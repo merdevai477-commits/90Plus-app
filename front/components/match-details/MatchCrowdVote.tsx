@@ -1,8 +1,8 @@
 /**
- * Fan 1-X-2 vote (365 "Who will win?") — Figma 1347:18834 header + three cards.
+ * Fan 1-X-2 vote (365 "Who will win?") — header, three equal tiles, split bar, footer.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,17 +18,9 @@ function isVoteChoice(value: unknown): value is CrowdVoteChoice {
   return value === 'home' || value === 'draw' || value === 'away';
 }
 
-const ICON = {
-  barChart: require('../../assets/images/match-vote/bar-chart.svg'),
-  arrowHome: require('../../assets/images/match-vote/arrow-home.svg'),
-  arrowAway: require('../../assets/images/match-vote/arrow-away.svg'),
-  users: require('../../assets/images/match-vote/users-small.svg'),
-  drawCross: require('../../assets/images/match-vote/draw-cross.svg'),
-};
-
 export type CrowdVoteTeam = { name: string; logo?: string | null };
 
-type Props = {
+export type MatchCrowdVoteData = {
   homePercent: number;
   drawPercent: number;
   awayPercent: number;
@@ -39,42 +31,49 @@ type Props = {
   subtitle: string;
   drawLabel: string;
   votesUnit: string;
-  rtl: boolean;
+  tapHint?: string;
+  votedHint?: string;
   /** Fixture id; the user's single vote is remembered per match under this key. */
   voteKey?: string | number | null;
 };
 
-type Tone = {
-  bg: string;
-  border: string;
-  glow: string;
-  pill: [string, string];
+type Props = MatchCrowdVoteData & { rtl: boolean };
+
+const TONE: Record<CrowdVoteChoice, { color: string; soft: string; gradient: [string, string] }> = {
+  home: { color: '#A855F7', soft: 'rgba(168,85,247,0.14)', gradient: ['#B46CFF', '#7C3AED'] },
+  draw: { color: '#94A3B8', soft: 'rgba(148,163,184,0.12)', gradient: ['#A8B3C4', '#64748B'] },
+  away: { color: '#3B82F6', soft: 'rgba(59,130,246,0.14)', gradient: ['#60A5FA', '#2563EB'] },
 };
 
-const TONE_HOME: Tone = {
-  bg: '#0B0518',
-  border: '#A855F7',
-  glow: 'rgba(168,85,247,0.46)',
-  pill: ['#A855F7', '#633291'],
-};
-const TONE_DRAW: Tone = {
-  bg: '#0A0A0A',
-  border: '#767676',
-  glow: 'rgba(104,104,104,0.46)',
-  pill: ['#888888', '#222222'],
-};
-const TONE_AWAY: Tone = {
-  bg: '#0B0518',
-  border: '#8B5CF6',
-  glow: 'rgba(139,92,246,0.46)',
-  pill: ['#8B5CF6', '#513690'],
-};
+const CHOICES: CrowdVoteChoice[] = ['home', 'draw', 'away'];
+const CHOICE_MARK: Record<CrowdVoteChoice, string> = { home: '1', draw: 'X', away: '2' };
+
 function formatVotes(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
 }
 
+/** Largest-remainder rounding so the three shown percentages always add up to 100. */
+function roundToHundred(values: Record<CrowdVoteChoice, number>): Record<CrowdVoteChoice, number> {
+  const safe = CHOICES.map((key) => Math.max(0, Number.isFinite(values[key]) ? values[key] : 0));
+  const sum = safe.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return { home: 0, draw: 0, away: 0 };
+  const scaled = safe.map((v) => (v / sum) * 100);
+  const floored = scaled.map(Math.floor);
+  let remaining = 100 - floored.reduce((a, b) => a + b, 0);
+  const order = scaled
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (remaining <= 0) break;
+    floored[i] += 1;
+    remaining -= 1;
+  }
+  return { home: floored[0], draw: floored[1], away: floored[2] };
+}
+
 function Crest({ team }: { team: CrowdVoteTeam }) {
-  if (team.logo) {
+  const [failed, setFailed] = useState(false);
+  if (team.logo && !failed) {
     return (
       <Image
         source={{ uri: team.logo }}
@@ -82,6 +81,7 @@ function Crest({ team }: { team: CrowdVoteTeam }) {
         contentFit="contain"
         cachePolicy="memory-disk"
         recyclingKey={team.logo}
+        onError={() => setFailed(true)}
       />
     );
   }
@@ -92,94 +92,95 @@ function Crest({ team }: { team: CrowdVoteTeam }) {
   );
 }
 
-function VoteCard({
-  tone,
+function DrawMark() {
+  return (
+    <View style={[styles.crest, styles.drawMark]}>
+      <Text style={styles.drawMarkText}>X</Text>
+    </View>
+  );
+}
+
+function VoteTile({
+  choice,
   media,
   name,
   percent,
-  trend,
-  arrow,
   votes,
   votesUnit,
-  choice,
-  rtl,
+  leading,
   selected,
   locked,
+  dimmed,
   onPress,
 }: {
-  tone: Tone;
+  choice: CrowdVoteChoice;
   media: React.ReactNode;
   name: string;
   percent: number;
-  trend: 'up' | 'down' | null;
-  arrow?: number;
   votes: number | null;
   votesUnit: string;
-  choice: string;
-  rtl: boolean;
+  leading: boolean;
   selected: boolean;
   locked: boolean;
+  dimmed: boolean;
   onPress: () => void;
 }) {
-  const cardStyle: ViewStyle = {
-    backgroundColor: tone.bg,
-    borderColor: tone.border,
-    boxShadow: `inset 0px 0px 18px 0px ${tone.glow}`,
-  };
+  const tone = TONE[choice];
   return (
     <Pressable
       onPress={onPress}
       disabled={locked}
       accessibilityRole="button"
-      accessibilityLabel={name}
+      accessibilityLabel={`${name} ${percent}%`}
       accessibilityState={{ selected, disabled: locked }}
-      style={({ pressed }) => [styles.card, cardStyle, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.tile,
+        selected && { borderColor: tone.color, backgroundColor: tone.soft },
+        dimmed && styles.tileDimmed,
+        pressed && styles.tilePressed,
+      ]}
     >
       {selected ? (
         <LinearGradient
-          colors={tone.pill}
+          colors={[tone.soft, 'rgba(0,0,0,0)']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+
+      <View style={styles.tileTop}>
+        <LinearGradient
+          colors={tone.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[styles.checkBadge, rtl ? styles.checkBadgeLeft : styles.checkBadgeRight]}
+          style={styles.markChip}
         >
-          <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+          <Text style={styles.markChipText}>{CHOICE_MARK[choice]}</Text>
         </LinearGradient>
-      ) : null}
-      <View style={styles.cardTeam}>
-        {media}
-        <Text style={styles.cardName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-          {name}
-        </Text>
-      </View>
-
-      <View style={styles.percentRow}>
-        <Text style={styles.percent}>{`${Math.round(percent)}%`}</Text>
-        {trend && arrow != null ? (
-          <Image
-            source={arrow}
-            style={[styles.arrow, trend === 'down' && styles.arrowDown]}
-            contentFit="contain"
-          />
+        {selected ? (
+          <View style={[styles.checkBadge, { backgroundColor: tone.color }]}>
+            <Ionicons name="checkmark" size={11} color="#FFFFFF" />
+          </View>
         ) : null}
       </View>
 
-      {votes != null ? (
-        <View style={[styles.votesRow, !rtl && styles.rowReverse]}>
-          <Text style={styles.votes} numberOfLines={1}>
-            {`${formatVotes(votes)} ${votesUnit}`}
-          </Text>
-          <Image source={ICON.users} style={styles.votesIcon} contentFit="contain" />
-        </View>
-      ) : null}
+      {media}
 
-      <LinearGradient
-        colors={tone.pill}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={styles.choicePill}
-      >
-        <Text style={styles.choiceText}>{choice}</Text>
-      </LinearGradient>
+      <Text style={styles.tileName} numberOfLines={2}>
+        {name}
+      </Text>
+
+      <Text style={[styles.percent, leading && { color: tone.color }]}>
+        {percent}
+        <Text style={[styles.percentSign, leading && { color: tone.color }]}>%</Text>
+      </Text>
+
+      {votes != null ? (
+        <Text style={styles.tileVotes} numberOfLines={1}>
+          {`${formatVotes(votes)} ${votesUnit}`}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -195,6 +196,8 @@ export function MatchCrowdVote({
   subtitle,
   drawLabel,
   votesUnit,
+  tapHint = 'Tap a card to vote',
+  votedHint = 'Your vote is in',
   rtl,
   voteKey = null,
 }: Props) {
@@ -245,261 +248,313 @@ export function MatchCrowdVote({
   const counts =
     baseCounts && myVote ? { ...baseCounts, [myVote]: baseCounts[myVote] + 1 } : baseCounts;
   const countsSum = counts ? counts.home + counts.draw + counts.away : 0;
-  const percents =
+  const rawPercents =
     counts && myVote && countsSum > 0
-      ? {
-          home: (counts.home / countsSum) * 100,
-          draw: (counts.draw / countsSum) * 100,
-          away: (counts.away / countsSum) * 100,
-        }
+      ? counts
       : { home: homePercent, draw: drawPercent, away: awayPercent };
+  const percents = roundToHundred(rawPercents);
+  const shownTotal = counts ? Math.round(countsSum) : null;
+
+  const maxPercent = Math.max(percents.home, percents.draw, percents.away);
+  const leaders = CHOICES.filter((key) => percents[key] === maxPercent);
+  const leader = maxPercent > 0 && leaders.length === 1 ? leaders[0] : null;
 
   const locked = myVote != null;
-  const homeTrend = percents.home === percents.away ? null : percents.home > percents.away ? 'up' : 'down';
-  const awayTrend = percents.home === percents.away ? null : percents.away > percents.home ? 'up' : 'down';
+  const textAlign = rtl ? 'right' : 'left';
+
+  const tileMedia: Record<CrowdVoteChoice, React.ReactNode> = {
+    home: <Crest team={home} />,
+    draw: <DrawMark />,
+    away: <Crest team={away} />,
+  };
+  const tileName: Record<CrowdVoteChoice, string> = {
+    home: home.name,
+    draw: drawLabel,
+    away: away.name,
+  };
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.card}>
+      <LinearGradient
+        colors={['rgba(124,58,237,0.20)', 'rgba(59,130,246,0.06)', 'rgba(8,7,25,0)']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
       <View style={[styles.header, rtl && styles.rowReverse]}>
-        <View style={[styles.headerCopy, rtl ? styles.alignEnd : styles.alignStart]}>
-          <View style={[styles.titleRow, rtl && styles.rowReverse]}>
-            <Image source={ICON.barChart} style={styles.titleIcon} contentFit="contain" />
-            <Text
-              style={[styles.title, { textAlign: rtl ? 'right' : 'left' }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
-            >
-              {title}
-            </Text>
-          </View>
-          <Text style={[styles.subtitle, { textAlign: rtl ? 'right' : 'left' }]}>{subtitle}</Text>
-        </View>
         <LinearGradient
-          colors={['#A855F7', '#633291']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.oddsPill}
+          colors={['#A855F7', '#6D28D9']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerIcon}
         >
-          <Text style={styles.oddsPillText}>1 X 2</Text>
+          <Ionicons name="stats-chart" size={16} color="#FFFFFF" />
         </LinearGradient>
+        <View style={styles.headerCopy}>
+          <Text style={[styles.title, { textAlign }]} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={[styles.subtitle, { textAlign }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        <View style={styles.oddsPill}>
+          <Text style={styles.oddsPillText}>1X2</Text>
+        </View>
       </View>
 
-      <View style={styles.cards}>
-        <VoteCard
-          tone={TONE_HOME}
-          media={<Crest team={home} />}
-          name={home.name}
-          percent={percents.home}
-          trend={homeTrend}
-          arrow={ICON.arrowHome}
-          votes={counts?.home ?? null}
-          votesUnit={votesUnit}
-          choice="1"
-          rtl={rtl}
-          selected={myVote === 'home'}
-          locked={locked}
-          onPress={() => castVote('home')}
-        />
-        <VoteCard
-          tone={TONE_DRAW}
-          media={<Image source={ICON.drawCross} style={styles.crest} contentFit="contain" />}
-          name={drawLabel}
-          percent={percents.draw}
-          trend={null}
-          votes={counts?.draw ?? null}
-          votesUnit={votesUnit}
-          choice="X"
-          rtl={rtl}
-          selected={myVote === 'draw'}
-          locked={locked}
-          onPress={() => castVote('draw')}
-        />
-        <VoteCard
-          tone={TONE_AWAY}
-          media={<Crest team={away} />}
-          name={away.name}
-          percent={percents.away}
-          trend={awayTrend}
-          arrow={ICON.arrowAway}
-          votes={counts?.away ?? null}
-          votesUnit={votesUnit}
-          choice="2"
-          rtl={rtl}
-          selected={myVote === 'away'}
-          locked={locked}
-          onPress={() => castVote('away')}
-        />
+      <View style={styles.tiles}>
+        {CHOICES.map((choice) => (
+          <VoteTile
+            key={choice}
+            choice={choice}
+            media={tileMedia[choice]}
+            name={tileName[choice]}
+            percent={percents[choice]}
+            votes={counts ? counts[choice] : null}
+            votesUnit={votesUnit}
+            leading={leader === choice}
+            selected={myVote === choice}
+            locked={locked}
+            dimmed={locked && myVote !== choice}
+            onPress={() => castVote(choice)}
+          />
+        ))}
+      </View>
+
+      <View style={styles.bar}>
+        {CHOICES.filter((choice) => percents[choice] > 0).map((choice) => (
+          <LinearGradient
+            key={choice}
+            colors={TONE[choice].gradient}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={[styles.barSegment, { flex: percents[choice] }]}
+          />
+        ))}
+      </View>
+
+      <View style={[styles.footer, rtl && styles.rowReverse]}>
+        {shownTotal != null ? (
+          <View style={[styles.footerItem, rtl && styles.rowReverse]}>
+            <Ionicons name="people" size={14} color="rgba(255,255,255,0.55)" />
+            <Text style={styles.footerText} numberOfLines={1}>
+              {`${formatVotes(shownTotal)} ${votesUnit}`}
+            </Text>
+          </View>
+        ) : (
+          <View />
+        )}
+        <View style={[styles.footerItem, rtl && styles.rowReverse]}>
+          <Ionicons
+            name={locked ? 'checkmark-circle' : 'hand-left-outline'}
+            size={14}
+            color={locked ? '#4ADE80' : 'rgba(255,255,255,0.55)'}
+          />
+          <Text style={[styles.footerText, locked && styles.footerTextDone]} numberOfLines={1}>
+            {locked ? votedHint : tapHint}
+          </Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: 18,
+  card: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.22)',
+    backgroundColor: '#0C0A1F',
+    padding: 16,
+    gap: 16,
+    overflow: 'hidden',
   },
   rowReverse: {
     flexDirection: 'row-reverse',
   },
-  alignEnd: {
-    alignItems: 'flex-end',
-  },
-  alignStart: {
-    alignItems: 'flex-start',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 12,
+  },
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerCopy: {
     flex: 1,
-    gap: 4,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: '100%',
-  },
-  titleIcon: {
-    width: 24,
-    height: 24,
+    minWidth: 0,
+    gap: 2,
   },
   title: {
-    flexShrink: 1,
     color: '#FFFFFF',
-    fontSize: 23,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   subtitle: {
-    color: '#9A9A9A',
-    fontSize: 16,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
     fontWeight: '500',
   },
   oddsPill: {
-    minWidth: 78,
-    height: 26,
-    borderRadius: 32,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.45)',
+    backgroundColor: 'rgba(124,58,237,0.18)',
   },
   oddsPillText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 20,
+    color: '#DDD6FE',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
-  cards: {
+  tiles: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
+    gap: 8,
   },
-  card: {
+  tile: {
     flex: 1,
-    minHeight: 215,
-    borderRadius: 12,
-    borderWidth: 2,
-    paddingHorizontal: 13,
-    paddingVertical: 14,
+    flexBasis: 0,
+    minWidth: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 8,
+    gap: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.035)',
     overflow: 'hidden',
   },
-  cardPressed: {
+  tileDimmed: {
+    opacity: 0.6,
+  },
+  tilePressed: {
     opacity: 0.85,
     transform: [{ scale: 0.97 }],
   },
-  checkBadge: {
-    position: 'absolute',
-    top: 7,
-    width: 20,
+  tileTop: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  markChip: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 6,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1,
   },
-  checkBadgeRight: {
-    right: 7,
+  markChipText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
-  checkBadgeLeft: {
-    left: 7,
-  },
-  cardTeam: {
+  checkBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
-    gap: 6,
-    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
   crest: {
-    width: 58,
-    height: 58,
+    width: 46,
+    height: 46,
   },
   crestFallback: {
-    borderRadius: 29,
+    borderRadius: 23,
     backgroundColor: 'rgba(168,85,247,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   crestFallbackText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
-  cardName: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  percentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  percent: {
-    color: '#FFFFFF',
-    fontSize: 23,
-    fontWeight: '700',
-  },
-  arrow: {
-    width: 24,
-    height: 24,
-  },
-  arrowDown: {
-    transform: [{ rotate: '180deg' }],
-  },
-  votesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  votes: {
-    color: '#A5A5A5',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  votesIcon: {
-    width: 16,
-    height: 16,
-  },
-  choicePill: {
-    alignSelf: 'stretch',
-    height: 25,
-    borderRadius: 55,
+  drawMark: {
+    borderRadius: 23,
+    borderWidth: 1.5,
+    borderColor: 'rgba(148,163,184,0.45)',
+    backgroundColor: 'rgba(148,163,184,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  choiceText: {
+  drawMarkText: {
+    color: '#CBD5E1',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  tileName: {
+    alignSelf: 'stretch',
     color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 16,
+    minHeight: 32,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+  },
+  percent: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 28,
+    fontVariant: ['tabular-nums'],
+  },
+  percentSign: {
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 14,
     fontWeight: '700',
-    lineHeight: 18,
+  },
+  tileVotes: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  bar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    gap: 3,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  barSegment: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  footerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 1,
+  },
+  footerText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footerTextDone: {
+    color: '#4ADE80',
   },
 });

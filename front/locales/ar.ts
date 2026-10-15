@@ -736,6 +736,8 @@ export const ar = {
     crowdVoteSubtitle: 'من سيفوز في المباراة؟',
     crowdVoteDraw: 'تعادل',
     crowdVoteUnit: 'صوت',
+    crowdVoteTap: 'اضغط على اختيارك للتصويت',
+    crowdVoteDone: 'تم تسجيل صوتك',
     chats: 'المحادثات',
     chatPlaceholder: 'اكتب رسالتك...',
     chatEmptyTitle: 'محادثات المباراة',

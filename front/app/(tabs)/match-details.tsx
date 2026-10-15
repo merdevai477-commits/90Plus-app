@@ -1742,6 +1742,8 @@ const MatchDetailsScreen = () => {
           subtitle: t.matchDetails.crowdVoteSubtitle || 'Who will win the match?',
           drawLabel: t.matchDetails.crowdVoteDraw || 'Draw',
           votesUnit: t.matchDetails.crowdVoteUnit || 'votes',
+          tapHint: t.matchDetails.crowdVoteTap || 'Tap a card to vote',
+          votedHint: t.matchDetails.crowdVoteDone || 'Your vote is in',
           voteKey: fixtureId || null,
         }
       : null;

@@ -9,7 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { GOLD_PRIMARY, PURPLE_SOFT, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from '../../constants/tokens';
-import { MatchCrowdVote, type CrowdVoteTeam } from './MatchCrowdVote';
+import { MatchCrowdVote, type MatchCrowdVoteData } from './MatchCrowdVote';
 import ImageViewerModal from '../common/ImageViewerModal';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import {
@@ -54,19 +54,7 @@ type Props = {
   broadcastLabel: string;
   matchTimeLabel: string;
   emptyHint: string;
-  crowd?: {
-    homePercent: number;
-    drawPercent: number;
-    awayPercent: number;
-    totalVotes?: number | null;
-    home: CrowdVoteTeam;
-    away: CrowdVoteTeam;
-    title: string;
-    subtitle: string;
-    drawLabel: string;
-    votesUnit: string;
-    voteKey?: string | number | null;
-  } | null;
+  crowd?: MatchCrowdVoteData | null;
   /** The "switches to Events" note only belongs on the pre-event Highlights tab. */
   showAutoUpdate?: boolean;
 };

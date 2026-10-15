@@ -501,6 +501,8 @@ export const en = {
     crowdVoteSubtitle: 'Who will win the match?',
     crowdVoteDraw: 'Draw',
     crowdVoteUnit: 'votes',
+    crowdVoteTap: 'Tap a card to vote',
+    crowdVoteDone: 'Your vote is in',
     chats: 'Chats',
     chatPlaceholder: 'Write your message...',
     chatEmptyTitle: 'Match chat',
