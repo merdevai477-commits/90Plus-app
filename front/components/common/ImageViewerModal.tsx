@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandWatermark } from './BrandWatermark';
 
 interface ImageViewerModalProps {
     visible: boolean;
@@ -135,11 +136,14 @@ export default function ImageViewerModal({ visible, imageUrl, onClose }: ImageVi
                             <Animated.View style={scaleStyle}>
                                 <View style={styles.imageContainer}>
                                     {!!imageUrl && (
-                                        <Image
-                                            source={{ uri: imageUrl }}
-                                            style={styles.image}
-                                            contentFit="contain"
-                                        />
+                                        <>
+                                            <Image
+                                                source={{ uri: imageUrl }}
+                                                style={styles.image}
+                                                contentFit="contain"
+                                            />
+                                            <BrandWatermark width={width * 0.5} style={styles.watermark} />
+                                        </>
                                     )}
                                 </View>
                             </Animated.View>
@@ -172,5 +176,8 @@ const styles = StyleSheet.create({
     image: {
         width: '100%',
         height: '100%',
+    },
+    watermark: {
+        position: 'absolute',
     },
 });
