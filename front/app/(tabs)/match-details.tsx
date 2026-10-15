@@ -10,6 +10,10 @@ import {
   ActivityIndicator,
   StatusBar,
   RefreshControl,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { Text } from '../../components/match-details/MatchText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -1403,15 +1407,126 @@ const MatchDetailsScreen = () => {
   }, [fixture?.fixture?.status?.short, snapshot?.phase, isLive, isFinishedMatch]);
 
   // ── Tab change handler — triggers lazy load ───────────────────────────────
-  const handleTabChange = useCallback((tab: string) => {
-    setActiveTab(tab as any);
+  const loadTabData = useCallback((tab: string) => {
     switch (tab) {
       case 'lineups':   loadLineupsIfNeeded(); break;
       case 'stats':     loadStatsIfNeeded(); break;
       case 'form':      loadFormIfNeeded(); break;
       case 'standings': loadStandingsIfNeeded(); break;
+      case 'info':      void loadVenueIfNeeded(); break;
     }
-  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded]);
+  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
+
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab as any);
+    loadTabData(tab);
+  }, [loadTabData]);
+
+  const tabs = useMemo(() => [
+    ...(infoTabVisible
+      ? [{
+          key: 'info',
+          label: t.matchDetails.infoShort || (language === 'ar' ? 'معلومات' : 'Information'),
+          icon: 'information-circle' as const,
+        }]
+      : []),
+    {
+      key: 'events',
+      label:
+        events.length === 0 && !isFinishedMatch()
+          ? (t.matchDetails.highlightsShort || 'Highlights')
+          : (t.matchDetails.eventsShort || t.matchDetails.events),
+      icon: 'football' as const,
+    },
+    { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
+    ...(showLineupsTab
+      ? [{ key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const }]
+      : []),
+    { key: 'chats', label: t.matchDetails.chats || 'Chats', icon: 'chatbubbles' as const },
+    { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
+    { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
+  ], [infoTabVisible, t, language, events.length, isFinishedMatch, showLineupsTab]);
+
+  // ── Swipeable tab pager ───────────────────────────────────────────────────
+  const { width: windowWidth } = useWindowDimensions();
+  const [pagerWidth, setPagerWidth] = useState(windowWidth);
+  const pagerRef = useRef<ScrollView>(null);
+  const pagerScrollX = useRef(new Animated.Value(0)).current;
+  const activeTabIndex = Math.max(0, tabs.findIndex((tab) => tab.key === activeTab));
+  const activeTabIndexRef = useRef(activeTabIndex);
+  activeTabIndexRef.current = activeTabIndex;
+  /** Page the pager is currently showing or animating toward. */
+  const pagerIndexRef = useRef(activeTabIndex);
+  const pagerWidthRef = useRef(pagerWidth);
+  const pagerInitialOffsetRef = useRef<{ x: number; y: number } | null>(null);
+
+  const jumpPagerTo = useCallback((index: number, width: number) => {
+    pagerIndexRef.current = index;
+    pagerWidthRef.current = width;
+    pagerScrollX.setValue(index * width);
+    pagerRef.current?.scrollTo({ x: index * width, animated: false });
+  }, [pagerScrollX]);
+
+  const onPagerLayout = useCallback((e: LayoutChangeEvent) => {
+    const width = Math.round(e.nativeEvent.layout.width);
+    if (width <= 0) return;
+    setPagerWidth(width);
+    jumpPagerTo(activeTabIndexRef.current, width);
+  }, [jumpPagerTo]);
+
+  // Tabs can appear/disappear (info, lineups) or be forced back to events —
+  // keep the pager offset pinned to the active tab when that happens.
+  useEffect(() => {
+    if (!pagerRef.current || pagerWidth <= 0) return;
+    if (pagerIndexRef.current === activeTabIndex && pagerWidthRef.current === pagerWidth) return;
+    jumpPagerTo(activeTabIndex, pagerWidth);
+  }, [activeTabIndex, pagerWidth, jumpPagerTo]);
+
+  const onPagerMomentumEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const width = pagerWidthRef.current;
+      if (width <= 0) return;
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      const key = tabs[index]?.key;
+      if (!key) return;
+      pagerIndexRef.current = index;
+      if (key !== activeTab) handleTabChange(key);
+    },
+    [tabs, activeTab, handleTabChange],
+  );
+
+  const onTabPress = useCallback(
+    (key: string) => {
+      const index = tabs.findIndex((tab) => tab.key === key);
+      if (index < 0) return;
+      pagerIndexRef.current = index;
+      pagerRef.current?.scrollTo({ x: index * pagerWidthRef.current, animated: true });
+      if (key !== activeTab) handleTabChange(key);
+    },
+    [tabs, activeTab, handleTabChange],
+  );
+
+  const onPagerScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { x: pagerScrollX } } }], { useNativeDriver: true }),
+    [pagerScrollX],
+  );
+
+  // Warm up the neighbouring tabs so their content is ready mid-swipe.
+  const prefetchedTabsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    prefetchedTabsRef.current.clear();
+  }, [fixtureId]);
+  useEffect(() => {
+    if (!fixture) return;
+    const id = setTimeout(() => {
+      for (const neighbor of [tabs[activeTabIndex - 1], tabs[activeTabIndex + 1]]) {
+        if (!neighbor || prefetchedTabsRef.current.has(neighbor.key)) continue;
+        prefetchedTabsRef.current.add(neighbor.key);
+        loadTabData(neighbor.key);
+      }
+    }, 400);
+    return () => clearTimeout(id);
+  }, [activeTabIndex, tabs, fixture, loadTabData]);
 
   const openPlayerProfile = useCallback(
     (
@@ -2432,32 +2547,6 @@ const MatchDetailsScreen = () => {
     );
   }
 
-  const baseTabs = [
-    ...(infoTabVisible
-      ? [{
-          key: 'info',
-          label: t.matchDetails.infoShort || (language === 'ar' ? 'معلومات' : 'Information'),
-          icon: 'information-circle' as const,
-        }]
-      : []),
-    {
-      key: 'events',
-      label:
-        events.length === 0 && !isFinishedMatch()
-          ? (t.matchDetails.highlightsShort || 'Highlights')
-          : (t.matchDetails.eventsShort || t.matchDetails.events),
-      icon: 'football' as const,
-    },
-    { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
-    ...(showLineupsTab
-      ? [{ key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const }]
-      : []),
-    { key: 'chats', label: t.matchDetails.chats || 'Chats', icon: 'chatbubbles' as const },
-    { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
-    { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
-  ];
-  const tabs = baseTabs;
-
   const hasLmtWidget = Boolean(lmtInfo?.widgetUrl);
   // Pitch / Score toggle only while the match is live — same as NS (no toggle).
   // When the match ends, hide LMT controls automatically so only the score header remains.
@@ -2537,6 +2626,83 @@ const MatchDetailsScreen = () => {
       />
     </View>
   ) : null;
+
+  const renderTabPage = (key: string) => {
+    if (key === 'chats') {
+      return (
+        <MatchChatTab
+          fixtureId={fixtureId}
+          kickoffAt={fixture?.fixture?.date}
+          matchSummary={{
+            homeTeam: getTeamDisplayName(homeTeamName, language),
+            awayTeam: getTeamDisplayName(awayTeamName, language),
+            homeLogo: homeTeamLogo,
+            awayLogo: awayTeamLogo,
+            homeScore: fixture?.goals?.home,
+            awayScore: fixture?.goals?.away,
+            league: getLeagueDisplayName(
+              leagueName,
+              language,
+              fixture?.league?.id,
+              fixture?.league?.country,
+            ),
+            statusShort: fixture?.fixture?.status?.short,
+            elapsed: fixture?.fixture?.status?.elapsed ?? undefined,
+            stoppage: fixture?.fixture?.status?.extra ?? null,
+            startTimestamp: fixture ? getPeriodStartTimestamp(fixture) : undefined,
+            clockAnchorKey: fixtureId || undefined,
+            fixtureDate: fixture?.fixture?.date,
+            kickoffStatusLabel: t.matchDetails.kickoffStatus,
+            liveLabel: getLocalizedMatchStatus('LIVE', language),
+            halftimeLabel: getLocalizedMatchStatus('HT', language),
+            finishedLabel: getLocalizedMatchStatus('FT', language),
+            statusLabel: fixture?.fixture?.status?.short
+              ? fixture.fixture.status.short === 'NS'
+                ? t.matchDetails.kickoffStatus
+                : getLocalizedMatchStatus(fixture.fixture.status.short, language)
+              : t.matchDetails.kickoffStatus,
+            scorers: goalScorers,
+            scorersViewMoreLabel: t.matchDetails.scorersViewMore,
+            scorersViewLessLabel: t.matchDetails.scorersViewLess,
+          }}
+        />
+      );
+    }
+    return (
+      <ScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={styles.pageScrollContent}
+        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        alwaysBounceVertical
+        overScrollMode="always"
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          {key === 'info' && infoTabVisible ? (
+            <ScrollView
+              scrollEnabled={false}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              {renderMatchInformation(false)}
+            </ScrollView>
+          ) : null}
+          {key === 'events' && renderEvents()}
+          {key === 'lineups' && renderLineups()}
+          {key === 'stats' && renderStatistics()}
+          {key === 'form' && renderForm()}
+          {key === 'standings' && renderStandings()}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  if (!pagerInitialOffsetRef.current) {
+    pagerInitialOffsetRef.current = { x: activeTabIndex * pagerWidth, y: 0 };
+  }
+  const pagerInitialOffset = pagerInitialOffsetRef.current;
 
   return (
     <View style={styles.container}>
@@ -2618,75 +2784,34 @@ const MatchDetailsScreen = () => {
       <ModernTabs
         tabs={tabs}
         activeTab={activeTab}
-        onTabChange={handleTabChange}
+        onTabChange={onTabPress}
+        scrollX={pagerScrollX}
+        pageWidth={pagerWidth}
       />
 
-      {activeTab === 'chats' ? (
-        <MatchChatTab
-          fixtureId={fixtureId}
-          kickoffAt={fixture?.fixture?.date}
-          matchSummary={{
-            homeTeam: getTeamDisplayName(homeTeamName, language),
-            awayTeam: getTeamDisplayName(awayTeamName, language),
-            homeLogo: homeTeamLogo,
-            awayLogo: awayTeamLogo,
-            homeScore: fixture?.goals?.home,
-            awayScore: fixture?.goals?.away,
-            league: getLeagueDisplayName(
-              leagueName,
-              language,
-              fixture?.league?.id,
-              fixture?.league?.country,
-            ),
-            statusShort: fixture?.fixture?.status?.short,
-            elapsed: fixture?.fixture?.status?.elapsed ?? undefined,
-            stoppage: fixture?.fixture?.status?.extra ?? null,
-            startTimestamp: fixture ? getPeriodStartTimestamp(fixture) : undefined,
-            clockAnchorKey: fixtureId || undefined,
-            fixtureDate: fixture?.fixture?.date,
-            kickoffStatusLabel: t.matchDetails.kickoffStatus,
-            liveLabel: getLocalizedMatchStatus('LIVE', language),
-            halftimeLabel: getLocalizedMatchStatus('HT', language),
-            finishedLabel: getLocalizedMatchStatus('FT', language),
-            statusLabel: fixture?.fixture?.status?.short
-              ? fixture.fixture.status.short === 'NS'
-                ? t.matchDetails.kickoffStatus
-                : getLocalizedMatchStatus(fixture.fixture.status.short, language)
-              : t.matchDetails.kickoffStatus,
-            scorers: goalScorers,
-            scorersViewMoreLabel: t.matchDetails.scorersViewMore,
-            scorersViewLessLabel: t.matchDetails.scorersViewLess,
-          }}
-        />
-      ) : (
-        <ScrollView
-          style={styles.pageScroll}
-          contentContainerStyle={styles.pageScrollContent}
-          refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
-          showsVerticalScrollIndicator={false}
-          nestedScrollEnabled
-          alwaysBounceVertical
-          overScrollMode="always"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
-            {activeTab === 'info' && infoTabVisible ? (
-              <ScrollView
-                scrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-              >
-                {renderMatchInformation(false)}
-              </ScrollView>
-            ) : null}
-            {activeTab === 'events' && renderEvents()}
-            {activeTab === 'lineups' && renderLineups()}
-            {activeTab === 'stats' && renderStatistics()}
-            {activeTab === 'form' && renderForm()}
-            {activeTab === 'standings' && renderStandings()}
+      <Animated.ScrollView
+        ref={pagerRef as any}
+        horizontal
+        pagingEnabled
+        style={styles.pager}
+        showsHorizontalScrollIndicator={false}
+        directionalLockEnabled
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScroll={onPagerScroll}
+        onMomentumScrollEnd={onPagerMomentumEnd}
+        onLayout={onPagerLayout}
+        contentOffset={pagerInitialOffset}
+        keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
+        bounces={false}
+      >
+        {tabs.map((tab, index) => (
+          <View key={tab.key} style={[styles.pagerPage, { width: pagerWidth }]}>
+            {Math.abs(index - activeTabIndex) <= 1 ? renderTabPage(tab.key) : null}
           </View>
-        </ScrollView>
-      )}
+        ))}
+      </Animated.ScrollView>
     </View>
   );
 };
@@ -2695,6 +2820,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0c051a',
+  },
+  pager: {
+    flex: 1,
+  },
+  pagerPage: {
+    flex: 1,
   },
   pageScroll: {
     flex: 1,
