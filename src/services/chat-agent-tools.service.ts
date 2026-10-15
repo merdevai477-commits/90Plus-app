@@ -44,6 +44,8 @@ import {
   scoreSearchName,
   stripSearchStopwords,
 } from '../utils/football-search-index';
+import { resolveFootballAlias } from '../utils/football-colloquial.util';
+import { buildEncyclopediaPayload, lookupFootballWiki } from './football-wiki.service';
 
 
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT', 'INT', 'SUSP']);
@@ -933,8 +935,8 @@ async function toolSearchPlayer(
       answerHint: resolution.suggestions.length
         ? buildSuggestionHint(resolution.suggestions, language)
         : language === 'en'
-          ? 'No reliable match found. Ask the user for the full name or the club, and do NOT invent data.'
-          : 'مفيش نتيجة موثوقة. اطلب من المستخدم الاسم الكامل أو النادي، وممنوع تخترع بيانات.',
+          ? 'Not in the live-data feed. If this is a well-known (often retired) football figure you clearly recognise, answer from established general knowledge (position, clubs, national team, famous titles) without precise numbers you are unsure of. Only if the name is genuinely unclear, ask for the full name or club. Never invent stats.'
+          : 'مش موجود في قاعدة البيانات اللحظية. لو ده شخصية كروية معروفة (غالبًا معتزل) وانت عارفه كويس، جاوب من المعلومات العامة الثابتة (المركز، النوادي، المنتخب، أشهر البطولات) من غير أرقام دقيقة مش متأكد منها. اطلب الاسم الكامل أو النادي بس لو الاسم فعلًا غامض. ممنوع تخترع أرقام.',
     };
   }
   const apiFb = row.apiPlayerId ? await enrichApiFootballTrophies(fallbackName) : null;
@@ -1407,8 +1409,8 @@ async function toolSearchFootball(
       hits,
       answerHint:
         language === 'en'
-          ? 'No football entity matched. Ask for the full name or club, and do NOT invent data.'
-          : 'مفيش نتيجة. اطلب الاسم الكامل أو النادي، وممنوع تخترع بيانات.',
+          ? 'Not in the live-data feed. If this is a well-known (often retired) football figure you clearly recognise, answer from established general knowledge (position, clubs, national team, famous titles) without precise numbers you are unsure of. Only if the name is genuinely unclear, ask for the full name or club. Never invent stats.'
+          : 'مش موجود في قاعدة البيانات اللحظية. لو ده شخصية كروية معروفة (غالبًا معتزل) وانت عارفه كويس، جاوب من المعلومات العامة الثابتة (المركز، النوادي، المنتخب، أشهر البطولات) من غير أرقام دقيقة مش متأكد منها. اطلب الاسم الكامل أو النادي بس لو الاسم فعلًا غامض. ممنوع تخترع أرقام.',
     };
   }
 
@@ -2326,6 +2328,51 @@ async function toolHeadToHead(args: Record<string, unknown>, language: MessageLa
   return { fixtureId, gameId, headToHead: h2h.data };
 }
 
+const ENCYCLOPEDIA_TOOLS = new Set(['search_football', 'search_player', 'get_player_career']);
+const CLOSE_CANDIDATE_SCORE = 0.8;
+
+function candidateNames(r: any): string[] {
+  const names: string[] = [];
+  for (const s of r?.suggestions ?? []) if (s?.name) names.push(String(s.name));
+  const hits = r?.hits ?? {};
+  for (const bucket of ['players', 'coaches', 'clubs', 'nationalTeams', 'competitions']) {
+    for (const h of hits[bucket] ?? []) if (h?.name) names.push(String(h.name));
+  }
+  return names;
+}
+
+/**
+ * Live feeds only index active athletes; for retired legends / historical
+ * figures fall back to the encyclopedia instead of answering "مفيش نتيجة".
+ * A clarification is kept when one of its candidates is already a close match.
+ */
+async function withEncyclopediaFallback(
+  args: Record<string, unknown>,
+  result: unknown,
+  language: MessageLanguage,
+): Promise<unknown> {
+  const r = result as any;
+  if (!r || typeof r !== 'object') return result;
+  const notFound = r.error === 'not_found' || r.error === 'player_not_found';
+  const clarify = r.status === 'need_clarification' && r.reason !== 'same_name_clubs';
+  if (!notFound && !clarify) return result;
+
+  const query = String(args.query ?? args.player_name ?? args.name ?? '').trim();
+  if (query.length < 3) return result;
+  if (clarify) {
+    const close = candidateNames(r).some((n) => scoreEntityNameMatch(query, n) >= CLOSE_CANDIDATE_SCORE);
+    if (close) return result;
+  }
+
+  try {
+    const entry = await lookupFootballWiki(query, language);
+    return entry ? buildEncyclopediaPayload(query, entry, language) : result;
+  } catch (err) {
+    logger.warn('[chat-agent] encyclopedia fallback failed:', (err as Error)?.message ?? err);
+    return result;
+  }
+}
+
 export async function executeAgentTool(
   name: string,
   argsJson: string,
@@ -2336,6 +2383,10 @@ export async function executeAgentTool(
     args = argsJson ? (JSON.parse(argsJson) as Record<string, unknown>) : {};
   } catch {
     return jsonCap({ error: 'invalid_tool_arguments', raw: argsJson.slice(0, 200) });
+  }
+
+  for (const key of ['query', 'player_name', 'team_name'] as const) {
+    if (typeof args[key] === 'string') args[key] = resolveFootballAlias(args[key] as string);
   }
 
   try {
@@ -2391,6 +2442,9 @@ export async function executeAgentTool(
         break;
       default:
         result = { error: 'unknown_tool', name };
+    }
+    if (ENCYCLOPEDIA_TOOLS.has(name)) {
+      result = await withEncyclopediaFallback(args, result, opts.language);
     }
     return jsonCap(result);
   } catch (err) {

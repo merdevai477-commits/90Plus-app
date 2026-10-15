@@ -25,10 +25,22 @@ import {
   extractChatNavLinks,
   type ChatNavLink,
 } from './chat-nav-links.service';
+import {
+  resolveConfirmedName,
+  stripColloquialFillers,
+} from '../utils/football-colloquial.util';
 
 const MAX_STEPS = 3;
 const AGENT_STREAM_MAX_TOKENS = 480;
 const AGENT_FINAL_MAX_TOKENS = 420;
+/** Legend bios (career + titles table) get cut mid-table at the default cap. */
+const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 760;
+
+function finalTokenBudget(payloads: string[]): number {
+  return payloads.some((p) => /\\?"source\\?":\\?"encyclopedia/.test(p))
+    ? AGENT_ENCYCLOPEDIA_MAX_TOKENS
+    : AGENT_FINAL_MAX_TOKENS;
+}
 
 function isCreditBudgetError(err: unknown): boolean {
   const msg = String((err as Error)?.message ?? err ?? '');
@@ -58,7 +70,7 @@ async function createAgentCompletion(
 
 const TOOL_USAGE_PREAMBLE = `
 قواعد البيانات (صارمة — زي بروفايل اللاعب في التطبيق):
-- أي سؤال عن لاعب/نادي/مباراة/ألقاب/إحصائيات = لازم أداة أولًا. متجاوبش من ذاكرتك أبدًا.
+- أي سؤال عن لاعب/نادي/مباراة/ألقاب/إحصائيات = لازم أداة أولًا. المعلومات الوقتية (نادي حالي، إحصائيات موسم، مباريات، ترتيب) متجاوبش فيها من ذاكرتك أبدًا.
 - اسم مش متأكد إنه لاعب ولا نادي ولا دوري ولا مدرب → search_football أولًا. لو رجّعت quickFacts أو source جاوب منها على طول — أداة واحدة بس في الدور، ومتستدعيش search_player بعد ما السيرش رجّع بروفايل.
 - لاعب (نادي حالي، سيزون، أهداف، ألقاب، فين بيلعب) → search_player لو الاسم واضح، أو search_football لو الاسم غامض/فيه غلطة. للألقاب زوّد get_player_career. لو معاك athlete_id من السيرش مرّره.
 - أهداف لاعب في بطولة محددة (كأس العالم / دوري الأبطال) → get_player_career. استخدم worldCupGoals.total للـWorld Cup و uclSummary للأبطال. لو worldCupGoals = null قول إن مفيش بيانات كأس عالم مؤكدة للاعب ده — ممنوع تخمّن رقم.
@@ -79,8 +91,21 @@ const TOOL_USAGE_PREAMBLE = `
   للمباريات استخدم: الحالة | المباراة | النتيجة/الموعد. للإحصائيات: الموسم/البطولة | أهداف | صناعة | لعب. للترتيب: مركز | الفريق | نقاط.
 - متكتبش لينكات وهمية — التطبيق هيحط أزرار تفتح بروفايل اللاعب/النادي أو تفاصيل الماتش أو صفحة المباريات.
 - اعتمد على quickFacts و seasonStats و answerHint من نتيجة الأداة. لو seasonStats موجودة متقولش "مفيش بيانات".
-- لو نتيجة الأداة فيها status="need_clarification" أو فيها suggestions/hits: اسأل المستخدم للتأكيد "قصدك <الاسم>؟" واستنى ردّه — ممنوع تخترع لاعب أو تجاوب من ذاكرتك. ولو مفيش نتيجة خالص اطلب الاسم الكامل أو اسم النادي بلطف.
+- لو نتيجة الأداة فيها status="need_clarification" أو فيها suggestions/hits: اسأل المستخدم للتأكيد "قصدك **<الاسم>**؟" (الاسم بولد) واستنى ردّه — ممنوع تخترع لاعب.
 - لاعب متوسط الشهرة أو اسم فيه غلطة إملائية: اعتمد على نتيجة search_football أو search_player (بتعمل تصحيح وبحث ذكي). متقولش "مش لاقيه" طول ما فيه suggestions.
+
+اللاعبين المعتزلين والأساطير (انت مرجع كروي — لازم تكون عارفهم):
+- قاعدة بيانات المباريات اللحظية فيها اللاعبين الحاليين بس. لو الأداة رجّعت source="encyclopedia" يبقى ده لاعب/مدرب معتزل أو تاريخي: جاوب من encyclopedia.extract كمرجع موثوق — تعريف في سطر، المركز، النوادي والمنتخب، أهم الألقاب والإنجازات، والأرقام المذكورة في النص. نظّمها نقط أو جدول (الفترة | النادي | أبرز الإنجازات).
+- لو الأداة مرجّعتش حاجة خالص بس الاسم لأسطورة أو لاعب معروف (زي أبو تريكة، وائل جمعة، الحضري، حسام حسن، الخطيب، زيدان، رونالدينيو): متقولش "مفيش نتيجة" — جاوب من معرفتك العامة بالمعلومات الثابتة المشهورة (المركز، النوادي، المنتخب، أشهر البطولات) بثقة، ومن غير أرقام دقيقة مش متأكد منها.
+- اطلب الاسم الكامل بس لو الاسم فعلًا غامض ومش عارف تقصد مين. وممنوع تسأل «قصدك X؟» وانت أصلًا عارف إن X هو المقصود — جاوب على طول.
+
+فهم العامية المصرية:
+- لو سألت «قصدك X؟» والمستخدم رد بـ ايوه / اه / أيوة / بالظبط / هو ده / ده قصدي / صح / تمام → ده تأكيد إن قصده X. كمّل وجاوب عن X فورًا ومتسألش تاني.
+- لو رد بـ «لا» / «لأ قصدي Y» → ابحث عن Y.
+- مصطلحات: جاب جون/جول = سجّل هدف، اسيست/باصة حلوة = صناعة، اتعوّر/متعوّر = مصاب، اتباع/اتنقل/مضى لـ = انتقال، الدكة = البدلاء، بلنتي/ضربة جزا = ركلة جزاء، اتطرد/خد أحمر = كارت أحمر، القمة = الأهلي والزمالك، الفورمة = المستوى، الماتش الجاي = المباراة القادمة، ماتش امبارح = آخر مباراة، الكابتن = اللاعب/المدرب حسب السياق.
+- ألقاب لاعبين: الماجيكو/أمير القلوب/تريكة = محمد أبو تريكة، أبو مكة/مو صلاح = محمد صلاح، السد العالي = عصام الحضري، بيبو = محمود الخطيب، الجنرال = محمود الجوهري، المعلم = حسن شحاتة، الدون = كريستيانو رونالدو، البرغوث = ليونيل ميسي، الظاهرة = رونالدو البرازيلي.
+- ألقاب أندية ومنتخبات: الأحمر/المارد الأحمر/نادي القرن = الأهلي المصري، الأبيض/الفارس الأبيض = الزمالك، الملكي/الميرنجي = ريال مدريد، البلوجرانا/البارسا = برشلونة، الريدز = ليفربول، الشياطين الحمر = مانشستر يونايتد، السيتيزنز = مانشستر سيتي، الجانرز/المدفعجية = آرسنال، البلوز = تشيلسي، السيدة العجوز = يوفنتوس، البافاري = بايرن ميونخ، الزعيم = الهلال، العالمي = النصر، الفراعنة/منتخبنا = منتخب مصر، السامبا = البرازيل، التانجو = الأرجنتين، الديوك = فرنسا، الماكينات = ألمانيا، أسود الأطلس = المغرب، محاربي الصحراء = الجزائر، نسور قرطاج = تونس.
+- لو الكلام عامي أو فيه أخطاء إملائية (ه بدل ة، ا بدل أ، حروف ناقصة) افهم المقصود من السياق وكمّل — متطلبش من المستخدم يكتب بالفصحى.
 
 قاعدة الالتزام بالأرقام (أهم قاعدة — مخالفتها = رد غلط):
 - الرقم اللي في الأداة هو الحقيقة الوحيدة. أرقام الألقاب من (quickFacts.worldCupTitles / quickFacts.championsLeagueTitles / cafChampionsLeagueWins) بس. لو العدد 1 قول 1، ولو 0 قول 0 — ممنوع تزوّد ولا تقلّل.
@@ -112,13 +137,15 @@ function skipEntityPrefetch(message: string): boolean {
 function extractSearchQuery(message: string): string | null {
   let s = message.replace(/[؟?!,.،]/g, ' ').replace(/\s+/g, ' ').trim();
   if (s.length < 2) return null;
-  const stripped = s
-    .replace(
-      /مين(?:\s+هو|\s+هي)?|من هو|من هي|who(?:'s| is)?|كام|عدد|فين(?:\s+بيلعب)?|بيلعب\s+فين|where(?:\s+does)?|how many|ايه|إيه|ترتيب|جدول/gi,
-      ' ',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
+  const stripped = stripColloquialFillers(
+    s
+      .replace(
+        /مين(?:\s+هو|\s+هي)?|من هو|من هي|who(?:'s| is)?|كام|عدد|فين(?:\s+بيلعب)?|بيلعب\s+فين|where(?:\s+does)?|how many|ايه|إيه|ترتيب|جدول/gi,
+        ' ',
+      )
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
   const q = stripped.length >= 2 ? stripped : s;
   if (/^(مباريات|ماتشات|matches|النهاردة|اليوم|today|لايف|مباشر|live)$/i.test(q)) return null;
   return q;
@@ -316,6 +343,7 @@ async function streamFinalAnswer(
   messages: ChatCompletionMessageParam[],
   onToken: (token: string) => void,
   signal?: AbortSignal,
+  maxTokens: number = AGENT_FINAL_MAX_TOKENS,
 ): Promise<string> {
   // Without tools + tool_choice 'none', Qwen keeps emitting tool calls here
   // (finish=tool_calls, empty content) and every step comes back blank.
@@ -325,7 +353,7 @@ async function streamFinalAnswer(
     tools: AGENT_TOOLS,
     tool_choice: 'none',
     temperature: 0.2,
-    max_tokens: AGENT_FINAL_MAX_TOKENS,
+    max_tokens: maxTokens,
     stream: true,
     reasoning: { effort: 'none' },
   })) as AsyncIterable<{
@@ -566,12 +594,23 @@ export async function runFootballAgent(
   let lastToolPayloads: string[] = [];
   const allToolPayloads: string[] = [];
 
+  // "ايوه ده قصدي" after our "قصدك X؟" → treat the turn as a question about X.
+  const confirmedName = resolveConfirmedName(params.history, params.userMessage);
+  const userMessage = confirmedName ?? params.userMessage;
+  const modelUserMessage = confirmedName
+    ? `${params.userMessage}\n\n` +
+      (params.language === 'en'
+        ? `(The user confirmed they mean: ${confirmedName}. Answer about ${confirmedName} now — do not ask again.)`
+        : `(المستخدم أكّد إن قصده: ${confirmedName}. جاوب عن ${confirmedName} دلوقتي ومتسألش تاني.)`)
+    : params.userMessage;
+  if (confirmedName) logger.info(`[chat-agent] confirmation → "${confirmedName}"`);
+
   const finish = (text: string): RunFootballAgentResult => {
     const navLinks = extractChatNavLinks(
       allToolPayloads,
       toolsUsed,
       params.language,
-      params.userMessage,
+      userMessage,
     );
     return { fullText: text, usedModel: model, toolsUsed, navLinks };
   };
@@ -584,11 +623,11 @@ export async function runFootballAgent(
     ...params.history
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content }) as ChatCompletionMessageParam),
-    { role: 'user', content: params.userMessage },
+    { role: 'user', content: modelUserMessage },
   ];
 
   const startedAt = Date.now();
-  const focusTeam = extractFocusTeamFromHistory(params.history, params.userMessage);
+  const focusTeam = extractFocusTeamFromHistory(params.history, userMessage);
   if (focusTeam) {
     messages[0] = {
       role: 'system',
@@ -600,21 +639,21 @@ export async function runFootballAgent(
     };
   }
 
-  const matchFollowUp = isLastMatchFollowUp(params.userMessage);
-  const followUp = isTeamFollowUp(params.userMessage) || matchFollowUp;
+  const matchFollowUp = isLastMatchFollowUp(userMessage);
+  const followUp = isTeamFollowUp(userMessage) || matchFollowUp;
   const prefetchQuery =
     followUp
       ? focusTeam
-      : !skipEntityPrefetch(params.userMessage) &&
-          (shouldRequireTools(params.userMessage) || looksLikeNameLookup(params.userMessage))
-        ? extractSearchQuery(params.userMessage)
+      : !skipEntityPrefetch(userMessage) &&
+          (shouldRequireTools(userMessage) || looksLikeNameLookup(userMessage))
+        ? extractSearchQuery(userMessage)
         : null;
   const prefetchTool = followUp
     ? matchFollowUp
       ? 'get_team_match'
-      : /هداف|scorer|goals?|assist|صناع/i.test(params.userMessage)
+      : /هداف|scorer|goals?|assist|صناع/i.test(userMessage)
         ? 'get_team_scorers'
-        : /مدرب|coach|مدير فني/i.test(params.userMessage)
+        : /مدرب|coach|مدير فني/i.test(userMessage)
           ? 'get_team_info'
           : 'get_team_squad'
     : prefetchQuery
@@ -630,7 +669,7 @@ export async function runFootballAgent(
           : { team_name: prefetchQuery };
       const payload = await executeAgentTool(prefetchTool, JSON.stringify(args), {
         language: params.language,
-        userMessage: params.userMessage,
+        userMessage: userMessage,
       });
       toolsUsed.push(prefetchTool);
       allToolPayloads.push(payload);
@@ -650,7 +689,7 @@ export async function runFootballAgent(
         logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
         return finish(fullText);
       }
-      if (looksLikeNameLookup(params.userMessage)) {
+      if (looksLikeNameLookup(userMessage)) {
         const brief = formatEntityBrief(parsed, params.language);
         if (brief) {
           fullText = brief;
@@ -707,7 +746,7 @@ export async function runFootballAgent(
           messages.push({ role: 'system', content: groundingMsg });
         }
         const groundedReply = buildGroundedFactReply(
-          params.userMessage,
+          userMessage,
           groundedFacts,
           params.language,
         );
@@ -723,6 +762,7 @@ export async function runFootballAgent(
           messages,
           params.onToken,
           params.signal,
+          finalTokenBudget(lastToolPayloads),
         );
         logger.info(
           `[chat-agent] prefetch+stream total=${Date.now() - startedAt}ms chars=${fullText.length}`,
@@ -767,7 +807,7 @@ export async function runFootballAgent(
         tools: AGENT_TOOLS,
         parallel_tool_calls: false,
         tool_choice:
-          step === 0 && shouldRequireTools(params.userMessage) ? 'required' : 'auto',
+          step === 0 && shouldRequireTools(userMessage) ? 'required' : 'auto',
         temperature: 0.2,
         max_tokens: AGENT_STREAM_MAX_TOKENS,
         stream: true,
@@ -824,7 +864,7 @@ export async function runFootballAgent(
           const tTool = Date.now();
           const content = await executeAgentTool(name, fn.arguments, {
             language: params.language,
-            userMessage: params.userMessage,
+            userMessage: userMessage,
           });
           logger.info(`[chat-agent] tool ${name} ${Date.now() - tTool}ms`);
           return {
@@ -850,7 +890,7 @@ export async function runFootballAgent(
       }
 
       const groundedReply = buildGroundedFactReply(
-        params.userMessage,
+        userMessage,
         groundedFacts,
         params.language,
       );
@@ -869,6 +909,7 @@ export async function runFootballAgent(
             messages,
             params.onToken,
             params.signal,
+            finalTokenBudget(lastToolPayloads),
           );
           if (answer) {
             fullText = answer;
