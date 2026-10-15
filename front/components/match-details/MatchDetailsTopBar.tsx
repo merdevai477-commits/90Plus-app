@@ -7,13 +7,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassBubbleFill, GlassRim, GlassSheen } from '../navigation/glass';
 
-const CAPSULE_HEIGHT = 52;
+const CAPSULE_HEIGHT = 60;
 const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
-const BUTTON_SIZE = 40;
+const BUTTON_SIZE = 46;
 const BAR_PAD_TOP = 6;
 const BAR_PAD_BOTTOM = 8;
 /** iOS blurs what scrolls behind the capsule; Android has no blur, so the tint carries it. */
-const CAPSULE_BG = Platform.OS === 'ios' ? 'rgba(16,12,28,0.55)' : 'rgba(16,12,28,0.9)';
+const CAPSULE_FILL =
+  Platform.OS === 'ios'
+    ? (['rgba(70,36,128,0.62)', 'rgba(26,14,48,0.62)'] as const)
+    : (['rgba(64,32,118,0.96)', 'rgba(24,13,46,0.96)'] as const);
+const BUTTON_FILL = ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.06)'] as const;
 
 /** Height of the bar below the status bar inset — screens floating content under it pad by this. */
 export const MATCH_TOP_BAR_HEIGHT = BAR_PAD_TOP + CAPSULE_HEIGHT + BAR_PAD_BOTTOM;
@@ -73,9 +77,11 @@ function GlassIconButton({
         <GlassBubbleFill radius={radius} height={BUTTON_SIZE} />
       ) : (
         <>
-          <View style={[StyleSheet.absoluteFill, styles.iconButtonFill]} />
-          <GlassSheen radius={radius} intensity={0.8} />
-          <GlassRim radius={radius} />
+          <View style={[StyleSheet.absoluteFill, styles.iconButtonClip]}>
+            <LinearGradient colors={BUTTON_FILL} style={StyleSheet.absoluteFill} />
+          </View>
+          <GlassSheen radius={radius} />
+          <GlassRim radius={radius} tint="rgba(210,190,255,0.32)" />
         </>
       )}
       {children}
@@ -134,12 +140,20 @@ export function MatchDetailsTopBar({
         {Platform.OS === 'ios' ? (
           <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.capsuleClip]} />
         ) : null}
-        <View style={[StyleSheet.absoluteFill, styles.capsuleClip, { backgroundColor: CAPSULE_BG }]} />
+        <View style={[StyleSheet.absoluteFill, styles.capsuleClip]}>
+          <LinearGradient colors={CAPSULE_FILL} style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={['rgba(164,123,255,0.28)', 'rgba(164,123,255,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 0.5, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
         <GlassSheen radius={CAPSULE_RADIUS} />
-        <GlassRim radius={CAPSULE_RADIUS} />
+        <GlassRim radius={CAPSULE_RADIUS} tint="rgba(190,160,255,0.38)" />
 
         <GlassIconButton onPress={onBack} accessibilityLabel={backLabel}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
+          <Ionicons name="chevron-back" size={26} color="#fff" />
         </GlassIconButton>
 
         <View style={styles.center}>
@@ -170,7 +184,7 @@ export function MatchDetailsTopBar({
           {notificationsLoading ? (
             <ActivityIndicator size="small" color="#c79bff" />
           ) : (
-            <Ionicons name={isSubscribed ? 'notifications' : 'notifications-outline'} size={20} color={bellColor} />
+            <Ionicons name={isSubscribed ? 'notifications' : 'notifications-outline'} size={24} color={bellColor} />
           )}
         </GlassIconButton>
 
@@ -201,11 +215,11 @@ const styles = StyleSheet.create({
     borderRadius: CAPSULE_RADIUS,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     gap: 8,
     shadowColor: '#7C4DFF',
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
+    shadowOpacity: 0.55,
+    shadowRadius: 22,
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
   },
@@ -223,9 +237,9 @@ const styles = StyleSheet.create({
   iconButtonPressed: {
     transform: [{ scale: 0.92 }],
   },
-  iconButtonFill: {
+  iconButtonClip: {
     borderRadius: BUTTON_SIZE / 2,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
   },
   center: {
     flex: 1,
@@ -246,9 +260,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.3,
     textAlign: 'center',
+    textShadowColor: 'rgba(164,123,255,0.55)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
 });
