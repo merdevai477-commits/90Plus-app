@@ -340,6 +340,14 @@ export default function ChatScreen() {
 
       onScroll={screen.handleScroll}
 
+      onScrollBeginDrag={screen.handleScrollBeginDrag}
+
+      onScrollEndDrag={screen.handleScrollEndDrag}
+
+      onMomentumScrollBegin={screen.handleMomentumScrollBegin}
+
+      onMomentumScrollEnd={screen.handleMomentumScrollEnd}
+
       onScrollToBottom={screen.handleScrollToBottom}
 
       onRetry={() => {

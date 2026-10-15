@@ -62,7 +62,10 @@ export function useChatScreenState({
   const router = useRouter();
   const listRef = useRef<FlashListRef<Message>>(null);
   const inputRef = useRef<TextInput>(null);
+  /** Pinned to the bottom: the list follows new/streaming content until the user drags away. */
   const isNearBottomRef = useRef(true);
+  const userScrollingRef = useRef(false);
+  const dragReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMessageCountRef = useRef(0);
   const prevOnlineRef = useRef<boolean | null>(null);
   const mountedRef = useRef(true);
@@ -87,6 +90,7 @@ export function useChatScreenState({
       scrollTimersRef.current = [];
       scrollRafRef.current.forEach((id) => cancelAnimationFrame(id));
       scrollRafRef.current = [];
+      if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
     };
   }, []);
 
@@ -203,18 +207,19 @@ export function useChatScreenState({
       }
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      // Pin before the new bubble renders; ChatMessageList sticks to the measured
+      // bottom on the resulting content-size change. An index scroll here used the
+      // pre-send item count and jumped the thread up to an older message.
+      isNearBottomRef.current = true;
+      userScrollingRef.current = false;
+      setUnreadCount(0);
+      setShowScrollButton(false);
       sendMessage(textOverride);
       setInputValue('');
       inputRef.current?.blur();
       Keyboard.dismiss();
-      isNearBottomRef.current = true;
-      setUnreadCount(0);
-      const raf = requestAnimationFrame(() => {
-        safeScrollToEnd(false);
-      });
-      scrollRafRef.current.push(raf);
     },
-    [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline, safeScrollToEnd],
+    [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline],
   );
 
   const handleStartEdit = useCallback(
@@ -237,24 +242,52 @@ export function useChatScreenState({
       const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
       const near = distanceFromBottom < SCROLL_NEAR_BOTTOM_THRESHOLD;
 
-      isNearBottomRef.current = near;
-
       if (near) {
+        isNearBottomRef.current = true;
         if (unreadCount > 0) setUnreadCount(0);
         if (showScrollButton) setShowScrollButton(false);
-      } else if (!showScrollButton) {
-        setShowScrollButton(true);
+        return;
       }
+      // Content growth, keyboard and programmatic scrolls also emit scroll events;
+      // only a real drag/fling should unpin the thread from the bottom.
+      if (!userScrollingRef.current) return;
+      isNearBottomRef.current = false;
+      if (!showScrollButton) setShowScrollButton(true);
     },
     [showScrollButton, unreadCount],
   );
 
+  const handleScrollBeginDrag = useCallback(() => {
+    if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
+    userScrollingRef.current = true;
+  }, []);
+
+  const handleScrollEndDrag = useCallback(() => {
+    if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
+    // A fling fires onMomentumScrollBegin right after; otherwise the drag is over.
+    dragReleaseTimerRef.current = setTimeout(() => {
+      userScrollingRef.current = false;
+    }, 250);
+  }, []);
+
+  /** Keeps a fling counted as the user's scroll; programmatic momentum never sets the flag. */
+  const handleMomentumScrollBegin = useCallback(() => {
+    if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
+  }, []);
+
+  const handleMomentumScrollEnd = useCallback(() => {
+    if (dragReleaseTimerRef.current) clearTimeout(dragReleaseTimerRef.current);
+    userScrollingRef.current = false;
+  }, []);
+
+  /** ChatMessageList performs the measured scroll after this re-pins the thread. */
   const handleScrollToBottom = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     isNearBottomRef.current = true;
+    userScrollingRef.current = false;
     setUnreadCount(0);
-    safeScrollToEnd(false);
-  }, [safeScrollToEnd]);
+    setShowScrollButton(false);
+  }, []);
 
   const handleOpenPanel = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -306,6 +339,10 @@ export function useChatScreenState({
     handleStartEdit,
     handleCancelEdit,
     handleScroll,
+    handleScrollBeginDrag,
+    handleScrollEndDrag,
+    handleMomentumScrollBegin,
+    handleMomentumScrollEnd,
     handleScrollToBottom,
     handleOpenPanel,
     handleBackHome,

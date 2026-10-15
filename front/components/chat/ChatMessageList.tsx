@@ -33,6 +33,10 @@ export type ChatMessageListProps = {
   nudgeText: string | null;
   onDismissNudge: () => void;
   onScroll: (e: Parameters<NonNullable<React.ComponentProps<typeof FlashList>['onScroll']>>[0]) => void;
+  onScrollBeginDrag?: () => void;
+  onScrollEndDrag?: () => void;
+  onMomentumScrollBegin?: () => void;
+  onMomentumScrollEnd?: () => void;
   onScrollToBottom: () => void;
   onRetry: () => void;
   onDismissError: () => void;
@@ -67,6 +71,10 @@ export function ChatMessageList({
   nudgeText,
   onDismissNudge,
   onScroll,
+  onScrollBeginDrag,
+  onScrollEndDrag,
+  onMomentumScrollBegin,
+  onMomentumScrollEnd,
   onScrollToBottom,
   onRetry,
   onDismissError,
@@ -139,23 +147,17 @@ export function ChatMessageList({
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
-  const stickToBottom = useCallback(() => {
+  const stickToBottom = useCallback((animated = false) => {
     if (!mountedRef.current || itemCountRef.current === 0) return;
     if (!isNearBottomRef.current) return;
-    safeFlashListScrollToEnd(listRef.current, false, {
+    safeFlashListScrollToEnd(listRef.current, animated, {
       itemCount: itemCountRef.current,
       contentHeight: pendingContentHeightRef.current ?? undefined,
       viewportHeight: viewportHeightRef.current || undefined,
     });
   }, [isNearBottomRef, listRef]);
 
-  const onListLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
-    const next = e.nativeEvent.layout.height;
-    if (next > 0) viewportHeightRef.current = next;
-  }, []);
-
-  const onListContentSizeChange = useCallback((_w: number, h: number) => {
-    pendingContentHeightRef.current = h;
+  const scheduleStickToBottom = useCallback(() => {
     if (!isNearBottomRef.current) return;
     if (!mountedRef.current || itemCountRef.current === 0) return;
     if (contentSizeRafRef.current != null) return;
@@ -164,6 +166,23 @@ export function ChatMessageList({
       stickToBottom();
     });
   }, [isNearBottomRef, stickToBottom]);
+
+  const onListLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    const next = e.nativeEvent.layout.height;
+    if (next <= 0 || next === viewportHeightRef.current) return;
+    viewportHeightRef.current = next;
+    scheduleStickToBottom();
+  }, [scheduleStickToBottom]);
+
+  const onListContentSizeChange = useCallback((_w: number, h: number) => {
+    pendingContentHeightRef.current = h;
+    scheduleStickToBottom();
+  }, [scheduleStickToBottom]);
+
+  const handleScrollToBottomPress = useCallback(() => {
+    onScrollToBottom();
+    stickToBottom(true);
+  }, [onScrollToBottom, stickToBottom]);
 
   return (
     <View style={styles.messagesPane}>
@@ -180,6 +199,10 @@ export function ChatMessageList({
           : {})}
         onLayout={onListLayout}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onScrollEndDrag={onScrollEndDrag}
+        onMomentumScrollBegin={onMomentumScrollBegin}
+        onMomentumScrollEnd={onMomentumScrollEnd}
         scrollEventThrottle={16}
         drawDistance={CHAT_DRAW_DISTANCE}
         bounces={false}
@@ -197,7 +220,7 @@ export function ChatMessageList({
           pointerEvents="box-none"
         >
           <ScrollToBottomButton
-            onPress={onScrollToBottom}
+            onPress={handleScrollToBottomPress}
             newMessagesCount={unreadCount}
           />
         </Animated.View>
