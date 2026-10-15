@@ -1,5 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, Animated, Platform } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Animated,
+  Platform,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
@@ -7,20 +16,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassBubbleFill, GlassRim, GlassSheen } from '../navigation/glass';
 
-const CAPSULE_HEIGHT = 60;
-const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
-const BUTTON_SIZE = 46;
+const ISLAND_HEIGHT = 56;
+const ISLAND_RADIUS = ISLAND_HEIGHT / 2;
+const ISLAND_GAP = 10;
 const BAR_PAD_TOP = 6;
 const BAR_PAD_BOTTOM = 8;
-/** iOS blurs what scrolls behind the capsule; Android has no blur, so the tint carries it. */
-const CAPSULE_FILL =
+/** iOS blurs what scrolls behind the islands; Android has no blur, so the tint carries it. */
+const ISLAND_FILL =
   Platform.OS === 'ios'
     ? (['rgba(70,36,128,0.62)', 'rgba(26,14,48,0.62)'] as const)
     : (['rgba(64,32,118,0.96)', 'rgba(24,13,46,0.96)'] as const);
-const BUTTON_FILL = ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.06)'] as const;
 
 /** Height of the bar below the status bar inset — screens floating content under it pad by this. */
-export const MATCH_TOP_BAR_HEIGHT = BAR_PAD_TOP + CAPSULE_HEIGHT + BAR_PAD_BOTTOM;
+export const MATCH_TOP_BAR_HEIGHT = BAR_PAD_TOP + ISLAND_HEIGHT + BAR_PAD_BOTTOM;
 
 export function useMatchTopBarHeight(): number {
   const insets = useSafeAreaInsets();
@@ -40,14 +48,45 @@ type MatchDetailsTopBarProps = {
   notificationsLoading?: boolean;
   /** Shown in place of the title as `collapseProgress` goes 0 → 1 (e.g. compact score). */
   compactContent?: React.ReactNode;
-  /** Strip pinned to the capsule's bottom edge, faded in with `collapseProgress`. */
+  /** Strip pinned to the title island's bottom edge, faded in with `collapseProgress`. */
   compactFooter?: React.ReactNode;
   collapseProgress?: Animated.AnimatedInterpolation<number> | Animated.Value;
   /** Overlay the screen so content scrolls behind the glass (pad content by `useMatchTopBarHeight`). */
   floating?: boolean;
 };
 
-function GlassIconButton({
+/** One free-standing piece of liquid glass. */
+function GlassIsland({
+  style,
+  lit,
+  children,
+}: {
+  style?: StyleProp<ViewStyle>;
+  lit?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.island, style]}>
+      {lit ? (
+        <GlassBubbleFill radius={ISLAND_RADIUS} height={ISLAND_HEIGHT} />
+      ) : (
+        <>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.islandClip]} />
+          ) : null}
+          <View style={[StyleSheet.absoluteFill, styles.islandClip]}>
+            <LinearGradient colors={ISLAND_FILL} style={StyleSheet.absoluteFill} />
+          </View>
+          <GlassSheen radius={ISLAND_RADIUS} />
+          <GlassRim radius={ISLAND_RADIUS} tint="rgba(190,160,255,0.38)" />
+        </>
+      )}
+      {children}
+    </View>
+  );
+}
+
+function GlassIslandButton({
   onPress,
   disabled,
   lit,
@@ -62,29 +101,19 @@ function GlassIconButton({
   accessibilityState?: { selected?: boolean; disabled?: boolean };
   children: React.ReactNode;
 }) {
-  const radius = BUTTON_SIZE / 2;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={4}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
-      style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+      style={({ pressed }) => pressed && styles.pressed}
     >
-      {lit ? (
-        <GlassBubbleFill radius={radius} height={BUTTON_SIZE} />
-      ) : (
-        <>
-          <View style={[StyleSheet.absoluteFill, styles.iconButtonClip]}>
-            <LinearGradient colors={BUTTON_FILL} style={StyleSheet.absoluteFill} />
-          </View>
-          <GlassSheen radius={radius} />
-          <GlassRim radius={radius} tint="rgba(210,190,255,0.32)" />
-        </>
-      )}
-      {children}
+      <GlassIsland lit={lit} style={styles.roundIsland}>
+        {children}
+      </GlassIsland>
     </Pressable>
   );
 }
@@ -123,7 +152,8 @@ export function MatchDetailsTopBar({
   const titleOpacity = collapseProgress && compactContent
     ? Animated.multiply(titleFade, Animated.subtract(1, collapseProgress))
     : titleFade;
-  const bellColor = isSubscribed ? '#fff' : notificationsDisabled ? 'rgba(199,155,255,0.4)' : '#c79bff';
+  const bellLit = isSubscribed && !notificationsDisabled;
+  const bellColor = bellLit ? '#fff' : notificationsDisabled ? 'rgba(199,155,255,0.4)' : '#d8c2ff';
 
   return (
     <View
@@ -133,30 +163,15 @@ export function MatchDetailsTopBar({
       <LinearGradient
         pointerEvents="none"
         colors={['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)']}
-        locations={[0, 0.5, 0.82, 1]}
+        locations={[0, 0.88, 0.96, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <View style={styles.capsule}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.capsuleClip]} />
-        ) : null}
-        <View style={[StyleSheet.absoluteFill, styles.capsuleClip]}>
-          <LinearGradient colors={CAPSULE_FILL} style={StyleSheet.absoluteFill} />
-          <LinearGradient
-            colors={['rgba(164,123,255,0.28)', 'rgba(164,123,255,0)']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 0.5, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-        <GlassSheen radius={CAPSULE_RADIUS} />
-        <GlassRim radius={CAPSULE_RADIUS} tint="rgba(190,160,255,0.38)" />
-
-        <GlassIconButton onPress={onBack} accessibilityLabel={backLabel}>
+      <View pointerEvents="box-none" style={styles.row}>
+        <GlassIslandButton onPress={onBack} accessibilityLabel={backLabel}>
           <Ionicons name="chevron-back" size={26} color="#fff" />
-        </GlassIconButton>
+        </GlassIslandButton>
 
-        <View style={styles.center}>
+        <GlassIsland style={styles.titleIsland}>
           <Animated.View
             style={[styles.centerLayer, { opacity: titleOpacity, transform: [{ translateY: titleShift }] }]}
           >
@@ -167,17 +182,22 @@ export function MatchDetailsTopBar({
           {compactContent && collapseProgress ? (
             <Animated.View
               pointerEvents="none"
-              style={[styles.centerLayer, StyleSheet.absoluteFill, { opacity: collapseProgress }]}
+              style={[styles.centerLayer, styles.compactLayer, { opacity: collapseProgress }]}
             >
               {compactContent}
             </Animated.View>
           ) : null}
-        </View>
+          {compactFooter && collapseProgress ? (
+            <Animated.View pointerEvents="none" style={[styles.footer, { opacity: collapseProgress }]}>
+              {compactFooter}
+            </Animated.View>
+          ) : null}
+        </GlassIsland>
 
-        <GlassIconButton
+        <GlassIslandButton
           onPress={onNotifications}
           disabled={notificationsDisabled || notificationsLoading}
-          lit={isSubscribed && !notificationsDisabled}
+          lit={bellLit}
           accessibilityLabel={notificationsLabel}
           accessibilityState={{ selected: isSubscribed, disabled: notificationsDisabled }}
         >
@@ -186,13 +206,7 @@ export function MatchDetailsTopBar({
           ) : (
             <Ionicons name={isSubscribed ? 'notifications' : 'notifications-outline'} size={24} color={bellColor} />
           )}
-        </GlassIconButton>
-
-        {compactFooter && collapseProgress ? (
-          <Animated.View pointerEvents="none" style={[styles.footer, { opacity: collapseProgress }]}>
-            {compactFooter}
-          </Animated.View>
-        ) : null}
+        </GlassIslandButton>
       </View>
     </View>
   );
@@ -210,51 +224,49 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  capsule: {
-    height: CAPSULE_HEIGHT,
-    borderRadius: CAPSULE_RADIUS,
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 7,
-    gap: 8,
-    shadowColor: '#7C4DFF',
-    shadowOpacity: 0.55,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    gap: ISLAND_GAP,
   },
-  capsuleClip: {
-    borderRadius: CAPSULE_RADIUS,
-    overflow: 'hidden',
-  },
-  iconButton: {
-    width: BUTTON_SIZE,
-    height: BUTTON_SIZE,
-    borderRadius: BUTTON_SIZE / 2,
+  island: {
+    height: ISLAND_HEIGHT,
+    borderRadius: ISLAND_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#7C4DFF',
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
   },
-  iconButtonPressed: {
+  islandClip: {
+    borderRadius: ISLAND_RADIUS,
+    overflow: 'hidden',
+  },
+  roundIsland: {
+    width: ISLAND_HEIGHT,
+  },
+  titleIsland: {
+    flex: 1,
+    paddingHorizontal: 14,
+  },
+  pressed: {
     transform: [{ scale: 0.92 }],
   },
-  iconButtonClip: {
-    borderRadius: BUTTON_SIZE / 2,
-    overflow: 'hidden',
-  },
-  center: {
-    flex: 1,
-    height: CAPSULE_HEIGHT - 8,
-  },
   centerLayer: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  compactLayer: {
+    left: 12,
+    right: 12,
   },
   footer: {
     position: 'absolute',
-    left: CAPSULE_RADIUS + 8,
-    right: CAPSULE_RADIUS + 8,
-    bottom: 3,
+    left: ISLAND_RADIUS,
+    right: ISLAND_RADIUS,
+    bottom: 4,
     borderRadius: 1,
     overflow: 'hidden',
   },
