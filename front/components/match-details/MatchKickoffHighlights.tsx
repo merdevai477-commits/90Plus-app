@@ -2,14 +2,15 @@
  * Pre-kickoff / Information tab: fan 1-X-2 vote, stadium photo card and the
  * kickoff / capacity / broadcast / referee grid (Figma 1347:18834).
  */
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from './MatchText';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { GOLD_PRIMARY, PURPLE_SOFT, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from '../../constants/tokens';
 import { MatchCrowdVote, type CrowdVoteTeam } from './MatchCrowdVote';
+import ImageViewerModal from '../common/ImageViewerModal';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import {
   fetchStadiumImageByName,
@@ -93,7 +94,7 @@ function StadiumPlaceholder() {
   );
 }
 
-function StadiumPhoto({ uri, stadiumName }: { uri: string | null; stadiumName: string | null }) {
+function useStadiumPhotoUri(uri: string | null, stadiumName: string | null) {
   const initial = isUsableRemotePhoto(uri) ? uri : null;
   const [remote, setRemote] = useState<string | null>(initial);
 
@@ -118,6 +119,11 @@ function StadiumPhoto({ uri, stadiumName }: { uri: string | null; stadiumName: s
     };
   }, [stadiumName, uri]);
 
+  const onError = useCallback(() => setRemote(null), []);
+  return { remote, onError };
+}
+
+function StadiumPhoto({ remote, onError }: { remote: string | null; onError: () => void }) {
   if (!remote) return <StadiumPlaceholder />;
 
   return (
@@ -127,7 +133,7 @@ function StadiumPhoto({ uri, stadiumName }: { uri: string | null; stadiumName: s
       style={StyleSheet.absoluteFill}
       contentFit="cover"
       cachePolicy="memory-disk"
-      onError={() => setRemote(null)}
+      onError={onError}
     />
   );
 }
@@ -237,6 +243,8 @@ export function MatchKickoffHighlights({
 
   const hasStadium = Boolean(info.stadiumName || info.stadiumImage);
   const hasCard = hasStadium || items.length > 0;
+  const stadiumPhoto = useStadiumPhotoUri(info.stadiumImage, info.stadiumName);
+  const [stadiumViewerOpen, setStadiumViewerOpen] = useState(false);
 
   return (
     <View style={styles.wrap}>
@@ -261,8 +269,14 @@ export function MatchKickoffHighlights({
       {hasCard ? (
         <View style={styles.card}>
           {hasStadium ? (
-            <View style={styles.hero}>
-              <StadiumPhoto uri={info.stadiumImage} stadiumName={info.stadiumName} />
+            <Pressable
+              style={styles.hero}
+              disabled={!stadiumPhoto.remote}
+              onPress={() => setStadiumViewerOpen(true)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={info.stadiumName ?? stadiumLabel}
+            >
+              <StadiumPhoto remote={stadiumPhoto.remote} onError={stadiumPhoto.onError} />
               <LinearGradient
                 colors={['rgba(8,7,25,0.05)', 'rgba(8,7,25,0.35)', 'rgba(8,7,25,0.97)']}
                 locations={[0, 0.45, 1]}
@@ -291,7 +305,7 @@ export function MatchKickoffHighlights({
                   ) : null}
                 </View>
               ) : null}
-            </View>
+            </Pressable>
           ) : null}
 
           {gridRows.length > 0 ? (
@@ -312,6 +326,14 @@ export function MatchKickoffHighlights({
       ) : (
         <Text style={styles.empty}>{emptyHint}</Text>
       )}
+
+      {stadiumPhoto.remote ? (
+        <ImageViewerModal
+          visible={stadiumViewerOpen}
+          imageUrl={stadiumPhoto.remote}
+          onClose={() => setStadiumViewerOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
