@@ -855,18 +855,21 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, is365Fixture, t?.matchDetails?.loadLineupsFailed, lineupFetchAttempts]);
 
-  // Cap exhausted — surface in Sentry once per fixture (the previous effect fired on
-  // every render after the cap: 121 warnings from one device in 85 minutes).
+  // Cap exhausted — surface in Sentry once per fixture only when lineups are
+  // expected (live + provider hasn't said "none"). Empty / upcoming / known-unavailable
+  // matches used to spam Sentry with expected upstream_empty noise.
   useEffect(() => {
     if (lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) return;
     if (isAuthoritativeLineupData(lineups)) return;
     if (lineupCapReportedForRef.current === fixtureId) return;
+    if (lineupsAvailable === false) return;
+    if (!isLive()) return;
     lineupCapReportedForRef.current = fixtureId;
     captureMessage(
       `[MatchDetails] lineups retry cap (${MAX_LINEUP_AUTO_RETRIES}) fixture=${fixtureId}`,
       'warning',
     );
-  }, [lineupFetchAttempts, lineups, fixtureId]);
+  }, [lineupFetchAttempts, lineups, fixtureId, lineupsAvailable, isLive]);
 
   const retryLineups = useCallback(() => {
     setLineupFetchAttempts(0);

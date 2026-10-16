@@ -1898,17 +1898,22 @@ export const ApiFootballService = {
    */
   async getFixtureEvents(
     fixtureId: number,
-    options?: { skipCache?: boolean },
+    options?: { skipCache?: boolean; timeout?: number },
   ): Promise<FixtureEvent[]> {
+    const timeout = options?.timeout;
     try {
       if (options?.skipCache) {
         return await fetchFromProxy<FixtureEvent[]>(
           `/cached/fixture/${fixtureId}/events`,
           {},
-          { fresh: true },
+          { fresh: true, ...(timeout ? { timeout } : {}) },
         );
       }
-      return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
+      return await fetchFromProxy<FixtureEvent[]>(
+        `/cached/fixture/${fixtureId}/events`,
+        {},
+        timeout ? { timeout } : undefined,
+      );
     } catch (error) {
       // Do not retry aborted/cancelled requests with fresh=1 — that caused
       // duplicate upstream hits and Railway 499 noise when screens remount.
@@ -1922,7 +1927,11 @@ export const ApiFootballService = {
         return [];
       }
       try {
-        return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
+        return await fetchFromProxy<FixtureEvent[]>(
+          `/cached/fixture/${fixtureId}/events`,
+          {},
+          timeout ? { timeout } : undefined,
+        );
       } catch {
         return [];
       }

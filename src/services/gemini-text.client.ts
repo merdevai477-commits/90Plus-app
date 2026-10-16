@@ -66,6 +66,50 @@ function isRetryableGeminiStatus(status: number): boolean {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
+/** Skip Gemini quiz calls while free-tier / daily quota is exhausted. */
+let geminiQuizCooldownUntilMs = 0;
+const GEMINI_QUOTA_COOLDOWN_MS = 15 * 60 * 1000;
+
+export function isGeminiQuizInCooldown(): boolean {
+  return Date.now() < geminiQuizCooldownUntilMs;
+}
+
+export function getGeminiQuizCooldownRemainingMs(): number {
+  return Math.max(0, geminiQuizCooldownUntilMs - Date.now());
+}
+
+function markGeminiQuizQuotaCooldown(reason: string): void {
+  const until = Date.now() + GEMINI_QUOTA_COOLDOWN_MS;
+  // Only extend / announce when entering a fresh cooldown window.
+  if (until > geminiQuizCooldownUntilMs + 1_000) {
+    geminiQuizCooldownUntilMs = until;
+    // Lazy require avoids a circular import with the logger at module load.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { logger } = require('../utils/logger') as typeof import('../utils/logger');
+      logger.warn('[Gemini] quiz quota cooldown — skipping Gemini for 15m', {
+        reason: reason.slice(0, 160),
+        until: new Date(until).toISOString(),
+      });
+    } catch {
+      // ignore
+    }
+  } else {
+    geminiQuizCooldownUntilMs = Math.max(geminiQuizCooldownUntilMs, until);
+  }
+}
+
+function isGeminiQuotaExhaustedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  // Any 429 from Gemini quiz is treated as quota pressure — free tier is tiny (20/day).
+  return /Gemini HTTP 429/i.test(msg);
+}
+
+/** Test-only. */
+export function __resetGeminiQuizCooldownForTests(): void {
+  geminiQuizCooldownUntilMs = 0;
+}
+
 export function isGeminiAudioConfigured(): boolean {
   return !!resolveGeminiQuizApiKey();
 }
@@ -221,6 +265,11 @@ export async function generateGeminiText(
   if (!apiKey) {
     throw new Error('Gemini API key not configured (GEMINI_QUIZ_API_KEY / GEMINI_API_KEY)');
   }
+  if (isGeminiQuizInCooldown()) {
+    throw new Error(
+      `Gemini quiz in quota cooldown (${Math.ceil(getGeminiQuizCooldownRemainingMs() / 1000)}s left)`,
+    );
+  }
 
   const primary = params.model ?? resolveGeminiQuizModel();
   const fallback = resolveGeminiQuizFallbackModel();
@@ -256,7 +305,11 @@ export async function generateGeminiText(
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         const err = new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 400)}`);
-        // Transient upstream errors (503/5xx/429): try the fallback model before failing.
+        if (res.status === 429) {
+          markGeminiQuizQuotaCooldown(err.message);
+          throw err; // don't burn the fallback model on the same exhausted quota
+        }
+        // Transient upstream errors (503/5xx): try the fallback model before failing.
         if (isRetryableGeminiStatus(res.status) && hasFallback) {
           lastErr = err;
           continue;

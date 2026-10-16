@@ -85,12 +85,27 @@ const createPrismaClient = () => {
     } catch (error: any) {
       const after = Date.now();
       const duration = after - before;
-      
-      logger.error(`❌ Query failed: ${params.model}.${params.action} after ${duration}ms`, {
-        error: error.message,
-        code: error.code,
-      });
-      
+
+      // Expected unique races (idempotent creates) — callers already handle P2002.
+      // Logging them as ERROR flooded Railway and Sentry without actionable signal.
+      const isExpectedUniqueRace =
+        error?.code === 'P2002' &&
+        (params.model === 'MatchEvent' ||
+          params.model === 'MatchEventDelivery' ||
+          params.model === 'User');
+
+      if (isExpectedUniqueRace) {
+        logger.debug(
+          `♻️ Expected unique race: ${params.model}.${params.action} after ${duration}ms`,
+          { code: error.code },
+        );
+      } else {
+        logger.error(`❌ Query failed: ${params.model}.${params.action} after ${duration}ms`, {
+          error: error.message,
+          code: error.code,
+        });
+      }
+
       throw error;
     }
   });

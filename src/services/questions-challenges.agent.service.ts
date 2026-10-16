@@ -60,7 +60,12 @@ import {
 } from './chat-agent-tools.service';
 import { createAgentOpenAIClient } from './chat-agent.service';
 import { buildGroundingSystemMessage, extractGroundedFacts } from './chat-grounding.service';
-import { generateGeminiText, isGeminiQuizConfigured, resolveGeminiQuizModel } from './gemini-text.client';
+import {
+  generateGeminiText,
+  isGeminiQuizConfigured,
+  isGeminiQuizInCooldown,
+  resolveGeminiQuizModel,
+} from './gemini-text.client';
 
 /** Tool-call rounds allowed before we give up on a mode's round. */
 const MAX_TOOL_STEPS = 4;
@@ -161,6 +166,13 @@ async function runQuestionsAgentViaGemini(
   params: QuestionsAgentParams,
 ): Promise<QuestionsAgentResult | null> {
   if (!isGeminiQuizConfigured()) return null;
+  // Avoid hammering a free-tier key that already returned 429 this window.
+  if (isGeminiQuizInCooldown()) {
+    logger.debug('[QuestionsAgent] skipping Gemini — quota cooldown active', {
+      label: params.label,
+    });
+    return null;
+  }
 
   try {
     const { content, model } = await generateGeminiText({
@@ -189,10 +201,19 @@ async function runQuestionsAgentViaGemini(
       toolsUsed: [],
     };
   } catch (err) {
-    logger.error('[QuestionsAgent] Gemini fallback failed', {
-      label: params.label,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    const msg = err instanceof Error ? err.message : String(err);
+    // Cooldown / quota is expected noise — warn once-level, not ERROR spam.
+    if (/quota cooldown|Gemini HTTP 429/i.test(msg)) {
+      logger.warn('[QuestionsAgent] Gemini unavailable (quota)', {
+        label: params.label,
+        error: msg.slice(0, 200),
+      });
+    } else {
+      logger.error('[QuestionsAgent] Gemini fallback failed', {
+        label: params.label,
+        error: msg,
+      });
+    }
     return null;
   }
 }
@@ -412,9 +433,12 @@ export async function runQuestionsAgent(
     return null;
   }
 
-  const geminiFirst = preferredQuizProvider() === 'gemini' && isGeminiQuizConfigured();
+  const geminiReady =
+    preferredQuizProvider() === 'gemini' &&
+    isGeminiQuizConfigured() &&
+    !isGeminiQuizInCooldown();
 
-  if (geminiFirst) {
+  if (geminiReady) {
     const result = await runQuestionsAgentViaGemini(params);
     if (result) return result;
     if (isChatAgentConfigured()) {
@@ -422,6 +446,15 @@ export async function runQuestionsAgent(
         label: params.label,
       });
     }
+    return runQuestionsAgentViaOpenRouter(params);
+  }
+
+  // Preferred Gemini but cooling down → go straight to OpenRouter (no wasted 429 latency).
+  if (
+    preferredQuizProvider() === 'gemini' &&
+    isGeminiQuizInCooldown() &&
+    isChatAgentConfigured()
+  ) {
     return runQuestionsAgentViaOpenRouter(params);
   }
 

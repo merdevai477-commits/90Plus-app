@@ -18,6 +18,10 @@ const WS_TRUST_DEBOUNCE_MS = 2500;
 const LIVE_FIXTURE_EVENTS_RECONCILE_MS = 60_000;
 /** Fallback reconciliation when WS is not trusted. */
 const LIVE_FIXTURE_EVENTS_POLL_MS = 15_000;
+/** Skip HTTP events reconcile when WS recently patched this fixture. */
+const LIVE_FIXTURE_EVENTS_WS_FRESH_MS = 45_000;
+/** Only Sentry-report truly slow polls (cold cache / upstream lag). */
+const LIVE_FIXTURE_EVENTS_SLOW_MS = 12_000;
 
 /**
  * Single global owner of live fixture HTTP polling and WebSocket patching.
@@ -68,6 +72,18 @@ export function useLiveFixtureSync(): void {
         ? LIVE_FIXTURE_EVENTS_RECONCILE_MS
         : LIVE_FIXTURE_EVENTS_POLL_MS;
       if (now - lastFocusedEventsAtRef.current < intervalMs) return;
+
+      // WS already owns score/clock and recently patched — HTTP reconcile can wait.
+      // Avoids stacking slow /events calls that only duplicate what WS already delivered.
+      if (
+        wsTrustedRef.current &&
+        snap.lastWsAppliedAt != null &&
+        now - snap.lastWsAppliedAt < LIVE_FIXTURE_EVENTS_WS_FRESH_MS &&
+        snap.events.length > 0
+      ) {
+        return;
+      }
+
       lastFocusedEventsAtRef.current = now;
       addBreadcrumb('events poll fired', 'match-details.events', 'info', {
         fixtureId: focusedId,
@@ -77,7 +93,7 @@ export function useLiveFixtureSync(): void {
       const pollStarted = Date.now();
       await state.fetchAndIngestEvents(focusedId);
       const pollMs = Date.now() - pollStarted;
-      if (pollMs > 5_000) {
+      if (pollMs > LIVE_FIXTURE_EVENTS_SLOW_MS) {
         captureMessage(
           `[MatchDetails] events poll slow (${pollMs}ms) fixture=${focusedId}`,
           'warning',

@@ -370,7 +370,10 @@ export async function fetchEventsSnapshot(
 ): Promise<LiveFixtureSnapshot | null> {
   return runCancellable(inFlightEvents, fixtureId, async () => {
     try {
-      const events = await ApiFootballService.getFixtureEvents(fixtureId);
+      // Focused reconcile should fail fast rather than stall Match Details for 30s+.
+      const events = await ApiFootballService.getFixtureEvents(fixtureId, {
+        timeout: 8_000,
+      });
       if (!existing?.fixture) {
         return null;
       }

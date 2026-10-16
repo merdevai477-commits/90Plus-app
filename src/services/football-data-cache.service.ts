@@ -45,6 +45,9 @@ import {
 } from '../config/world-cup-only-mode.config';
 import { getWorldCupTabState } from './app-features.service';
 
+/** Cap noisy empty-lineup warnings per fixture for this process lifetime. */
+const emptyLineupWarnCounts = new Map<number, number>();
+
 // Memory cache for frequently accessed data
 interface MemoryCacheEntry<T> {
     data: T;
@@ -2294,7 +2297,17 @@ class FootballDataCacheService {
                     );
                 }
             }
-            logger.warn(`[Lineups] fixture=${fixtureId} reason=upstream_empty source=365`);
+            // Expected for many leagues / early kickoff — keep first sighting visible,
+            // demote repeats so Railway error streams stay actionable.
+            const prevEmptyLogs = emptyLineupWarnCounts.get(fixtureId) ?? 0;
+            emptyLineupWarnCounts.set(fixtureId, prevEmptyLogs + 1);
+            if (prevEmptyLogs === 0) {
+              logger.warn(`[Lineups] fixture=${fixtureId} reason=upstream_empty source=365`);
+            } else if (prevEmptyLogs < 3) {
+              logger.debug(
+                `[Lineups] fixture=${fixtureId} reason=upstream_empty source=365 (repeat ${prevEmptyLogs})`,
+              );
+            }
             // P1-7: backoff live empty upstream polls; never latch empty lineups
             // under FINISHED TTL (6h) — that hid XI for whole sessions after LIVE→FT.
             if (isFinished || TERMINAL_LATCH_STATUSES.includes(dbMatch?.status ?? '')) {
