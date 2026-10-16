@@ -8,6 +8,7 @@ import * as Application from 'expo-application';
 import { Platform, Linking, Alert } from 'react-native';
 import { getApiUrl } from '../config/api.config';
 import { safeJsonParse } from '../utils/safeJsonParse';
+import { isAbortError } from '../utils/isAbortError';
 
 const API_URL = getApiUrl();
 
@@ -119,8 +120,11 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
         }
 
         return null;
-    } catch (error: any) {
-        console.error('Error checking app version:', error);
+    } catch (error: unknown) {
+        // Timeout AbortController / navigation cancel — expected, not a real failure.
+        if (!isAbortError(error)) {
+            console.error('Error checking app version:', error);
+        }
         // Don't block app if version check fails
         return null;
     }
