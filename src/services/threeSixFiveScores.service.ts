@@ -2522,8 +2522,8 @@ export class ThreeSixFiveScoresService {
       if (!competitionMeta.has(competitionId)) {
         competitionMeta.set(competitionId, {
           name: `Competition ${competitionId}`,
-          country: null,
-          logo: null,
+          country: undefined,
+          logo: undefined,
         });
       }
 
