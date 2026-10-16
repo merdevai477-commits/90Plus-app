@@ -83,7 +83,12 @@ export function LockedPickSheet({ notice, scale, onClose, onViewProfile }: Locke
   const canViewProfile = player?.athleteId != null;
   const confirmed = reason === 'confirmed' && player != null;
   const title = confirmed ? pickCopy.pickLockedTitle : pickCopy.lockedTitle;
-  const body = confirmed ? pickCopy.pickLockedBody.replace('{name}', player.name) : pickCopy.lockedBody;
+  const leagueName = league ? pickCopy.leagues[league] : '';
+  const body = confirmed
+    ? pickCopy.pickLockedBody.replace('{name}', player.name)
+    : leagueName
+      ? pickCopy.lockedBody.replace('{league}', leagueName)
+      : pickCopy.lockedBodyGeneric;
   const row = isAr ? 'row-reverse' : 'row';
   const textAlign = isAr ? 'right' : 'left';
 

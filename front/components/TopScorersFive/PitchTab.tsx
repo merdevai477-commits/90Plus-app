@@ -73,13 +73,15 @@ const SLOTS: readonly Slot[] = [
 
 type PitchTabProps = {
   picks: Partial<Record<TsfLeagueKey, TsfPlayer>>;
+  /** Leagues whose gameweek has already kicked off (empty slots stay locked). */
+  leagueLocked?: Partial<Record<TsfLeagueKey, boolean>>;
   scale: number;
   onBack: () => void;
   onOpenLeague: (league: TsfLeagueKey) => void;
   onRemove: (league: TsfLeagueKey) => void;
 };
 
-export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: PitchTabProps) {
+export function PitchTab({ picks, leagueLocked, scale, onBack, onOpenLeague, onRemove }: PitchTabProps) {
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
   const copy = t.topScorersFive;
@@ -183,6 +185,7 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
 
         {SLOTS.map((slot) => {
           const player = picks[slot.key];
+          const slotLocked = Boolean(player?.locked || (!player && leagueLocked?.[slot.key]));
           return (
             <View
               key={slot.key}
@@ -306,13 +309,17 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
                 <FontAwesome5 name="crown" size={s(17)} color={PURPLE_SOFT} />
               </View>
 
-              {player?.locked ? (
+              {slotLocked ? (
                 <TouchableOpacity
                   onPress={() => onOpenLeague(slot.key)}
                   hitSlop={8}
                   activeOpacity={0.75}
                   accessibilityRole="button"
-                  accessibilityLabel={pickCopy.lockedA11y.replace('{name}', player.name)}
+                  accessibilityLabel={
+                    player
+                      ? pickCopy.lockedA11y.replace('{name}', player.name)
+                      : `${pickCopy.leagues[slot.key]} — ${pickCopy.lockedUntilNext}`
+                  }
                   style={[
                     styles.remove,
                     styles.locked,

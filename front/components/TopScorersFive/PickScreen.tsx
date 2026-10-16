@@ -60,6 +60,8 @@ export default function TopScorersFivePickScreen() {
 
   const [tab, setTab] = useState<TsfTabKey>('pitch');
   const [picks, setPicks] = useState<Partial<Record<TsfLeagueKey, TsfPlayer>>>({});
+  /** Gameweek deadline passed for this league (even with an empty slot). */
+  const [leagueLocked, setLeagueLocked] = useState<Partial<Record<TsfLeagueKey, boolean>>>({});
   const [openLeague, setOpenLeague] = useState<TsfLeagueKey | null>(null);
   const [livePlayers, setLivePlayers] = useState<Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>>>({});
   const [pending, setPending] = useState<TsfPlayer | null>(null);
@@ -99,6 +101,7 @@ export default function TopScorersFivePickScreen() {
           const data = await topScorersFiveService.getSelection(token, league, language);
           const pick = tsfPickFromSelection(data);
           if (cancelled) return;
+          setLeagueLocked((prev) => ({ ...prev, [league]: data.gameweek.locked }));
           setPicks((prev) => {
             const next = { ...prev };
             if (pick) next[league] = pick;
@@ -162,6 +165,7 @@ export default function TopScorersFivePickScreen() {
   const explainFailure = useCallback(
     (league: TsfLeagueKey, error: unknown, player?: TsfPlayer) => {
       if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_LOCKED') {
+        setLeagueLocked((prev) => ({ ...prev, [league]: true }));
         setLockedNotice({ league, player, reason: 'gameweek' });
       } else if (error instanceof TsfApiError && error.status === 401) {
         Alert.alert(pickCopy.signInTitle, pickCopy.signInBody);
@@ -175,13 +179,13 @@ export default function TopScorersFivePickScreen() {
   const handleOpenLeague = useCallback(
     (league: TsfLeagueKey) => {
       const current = picks[league];
-      if (current?.locked) {
+      if (current?.locked || leagueLocked[league]) {
         explainLocked(league, current);
         return;
       }
       setOpenLeague(league);
     },
-    [explainLocked, picks],
+    [explainLocked, leagueLocked, picks],
   );
 
   const handlePick = useCallback((league: TsfLeagueKey, player: TsfPlayer) => {
@@ -303,6 +307,7 @@ export default function TopScorersFivePickScreen() {
       {tab === 'pitch' ? (
         <PitchTab
           picks={picks}
+          leagueLocked={leagueLocked}
           scale={scale}
           onBack={handleBack}
           onOpenLeague={handleOpenLeague}
