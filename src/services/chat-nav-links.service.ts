@@ -3,7 +3,11 @@ import {
   preferScores365AthletesPhotoUrl,
 } from '../utils/scores365-athlete-photo';
 
-export type ChatNavLinkType = 'player' | 'club' | 'match' | 'matches';
+export type ChatNavLinkType = 'player' | 'club' | 'competition' | 'match' | 'matches';
+
+function competitionLogoUrl(competitionId: number): string {
+  return `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/Competitions/${competitionId}`;
+}
 
 export type ChatNavLink = {
   type: ChatNavLinkType;
@@ -97,7 +101,15 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
   for (const item of raw) {
     if (!isRecord(item)) continue;
     const type = item.type;
-    if (type !== 'player' && type !== 'club' && type !== 'match' && type !== 'matches') continue;
+    if (
+      type !== 'player' &&
+      type !== 'club' &&
+      type !== 'competition' &&
+      type !== 'match' &&
+      type !== 'matches'
+    ) {
+      continue;
+    }
     const label = asLabel(item.label, type);
     const id = positiveId(item.id) ?? undefined;
     const query = asLabel(item.query) || undefined;
@@ -282,11 +294,16 @@ export function inferChatNavIntent(message: string): ChatNavLinkType[] {
     );
   const wantsPlayer =
     /لاعب|\bplayer\b|بيلعب|إحصائ|احصائ|سيزون|موسم|ألقاب|القاب|هداف(?!ين)|صناعة|صانع/.test(q);
+  const wantsCompetition =
+    /دوري|بطول[ةه]|ليج|\bleague\b|\bcompetition\b|ترتيب\s*ال|premier|laliga|serie\s*a|bundesliga|champions/i.test(
+      q,
+    );
 
   if (wantsMatches) types.push('matches');
   if (wantsMatch) types.push('match');
   if (wantsPlayer) types.push('player');
   if (wantsClub) types.push('club');
+  if (wantsCompetition) types.push('competition');
 
   return types;
 }
@@ -484,6 +501,29 @@ export function extractChatNavLinks(
       });
     }
 
+    const competitionHit = firstRecord(hits?.competitions);
+    const competitionId =
+      positiveId(parsed.competitionId) ||
+      (bestType === 'competition' ? positiveId(best?.id) : null) ||
+      positiveId(competitionHit?.competitionId) ||
+      positiveId(competitionHit?.id);
+    const competitionName = asLabel(
+      parsed.competitionName ??
+        (bestType === 'competition' ? best?.name : '') ??
+        competitionHit?.name ??
+        parsed.name,
+    );
+    if (competitionId && competitionName) {
+      addLink(map, {
+        type: 'competition',
+        id: competitionId,
+        label: competitionName,
+        logo:
+          firstHttpUrl(parsed.logo, competitionHit?.logo) ?? competitionLogoUrl(competitionId),
+        country: asLabel(parsed.country ?? competitionHit?.country) || null,
+      });
+    }
+
     const matchNode = isRecord(parsed.match) ? parsed.match : parsed;
     const fixtureId = fixtureIdFrom(parsed) || fixtureIdFrom(matchNode);
     if (fixtureId && wantMatch && !wantMatches) {
@@ -527,12 +567,21 @@ export function extractChatNavLinks(
   // generic (unresolved) profile CTA needs the question itself to ask about one.
   const askedPlayer = inferred.includes('player');
   const askedClub = inferred.includes('club');
+  const askedCompetition = inferred.includes('competition');
+  const competitionFallback = language === 'en' ? 'Competition profile' : 'بروفايل البطولة';
 
   if (!hasChoices && askedPlayer && ![...map.values()].some((l) => l.type === 'player')) {
     addLink(map, { type: 'player', label: playerFallback, query });
   }
   if (!hasChoices && askedClub && ![...map.values()].some((l) => l.type === 'club')) {
     addLink(map, { type: 'club', label: clubFallback, query });
+  }
+  if (
+    !hasChoices &&
+    askedCompetition &&
+    ![...map.values()].some((l) => l.type === 'competition')
+  ) {
+    addLink(map, { type: 'competition', label: competitionFallback, query });
   }
   if (wantMatches) {
     addLink(map, { type: 'matches', label: matchesFallback });
@@ -552,9 +601,11 @@ export function extractChatNavLinks(
               ? playerFallback
               : type === 'club'
                 ? clubFallback
-                : type === 'match'
-                  ? matchFallback
-                  : matchesFallback,
+                : type === 'competition'
+                  ? competitionFallback
+                  : type === 'match'
+                    ? matchFallback
+                    : matchesFallback,
           ...(type === 'matches' ? {} : { query }),
         });
       }
@@ -563,7 +614,13 @@ export function extractChatNavLinks(
 
   const ranked = [...map.values()].sort((a, b) => {
     if (!!b.choice !== !!a.choice) return a.choice ? -1 : 1;
-    const order: Record<ChatNavLinkType, number> = { player: 0, club: 1, matches: 2, match: 3 };
+    const order: Record<ChatNavLinkType, number> = {
+      player: 0,
+      club: 1,
+      competition: 2,
+      matches: 3,
+      match: 4,
+    };
     const typeDelta = order[a.type] - order[b.type];
     if (typeDelta !== 0) return typeDelta;
     return (b.id ? 1 : 0) - (a.id ? 1 : 0);
@@ -582,6 +639,13 @@ export function extractChatNavLinks(
     }
     if (!link.choice && link.type === 'player' && out.some((x) => x.type === 'player')) continue;
     if (!link.choice && link.type === 'club' && out.some((x) => x.type === 'club')) continue;
+    if (
+      !link.choice &&
+      link.type === 'competition' &&
+      out.some((x) => x.type === 'competition')
+    ) {
+      continue;
+    }
     if (link.type === 'matches' && out.some((x) => x.type === 'matches')) continue;
     out.push({
       ...link,

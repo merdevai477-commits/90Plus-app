@@ -2429,39 +2429,139 @@ export class ThreeSixFiveScoresService {
         `competitor-stats:${competitorId}:${competitionId}`,
         600_000,
       );
-      const boards = payload?.stats?.athletesStats ?? [];
-      if (!boards.length) return { data: null, source: null };
+      const result = this.parseAthletesStatsBoards(payload, competitionId, {
+        maxBoards: roster ? 20 : 6,
+        maxRows: roster ? 50 : 10,
+      });
+      if (!result) return { data: null, source: null };
 
-      const maxBoards = roster ? 20 : 6;
-      const maxRows = roster ? 50 : 10;
-      const leaderboards: ThreeSixFiveStatLeaderboard[] = boards
-        .slice(0, maxBoards)
-        .map((board) => ({
-          key: board.id,
-          typeId: board.statsTypes?.[0]?.typeId ?? board.rows?.[0]?.stats?.[0]?.typeId ?? null,
-          name: board.name ?? '—',
-          rows: (board.rows ?? [])
-            .slice(0, maxRows)
-            .map((r) => ({
-              rank: r.position,
-              athleteId: r.entity?.id ?? 0,
-              name: r.entity?.name ?? '—',
-              photo: r.entity?.id ? buildScores365AthletePhotoUrl(r.entity.id, 68) : null,
-              value: r.stats?.[0]?.value ?? '',
-              competitorId: r.entity?.competitorId ?? null,
-              leftClub: r.entity?.isLeftClub === true,
-              positionName: r.entity?.positionName ?? null,
-            }))
-            .filter((row) => row.athleteId > 0),
-        }))
-        .filter((board) => board.rows.length > 0);
-
-      const result: ThreeSixFiveCompetitorStats = { competitionId, leaderboards };
       await redisCacheService.set(cacheKey, result, 600_000);
       return { data: result, source: '365scores' };
     } catch (err: unknown) {
       logger.error(
         `[365Scores] getCompetitorStats(${competitorId}, ${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  /**
+   * League-wide leaderboards (goals / assists / …) via `/web/stats/?competitions=`.
+   * Same shape as competitor stats — used by the competition profile screen.
+   */
+  async getCompetitionStats(
+    competitionId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
+    if (!Number.isFinite(competitionId) || competitionId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competition:${competitionId}:stats:v1:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorStats>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const payload = await this.fetchJson<StatsPayload>(
+        `/web/stats/?${this.commonParams(langId)}&competitions=${competitionId}`,
+        `competition-stats:${competitionId}`,
+        600_000,
+      );
+      const result = this.parseAthletesStatsBoards(payload, competitionId, {
+        maxBoards: 8,
+        maxRows: 15,
+      });
+      if (!result) return { data: null, source: null };
+
+      await redisCacheService.set(cacheKey, result, 600_000);
+      return { data: result, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitionStats(${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  private parseAthletesStatsBoards(
+    payload: StatsPayload | null,
+    competitionId: number,
+    opts: { maxBoards: number; maxRows: number },
+  ): ThreeSixFiveCompetitorStats | null {
+    const boards = payload?.stats?.athletesStats ?? [];
+    if (!boards.length) return null;
+    const leaderboards: ThreeSixFiveStatLeaderboard[] = boards
+      .slice(0, opts.maxBoards)
+      .map((board) => ({
+        key: board.id,
+        typeId: board.statsTypes?.[0]?.typeId ?? board.rows?.[0]?.stats?.[0]?.typeId ?? null,
+        name: board.name ?? '—',
+        rows: (board.rows ?? [])
+          .slice(0, opts.maxRows)
+          .map((r) => ({
+            rank: r.position,
+            athleteId: r.entity?.id ?? 0,
+            name: r.entity?.name ?? '—',
+            photo: r.entity?.id ? buildScores365AthletePhotoUrl(r.entity.id, 68) : null,
+            value: r.stats?.[0]?.value ?? '',
+            competitorId: r.entity?.competitorId ?? null,
+            leftClub: r.entity?.isLeftClub === true,
+            positionName: r.entity?.positionName ?? null,
+          }))
+          .filter((row) => row.athleteId > 0),
+      }))
+      .filter((board) => board.rows.length > 0);
+    if (!leaderboards.length) return null;
+    return { competitionId, leaderboards };
+  }
+
+  /**
+   * Same-calendar-day live + upcoming fixtures for a 365 competition
+   * (used by the followed-league match watcher).
+   */
+  async getCompetitionTodaysFixtures(
+    competitionId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<FixtureFromAPI[]>> {
+    if (!Number.isFinite(competitionId) || competitionId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const today = calendarTodayKey();
+      const cacheKey = `365:competition:${competitionId}:today-fixtures:${today}:${langId}`;
+      const cached = await redisCacheService.get<FixtureFromAPI[]>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const payload = await this.fetchJson<AllScoresPayload>(
+        `/web/games/allscores/?${this.commonParams(langId)}&competitions=${competitionId}`,
+        `competition-allscores:${competitionId}`,
+        120_000,
+      );
+      const games = payload?.games ?? [];
+      const countriesById = new Map<number, string>();
+      for (const c of payload?.countries ?? []) {
+        if (c.id != null && c.name) countriesById.set(c.id, c.name);
+      }
+      const competitionMeta = this.buildCompetitionMetaFromCatalog(
+        payload?.competitions ?? [],
+        countriesById,
+      );
+      const fixtures = games
+        .filter((g) => {
+          if (calendarDateFromKickoff(g.startTime) !== today) return false;
+          const phase = this.classifyPhase(g);
+          return phase === 'live' || phase === 'upcoming';
+        })
+        .map((g) => this.buildCompetitorFixture(g, competitionMeta));
+
+      await redisCacheService.set(cacheKey, fixtures, 90_000);
+      return { data: fixtures, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitionTodaysFixtures(${competitionId}) failed:`,
         (err as Error)?.message,
       );
       return { data: null, source: null };
@@ -3110,34 +3210,29 @@ export class ThreeSixFiveScoresService {
     const firstQuery = expansion.queries[0] ?? trimmed;
     const extraQueries = expansion.queries.slice(1).filter((q) => q && q !== firstQuery);
 
-    // Primary 365 hit + local competitions in parallel. Only hit the
-    // fallback language when the primary language returns nothing — that
-    // cuts cold-path latency roughly in half for the common case.
-    const [primaryRes, competitions] = await Promise.all([
+    // Primary + first alias expansion + local competitions in parallel so
+    // famous-player aliases (رافينيا → Raphinha) don't wait on a second hop.
+    const [primaryRes, firstExtraRes, competitions] = await Promise.all([
       this.fetchSearchEntities(firstQuery, primaryLangId),
+      extraQueries[0]
+        ? this.fetchSearchEntities(extraQueries[0], primaryLangId)
+        : Promise.resolve(null as SearchEntitiesFetch | null),
       this.searchCompetitionsLocal(trimmed, expansion.boostedEntityIds, language),
     ]);
 
-    let results: SearchEntitiesFetch = primaryRes;
+    let results: SearchEntitiesFetch = firstExtraRes
+      ? this.mergeSearchResults([primaryRes, firstExtraRes])
+      : primaryRes;
     if (this.search365Empty(results) && fallbackLangId !== primaryLangId) {
       results = await this.fetchSearchEntities(firstQuery, fallbackLangId);
     }
 
-    // Alias expansion (e.g. رافينيا → Raphinha) used to only rewrite the
-    // boost set — the canonical English query was never fetched, so obscure
-    // same-name hits won. Merge extra expansion queries when the boosted
-    // famous entity is missing from the primary hit set.
-    if (extraQueries.length && this.searchNeedsExpansion(results, expansion.boostedEntityIds)) {
+    const restExtras = extraQueries.slice(1);
+    if (restExtras.length && this.searchNeedsExpansion(results, expansion.boostedEntityIds)) {
       const extras = await Promise.all(
-        extraQueries.slice(0, 2).map((q) => this.fetchSearchEntities(q, primaryLangId)),
+        restExtras.slice(0, 1).map((q) => this.fetchSearchEntities(q, primaryLangId)),
       );
       results = this.mergeSearchResults([results, ...extras]);
-      if (this.searchNeedsExpansion(results, expansion.boostedEntityIds) && fallbackLangId !== primaryLangId) {
-        const extrasFb = await Promise.all(
-          extraQueries.slice(0, 2).map((q) => this.fetchSearchEntities(q, fallbackLangId)),
-        );
-        results = this.mergeSearchResults([results, ...extrasFb]);
-      }
     }
 
     results = {

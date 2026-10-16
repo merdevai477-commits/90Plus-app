@@ -102,10 +102,28 @@ export class UserController {
             // Notification preferences sync (match toggles) — push consent is managed
             // only via POST /matches/push-token and POST /gdpr/consent, not here.
 
+            const rawFavoriteLeagues = updatedSettings.favoriteLeagues;
+            const nextFavoriteLeagues = Array.isArray(rawFavoriteLeagues)
+                ? [
+                      ...new Set(
+                          rawFavoriteLeagues
+                              .map((id: unknown) => Number(id))
+                              .filter((id: number) => Number.isFinite(id) && id > 0),
+                      ),
+                  ]
+                : null;
+
+            const previous = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { favoriteLeagues: true },
+            });
+            const prevLeagues = previous?.favoriteLeagues ?? [];
+
             await prisma.user.update({
                 where: { clerkUserId },
                 data: {
                     settings: updatedSettings as Prisma.InputJsonValue,
+                    ...(nextFavoriteLeagues ? { favoriteLeagues: nextFavoriteLeagues } : {}),
                 },
             });
 
@@ -121,6 +139,24 @@ export class UserController {
                 // Drop the cached language so the very next push for this
                 // user reads the fresh value from the DB.
                 invalidateUserLanguageCache(user.id);
+            }
+
+            // Sync followed-competition match subscriptions when leagues change.
+            if (nextFavoriteLeagues) {
+                const added = nextFavoriteLeagues.filter((id) => !prevLeagues.includes(id));
+                const removed = prevLeagues.filter((id) => !nextFavoriteLeagues.includes(id));
+                if (added.length || removed.length) {
+                    void import('../services/league-match-watcher.service').then(
+                        ({ LeagueMatchWatcherService }) => {
+                            for (const id of added) {
+                                void LeagueMatchWatcherService.syncCompetitionForUser(user.id, id);
+                            }
+                            for (const id of removed) {
+                                void LeagueMatchWatcherService.cleanupCompetitionForUser(user.id, id);
+                            }
+                        },
+                    );
+                }
             }
 
             res.json({

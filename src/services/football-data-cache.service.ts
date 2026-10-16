@@ -23,6 +23,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { lagAudit } from '../utils/lag-audit';
 import { hasLineupData, isAuthoritativeLineupData, is365LineupIdMappingStale, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
@@ -3576,6 +3577,16 @@ class FootballDataCacheService {
                         this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
                     }
                     this.latchAuthoritativeFinishedFixture(enriched.fixture);
+                    lagAudit('details_bundle_serve', {
+                      fixtureId,
+                      path: 'cache',
+                      cacheAgeMs: Date.now() - cached.timestamp,
+                      ttlMs: cached.ttl,
+                      short: enriched.fixture?.fixture?.status?.short ?? null,
+                      elapsed: enriched.fixture?.fixture?.status?.elapsed ?? null,
+                      extra: enriched.fixture?.fixture?.status?.extra ?? null,
+                      mergedLiveRow: false,
+                    });
                     return enriched;
                 }
             }
@@ -5021,6 +5032,13 @@ class FootballDataCacheService {
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitionProfile>> {
         return threeSixFiveScoresService.getCompetitionProfile(competitionId, language);
+    }
+
+    async getCached365CompetitionStats(
+        competitionId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
+        return threeSixFiveScoresService.getCompetitionStats(competitionId, language);
     }
 
     async getCached365CompetitionTransfers(

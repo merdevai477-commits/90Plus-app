@@ -38,7 +38,9 @@ const CTA_TEXT = '#FFFFFF';
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
   if (type === 'player') return <User size={17} color={color} strokeWidth={2.2} />;
-  if (type === 'club') return <Trophy size={17} color={color} strokeWidth={2.2} />;
+  if (type === 'club' || type === 'competition') {
+    return <Trophy size={17} color={color} strokeWidth={2.2} />;
+  }
   if (type === 'match') return <CircleDot size={17} color={color} strokeWidth={2.2} />;
   return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
 }
@@ -180,10 +182,11 @@ function NavLinkCard({
   rtl: boolean;
   onPress: () => void;
 }) {
-  const isProfile = link.type === 'player' || link.type === 'club';
+  const isProfile =
+    link.type === 'player' || link.type === 'club' || link.type === 'competition';
   const photoUris = useMemo(
     () =>
-      link.type === 'club'
+      link.type === 'club' || link.type === 'competition'
         ? resolveChatNavClubPhotos(link)
         : link.type === 'player'
           ? resolveChatNavPlayerPhotos(link)
@@ -198,7 +201,7 @@ function NavLinkCard({
   const avatar = isProfile ? (
     <FollowAvatar
       photoUris={photoUris}
-      photoKind={link.type === 'club' ? 'club' : 'player'}
+      photoKind={link.type === 'player' ? 'player' : 'club'}
       badgeUris={badgeUris}
       rtl={rtl}
     />
@@ -250,15 +253,18 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
   const generic = new Set([
     'player',
     'club',
+    'competition',
     'match',
     'matches',
     'Player profile',
     'Club profile',
+    'Competition profile',
     'Match details',
     "Today's matches",
     'بروفايل اللاعب',
     'بروفايل الفريق',
     'بروفايل النادي',
+    'بروفايل البطولة',
     'تفاصيل المباراة',
     'مباريات اليوم',
   ]);
@@ -275,6 +281,13 @@ function copyForNavLink(
       followLabel: t.chat.navVisitClub,
       buttonLabel: t.captainAI.viewProfile,
       a11yLabel: t.chat.navViewClubA11y,
+    };
+  }
+  if (link.type === 'competition') {
+    return {
+      followLabel: t.chat.navVisitCompetition,
+      buttonLabel: t.competitionProfile.viewProfile ?? t.captainAI.viewProfile,
+      a11yLabel: t.chat.navViewCompetitionA11y,
     };
   }
   if (link.type === 'player') {
@@ -320,6 +333,18 @@ export function ChatNavLinks({ links, onChoose }: Props) {
         router.push({
           pathname: '/team-profile' as any,
           params: { id: String(link.id), name: link.label },
+        } as never);
+        return;
+      }
+      if (link.type === 'competition' && link.id) {
+        router.push({
+          pathname: '/competition-profile' as any,
+          params: {
+            id: String(link.id),
+            name: link.label,
+            logo: link.logo ?? '',
+            country: link.country ?? '',
+          },
         } as never);
         return;
       }

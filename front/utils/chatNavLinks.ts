@@ -4,7 +4,7 @@ import {
   scores365AthletePhotoCandidates,
 } from './scores365AthletePhoto';
 
-export type ChatNavLinkType = 'player' | 'club' | 'match' | 'matches';
+export type ChatNavLinkType = 'player' | 'club' | 'competition' | 'match' | 'matches';
 
 export type ChatNavLink = {
   type: ChatNavLinkType;
@@ -66,7 +66,7 @@ export function resolveChatNavAvatar(link: ChatNavLink): ChatNavAvatar {
     const uri = resolveChatNavPlayerPhotos(link)[0] ?? null;
     if (uri) return { kind: 'player', uri };
   }
-  if (link.type === 'club') {
+  if (link.type === 'club' || link.type === 'competition') {
     const uri = resolveChatNavClubPhotos(link)[0] ?? null;
     if (uri) return { kind: 'club', uri };
   }
@@ -107,8 +107,19 @@ export function resolveChatNavClubBadgeCandidates(link: ChatNavLink): string[] {
   return [...new Set(urls)];
 }
 
-/** Club CTA photos: payload logo, then competitor id. */
+/** Club / competition CTA photos: payload logo, then competitor/competition id. */
 export function resolveChatNavClubPhotos(link: ChatNavLink): string[] {
+  if (link.type === 'competition') {
+    const urls: string[] = [];
+    const fromLogo = httpUrl(link.logo);
+    if (fromLogo) urls.push(fromLogo);
+    if (link.id) {
+      urls.push(
+        `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/Competitions/${link.id}`,
+      );
+    }
+    return [...new Set(urls)];
+  }
   if (link.type !== 'club') return resolveChatNavClubBadgeCandidates(link);
   const urls = [...resolveChatNavClubBadgeCandidates({ ...link, teamId: link.teamId ?? link.id })];
   const fromId = link.id ? build365CompetitorLogo(link.id) : null;
@@ -162,7 +173,15 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
   for (const item of raw) {
     if (!isRecord(item)) continue;
     const type = item.type;
-    if (type !== 'player' && type !== 'club' && type !== 'match' && type !== 'matches') continue;
+    if (
+      type !== 'player' &&
+      type !== 'club' &&
+      type !== 'competition' &&
+      type !== 'match' &&
+      type !== 'matches'
+    ) {
+      continue;
+    }
     const label = asLabel(item.label, type);
     const id = positiveId(item.id) ?? undefined;
     const query = asLabel(item.query) || undefined;
@@ -232,6 +251,10 @@ export function inferChatNavLinksFromQuestion(
       q,
     );
   const player = /لاعب|\bplayer\b|بيلعب|إحصائ|احصائ|سيزون|موسم|ألقاب|القاب|هداف(?!ين)|صناعة|صانع/.test(q);
+  const competition =
+    /دوري|بطول[ةه]|ليج|\bleague\b|\bcompetition\b|ترتيب\s*ال|premier|laliga|serie\s*a|bundesliga|champions/i.test(
+      q,
+    );
 
   const out: ChatNavLink[] = [];
   if (player) {
@@ -247,6 +270,13 @@ export function inferChatNavLinksFromQuestion(
     out.push({
       type: 'club',
       label: language === 'en' ? 'Club profile' : 'بروفايل الفريق',
+      query: q,
+    });
+  }
+  if (competition) {
+    out.push({
+      type: 'competition',
+      label: language === 'en' ? 'Competition profile' : 'بروفايل البطولة',
       query: q,
     });
   }

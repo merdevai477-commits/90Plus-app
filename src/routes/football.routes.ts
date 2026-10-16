@@ -278,6 +278,11 @@ router.get(
   FootballController.getCached365CompetitionProfile,
 );
 router.get(
+  '/cached/365/competition/:id/stats',
+  SHARED_CACHE_5MIN,
+  FootballController.getCached365CompetitionStats,
+);
+router.get(
   '/cached/365/transfers',
   SHARED_CACHE_1H,
   FootballController.getCached365CompetitionTransfers,

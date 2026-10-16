@@ -2981,6 +2981,20 @@ export const ApiFootballService = {
     }
   },
 
+  /** League-wide scorers / assists boards for a 365 competition. */
+  async getCompetition365Stats(competitionId: number): Promise<Competitor365Stats | null> {
+    if (!competitionId || competitionId <= 0) return null;
+    try {
+      const res = await fetchFromProxy<Competitor365Stats>(
+        `/cached/365/competition/${competitionId}/stats`,
+      );
+      return res && Array.isArray((res as any).leaderboards) ? res : null;
+    } catch (error) {
+      console.error('Error fetching 365 competition stats:', error);
+      return null;
+    }
+  },
+
   async get365TransfersByCompetitions(
     competitionIds?: number[],
   ): Promise<Competition365Transfers[]> {

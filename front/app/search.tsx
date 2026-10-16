@@ -39,7 +39,7 @@ import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
-const DEBOUNCE_MS = 150;
+const DEBOUNCE_MS = 90;
 
 function useDebouncedValue(value: string, delay: number): string {
     const [debounced, setDebounced] = useState(value);

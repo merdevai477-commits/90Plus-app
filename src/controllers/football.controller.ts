@@ -4,6 +4,7 @@ import { matchCacheService, FixtureFromAPI } from '../services/match-cache.servi
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clubs.service';
 import { logger } from '../utils/logger';
+import { lagAudit } from '../utils/lag-audit';
 import { getFootballMetrics } from '../utils/football-metrics';
 import { resolveAppLanguage } from '../utils/app-language.util';
 import prisma from '../lib/prisma';
@@ -545,6 +546,18 @@ export class FootballController {
         const redisLive = await resolveLiveFixturesForClient(language);
         const elapsedMs = Date.now() - startedAt;
         await noteListPullRefresh(req);
+        lagAudit('http_live_list_read', {
+          pull: true,
+          redisReadMs: elapsedMs,
+          source: redisLive.source,
+          count: redisLive.fixtures.length,
+          clocks: redisLive.fixtures.map((f: any) => ({
+            id: f?.fixture?.id,
+            short: f?.fixture?.status?.short ?? null,
+            elapsed: f?.fixture?.status?.elapsed ?? null,
+            extra: f?.fixture?.status?.extra ?? null,
+          })),
+        });
         res.json({
           status: 'SUCCESS',
           results: redisLive.fixtures.length,
@@ -563,6 +576,18 @@ export class FootballController {
         redisLive.fixtures.length > 0
       ) {
         const elapsedMs = Date.now() - startedAt;
+        lagAudit('http_live_list_read', {
+          pull: false,
+          redisReadMs: elapsedMs,
+          source: redisLive.source,
+          count: redisLive.fixtures.length,
+          clocks: redisLive.fixtures.map((f: any) => ({
+            id: f?.fixture?.id,
+            short: f?.fixture?.status?.short ?? null,
+            elapsed: f?.fixture?.status?.elapsed ?? null,
+            extra: f?.fixture?.status?.extra ?? null,
+          })),
+        });
         logger.info(
           `[Perf] getLiveFixtures source=${redisLive.source} results=${redisLive.fixtures.length} elapsedMs=${elapsedMs}`,
         );
@@ -1994,6 +2019,18 @@ export class FootballController {
       );
       if (isPull) {
         await noteListPullRefresh(req);
+        lagAudit('http_ptr_calendar', {
+          date: dateString,
+          redisReadMs: elapsedMs,
+          count: response.length,
+          liveClocks: (Array.isArray(trimmed) ? trimmed : []).flatMap((row: any) => {
+            const short = row?.fixture?.status?.short ?? row?.statusShort ?? null;
+            const elapsed = row?.fixture?.status?.elapsed ?? row?.elapsed ?? null;
+            const id = row?.fixture?.id ?? (row?.id != null ? Number(row.id) : null);
+            if (id == null || elapsed == null) return [];
+            return [{ id, short, elapsed, extra: row?.fixture?.status?.extra ?? row?.extra ?? null }];
+          }),
+        });
       }
 
       res.json({
@@ -2689,6 +2726,15 @@ export class FootballController {
               }
             : {}),
         },
+      });
+      lagAudit('http_details', {
+        fixtureId,
+        pull: isPull,
+        forceRefresh,
+        short: bundle?.fixture?.fixture?.status?.short ?? null,
+        elapsed: bundle?.fixture?.fixture?.status?.elapsed ?? null,
+        extra: bundle?.fixture?.fixture?.status?.extra ?? null,
+        pullOutcome: pullMeta?.outcome ?? null,
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -3569,6 +3615,40 @@ export class FootballController {
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores competition profile unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { competitionId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competition/:id/stats — league-wide scorers / assists boards.
+   */
+  static async getCached365CompetitionStats(req: Request, res: Response): Promise<void> {
+    try {
+      const competitionId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitionId) || competitionId <= 0) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competition ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitionStats(
+        competitionId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competition stats unavailable',
           source: result.source,
         });
         return;
