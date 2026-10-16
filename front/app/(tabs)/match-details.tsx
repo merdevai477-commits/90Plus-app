@@ -1667,6 +1667,23 @@ const MatchDetailsScreen = () => {
     [router, fixture?.teams?.home, fixture?.teams?.away, is365Fixture],
   );
 
+  // League pill → competition profile (365 competitionId only).
+  const openLeagueProfile = useCallback(() => {
+    const league = fixture?.league;
+    if (!league) return;
+    const competitionId = match365CompetitionId(league.id);
+    if (!competitionId) return;
+    router.push({
+      pathname: '/competition-profile' as any,
+      params: {
+        id: String(competitionId),
+        name: league.name ?? '',
+        logo: league.logo ?? '',
+        country: league.country ?? '',
+      },
+    } as any);
+  }, [router, fixture?.league]);
+
   const openStandingTeamProfile = useCallback(
     (row: Standing) => {
       const team = row.team;
@@ -2703,6 +2720,9 @@ const MatchDetailsScreen = () => {
       scorersViewLessLabel={t.matchDetails.scorersViewLess}
       onPressHomeTeam={() => openTeamProfile('home')}
       onPressAwayTeam={() => openTeamProfile('away')}
+      onPressLeague={
+        match365CompetitionId(fixture?.league?.id) ? openLeagueProfile : undefined
+      }
     />
   );
 

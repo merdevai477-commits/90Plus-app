@@ -64,6 +64,8 @@ interface MatchHeaderProps {
   /** Tapping a team (logo + name) opens its 365 profile when provided. */
   onPressHomeTeam?: () => void;
   onPressAwayTeam?: () => void;
+  /** Tapping the league pill opens the competition profile when provided. */
+  onPressLeague?: () => void;
 }
 
 export function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
@@ -144,6 +146,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   scorersViewLessLabel = 'View less',
   onPressHomeTeam,
   onPressAwayTeam,
+  onPressLeague,
 }) => {
   const {
     short,
@@ -218,16 +221,25 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
 
         <View style={[styles.scoreArea, { minWidth: scoreAreaMin }]}>
           {league ? (
-            <LinearGradient
-              colors={['rgba(95,13,173,0.55)', 'rgba(42,6,75,0.55)']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[styles.leaguePill, { maxWidth: leagueMaxWidth }]}
+            <TouchableOpacity
+              onPress={onPressLeague}
+              disabled={!onPressLeague}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole={onPressLeague ? 'link' : undefined}
+              accessibilityLabel={league}
             >
-              <Text style={styles.leaguePillText} numberOfLines={2}>
-                {league}
-              </Text>
-            </LinearGradient>
+              <LinearGradient
+                colors={['rgba(95,13,173,0.55)', 'rgba(42,6,75,0.55)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={[styles.leaguePill, { maxWidth: leagueMaxWidth }]}
+              >
+                <Text style={styles.leaguePillText} numberOfLines={2}>
+                  {league}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           ) : (
             <View style={styles.leaguePillSpacer} />
           )}
