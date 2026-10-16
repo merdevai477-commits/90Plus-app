@@ -33,6 +33,7 @@ import { FlashList } from '@shopify/flash-list';
 import { TEXT_PRIMARY, PURPLE_PRIMARY, PURPLE_SOFT, LIVE_RED } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
+import { useViewerIsIsrael } from '../../hooks/useViewerIsIsrael';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { PredictionsService, PredictionApiError } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
@@ -1218,6 +1219,9 @@ export default function MatchesHubScreenV2() {
   // and live interest explicitly while another screen (e.g. match details) is up.
   const isFocused = useIsFocused();
 
+  // Israeli leagues → Palestine for every viewer except profile country Israel.
+  const viewerIsIsrael = useViewerIsIsrael();
+
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
   const { countryGroups, matches, loading, error, isDataStale, refetch, refreshSoft } = useMatchesData(
     selectedDate,
@@ -1225,6 +1229,7 @@ export default function MatchesHubScreenV2() {
       pauseBackgroundRefresh: wcTabActive || !isFocused,
       visibleFixtureIds,
       interestRevision,
+      viewerIsIsrael,
     },
   );
 

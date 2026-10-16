@@ -3,6 +3,15 @@ import type { CountryGroup, GroupedMatches } from '../hooks/matchesData.types';
 import { getCountryFlagUri } from './countryFlagUri';
 import { matchLiveFingerprint, logLiveRenderFix } from './liveFixtureFreshness';
 import { sortCountryGroupsForMatches } from './matchesCountrySort';
+import {
+  displayMatchListCountry,
+  displayMatchListCountryFlag,
+} from './matchesCountryDisplay';
+
+export type MatchesCountryGroupOptions = {
+  /** When false/undefined, Israeli leagues are labeled Palestine. */
+  viewerIsIsrael?: boolean;
+};
 
 /** Fallback to full re-group when more than this fraction of rows changed (P1-5). */
 export const INCREMENTAL_GROUP_CHANGE_RATIO = 0.3;
@@ -53,14 +62,21 @@ export function groupMatchesByLeague(matches: Match[]): GroupedMatches[] {
 export function groupMatchesByCountry(
   matches: Match[],
   leagueGroups?: GroupedMatches[],
+  options?: MatchesCountryGroupOptions,
 ): CountryGroup[] {
+  const viewerIsIsrael = options?.viewerIsIsrael === true;
   const groups = leagueGroups ?? groupMatchesByLeague(matches);
   const countryMap = new Map<string, { flag: string | null; leagues: GroupedMatches[] }>();
 
   for (const group of groups) {
     const firstMatch = group.matches[0];
-    const country = firstMatch?.league?.country || 'World';
-    const flag = firstMatch?.league?.countryFlag || null;
+    const apiCountry = firstMatch?.league?.country || 'World';
+    const country = displayMatchListCountry(apiCountry, viewerIsIsrael);
+    const flag = displayMatchListCountryFlag(
+      apiCountry,
+      firstMatch?.league?.countryFlag || null,
+      viewerIsIsrael,
+    );
 
     if (!countryMap.has(country)) {
       countryMap.set(country, { flag, leagues: [] });
@@ -123,10 +139,13 @@ export function groupMatchesByCountryIncremental(
   matches: Match[],
   changedIds: Set<string>,
   previous: CountryGroup[] | null,
+  options?: MatchesCountryGroupOptions,
 ): CountryGroup[] {
   if (!previous || previous.length === 0 || matches.length === 0) {
-    return groupMatchesByCountry(matches);
+    return groupMatchesByCountry(matches, undefined, options);
   }
+
+  const viewerIsIsrael = options?.viewerIsIsrael === true;
 
   let ids = changedIds;
   if (ids.size === 0) {
@@ -137,7 +156,7 @@ export function groupMatchesByCountryIncremental(
   }
 
   if (ids.size > matches.length * INCREMENTAL_GROUP_CHANGE_RATIO) {
-    return groupMatchesByCountry(matches);
+    return groupMatchesByCountry(matches, undefined, options);
   }
 
   const matchById = new Map(matches.map((m) => [m.id, m]));
@@ -147,9 +166,9 @@ export function groupMatchesByCountryIncremental(
     const m = matchById.get(id);
     if (!m) {
       // Row disappeared — structure may have changed; full rebuild.
-      return groupMatchesByCountry(matches);
+      return groupMatchesByCountry(matches, undefined, options);
     }
-    changedCountries.add(m.league?.country || 'World');
+    changedCountries.add(displayMatchListCountry(m.league?.country || 'World', viewerIsIsrael));
   }
 
   // Verify previous structure still covers all leagues present in matches.
@@ -160,7 +179,7 @@ export function groupMatchesByCountryIncremental(
   for (const m of matches) {
     const lid = m.league?.id || 0;
     if (!prevLeagueIds.has(lid)) {
-      return groupMatchesByCountry(matches);
+      return groupMatchesByCountry(matches, undefined, options);
     }
   }
 
@@ -173,13 +192,14 @@ export function groupMatchesByCountryIncremental(
     // Rebuild the whole country from current matches so league order/content
     // matches a full regroup for this country.
     const countryMatches = matches.filter(
-      (m) => (m.league?.country || 'World') === cg.country,
+      (m) =>
+        displayMatchListCountry(m.league?.country || 'World', viewerIsIsrael) === cg.country,
     );
     if (countryMatches.length === 0) {
       return cg;
     }
     // Full country regroup includes live-first league ordering.
-    const rebuilt = groupMatchesByCountry(countryMatches);
+    const rebuilt = groupMatchesByCountry(countryMatches, undefined, options);
     return rebuilt.find((c) => c.country === cg.country) ?? rebuilt[0] ?? cg;
   });
 

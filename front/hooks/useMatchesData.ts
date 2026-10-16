@@ -68,6 +68,11 @@ export interface UseMatchesDataOptions {
   visibleFixtureIds?: number[];
   /** Bumps when visible set changes — re-syncs registerInterest. */
   interestRevision?: number;
+  /**
+   * When false, Israeli league groups are labeled Palestine (flag + name).
+   * Defaults to false when omitted.
+   */
+  viewerIsIsrael?: boolean;
 }
 
 // Must match cacheService.cacheMatchesByDate so both writers share one disk entry.
@@ -246,7 +251,12 @@ export const useMatchesData = (
   selectedDate: Date,
   options: UseMatchesDataOptions = {},
 ): UseMatchesDataResult => {
-  const { pauseBackgroundRefresh = false, visibleFixtureIds = [], interestRevision = 0 } = options;
+  const {
+    pauseBackgroundRefresh = false,
+    visibleFixtureIds = [],
+    interestRevision = 0,
+    viewerIsIsrael = false,
+  } = options;
   const dateString = formatLocalDateKey(selectedDate);
   const memoryBoot = memoryCache.get(dateString);
   const [calendarMatches, setCalendarMatches] = useState<Match[]>(() => memoryBoot?.data ?? []);
@@ -381,19 +391,20 @@ export const useMatchesData = (
 
   // Group matches by league, then country — incremental when few rows changed (P1-5).
   const countryGroupsPrevRef = useRef<CountryGroup[] | null>(null);
-  // Reset incremental cache when the calendar date identity set changes.
+  // Reset incremental cache when the calendar date or Israel/Palestine display changes.
   useEffect(() => {
     countryGroupsPrevRef.current = null;
-  }, [dateString]);
+  }, [dateString, viewerIsIsrael]);
   const countryGroups = useMemo(() => {
     const next = groupMatchesByCountryIncremental(
       matches,
       overlayResult.changedIds,
       countryGroupsPrevRef.current,
+      { viewerIsIsrael },
     );
     countryGroupsPrevRef.current = next;
     return next;
-  }, [matches, overlayResult.changedIds]);
+  }, [matches, overlayResult.changedIds, viewerIsIsrael]);
   const groupedMatches = useMemo(
     () => countryGroups.flatMap((cg) => cg.leagues),
     [countryGroups],

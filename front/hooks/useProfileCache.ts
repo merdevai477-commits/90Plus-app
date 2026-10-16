@@ -55,6 +55,20 @@ export function setProfileMemoryCache(key: string, data: ProfileCacheData): void
   setMemoryCache(key, data);
 }
 
+/** Sync peek of cached profile country for matches-list Israel/Palestine display. */
+export function peekProfileMemoryCountry(
+  clerkUserId?: string | null,
+): { country?: string; countryFlag?: string } | null {
+  if (!clerkUserId) return null;
+  const key = getUserCacheKey(CACHE_KEYS.PROFILE_DATA, clerkUserId);
+  const data = getFromMemoryCache(key);
+  if (!data?.userData) return null;
+  return {
+    country: data.userData.country,
+    countryFlag: data.userData.countryFlag,
+  };
+}
+
 // Extended user data type for profile screen
 export interface ProfileUserData {
   id: string; // User ID for badges and other features
