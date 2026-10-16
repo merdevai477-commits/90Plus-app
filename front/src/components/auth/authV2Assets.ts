@@ -1,7 +1,7 @@
 /** Figma auth screens (nodes 1015:3722, 1017:3880). */
 export const AUTH_V2_ASSETS = {
   hero: require('../../../assets/images/auth/auth-hero-figma.webp'),
-  logo: require('../../../assets/images/splash/splash-logo-v2.png'),
+  logo: require('../../../assets/images/splash/splash-logo-v3.png'),
   iconUser: require('../../../assets/images/auth/icon-user.svg'),
   iconEmail: require('../../../assets/images/auth/icon-email.svg'),
   iconLock: require('../../../assets/images/auth/icon-lock.svg'),

@@ -143,7 +143,7 @@ export default function AuthLoadingScreen({ message = 'جاري تسجيل ال�
             {/* Logo */}
             <Animated.View style={[styles.logoContainer, logoStyle]}>
                 <Image
-                    source={require('../assets/images/splash/splash-logo-v2.png')}
+                    source={require('../assets/images/splash/splash-logo-v3.png')}
                     style={styles.logo}
                     contentFit="contain"
                     priority="high"

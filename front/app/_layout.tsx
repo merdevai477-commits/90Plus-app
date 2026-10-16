@@ -128,7 +128,9 @@ const getWebSocketClient = async () => {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-SplashScreen.setOptions({ duration: 450, fade: true });
+// No cross-fade: a fade lets the native (baked) logo linger over the JS splash
+// and reads as "new logo → old logo" when the two assets disagree.
+SplashScreen.setOptions({ duration: 0, fade: false });
 
 const queryClient = new QueryClient();
 

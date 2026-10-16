@@ -37,7 +37,7 @@ import {
 } from '../utils/teamOnboarding';
 import { logger } from '../services/logger';
 
-const LOGO = require('../assets/images/splash/splash-logo-v2.png');
+const LOGO = require('../assets/images/splash/splash-logo-v3.png');
 const SEARCH_DEBOUNCE_MS = 150;
 
 function useDebouncedValue(value: string, delay: number): string {

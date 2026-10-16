@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withTiming,
   withSpring,
 } from 'react-native-reanimated';
 import { SplashScreenLayout } from './SplashScreenLayout';
@@ -12,11 +11,12 @@ import { SplashScreenLayout } from './SplashScreenLayout';
  * Matches app.json splash colors to avoid visible "shutter" between native and JS layers.
  */
 export function AppSplashScreen() {
-  const logoScale = useSharedValue(0.88);
-  const logoOpacity = useSharedValue(0);
+  // Start fully visible so the handoff from the native splash never dips to a
+  // blank/stale logo frame (opacity 0 → fade-in looked like a logo swap).
+  const logoScale = useSharedValue(0.96);
+  const logoOpacity = useSharedValue(1);
 
   useEffect(() => {
-    logoOpacity.value = withTiming(1, { duration: 450 });
     logoScale.value = withSpring(1, { damping: 16, stiffness: 140 });
   }, []);
 

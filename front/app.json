@@ -85,7 +85,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 120,
+      "versionCode": 121,
       "softwareKeyboardLayoutMode": "resize",
       "intentFilters": [
         {
@@ -234,7 +234,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash/splash-logo-v2.png",
+          "image": "./assets/images/splash/splash-logo-v3.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#0d0529",
@@ -243,7 +243,7 @@
           },
           "android": {
             "backgroundColor": "#0d0529",
-            "image": "./assets/images/splash/splash-logo-v2.png",
+            "image": "./assets/images/splash/splash-logo-v3.png",
             "imageWidth": 220,
             "resizeMode": "contain",
             "dark": {

@@ -23,7 +23,7 @@ import {
  * stopped using a real stadium photo as the miss fallback.
  * Branded logo only — never a venue photograph.
  */
-const STADIUM_PLACEHOLDER = require('../../assets/images/splash/splash-logo-v2.png');
+const STADIUM_PLACEHOLDER = require('../../assets/images/splash/splash-logo-v3.png');
 
 const ICON = {
   time: require('../../assets/images/match-vote/time.svg'),
