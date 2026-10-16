@@ -2569,6 +2569,14 @@ export class ThreeSixFiveScoresService {
     }
   }
 
+  /** Relabel 365Scores' "365 Ratings" board to our product name. */
+  private brandAthleteStatBoardName(name: string | null | undefined): string {
+    const n = (name ?? '').trim();
+    if (!n) return '—';
+    if (/^365\s*ratings?$/i.test(n)) return '90plus ratings';
+    return n;
+  }
+
   private parseAthletesStatsBoards(
     payload: StatsPayload | null,
     competitionId: number,
@@ -2581,7 +2589,7 @@ export class ThreeSixFiveScoresService {
       .map((board) => ({
         key: board.id,
         typeId: board.statsTypes?.[0]?.typeId ?? board.rows?.[0]?.stats?.[0]?.typeId ?? null,
-        name: board.name ?? '—',
+        name: brandAthleteStatBoardName(board.name),
         rows: (board.rows ?? [])
           .slice(0, opts.maxRows)
           .map((r) => ({

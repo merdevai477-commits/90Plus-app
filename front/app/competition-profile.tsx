@@ -51,6 +51,8 @@ function sortBoards(boards: Stat365Leaderboard[]): Stat365Leaderboard[] {
 
 function boardLabel(board: Stat365Leaderboard, fallback: string): string {
   const name = (board.name || '').trim();
+  // 365Scores brands the rating board; show our product name instead.
+  if (/^365\s*ratings?$/i.test(name)) return '90plus ratings';
   return name || fallback;
 }
 

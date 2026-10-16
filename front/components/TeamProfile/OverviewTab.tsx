@@ -251,7 +251,13 @@ function TopScorers({
 
     return (
         <Card>
-            <SectionTitle title={board.name || t.teamProfile.topScorers} />
+            <SectionTitle
+                title={
+                    /^365\s*ratings?$/i.test((board.name || '').trim())
+                        ? '90plus ratings'
+                        : board.name || t.teamProfile.topScorers
+                }
+            />
             {rows.map((row, idx) => (
                 <TouchableOpacity
                     key={`${row.athleteId}-${idx}`}
