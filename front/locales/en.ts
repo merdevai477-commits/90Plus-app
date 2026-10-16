@@ -818,6 +818,7 @@ export const en = {
     loading: 'Loading competition…',
     noData: 'Competition unavailable',
     overview: 'Overview',
+    scorers: 'Scorers',
     matches: 'Matches',
     table: 'Table',
     noTable: 'Standings are not available',

@@ -1,5 +1,5 @@
 /**
- * Competition profile: crest hero + follow + matches + stats boards + standings.
+ * Competition profile: crest hero + follow + scorers + matches + standings.
  * Opens from search / favorites / AI the same way club & player profiles do.
  */
 
@@ -35,7 +35,7 @@ import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import MatchesTab from '../components/TeamProfile/MatchesTab';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
-type TabKey = 'overview' | 'matches' | 'table';
+type TabKey = 'scorers' | 'matches' | 'table';
 
 /** Prefer goals / assists / rating early; keep API order otherwise. */
 function sortBoards(boards: Stat365Leaderboard[]): Stat365Leaderboard[] {
@@ -69,9 +69,10 @@ export default function CompetitionProfileScreen() {
   const cp = t.competitionProfile;
   const { isFollowing, toggleFollow, pending: followPending } = useFavoriteLeagues();
   const following = competitionId > 0 && isFollowing(competitionId);
-  const [tab, setTab] = useState<TabKey>('overview');
+  const [tab, setTab] = useState<TabKey>('scorers');
   const [boardKey, setBoardKey] = useState<number | null>(null);
 
+  // Hero can paint from nav params — don't block the whole screen on profile fetch.
   const infoQ = useQuery({
     queryKey: ['365-competition-profile', competitionId, language],
     queryFn: () => ApiFootballService.getCompetition365Profile(competitionId),
@@ -81,6 +82,7 @@ export default function CompetitionProfileScreen() {
     refetchOnWindowFocus: false,
   });
 
+  // Scorers tab is default — fetch immediately.
   const statsQ = useQuery({
     queryKey: ['365-competition-stats', competitionId, language],
     queryFn: () => ApiFootballService.getCompetition365Stats(competitionId),
@@ -90,16 +92,22 @@ export default function CompetitionProfileScreen() {
     refetchOnWindowFocus: false,
   });
 
+  // Heavy fixtures paging — only when the user opens Matches.
   const matchesQ = useQuery({
     queryKey: ['365-competition-matches', competitionId, language],
     queryFn: () => ApiFootballService.getCompetition365Matches(competitionId),
-    enabled: competitionId > 0,
+    enabled: competitionId > 0 && tab === 'matches',
     staleTime: 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
   });
 
-  const standingsQ = useCompetitorStandings(competitionId, competitionId > 0);
+  // Standings only when Table tab is open.
+  const standingsQ = useCompetitorStandings(
+    competitionId,
+    competitionId > 0 && tab === 'table',
+  );
+
   const info = infoQ.data;
   const name = info?.name || params.name || '—';
   const logo = info?.logo || params.logo || null;
@@ -117,7 +125,7 @@ export default function CompetitionProfileScreen() {
       const found = boards.find((b) => b.key === boardKey);
       if (found) return found;
     }
-    return boards[0];
+    return boards.find((b) => (b.typeId ?? b.key) === 1) ?? boards[0];
   }, [boards, boardKey]);
   const boardRows = (activeBoard?.rows ?? []).slice(0, 15);
 
@@ -125,9 +133,10 @@ export default function CompetitionProfileScreen() {
     const list = standingsQ.data ?? [];
     const byGroup = new Map<number, { name: string | null; rows: Standing365Row[] }>();
     for (const row of list) {
-      const g = byGroup.get(row.groupNum);
+      const groupNum = Number.isFinite(row.groupNum) ? row.groupNum : 0;
+      const g = byGroup.get(groupNum);
       if (g) g.rows.push(row);
-      else byGroup.set(row.groupNum, { name: row.groupName, rows: [row] });
+      else byGroup.set(groupNum, { name: row.groupName, rows: [row] });
     }
     return [...byGroup.entries()].sort((a, b) => a[0] - b[0]);
   }, [standingsQ.data]);
@@ -153,12 +162,15 @@ export default function CompetitionProfileScreen() {
     } as any);
   };
 
-  const tabKeys: TabKey[] = ['overview', 'matches', 'table'];
+  const tabKeys: TabKey[] = ['scorers', 'matches', 'table'];
   const tabLabel = (key: TabKey) => {
-    if (key === 'overview') return cp.overview;
+    if (key === 'scorers') return cp.scorers ?? cp.topScorers;
     if (key === 'matches') return cp.matches;
     return cp.table;
   };
+
+  const showFullScreenLoader =
+    competitionId > 0 && infoQ.isLoading && !info && !params.name && !params.logo;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -173,7 +185,7 @@ export default function CompetitionProfileScreen() {
         <View style={styles.backBtn} />
       </View>
 
-      {infoQ.isLoading && !info ? (
+      {showFullScreenLoader ? (
         <View style={styles.center}>
           <ActivityIndicator color={Colors.purpleSoft} />
           <Text style={styles.muted}>{cp.loading}</Text>
@@ -208,7 +220,7 @@ export default function CompetitionProfileScreen() {
                     color={following ? Colors.purpleSoft : Colors.white}
                   />
                 ) : (
-                  <>
+                  <View style={styles.followInner}>
                     <Ionicons
                       name={following ? 'notifications' : 'add'}
                       size={16}
@@ -219,7 +231,7 @@ export default function CompetitionProfileScreen() {
                         ? cp.following ?? t.teamProfile.following
                         : cp.follow ?? t.teamProfile.follow}
                     </Text>
-                  </>
+                  </View>
                 )}
               </TouchableOpacity>
             ) : null}
@@ -243,25 +255,25 @@ export default function CompetitionProfileScreen() {
             })}
           </View>
 
-          {tab === 'overview' ? (
-            <>
-              <Text style={styles.section}>{cp.stats}</Text>
+          {tab === 'scorers' ? (
+            <View>
+              <Text style={styles.section}>{cp.scorers ?? cp.topScorers}</Text>
               {statsQ.isLoading ? (
                 <ActivityIndicator color={Colors.purpleSoft} style={{ marginVertical: 20 }} />
               ) : boards.length === 0 ? (
                 <Text style={styles.mutedCenter}>{cp.noScorers}</Text>
               ) : (
-                <>
+                <View>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.boardRow}
                   >
-                    {boards.map((board) => {
+                    {boards.map((board, boardIdx) => {
                       const active = activeBoard?.key === board.key;
                       return (
                         <TouchableOpacity
-                          key={board.key}
+                          key={`board-${board.key}-${board.typeId ?? 'x'}-${boardIdx}`}
                           style={[styles.boardChip, active && styles.boardChipActive]}
                           onPress={() => setBoardKey(board.key)}
                           activeOpacity={0.85}
@@ -280,7 +292,7 @@ export default function CompetitionProfileScreen() {
                   <View style={styles.card}>
                     {boardRows.map((row, idx) => (
                       <TouchableOpacity
-                        key={`${activeBoard?.key}-${row.athleteId}-${idx}`}
+                        key={`scorer-${activeBoard?.key ?? 'b'}-${row.athleteId || 'x'}-${idx}`}
                         style={styles.scorerRow}
                         activeOpacity={0.8}
                         onPress={() => openPlayer(row)}
@@ -305,9 +317,9 @@ export default function CompetitionProfileScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                </>
+                </View>
               )}
-            </>
+            </View>
           ) : null}
 
           {tab === 'matches' ? (
@@ -324,7 +336,7 @@ export default function CompetitionProfileScreen() {
           ) : null}
 
           {tab === 'table' ? (
-            <>
+            <View>
               <Text style={styles.section}>{cp.table}</Text>
               {!hasStandings ? (
                 <Text style={styles.mutedCenter}>{cp.noTable}</Text>
@@ -334,7 +346,7 @@ export default function CompetitionProfileScreen() {
                 <Text style={styles.mutedCenter}>{cp.noTable}</Text>
               ) : (
                 groups.map(([groupNum, group]) => (
-                  <View key={groupNum} style={styles.tableCard}>
+                  <View key={`standings-group-${groupNum}`} style={styles.tableCard}>
                     {group.name ? <Text style={styles.groupName}>{group.name}</Text> : null}
                     <View style={styles.headerRow}>
                       <Text style={styles.cellPos}>#</Text>
@@ -342,9 +354,9 @@ export default function CompetitionProfileScreen() {
                       <Text style={styles.cell}>P</Text>
                       <Text style={styles.cellPts}>Pts</Text>
                     </View>
-                    {group.rows.map((row) => (
+                    {group.rows.map((row, rowIdx) => (
                       <TouchableOpacity
-                        key={row.teamId}
+                        key={`standings-row-${groupNum}-${row.teamId || 't'}-${row.position}-${rowIdx}`}
                         style={styles.row}
                         onPress={() =>
                           router.push({
@@ -376,7 +388,7 @@ export default function CompetitionProfileScreen() {
                   </View>
                 ))
               )}
-            </>
+            </View>
           ) : null}
         </ScrollView>
       )}
@@ -451,16 +463,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
   followBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     marginTop: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
     backgroundColor: Colors.purpleSoft,
     minWidth: 140,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  followInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   followingBtn: {
     backgroundColor: 'transparent',

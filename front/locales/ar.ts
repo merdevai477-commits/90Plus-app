@@ -1054,6 +1054,7 @@ export const ar = {
     loading: 'جاري تحميل البطولة…',
     noData: 'تعذّر تحميل البطولة',
     overview: 'نظرة عامة',
+    scorers: 'الهدافين',
     matches: 'المباريات',
     table: 'الترتيب',
     noTable: 'جدول الترتيب غير متاح',
