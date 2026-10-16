@@ -5041,6 +5041,13 @@ class FootballDataCacheService {
         return threeSixFiveScoresService.getCompetitionStats(competitionId, language);
     }
 
+    async getCached365CompetitionMatches(
+        competitionId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
+        return threeSixFiveScoresService.getCompetitionMatches(competitionId, language);
+    }
+
     async getCached365CompetitionTransfers(
         competitionIds: number[],
         language?: string | null,

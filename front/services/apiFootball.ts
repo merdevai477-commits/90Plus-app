@@ -2995,6 +2995,26 @@ export const ApiFootballService = {
     }
   },
 
+  /** Live / upcoming / finished fixtures for a competition profile Matches tab. */
+  async getCompetition365Matches(competitionId: number): Promise<Competitor365Matches> {
+    const empty: Competitor365Matches = { live: [], upcoming: [], finished: [] };
+    if (!competitionId || competitionId <= 0) return empty;
+    try {
+      const res = await fetchFromProxy<Competitor365Matches>(
+        `/cached/365/competition/${competitionId}/matches`,
+      );
+      if (!res) return empty;
+      return {
+        live: Array.isArray(res.live) ? res.live : [],
+        upcoming: Array.isArray(res.upcoming) ? res.upcoming : [],
+        finished: Array.isArray(res.finished) ? res.finished : [],
+      };
+    } catch (error) {
+      console.error('Error fetching 365 competition matches:', error);
+      return empty;
+    }
+  },
+
   async get365TransfersByCompetitions(
     competitionIds?: number[],
   ): Promise<Competition365Transfers[]> {

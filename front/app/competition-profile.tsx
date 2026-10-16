@@ -1,5 +1,5 @@
 /**
- * Competition profile: crest hero + follow + top scorers + standings.
+ * Competition profile: crest hero + follow + matches + stats boards + standings.
  * Opens from search / favorites / AI the same way club & player profiles do.
  */
 
@@ -23,8 +23,8 @@ import { useTranslation } from '../src/i18n';
 import { getLeagueDisplayName, getTeamDisplayName } from '../utils/i18nHelpers';
 import ApiFootballService, {
   type Standing365Row,
-  type Competitor365Stats,
   type Stat365LeaderRow,
+  type Stat365Leaderboard,
 } from '../services/apiFootball';
 import { useCompetitorStandings } from '../hooks/useTeamProfile';
 import { useFavoriteLeagues } from '../hooks/useFavoriteLeagues';
@@ -32,19 +32,26 @@ import { useHaptic } from '../hooks/useHaptic';
 import TeamBadge from '../components/common/TeamBadge';
 import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
+import MatchesTab from '../components/TeamProfile/MatchesTab';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
-type TabKey = 'overview' | 'table';
+type TabKey = 'overview' | 'matches' | 'table';
 
-function pickGoalsBoard(stats: Competitor365Stats | null | undefined) {
-  const boards = stats?.leaderboards ?? [];
-  if (!boards.length) return null;
-  return boards.find((b) => b.typeId === 1) ?? boards.find((b) => b.key === 1) ?? boards[0];
+/** Prefer goals / assists / rating early; keep API order otherwise. */
+function sortBoards(boards: Stat365Leaderboard[]): Stat365Leaderboard[] {
+  const priority = (b: Stat365Leaderboard) => {
+    const t = b.typeId ?? b.key;
+    if (t === 1) return 0; // goals
+    if (t === 3 || t === 2) return 1; // assists
+    if (t === 36) return 2; // rating
+    return 10;
+  };
+  return [...boards].sort((a, b) => priority(a) - priority(b));
 }
 
-function pickAssistsBoard(stats: Competitor365Stats | null | undefined) {
-  const boards = stats?.leaderboards ?? [];
-  return boards.find((b) => b.typeId === 3) ?? boards.find((b) => b.key === 3) ?? null;
+function boardLabel(board: Stat365Leaderboard, fallback: string): string {
+  const name = (board.name || '').trim();
+  return name || fallback;
 }
 
 export default function CompetitionProfileScreen() {
@@ -63,6 +70,7 @@ export default function CompetitionProfileScreen() {
   const { isFollowing, toggleFollow, pending: followPending } = useFavoriteLeagues();
   const following = competitionId > 0 && isFollowing(competitionId);
   const [tab, setTab] = useState<TabKey>('overview');
+  const [boardKey, setBoardKey] = useState<number | null>(null);
 
   const infoQ = useQuery({
     queryKey: ['365-competition-profile', competitionId, language],
@@ -82,6 +90,15 @@ export default function CompetitionProfileScreen() {
     refetchOnWindowFocus: false,
   });
 
+  const matchesQ = useQuery({
+    queryKey: ['365-competition-matches', competitionId, language],
+    queryFn: () => ApiFootballService.getCompetition365Matches(competitionId),
+    enabled: competitionId > 0,
+    staleTime: 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
   const standingsQ = useCompetitorStandings(competitionId, competitionId > 0);
   const info = infoQ.data;
   const name = info?.name || params.name || '—';
@@ -90,10 +107,19 @@ export default function CompetitionProfileScreen() {
   const hasStandings = info?.hasStandings !== false;
   const displayName = getLeagueDisplayName(name, language, competitionId, country);
 
-  const goalsBoard = useMemo(() => pickGoalsBoard(statsQ.data), [statsQ.data]);
-  const assistsBoard = useMemo(() => pickAssistsBoard(statsQ.data), [statsQ.data]);
-  const goalRows = (goalsBoard?.rows ?? []).slice(0, 10);
-  const assistRows = (assistsBoard?.rows ?? []).slice(0, 5);
+  const boards = useMemo(
+    () => sortBoards(statsQ.data?.leaderboards ?? []),
+    [statsQ.data],
+  );
+  const activeBoard: Stat365Leaderboard | null = useMemo(() => {
+    if (!boards.length) return null;
+    if (boardKey != null) {
+      const found = boards.find((b) => b.key === boardKey);
+      if (found) return found;
+    }
+    return boards[0];
+  }, [boards, boardKey]);
+  const boardRows = (activeBoard?.rows ?? []).slice(0, 15);
 
   const groups = useMemo(() => {
     const list = standingsQ.data ?? [];
@@ -118,6 +144,20 @@ export default function CompetitionProfileScreen() {
       name: row.name,
       photo: row.photo,
     });
+  };
+
+  const openMatch = (fixtureId: number) => {
+    router.push({
+      pathname: '/(tabs)/match-details' as any,
+      params: { fixtureId: String(fixtureId) },
+    } as any);
+  };
+
+  const tabKeys: TabKey[] = ['overview', 'matches', 'table'];
+  const tabLabel = (key: TabKey) => {
+    if (key === 'overview') return cp.overview;
+    if (key === 'matches') return cp.matches;
+    return cp.table;
   };
 
   return (
@@ -186,9 +226,8 @@ export default function CompetitionProfileScreen() {
           </View>
 
           <View style={styles.tabs}>
-            {(['overview', 'table'] as TabKey[]).map((key) => {
+            {tabKeys.map((key) => {
               const active = tab === key;
-              const label = key === 'overview' ? cp.overview : cp.table;
               return (
                 <TouchableOpacity
                   key={key}
@@ -196,7 +235,9 @@ export default function CompetitionProfileScreen() {
                   onPress={() => setTab(key)}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                    {tabLabel(key)}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -204,44 +245,42 @@ export default function CompetitionProfileScreen() {
 
           {tab === 'overview' ? (
             <>
-              <Text style={styles.section}>{cp.topScorers}</Text>
+              <Text style={styles.section}>{cp.stats}</Text>
               {statsQ.isLoading ? (
                 <ActivityIndicator color={Colors.purpleSoft} style={{ marginVertical: 20 }} />
-              ) : goalRows.length === 0 ? (
+              ) : boards.length === 0 ? (
                 <Text style={styles.mutedCenter}>{cp.noScorers}</Text>
               ) : (
-                <View style={styles.card}>
-                  {goalRows.map((row, idx) => (
-                    <TouchableOpacity
-                      key={`g-${row.athleteId}-${idx}`}
-                      style={styles.scorerRow}
-                      activeOpacity={0.8}
-                      onPress={() => openPlayer(row)}
-                    >
-                      <Text style={styles.scorerRank}>{idx + 1}</Text>
-                      <CachedAthletePhoto
-                        uri={row.photo}
-                        size={40}
-                        recyclingKey={row.athleteId}
-                      />
-                      <View style={styles.scorerInfo}>
-                        <Text style={styles.scorerName} numberOfLines={1}>
-                          {row.name}
-                        </Text>
-                      </View>
-                      <Text style={styles.scorerValue}>{row.value}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              {assistRows.length > 0 ? (
                 <>
-                  <Text style={styles.section}>{cp.topAssists}</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.boardRow}
+                  >
+                    {boards.map((board) => {
+                      const active = activeBoard?.key === board.key;
+                      return (
+                        <TouchableOpacity
+                          key={board.key}
+                          style={[styles.boardChip, active && styles.boardChipActive]}
+                          onPress={() => setBoardKey(board.key)}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={[styles.boardChipText, active && styles.boardChipTextActive]}
+                            numberOfLines={1}
+                          >
+                            {boardLabel(board, cp.topScorers)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
                   <View style={styles.card}>
-                    {assistRows.map((row, idx) => (
+                    {boardRows.map((row, idx) => (
                       <TouchableOpacity
-                        key={`a-${row.athleteId}-${idx}`}
+                        key={`${activeBoard?.key}-${row.athleteId}-${idx}`}
                         style={styles.scorerRow}
                         activeOpacity={0.8}
                         onPress={() => openPlayer(row)}
@@ -256,15 +295,35 @@ export default function CompetitionProfileScreen() {
                           <Text style={styles.scorerName} numberOfLines={1}>
                             {row.name}
                           </Text>
+                          {row.positionName ? (
+                            <Text style={styles.scorerPos} numberOfLines={1}>
+                              {row.positionName}
+                            </Text>
+                          ) : null}
                         </View>
                         <Text style={styles.scorerValue}>{row.value}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 </>
-              ) : null}
+              )}
             </>
-          ) : (
+          ) : null}
+
+          {tab === 'matches' ? (
+            matchesQ.isLoading && !matchesQ.data ? (
+              <ActivityIndicator color={Colors.purpleSoft} style={{ marginVertical: 24 }} />
+            ) : (
+              <MatchesTab
+                matches={matchesQ.data}
+                language={language}
+                t={t}
+                onOpenMatch={openMatch}
+              />
+            )
+          ) : null}
+
+          {tab === 'table' ? (
             <>
               <Text style={styles.section}>{cp.table}</Text>
               {!hasStandings ? (
@@ -318,7 +377,7 @@ export default function CompetitionProfileScreen() {
                 ))
               )}
             </>
-          )}
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -351,7 +410,12 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
   muted: { color: Colors.textMuted },
-  mutedCenter: { color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.lg, marginHorizontal: Spacing.base },
+  mutedCenter: {
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: Spacing.lg,
+    marginHorizontal: Spacing.base,
+  },
   hero: { alignItems: 'center', paddingVertical: Spacing['2xl'], gap: Spacing.sm },
   crestRing: {
     width: 96,
@@ -411,6 +475,7 @@ const styles = StyleSheet.create({
   followingText: { color: Colors.purpleSoft },
   tabs: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: Spacing.base,
     marginBottom: Spacing.md,
@@ -431,6 +496,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.base,
     marginBottom: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  boardRow: {
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.sm,
+  },
+  boardChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.chip,
+    backgroundColor: Colors.white04,
+    borderWidth: 1,
+    borderColor: Colors.borderSubtle,
+    maxWidth: 180,
+  },
+  boardChipActive: {
+    backgroundColor: Colors.purpleMuted,
+    borderColor: Colors.purpleSoft,
+  },
+  boardChipText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.semibold,
+  },
+  boardChipTextActive: {
+    color: Colors.purpleSoft,
   },
   card: {
     marginHorizontal: Spacing.base,
@@ -453,6 +544,7 @@ const styles = StyleSheet.create({
   scorerRank: { width: 22, color: Colors.textMuted, fontWeight: FontWeight.bold },
   scorerInfo: { flex: 1, minWidth: 0 },
   scorerName: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: FontWeight.semibold },
+  scorerPos: { color: Colors.textMuted, fontSize: FontSize.sm, marginTop: 1 },
   scorerValue: { color: Colors.purpleSoft, fontWeight: FontWeight.bold, fontSize: FontSize.lg },
   tableCard: {
     marginHorizontal: Spacing.base,

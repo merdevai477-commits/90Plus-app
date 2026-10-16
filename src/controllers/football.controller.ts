@@ -3665,6 +3665,47 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/competition/:id/matches — live / upcoming / finished.
+   */
+  static async getCached365CompetitionMatches(req: Request, res: Response): Promise<void> {
+    try {
+      const competitionId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitionId) || competitionId <= 0) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competition ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitionMatches(
+        competitionId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competition matches unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      const { live, upcoming, finished } = result.data;
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          competitionId,
+          live: live.length,
+          upcoming: upcoming.length,
+          finished: finished.length,
+          cacheHit: result.cacheHit === true,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/transfers?competitions=7,11,552 — 365 competition transfers.
    */
   static async getCached365CompetitionTransfers(req: Request, res: Response): Promise<void> {

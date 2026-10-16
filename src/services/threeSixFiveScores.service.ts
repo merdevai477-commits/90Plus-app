@@ -2459,7 +2459,7 @@ export class ThreeSixFiveScoresService {
     }
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:competition:${competitionId}:stats:v1:${langId}`;
+      const cacheKey = `365:competition:${competitionId}:stats:v2:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFiveCompetitorStats>(cacheKey);
       if (cached) return { data: cached, source: '365scores' };
 
@@ -2469,7 +2469,7 @@ export class ThreeSixFiveScoresService {
         600_000,
       );
       const result = this.parseAthletesStatsBoards(payload, competitionId, {
-        maxBoards: 8,
+        maxBoards: 16,
         maxRows: 15,
       });
       if (!result) return { data: null, source: null };
@@ -2479,6 +2479,90 @@ export class ThreeSixFiveScoresService {
     } catch (err: unknown) {
       logger.error(
         `[365Scores] getCompetitionStats(${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  /**
+   * Live / upcoming / finished fixtures for a competition profile Matches tab.
+   * Merges fixtures feed + allscores so live scores stay current.
+   */
+  async getCompetitionMatches(
+    competitionId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
+    if (!Number.isFinite(competitionId) || competitionId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competition:${competitionId}:matches:v1:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorMatches>(cacheKey);
+      if (cached) return { data: cached, source: '365scores', cacheHit: true };
+
+      const [fixtureGames, allscores] = await Promise.all([
+        this.fetchAllFixtures(competitionId, langId),
+        this.fetchJson<AllScoresPayload>(
+          `/web/games/allscores/?${this.commonParams(langId)}&competitions=${competitionId}`,
+          `competition-matches-allscores:${competitionId}`,
+          90_000,
+        ),
+      ]);
+
+      const countriesById = new Map<number, string>();
+      for (const c of allscores?.countries ?? []) {
+        if (c.id != null && c.name) countriesById.set(c.id, c.name);
+      }
+      const competitionMeta = this.buildCompetitionMetaFromCatalog(
+        allscores?.competitions ?? [],
+        countriesById,
+      );
+      if (!competitionMeta.has(competitionId)) {
+        competitionMeta.set(competitionId, {
+          name: `Competition ${competitionId}`,
+          country: null,
+          logo: null,
+        });
+      }
+
+      const byId = new Map<number, Scores365Game>();
+      for (const g of fixtureGames) {
+        if (g?.id != null) byId.set(g.id, g);
+      }
+      for (const g of allscores?.games ?? []) {
+        if (g?.id != null) byId.set(g.id, g); // allscores wins for live score/status
+      }
+
+      const live: FixtureFromAPI[] = [];
+      const upcoming: FixtureFromAPI[] = [];
+      const finished: FixtureFromAPI[] = [];
+      for (const game of byId.values()) {
+        const fixture = this.buildCompetitorFixture(game, competitionMeta);
+        const phase = this.classifyPhase(game);
+        if (phase === 'live') live.push(fixture);
+        else if (phase === 'upcoming') upcoming.push(fixture);
+        else finished.push(fixture);
+      }
+
+      const asc = (a: FixtureFromAPI, b: FixtureFromAPI) =>
+        new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime();
+      live.sort(asc);
+      upcoming.sort(asc);
+      finished.sort((a, b) => asc(b, a));
+
+      const result: ThreeSixFiveCompetitorMatches = {
+        live,
+        upcoming: upcoming.slice(0, 40),
+        finished: finished.slice(0, 30),
+      };
+      const ttlMs = live.length > 0 ? 60_000 : 180_000;
+      await redisCacheService.set(cacheKey, result, ttlMs);
+      return { data: result, source: '365scores', cacheHit: false };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitionMatches(${competitionId}) failed:`,
         (err as Error)?.message,
       );
       return { data: null, source: null };
