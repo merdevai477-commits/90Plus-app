@@ -41,7 +41,10 @@ const db = {
 
 const prismaMock = {
   user: { findFirst: jest.fn(async () => ({ id: 'user-1' })) },
-  cachedFixture: { findFirst: jest.fn(async () => null), findMany: jest.fn(async () => []) },
+  cachedFixture: {
+    findFirst: jest.fn(async () => null),
+    findMany: jest.fn(async (): Promise<Array<{ homeTeamId: number; awayTeamId: number; matchDate: Date; status: string }>> => []),
+  },
   topScorersFiveGameweek: {
     findUnique: jest.fn(async () => db.gameweek),
     findUniqueOrThrow: jest.fn(async () => db.gameweek),
@@ -121,7 +124,9 @@ import {
   combineTsfPickStates,
   computeTsfPoints,
   extractTsfStatsFrom365Game,
+  isTsfFixtureNotStarted,
   isTsfGameweekOpen,
+  isTsfLeaguePickingOpen,
   nextTsfGameweekStatus,
   sumTsfPerformances,
   tsfGameweekWindow,
@@ -203,17 +208,48 @@ beforeEach(() => {
     { id: 'p-vini', externalPlayerId: 1002, teamId: 131 },
     { id: 'p-lewa', externalPlayerId: 2001, teamId: 132 },
   ];
-  db.players = new Map(
-    ['p-mbappe', 'p-vini', 'p-lewa', 'p-yamal'].map((id) => [
+  db.players = new Map<string, Record<string, unknown>>(
+    (
+      [
+        ['p-mbappe', 131],
+        ['p-vini', 131],
+        ['p-lewa', 132],
+        ['p-yamal', 131],
+      ] as const
+    ).map(([id, teamId]) => [
       id,
       {
-        id, leagueKey: 'laliga', active: true, externalPlayerId: 1, nameAr: id, nameEn: id,
-        clubNameAr: 'x', clubNameEn: 'x', teamId: 131, photoUrl: null, position: 'CF',
+        id,
+        leagueKey: 'laliga',
+        active: true,
+        externalPlayerId: 1,
+        nameAr: id,
+        nameEn: id,
+        clubNameAr: 'x',
+        clubNameEn: 'x',
+        teamId,
+        photoUrl: null,
+        position: 'CF',
       },
     ]),
   );
   db.gameweek = null;
   jest.clearAllMocks();
+  // Default: both clubs still have a not-started fixture in the window.
+  prismaMock.cachedFixture.findMany.mockImplementation(async () => [
+    {
+      homeTeamId: 131,
+      awayTeamId: 999,
+      matchDate: new Date(NOW.getTime() + 3600_000),
+      status: 'NS',
+    },
+    {
+      homeTeamId: 132,
+      awayTeamId: 998,
+      matchDate: new Date(NOW.getTime() + 7200_000),
+      status: 'NS',
+    },
+  ]);
 });
 
 describe('points', () => {
@@ -448,15 +484,40 @@ describe('selection — confirm is final', () => {
     expect(db.selections).toHaveLength(1);
   });
 
-  it('refuses any pick once the gameweek deadline has passed', async () => {
-    db.gameweek = gameweek({ status: 'OPEN', lockAt: new Date(NOW.getTime() - 60_000) });
+  it('still allows a pick after the league lockAt when that player\'s match has not started', async () => {
+    db.gameweek = gameweek({ status: 'LOCKED', lockAt: new Date(NOW.getTime() - 60_000) });
+    const saved = await saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW);
+    expect(saved.selection?.player.id).toBe('p-lewa');
+    expect(db.selections).toHaveLength(1);
+  });
+
+  it('refuses a player whose club match has already started, even while others remain open', async () => {
+    db.gameweek = gameweek({ status: 'LIVE', lockAt: new Date(NOW.getTime() - 60_000) });
+    prismaMock.cachedFixture.findMany.mockImplementation(async () => [
+      {
+        homeTeamId: 131,
+        awayTeamId: 999,
+        matchDate: new Date(NOW.getTime() + 3600_000),
+        status: 'NS',
+      },
+    ]);
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toMatchObject({
       code: 'GAMEWEEK_LOCKED',
     });
-    db.gameweek = gameweek({ status: 'LIVE', lockAt: new Date(NOW.getTime() + 3600_000) });
-    await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toBeInstanceOf(TopScorersFiveError);
+    const saved = await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
+    expect(saved.selection?.player.id).toBe('p-mbappe');
+  });
+
+  it('refuses any pick once the gameweek window has ended', async () => {
+    db.gameweek = gameweek({
+      status: 'LIVE',
+      lockAt: new Date(NOW.getTime() - 60_000),
+      endAt: new Date(NOW.getTime() - 1),
+    });
+    await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toMatchObject({
+      code: 'GAMEWEEK_LOCKED',
+    });
     expect(prismaMock.topScorersFiveSelection.create).not.toHaveBeenCalled();
-    expect(prismaMock.topScorersFiveSelection.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects players outside the eligible list or not linked to match data', async () => {
@@ -514,6 +575,22 @@ describe('gameweek window and lifecycle', () => {
     expect(isTsfGameweekOpen({ status: 'OPEN', lockAt }, NOW)).toBe(true);
     expect(isTsfGameweekOpen({ status: 'OPEN', lockAt: NOW }, NOW)).toBe(false);
     expect(isTsfGameweekOpen({ status: 'LOCKED', lockAt }, NOW)).toBe(false);
+  });
+
+  it('keeps league picking open through LOCKED/LIVE until the window ends', () => {
+    const endAt = new Date(NOW.getTime() + 86_400_000);
+    expect(isTsfLeaguePickingOpen({ status: 'LOCKED', endAt }, NOW)).toBe(true);
+    expect(isTsfLeaguePickingOpen({ status: 'LIVE', endAt }, NOW)).toBe(true);
+    expect(isTsfLeaguePickingOpen({ status: 'CALCULATING', endAt }, NOW)).toBe(false);
+    expect(isTsfLeaguePickingOpen({ status: 'LIVE', endAt: NOW }, NOW)).toBe(false);
+  });
+
+  it('treats a fixture as pickable only before kickoff', () => {
+    const kickoffAt = new Date(NOW.getTime() + 60_000);
+    expect(isTsfFixtureNotStarted({ kickoffAt, status: 'NS' }, NOW)).toBe(true);
+    expect(isTsfFixtureNotStarted({ kickoffAt: NOW, status: 'NS' }, NOW)).toBe(false);
+    expect(isTsfFixtureNotStarted({ kickoffAt, status: 'LIVE' }, NOW)).toBe(false);
+    expect(isTsfFixtureNotStarted({ kickoffAt, status: 'FT' }, NOW)).toBe(false);
   });
 });
 

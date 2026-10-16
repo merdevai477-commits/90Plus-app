@@ -14,7 +14,8 @@ import {
   enabledTsfLeagues,
   getTsfLeagueConfig,
   isTsfFinishedStatus,
-  isTsfGameweekOpen,
+  isTsfFixtureNotStarted,
+  isTsfLeaguePickingOpen,
   isTsfSelectionLocked,
   isTsfVoidStatus,
   sumTsfPerformances,
@@ -117,7 +118,7 @@ export type TsfGameweekDto = {
   locked: boolean;
 };
 
-function gameweekDto(gameweek: TopScorersFiveGameweek, now: Date = new Date()): TsfGameweekDto {
+function gameweekDto(gameweek: TopScorersFiveGameweek, now: Date = new Date(), pickingOpen = true): TsfGameweekDto {
   return {
     id: gameweek.id,
     weekKey: gameweek.weekKey,
@@ -125,8 +126,46 @@ function gameweekDto(gameweek: TopScorersFiveGameweek, now: Date = new Date()): 
     endAt: gameweek.endAt.toISOString(),
     lockAt: gameweek.lockAt.toISOString(),
     status: gameweek.status,
-    locked: !isTsfGameweekOpen(gameweek, now),
+    /** True when nobody left in this league can still be picked. */
+    locked: !pickingOpen,
   };
+}
+
+/**
+ * Clubs that still have a not-started league fixture inside the gameweek
+ * window — those are the only teams whose players remain selectable.
+ */
+export async function tsfPickableTeamIds(
+  cfg: TsfLeagueConfig,
+  gameweek: TopScorersFiveGameweek,
+  now: Date = new Date(),
+): Promise<Set<number>> {
+  if (!isTsfLeaguePickingOpen(gameweek, now)) return new Set();
+  const rows = await prisma.cachedFixture.findMany({
+    where: {
+      leagueId: cfg.competitionLeagueId,
+      matchDate: { gte: gameweek.startAt, lt: gameweek.endAt, gt: now },
+      status: { notIn: ['PST', 'CANC', 'ABD', 'AWD', 'WO', 'TBD', 'FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT'] },
+    },
+    select: { homeTeamId: true, awayTeamId: true, matchDate: true, status: true },
+  });
+  const ids = new Set<number>();
+  for (const row of rows) {
+    if (!isTsfFixtureNotStarted({ kickoffAt: row.matchDate, status: row.status }, now)) continue;
+    ids.add(row.homeTeamId);
+    ids.add(row.awayTeamId);
+  }
+  return ids;
+}
+
+async function leaguePickingOpen(
+  cfg: TsfLeagueConfig,
+  gameweek: TopScorersFiveGameweek,
+  now: Date,
+): Promise<boolean> {
+  if (!isTsfLeaguePickingOpen(gameweek, now)) return false;
+  const teams = await tsfPickableTeamIds(cfg, gameweek, now);
+  return teams.size > 0;
 }
 
 // ─── Players ────────────────────────────────────────────────────────────────
@@ -236,11 +275,23 @@ async function playerTotals(playerIds: string[]): Promise<Map<string, { goals: n
   );
 }
 
-/** A. The league's selectable players — resolved, active pool entries only. */
-export async function listTsfEligiblePlayers(leagueKey: string, language: TsfLanguage): Promise<TsfPlayerDto[]> {
+/** A. The league's selectable players — resolved, active, match not started yet. */
+export async function listTsfEligiblePlayers(
+  leagueKey: string,
+  language: TsfLanguage,
+  now: Date = new Date(),
+): Promise<TsfPlayerDto[]> {
   const cfg = requireLeague(leagueKey);
+  const gameweek = await ensureTsfGameweek(cfg.key, now);
+  const pickableTeams = await tsfPickableTeamIds(cfg, gameweek, now);
+  if (pickableTeams.size === 0) return [];
   const players = await prisma.topScorersFivePlayer.findMany({
-    where: { leagueKey: cfg.key, active: true, externalPlayerId: { not: null } },
+    where: {
+      leagueKey: cfg.key,
+      active: true,
+      externalPlayerId: { not: null },
+      teamId: { in: [...pickableTeams] },
+    },
     orderBy: { sortOrder: 'asc' },
   });
   const [totals, season] = await Promise.all([
@@ -287,8 +338,14 @@ async function selectionDto(
   now: Date = new Date(),
 ): Promise<TsfSelectionDto> {
   const cfg = getTsfLeagueConfig(gameweek.leagueKey);
+  const pickingOpen = cfg ? await leaguePickingOpen(cfg, gameweek, now) : false;
   if (!selection) {
-    return { leagueKey: gameweek.leagueKey, gameweek: gameweekDto(gameweek, now), state: 'PICKING', selection: null };
+    return {
+      leagueKey: gameweek.leagueKey,
+      gameweek: gameweekDto(gameweek, now, pickingOpen),
+      state: 'PICKING',
+      selection: null,
+    };
   }
 
   const [performances, totals, season, fixtures] = await Promise.all([
@@ -304,7 +361,7 @@ async function selectionDto(
   const locked = isTsfSelectionLocked(selection, gameweek, now);
   return {
     leagueKey: gameweek.leagueKey,
-    gameweek: gameweekDto(gameweek, now),
+    gameweek: gameweekDto(gameweek, now, pickingOpen),
     state: tsfPickState({ picked: true, locked, now, windowEnd: gameweek.endAt, fixtures }),
     selection: {
       player: playerDto(selection.player, language, totals.get(selection.playerId), season),
@@ -371,8 +428,11 @@ export async function saveTsfSelection(
 
   const existing = await prisma.topScorersFiveSelection.findUnique({ where, include: { player: true } });
   if (existing?.confirmedAt) return settled();
-  if (!isTsfGameweekOpen(gameweek, now)) {
+  if (!isTsfLeaguePickingOpen(gameweek, now)) {
     throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'Picks are locked for this gameweek');
+  }
+  if (player.teamId == null || !(await tsfPickableTeamIds(cfg, gameweek, now)).has(player.teamId)) {
+    throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'This player\'s match has already started');
   }
 
   if (existing) {
@@ -405,7 +465,7 @@ export async function clearTsfSelection(clerkUserId: string, leagueKey: string, 
   if (existing?.confirmedAt) {
     throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your pick is confirmed for this gameweek');
   }
-  if (!isTsfGameweekOpen(gameweek, now)) {
+  if (!isTsfLeaguePickingOpen(gameweek, now)) {
     throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'Picks are locked for this gameweek');
   }
   await prisma.topScorersFiveSelection.deleteMany({
@@ -727,6 +787,7 @@ type LeaguePick = {
   selection: (SelectionWithPlayer & { id: string }) | null;
   fixtures: RelevantFixture[];
   state: TsfPickState;
+  pickingOpen: boolean;
 };
 
 /** Every enabled league's current gameweek with the user's pick, its fixtures and state. */
@@ -739,6 +800,7 @@ async function tsfLeaguePicks(userId: string, now: Date = new Date()): Promise<L
         include: { player: true },
       });
       const fixtures = selection ? await tsfRelevantFixtures(cfg, gameweek, teamIdsOf([selection.player])) : [];
+      const pickingOpen = await leaguePickingOpen(cfg, gameweek, now);
       const state = tsfPickState({
         picked: selection != null,
         locked: isTsfSelectionLocked(selection, gameweek, now),
@@ -746,7 +808,7 @@ async function tsfLeaguePicks(userId: string, now: Date = new Date()): Promise<L
         windowEnd: gameweek.endAt,
         fixtures,
       });
-      return { cfg, gameweek, selection, fixtures, state };
+      return { cfg, gameweek, selection, fixtures, state, pickingOpen };
     }),
   );
 }
@@ -852,7 +914,7 @@ export async function getTsfMyFixtures(clerkUserId: string, language: TsfLanguag
     leagues: picks.map((p) => ({
       leagueKey: p.cfg.key,
       state: p.state,
-      gameweek: gameweekDto(p.gameweek, now),
+      gameweek: gameweekDto(p.gameweek, now, p.pickingOpen),
       playerId: p.selection?.playerId ?? null,
     })),
     fixtures: [...merged.values()].sort((a, b) => a.kickoff.localeCompare(b.kickoff)),

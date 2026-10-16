@@ -253,16 +253,43 @@ export function isTsfGameweekOpen(gameweek: { lockAt: Date; status: TopScorersFi
   return gameweek.status === 'OPEN' && now < gameweek.lockAt;
 }
 
+const STARTED_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT', 'FT', 'AET', 'PEN']);
+
 /**
- * A pick can still be set only while the gameweek is open and the user has not
- * confirmed one. Confirming is final until the next gameweek.
+ * A fixture still accepts a pick when it has not kicked off and is not already
+ * live, finished, void, or postponed out of the window.
+ */
+export function isTsfFixtureNotStarted(
+  fixture: { kickoffAt: Date; status: string | null | undefined },
+  now: Date = new Date(),
+): boolean {
+  const status = String(fixture.status ?? '').toUpperCase();
+  if (isTsfVoidStatus(status) || isTsfPostponedStatus(status) || STARTED_STATUSES.has(status)) return false;
+  return fixture.kickoffAt.getTime() > now.getTime();
+}
+
+/**
+ * League-wide picking stays available through LOCKED/LIVE until the window ends
+ * — individual players drop out once their own match has started.
+ */
+export function isTsfLeaguePickingOpen(
+  gameweek: { endAt: Date; status: TopScorersFiveGameweekStatus },
+  now: Date = new Date(),
+): boolean {
+  if (now >= gameweek.endAt) return false;
+  return gameweek.status !== 'CALCULATING' && gameweek.status !== 'COMPLETED';
+}
+
+/**
+ * A saved pick is final once confirmed. Unconfirmed rows (rare) also lock when
+ * the league window is over.
  */
 export function isTsfSelectionLocked(
   selection: { confirmedAt: Date | null } | null,
-  gameweek: { lockAt: Date; status: TopScorersFiveGameweekStatus },
+  gameweek: { lockAt: Date; endAt: Date; status: TopScorersFiveGameweekStatus },
   now: Date = new Date(),
 ): boolean {
-  return selection?.confirmedAt != null || !isTsfGameweekOpen(gameweek, now);
+  return selection?.confirmedAt != null || !isTsfLeaguePickingOpen(gameweek, now);
 }
 
 /** The "next 7 days" fixture window, from now. */
