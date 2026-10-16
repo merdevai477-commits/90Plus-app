@@ -2589,7 +2589,7 @@ export class ThreeSixFiveScoresService {
       .map((board) => ({
         key: board.id,
         typeId: board.statsTypes?.[0]?.typeId ?? board.rows?.[0]?.stats?.[0]?.typeId ?? null,
-        name: brandAthleteStatBoardName(board.name),
+        name: this.brandAthleteStatBoardName(board.name),
         rows: (board.rows ?? [])
           .slice(0, opts.maxRows)
           .map((r) => ({
