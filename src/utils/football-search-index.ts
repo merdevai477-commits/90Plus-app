@@ -340,6 +340,20 @@ export const FOOTBALL_SEARCH_INDEX: FootballSearchAliasRecord[] = [
     aliases: ['haaland', 'erling haaland', 'هالاند', 'إيرلينج هالاند', 'ايرلينج هالاند'],
   },
   {
+    // 365Scores athleteId — Barcelona winger (not Coritiba / older "Rafinha").
+    entityId: 39789,
+    type: 'player',
+    canonicalName: 'Raphinha',
+    aliases: [
+      'raphinha',
+      'raphina',
+      'رافينيا',
+      'رافاينيا',
+      'رافينيا برشلونة',
+      'رافينيا برشلونه',
+    ],
+  },
+  {
     entityId: 51976,
     type: 'coach',
     canonicalName: 'Hussein Ammouta',

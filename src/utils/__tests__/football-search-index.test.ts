@@ -46,6 +46,13 @@ describe('football-search-index', () => {
     expect(expandSearchQueries('فيني').boostedEntityIds.has(48298)).toBe(true);
   });
 
+  it('maps رافينيا to Barcelona Raphinha 39789 and expands the English query', () => {
+    const exp = expandSearchQueries('رافينيا');
+    expect(exp.boostedEntityIds.has(39789)).toBe(true);
+    expect(exp.queries.some((q) => /raphinha/i.test(q))).toBe(true);
+    expect(isPlayerOrientedBoost(exp.boostedEntityIds)).toBe(true);
+  });
+
   it('maps صلاح / رونالدو / هالاند and Egypt NT / الهلال to 365 IDs', () => {
     expect(expandSearchQueries('صلاح').boostedEntityIds.has(1439)).toBe(true);
     expect(expandSearchQueries('محمد صلاح').boostedEntityIds.has(1439)).toBe(true);

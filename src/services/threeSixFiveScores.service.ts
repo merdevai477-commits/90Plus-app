@@ -2987,7 +2987,8 @@ export class ThreeSixFiveScoresService {
           : null;
       const queryNorm = normalizeSearchText(trimmed);
       let expansion = expandSearchQueries(trimmed);
-      const rankedCacheKey = `365:searchall:ranked:v3:${primaryLangId}:${queryNorm}:${preferredCountryId ?? 0}`;
+      // v4: alias expansion actually fetches canonical English queries (Raphinha etc.).
+      const rankedCacheKey = `365:searchall:ranked:v4:${primaryLangId}:${queryNorm}:${preferredCountryId ?? 0}`;
       const cachedRanked = await redisCacheService.get<ThreeSixFiveSearchResults>(rankedCacheKey);
       if (cachedRanked) return { data: this.withSearchDefaults(cachedRanked), source: '365scores' };
 
@@ -3073,7 +3074,7 @@ export class ThreeSixFiveScoresService {
     fallbackLangId: number,
   ): Promise<ThreeSixFiveSearchResults | null> {
     for (const country of [0, DEFAULT_ARABIC_COUNTRY_ID]) {
-      const key = `365:searchall:ranked:v3:${fallbackLangId}:${queryNorm}:${country}`;
+      const key = `365:searchall:ranked:v4:${fallbackLangId}:${queryNorm}:${country}`;
       const hit = await redisCacheService.get<ThreeSixFiveSearchResults>(key);
       if (hit && !this.searchIsEmpty(hit)) return this.withSearchDefaults(hit);
     }
@@ -3091,7 +3092,7 @@ export class ThreeSixFiveScoresService {
     await redisCacheService.set(rankedCacheKey, ranked, ttlMs);
     if (this.searchIsEmpty(ranked)) return;
     for (const q of expansion.queries) {
-      const aliasKey = `365:searchall:ranked:v3:${primaryLangId}:${normalizeSearchText(q)}:${preferredCountryId ?? 0}`;
+      const aliasKey = `365:searchall:ranked:v4:${primaryLangId}:${normalizeSearchText(q)}:${preferredCountryId ?? 0}`;
       if (aliasKey === rankedCacheKey) continue;
       await redisCacheService.set(aliasKey, ranked, ttlMs);
     }
@@ -3107,6 +3108,7 @@ export class ThreeSixFiveScoresService {
     language?: string | null,
   ): Promise<ThreeSixFiveSearchResults | null> {
     const firstQuery = expansion.queries[0] ?? trimmed;
+    const extraQueries = expansion.queries.slice(1).filter((q) => q && q !== firstQuery);
 
     // Primary 365 hit + local competitions in parallel. Only hit the
     // fallback language when the primary language returns nothing — that
@@ -3119,6 +3121,23 @@ export class ThreeSixFiveScoresService {
     let results: SearchEntitiesFetch = primaryRes;
     if (this.search365Empty(results) && fallbackLangId !== primaryLangId) {
       results = await this.fetchSearchEntities(firstQuery, fallbackLangId);
+    }
+
+    // Alias expansion (e.g. رافينيا → Raphinha) used to only rewrite the
+    // boost set — the canonical English query was never fetched, so obscure
+    // same-name hits won. Merge extra expansion queries when the boosted
+    // famous entity is missing from the primary hit set.
+    if (extraQueries.length && this.searchNeedsExpansion(results, expansion.boostedEntityIds)) {
+      const extras = await Promise.all(
+        extraQueries.slice(0, 2).map((q) => this.fetchSearchEntities(q, primaryLangId)),
+      );
+      results = this.mergeSearchResults([results, ...extras]);
+      if (this.searchNeedsExpansion(results, expansion.boostedEntityIds) && fallbackLangId !== primaryLangId) {
+        const extrasFb = await Promise.all(
+          extraQueries.slice(0, 2).map((q) => this.fetchSearchEntities(q, fallbackLangId)),
+        );
+        results = this.mergeSearchResults([results, ...extrasFb]);
+      }
     }
 
     results = {

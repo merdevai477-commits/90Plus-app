@@ -178,6 +178,19 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
     aliases: ['رودري', 'Rodri', 'Rodrigo Hernandez', 'Rodrigo Hernández'],
     apiPlayerId: 44,
   },
+  {
+    // Barcelona winger — Arabic «رافينيا» must NOT resolve to obscure "Rafinha".
+    arabicName: 'رافينيا',
+    englishName: 'Raphinha',
+    aliases: [
+      'رافينيا',
+      'رافاينيا',
+      'رافينيا برشلونة',
+      'Raphinha',
+      'Raphina',
+    ],
+    apiPlayerId: 278817,
+  },
 ];
 
 let mappingCache: CachedMapping[] | null = null;
