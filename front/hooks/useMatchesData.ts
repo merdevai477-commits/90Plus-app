@@ -12,7 +12,7 @@ import {
   getLocalTodayKey,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
-import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS, MATCHES_PAST_DISK_TTL_MS } from '../services/cacheService';
+import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { isAbortError } from '../utils/isAbortError';
 import { useLanguageStore } from '../src/i18n/store';
@@ -41,6 +41,7 @@ import { dateFromLocalKey } from '../utils/safeDate';
 import { ensureLiveFeed, subscribeLiveFeed, isLiveFeedWsTrusted } from '../services/liveFeedOwner';
 import { shouldApplyCalendarGeneration } from '../utils/calendarGeneration';
 import { shouldForceLiveFeedFetch } from '../utils/liveFeedForceGate';
+import { shouldRevalidatePastCalendar } from '../utils/pastMatchesRevalidate';
 import { calendarStorageKey, onCalendarTimezoneChange } from '../utils/calendarTimezone';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
@@ -460,11 +461,8 @@ export const useMatchesData = (
             setLoading(false);
             maybePrefetchMatchAssets(memoryCached.data);
 
-            if (isPastDate) {
-              release();
-              return;
-            }
-
+            // Past dates: paint cache-first, then soft-revalidate when policy says so
+            // (yesterday always; older past only if disk is missing/stale). No periodic poll.
             if (isToday) {
               refreshTodayInBackground();
             } else {
@@ -490,11 +488,6 @@ export const useMatchesData = (
             applyCalendarMatches(generation, cached);
             setLoading(false);
             maybePrefetchMatchAssets(cached);
-
-            if (isPastDate) {
-              release();
-              return;
-            }
 
             if (isToday) {
               refreshTodayInBackground();
@@ -583,8 +576,22 @@ export const useMatchesData = (
     isTodayFlag: boolean,
     isPastFlag: boolean
   ) => {
-    if (isPastFlag) return;
     const generation = calendarGenRef.current;
+
+    // Historical: no periodic poll — only soft-revalidate when policy requires it.
+    if (isPastFlag) {
+      const todayKey = getLocalTodayKey();
+      const meta = await cacheService.getMetadata(getMatchesCacheKey(dateStr));
+      if (
+        !shouldRevalidatePastCalendar(
+          dateStr,
+          todayKey,
+          meta ? { isStale: meta.isStale } : null,
+        )
+      ) {
+        return;
+      }
+    }
 
     // ✅ Throttle: skip if refreshed recently
     const lastFetch = lastBackgroundFetch.get(dateStr) || 0;
