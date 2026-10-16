@@ -2758,19 +2758,13 @@ export class FootballController {
       const result = await footballDataCacheService.getCached365Standings(competitionId, language, {
         force,
       });
-      if (!result.data?.length) {
-        res.status(503).json({
-          status: 'ERROR',
-          message: '365Scores standings unavailable',
-          source: result.source,
-        });
-        return;
-      }
+      const rows = result.data ?? [];
       res.json({
         status: 'SUCCESS',
         source: result.source,
-        results: result.data.length,
-        response: result.data,
+        results: rows.length,
+        response: rows,
+        _meta: { unavailable: !result.data?.length },
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -3645,19 +3639,12 @@ export class FootballController {
         competitionId,
         language,
       );
-      if (!result.data) {
-        res.status(503).json({
-          status: 'ERROR',
-          message: '365Scores competition stats unavailable',
-          source: result.source,
-        });
-        return;
-      }
+      // Empty boards are normal for some cups / off-season — degrade, don't 503 the profile.
       res.json({
         status: 'SUCCESS',
         source: result.source,
-        response: result.data,
-        _meta: { competitionId },
+        response: result.data ?? { competitionId, leaderboards: [] },
+        _meta: { competitionId, unavailable: !result.data },
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -3679,25 +3666,20 @@ export class FootballController {
         competitionId,
         language,
       );
-      if (!result.data) {
-        res.status(503).json({
-          status: 'ERROR',
-          message: '365Scores competition matches unavailable',
-          source: result.source,
-        });
-        return;
-      }
-      const { live, upcoming, finished } = result.data;
+      const empty = { live: [] as unknown[], upcoming: [] as unknown[], finished: [] as unknown[] };
+      const data = result.data ?? empty;
+      const { live, upcoming, finished } = data;
       res.json({
         status: 'SUCCESS',
         source: result.source,
-        response: result.data,
+        response: data,
         _meta: {
           competitionId,
           live: live.length,
           upcoming: upcoming.length,
           finished: finished.length,
           cacheHit: result.cacheHit === true,
+          unavailable: !result.data,
         },
       });
     } catch (error) {

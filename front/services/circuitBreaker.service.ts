@@ -68,8 +68,17 @@ class CircuitBreakerService {
       return result;
     } catch (error) {
       const message = String((error as Error)?.message ?? '');
+      const statusCode = Number((error as { statusCode?: number })?.statusCode);
+      // 4xx (except 429) are client/route mistakes — don't open the breaker and
+      // poison unrelated /cached/* calls (e.g. missing competition matches route).
+      const isClientError =
+        Number.isFinite(statusCode) &&
+        statusCode >= 400 &&
+        statusCode < 500 &&
+        statusCode !== 429;
       if (
         !isAbortError(error) &&
+        !isClientError &&
         !message.includes('timed out') &&
         !message.includes('timeout')
       ) {
