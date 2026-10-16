@@ -24,8 +24,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
-import { getTeamDisplayName } from '../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
+import { useFavoriteLeagues } from '../hooks/useFavoriteLeagues';
 import ApiFootballService, {
     type FootballSearchResults,
     type SearchCompetitor365,
@@ -34,6 +35,7 @@ import ApiFootballService, {
 } from '../services/apiFootball';
 import { RecentSearchStorage } from '../src/storage/recentSearch.storage';
 import TeamBadge from '../components/common/TeamBadge';
+import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
@@ -104,12 +106,85 @@ function PlayerRow({ item, onPress }: { item: SearchAthlete365; onPress: () => v
     );
 }
 
+function CompetitionRow({
+    item,
+    language,
+    following,
+    followPending,
+    onPress,
+    onToggleFollow,
+    followLabel,
+    followingLabel,
+}: {
+    item: SearchCompetition365;
+    language: 'ar' | 'en';
+    following: boolean;
+    followPending: boolean;
+    onPress: () => void;
+    onToggleFollow: () => void;
+    followLabel: string;
+    followingLabel: string;
+}) {
+    return (
+        <View style={styles.row}>
+            <TouchableOpacity
+                style={styles.rowHit}
+                onPress={onPress}
+                activeOpacity={0.75}
+            >
+                <LeagueIcon name={item.name} logo={item.logo ?? undefined} size={40} />
+                <View style={styles.rowInfo}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                        {getLeagueDisplayName(item.name, language, item.competitionId, item.country)}
+                    </Text>
+                    {item.country ? (
+                        <Text style={styles.rowSub} numberOfLines={1}>
+                            {item.country}
+                        </Text>
+                    ) : null}
+                </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.followChip, following && styles.followingChip]}
+                onPress={onToggleFollow}
+                disabled={followPending}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.85}
+            >
+                {followPending ? (
+                    <ActivityIndicator
+                        size="small"
+                        color={following ? Colors.purpleSoft : Colors.white}
+                    />
+                ) : (
+                    <>
+                        <Ionicons
+                            name={following ? 'checkmark' : 'add'}
+                            size={14}
+                            color={following ? Colors.purpleSoft : Colors.white}
+                        />
+                        <Text style={[styles.followChipText, following && styles.followingChipText]}>
+                            {following ? followingLabel : followLabel}
+                        </Text>
+                    </>
+                )}
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 export default function FootballSearchScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{ q?: string | string[] }>();
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
     const { trigger } = useHaptic();
+    const {
+        isFollowing: isFollowingLeague,
+        toggleFollow: toggleFollowLeague,
+        pending: leagueFollowPending,
+    } = useFavoriteLeagues();
+    const [followBusyId, setFollowBusyId] = useState<number | null>(null);
     const inputRef = useRef<TextInput>(null);
     const initialQuery = typeof params.q === 'string' ? params.q : Array.isArray(params.q) ? params.q[0] : '';
 
@@ -228,6 +303,26 @@ export default function FootballSearchScreen() {
             },
         } as any);
     };
+
+    const handleToggleCompetitionFollow = async (item: SearchCompetition365) => {
+        if (leagueFollowPending || followBusyId != null) return;
+        trigger('medium');
+        setFollowBusyId(item.competitionId);
+        try {
+            await toggleFollowLeague({
+                id: item.competitionId,
+                name: item.name,
+                logo: item.logo,
+                country: item.country,
+            });
+            void remember(query.trim() || item.name);
+        } finally {
+            setFollowBusyId(null);
+        }
+    };
+
+    const followLabel = t.competitionProfile?.follow ?? t.teamProfile.follow;
+    const followingLabel = t.competitionProfile?.following ?? t.teamProfile.following;
 
     const applyRecent = (q: string) => {
         trigger('light');
@@ -396,6 +491,26 @@ export default function FootballSearchScreen() {
                             />
                         ))}
 
+                        <SectionHeader
+                            title={t.searchScreen.sectionCompetitions}
+                            count={(results.competitions ?? []).length}
+                        />
+                        {(results.competitions ?? []).map((c) => (
+                            <CompetitionRow
+                                key={`comp-${c.competitionId}`}
+                                item={c}
+                                language={language}
+                                following={isFollowingLeague(c.competitionId)}
+                                followPending={
+                                    leagueFollowPending && followBusyId === c.competitionId
+                                }
+                                onPress={() => openCompetition(c)}
+                                onToggleFollow={() => void handleToggleCompetitionFollow(c)}
+                                followLabel={followLabel}
+                                followingLabel={followingLabel}
+                            />
+                        ))}
+
                         <SectionHeader title={t.searchScreen.sectionPlayers} count={results.players.length} />
                         {results.players.map((p) => (
                             <PlayerRow key={`p-${p.athleteId}`} item={p} onPress={() => openPlayer(p)} />
@@ -407,27 +522,6 @@ export default function FootballSearchScreen() {
                         />
                         {(results.coaches ?? []).map((p) => (
                             <PlayerRow key={`coach-${p.athleteId}`} item={p} onPress={() => openCoach(p)} />
-                        ))}
-
-                        <SectionHeader
-                            title={t.searchScreen.sectionCompetitions}
-                            count={(results.competitions ?? []).length}
-                        />
-                        {(results.competitions ?? []).map((c) => (
-                            <CompetitorRow
-                                key={`comp-${c.competitionId}`}
-                                item={{
-                                    competitorId: c.competitionId,
-                                    name: c.name,
-                                    type: 0,
-                                    countryId: null,
-                                    country: c.country,
-                                    logo: c.logo,
-                                    isNationalTeam: false,
-                                }}
-                                language={language}
-                                onPress={() => openCompetition(c)}
-                            />
                         ))}
                     </>
                 ) : null}
@@ -506,9 +600,41 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: Colors.borderSubtle,
     },
+    rowHit: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+        minWidth: 0,
+    },
     rowInfo: {
         flex: 1,
         gap: 2,
+        minWidth: 0,
+    },
+    followChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: 6,
+        borderRadius: Radius.full,
+        backgroundColor: Colors.purpleSoft,
+        minWidth: 72,
+        justifyContent: 'center',
+    },
+    followingChip: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: Colors.purpleSoft,
+    },
+    followChipText: {
+        color: Colors.white,
+        fontSize: FontSize.sm,
+        fontWeight: FontWeight.semibold,
+    },
+    followingChipText: {
+        color: Colors.purpleSoft,
     },
     rowTitle: {
         color: Colors.textPrimary,

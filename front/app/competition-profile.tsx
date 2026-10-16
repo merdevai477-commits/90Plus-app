@@ -1,5 +1,5 @@
 /**
- * Competition profile: 365 logo + name + standings table.
+ * Competition profile: 365 logo + name + standings table + follow.
  */
 
 import React, { useMemo } from 'react';
@@ -21,6 +21,8 @@ import { useTranslation } from '../src/i18n';
 import { getLeagueDisplayName, getTeamDisplayName } from '../utils/i18nHelpers';
 import ApiFootballService, { type Standing365Row } from '../services/apiFootball';
 import { useCompetitorStandings } from '../hooks/useTeamProfile';
+import { useFavoriteLeagues } from '../hooks/useFavoriteLeagues';
+import { useHaptic } from '../hooks/useHaptic';
 import TeamBadge from '../components/common/TeamBadge';
 import LeagueIcon from '../components/common/LeagueIcon';
 
@@ -28,6 +30,7 @@ export default function CompetitionProfileScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
+    const { trigger } = useHaptic();
     const params = useLocalSearchParams() as {
         id?: string;
         name?: string;
@@ -36,6 +39,8 @@ export default function CompetitionProfileScreen() {
     };
     const competitionId = parseInt(params.id ?? '0', 10);
     const cp = t.competitionProfile;
+    const { isFollowing, toggleFollow, pending: followPending } = useFavoriteLeagues();
+    const following = competitionId > 0 && isFollowing(competitionId);
 
     const infoQ = useQuery({
         queryKey: ['365-competition-profile', competitionId, language],
@@ -64,6 +69,17 @@ export default function CompetitionProfileScreen() {
         return [...byGroup.entries()].sort((a, b) => a[0] - b[0]);
     }, [standingsQ.data]);
 
+    const handleToggleFollow = () => {
+        if (competitionId <= 0 || followPending) return;
+        trigger('medium');
+        void toggleFollow({
+            id: competitionId,
+            name,
+            logo,
+            country,
+        });
+    };
+
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <StatusBar barStyle="light-content" />
@@ -85,11 +101,44 @@ export default function CompetitionProfileScreen() {
             ) : (
                 <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
                     <View style={styles.hero}>
-                        <LeagueIcon name={name} logo={logo} size={56} />
+                        <LeagueIcon name={name} logo={logo ?? undefined} size={56} />
                         <Text style={styles.name}>
                             {getLeagueDisplayName(name, language, competitionId, country)}
                         </Text>
                         {country ? <Text style={styles.meta}>{country}</Text> : null}
+                        {competitionId > 0 ? (
+                            <TouchableOpacity
+                                style={[styles.followBtn, following && styles.followingBtn]}
+                                onPress={handleToggleFollow}
+                                disabled={followPending}
+                                activeOpacity={0.85}
+                            >
+                                {followPending ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color={following ? Colors.purpleSoft : Colors.white}
+                                    />
+                                ) : (
+                                    <>
+                                        <Ionicons
+                                            name={following ? 'checkmark' : 'add'}
+                                            size={16}
+                                            color={following ? Colors.purpleSoft : Colors.white}
+                                        />
+                                        <Text
+                                            style={[
+                                                styles.followText,
+                                                following && styles.followingText,
+                                            ]}
+                                        >
+                                            {following
+                                                ? cp.following ?? t.teamProfile.following
+                                                : cp.follow ?? t.teamProfile.follow}
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        ) : null}
                     </View>
 
                     <Text style={styles.section}>{cp.table}</Text>
@@ -185,6 +234,31 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.lg,
     },
     meta: { color: Colors.textSecondary, fontSize: FontSize.lg },
+    followBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: Spacing.sm,
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.sm,
+        borderRadius: Radius.full,
+        backgroundColor: Colors.purpleSoft,
+        minWidth: 120,
+        justifyContent: 'center',
+    },
+    followingBtn: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: Colors.purpleSoft,
+    },
+    followText: {
+        color: Colors.white,
+        fontSize: FontSize.lg,
+        fontWeight: FontWeight.semibold,
+    },
+    followingText: {
+        color: Colors.purpleSoft,
+    },
     section: {
         color: Colors.textPrimary,
         fontSize: FontSize['2xl'],

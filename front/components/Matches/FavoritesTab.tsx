@@ -17,7 +17,7 @@ import {
     Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { ChevronDown, ChevronUp, Heart, Search } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, ChevronRight, Heart, Search } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -33,6 +33,7 @@ import {
 } from '../../hooks/useFavoritesFeed';
 import { useFavoritesLiveOverlay } from '../../hooks/useFavoritesLiveOverlay';
 import type { StoredFollowedTeam } from '../../src/storage/teamFavorites.storage';
+import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
 import type { StoredFavoriteMatch } from '../../src/storage/matchFavorites.storage';
 import { CompetitorMatchesCache } from '../../src/storage/competitorMatches.cache';
 import { useTranslation } from '../../src/i18n';
@@ -45,16 +46,19 @@ type ListRow =
     | { type: 'section'; id: string; title: string }
     | { type: 'notified'; id: string; match: StoredFavoriteMatch }
     | { type: 'team'; id: string; team: StoredFollowedTeam }
+    | { type: 'league'; id: string; league: StoredFollowedLeague }
     | { type: 'cta'; id: string };
 
 export interface FavoritesTabProps {
     followedTeams: StoredFollowedTeam[];
+    followedLeagues?: StoredFollowedLeague[];
     notifiedMatches: StoredFavoriteMatch[];
     loading?: boolean;
     headerOffset: number;
     listHeader?: React.ReactElement | null;
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
     onOpenTeam?: (team: StoredFollowedTeam) => void;
+    onOpenLeague?: (league: StoredFollowedLeague) => void;
     onChooseFavoriteTeam?: () => void;
     refreshControl?: React.ReactElement;
 }
@@ -272,6 +276,53 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
     );
 });
 
+const LeagueFavoriteRow = memo(function LeagueFavoriteRow({
+    league,
+    onOpenLeague,
+}: {
+    league: StoredFollowedLeague;
+    onOpenLeague?: (league: StoredFollowedLeague) => void;
+}) {
+    const { language } = useTranslation();
+    return (
+        <TouchableOpacity
+            style={styles.teamHeader}
+            onPress={() => onOpenLeague?.(league)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+        >
+            {league.logo ? (
+                <Image
+                    source={{ uri: league.logo }}
+                    style={styles.teamLogo}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                    transition={0}
+                    priority="high"
+                />
+            ) : (
+                <View style={[styles.teamLogo, styles.placeholderLogo]} />
+            )}
+            <View style={styles.teamTitleWrap}>
+                <Text style={styles.teamName} numberOfLines={1}>
+                    {getLeagueDisplayName(
+                        league.name,
+                        language,
+                        league.competitionId,
+                        league.country,
+                    )}
+                </Text>
+                {league.country ? (
+                    <Text style={styles.teamSub} numberOfLines={1}>
+                        {league.country}
+                    </Text>
+                ) : null}
+            </View>
+            <ChevronRight size={16} color="rgba(255,255,255,0.5)" />
+        </TouchableOpacity>
+    );
+});
+
 const NotifiedFavoriteBlock = memo(function NotifiedFavoriteBlock({
     match,
     renderFixture,
@@ -307,12 +358,14 @@ const NotifiedFavoriteBlock = memo(function NotifiedFavoriteBlock({
 
 export default function FavoritesTab({
     followedTeams,
+    followedLeagues = [],
     notifiedMatches,
     loading,
     headerOffset,
     listHeader,
     renderFixture,
     onOpenTeam,
+    onOpenLeague,
     onChooseFavoriteTeam,
     refreshControl,
 }: FavoritesTabProps) {
@@ -332,6 +385,22 @@ export default function FavoritesTab({
                 out.push({ type: 'notified', id: `n-${match.id}`, match });
             }
         }
+        if (followedLeagues.length > 0) {
+            out.push({
+                type: 'section',
+                id: 'sec-leagues',
+                title:
+                    t.matches.screen.favoritesLeaguesSection ??
+                    t.searchScreen.sectionCompetitions,
+            });
+            for (const league of followedLeagues) {
+                out.push({
+                    type: 'league',
+                    id: `l-${league.competitionId}`,
+                    league,
+                });
+            }
+        }
         if (followedTeams.length > 0) {
             out.push({
                 type: 'section',
@@ -341,13 +410,17 @@ export default function FavoritesTab({
             for (const team of followedTeams) {
                 out.push({ type: 'team', id: `t-${team.apiTeamId}`, team });
             }
-        } else if (!loading && onChooseFavoriteTeam && notifiedMatches.length > 0) {
-            // Notified matches exist but no followed club yet — keep a pick-team CTA in-list.
+        } else if (
+            !loading &&
+            onChooseFavoriteTeam &&
+            (notifiedMatches.length > 0 || followedLeagues.length > 0)
+        ) {
+            // Notified matches / leagues exist but no followed club yet — keep a pick-team CTA in-list.
             out.push({ type: 'section', id: 'sec-teams', title: t.matches.screen.favoritesTeamsSection });
             out.push({ type: 'cta', id: 'cta-choose-team' });
         }
         return out;
-    }, [followedTeams, notifiedMatches, loading, onChooseFavoriteTeam, t]);
+    }, [followedTeams, followedLeagues, notifiedMatches, loading, onChooseFavoriteTeam, t]);
 
     const renderItem = useCallback(
         ({ item }: { item: ListRow }) => {
@@ -368,6 +441,13 @@ export default function FavoritesTab({
                     <NotifiedFavoriteBlock match={item.match} renderFixture={renderFixture} />
                 );
             }
+            if (item.type === 'league') {
+                return (
+                    <View style={styles.teamContainer}>
+                        <LeagueFavoriteRow league={item.league} onOpenLeague={onOpenLeague} />
+                    </View>
+                );
+            }
             return (
                 <TeamFavoriteRow
                     team={item.team}
@@ -376,7 +456,7 @@ export default function FavoritesTab({
                 />
             );
         },
-        [onOpenTeam, onChooseFavoriteTeam, chooseLabel, renderFixture],
+        [onOpenTeam, onOpenLeague, onChooseFavoriteTeam, chooseLabel, renderFixture],
     );
 
     const empty = !loading && rows.length === 0;

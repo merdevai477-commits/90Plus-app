@@ -819,6 +819,8 @@ export const en = {
     noData: 'Competition unavailable',
     table: 'Table',
     noTable: 'Standings are not available',
+    follow: 'Follow',
+    following: 'Following',
   },
 
   offlineQueue: {
@@ -872,10 +874,12 @@ export const en = {
         'Follow a club from its profile, or tap the bell on a match card — they show up here.',
       favoritesChooseTeamCta: 'Choose your favorite team now',
       favoritesTeamsSection: 'Followed teams',
+      favoritesLeaguesSection: 'Followed competitions',
       favoritesNotifiedSection: 'Match alerts',
       favoritesNotifiedBadge: 'Notified',
       followedToFavoritesTitle: 'Added to Favorites',
       followedToFavoritesBody: '"{name}" was added to your Favorites tab.',
+      followedLeagueToFavoritesBody: '"{name}" was added to your Favorites tab.',
       viewAll: 'View All ({{count}}) ›',
       leagueDataUnavailable: 'League data is not available',
       selectDate: 'Select Date',

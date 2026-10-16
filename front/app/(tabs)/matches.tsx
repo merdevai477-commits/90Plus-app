@@ -49,6 +49,9 @@ import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import FavoritesTab from '../../components/Matches/FavoritesTab';
 import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavoritesFeed';
+import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
+import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
+import { pinFavoriteLeaguesInCountryGroups } from '../../utils/matchesCountrySort';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { fetchLeagueMatchesByDate, resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
@@ -1147,6 +1150,7 @@ export default function MatchesHubScreenV2() {
   const followedTeams = favoritesFeed.followedTeams;
   const notifiedMatches = favoritesFeed.notifiedMatches;
   const favoritesFeedLoading = favoritesFeed.loading;
+  const { followedLeagues, favoriteLeagues } = useFavoriteLeagues();
   const refreshNotifiedRef = useRef(favoritesFeed.refreshNotified);
   refreshNotifiedRef.current = favoritesFeed.refreshNotified;
 
@@ -1441,15 +1445,19 @@ export default function MatchesHubScreenV2() {
   // Country → League hierarchy after filtering, keyed by tab so the swipe
   // pager can show neighbouring pages without waiting for a filter settle.
   // World Cup stays on its dedicated tab / pin; continental leagues stay in-list.
+  // Followed competitions float to the top of each country / list.
   const countryGroupsByFilter = useMemo(() => {
     const out = {} as Record<MatchFilter, CountryGroup[]>;
     for (const f of COUNTRY_LIST_FILTERS) {
-      out[f] = filterCountryGroupsFor(countryGroups, f, worldCupLeagueId);
+      out[f] = pinFavoriteLeaguesInCountryGroups(
+        filterCountryGroupsFor(countryGroups, f, worldCupLeagueId),
+        favoriteLeagues,
+      );
     }
     out.Favorite = [];
     out.WorldCup = [];
     return out;
-  }, [countryGroups, worldCupLeagueId]);
+  }, [countryGroups, worldCupLeagueId, favoriteLeagues]);
 
   const filteredCountryGroups = countryGroupsByFilter[filter] ?? countryGroupsByFilter.All;
 
@@ -1957,6 +1965,21 @@ export default function MatchesHubScreenV2() {
       router.push({
         pathname: '/team-profile' as any,
         params: { id: String(team.apiTeamId) },
+      });
+    },
+    [router],
+  );
+
+  const handleOpenFavoriteLeague = useCallback(
+    (league: StoredFollowedLeague) => {
+      router.push({
+        pathname: '/competition-profile' as any,
+        params: {
+          id: String(league.competitionId),
+          name: league.name,
+          logo: league.logo ?? '',
+          country: league.country ?? '',
+        },
       });
     },
     [router],
@@ -2485,12 +2508,14 @@ export default function MatchesHubScreenV2() {
         return (
           <FavoritesTab
             followedTeams={followedTeams}
+            followedLeagues={followedLeagues}
             notifiedMatches={notifiedMatches}
             loading={favoritesFeedLoading}
             headerOffset={8}
             listHeader={null}
             renderFixture={renderFavoriteFixture}
             onOpenTeam={handleOpenFavoriteTeam}
+            onOpenLeague={handleOpenFavoriteLeague}
             onChooseFavoriteTeam={() => router.push('/search' as any)}
             refreshControl={refreshControl}
           />
@@ -2517,10 +2542,12 @@ export default function MatchesHubScreenV2() {
       renderLeagueCardFor,
       emptyNodeFor,
       followedTeams,
+      followedLeagues,
       notifiedMatches,
       favoritesFeedLoading,
       renderFavoriteFixture,
       handleOpenFavoriteTeam,
+      handleOpenFavoriteLeague,
       router,
       countryGroupsByFilter,
       renderCountryAccordion,

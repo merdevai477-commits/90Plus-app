@@ -600,10 +600,12 @@ export const ar = {
         'تابع نادياً من بروفايله، أو اضغط جرس المباراة — هتظهر هنا في المفضلة.',
       favoritesChooseTeamCta: 'اختار فريقك المفضل دلوقتي',
       favoritesTeamsSection: 'الفرق المتابَعة',
+      favoritesLeaguesSection: 'البطولات المتابَعة',
       favoritesNotifiedSection: 'تنبيهات المباريات',
       favoritesNotifiedBadge: 'إشعار مفعّل',
       followedToFavoritesTitle: 'تمت الإضافة للمفضلة',
       followedToFavoritesBody: 'تم متابعة "{name}" وإضافته لتبويب المفضلة.',
+      followedLeagueToFavoritesBody: 'تم متابعة بطولة "{name}" وإضافتها لتبويب المفضلة.',
       viewAll: 'عرض الكل ({{count}}) ›',
       leagueDataUnavailable: 'بيانات الدوري غير متاحة',
       selectDate: 'اختر التاريخ',
@@ -1053,6 +1055,8 @@ export const ar = {
     noData: 'تعذّر تحميل البطولة',
     table: 'الترتيب',
     noTable: 'جدول الترتيب غير متاح',
+    follow: 'متابعة',
+    following: 'متابع',
   },
 
   predictions: {

@@ -4,6 +4,10 @@ import {
   getInternationalSortTier,
   isInternationalCompetition,
 } from './internationalCompetition';
+import {
+  isFollowedCompetitionId,
+  toCompetitionId,
+} from '../src/storage/leagueFavorites.storage';
 
 /** Top domestic leagues — after continental block. */
 const TOP5_COUNTRIES: Record<string, number> = {
@@ -127,4 +131,41 @@ export function sortCountryGroupsForMatches(groups: CountryGroup[]): CountryGrou
       leagues: sortLeaguesInCountry(cg.leagues),
     }))
     .sort(compareCountryGroups);
+}
+
+/**
+ * Hoist followed competitions within each country, and hoist countries that
+ * contain a followed competition toward the top of the Matches list.
+ */
+export function pinFavoriteLeaguesInCountryGroups(
+  groups: CountryGroup[],
+  favoriteCompetitionIds: number[] | null | undefined,
+): CountryGroup[] {
+  const favs = (favoriteCompetitionIds ?? [])
+    .map(toCompetitionId)
+    .filter((id) => id > 0);
+  if (favs.length === 0 || groups.length === 0) return groups;
+
+  const isFav = (leagueId: number) => isFollowedCompetitionId(leagueId, favs);
+
+  const withPinnedLeagues = groups.map((cg) => {
+    const followed: GroupedMatches[] = [];
+    const rest: GroupedMatches[] = [];
+    for (const league of cg.leagues) {
+      if (isFav(league.leagueId)) followed.push(league);
+      else rest.push(league);
+    }
+    if (followed.length === 0) return cg;
+    return { ...cg, leagues: [...followed, ...rest] };
+  });
+
+  return [...withPinnedLeagues]
+    .map((cg, index) => ({ cg, index }))
+    .sort((a, b) => {
+      const aHas = a.cg.leagues.some((l) => isFav(l.leagueId));
+      const bHas = b.cg.leagues.some((l) => isFav(l.leagueId));
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map(({ cg }) => cg);
 }
