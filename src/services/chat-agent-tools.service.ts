@@ -38,12 +38,18 @@ import {
   transliterateArabicToLatin,
 } from './quiz-name-match.util';
 import {
+  FOOTBALL_SEARCH_INDEX,
   expandSearchQueries,
   isPlayerOrientedBoost,
   normalizeSearchText,
   scoreSearchName,
   stripSearchStopwords,
 } from '../utils/football-search-index';
+
+/** Big-club competitorIds from the curated search index — used as a fame prior. */
+const FAMOUS_CLUB_IDS = new Set(
+  FOOTBALL_SEARCH_INDEX.filter((r) => r.type === 'club').map((r) => r.entityId),
+);
 import { resolveFootballAlias } from '../utils/football-colloquial.util';
 import { buildEncyclopediaPayload, lookupFootballWiki } from './football-wiki.service';
 
@@ -684,6 +690,16 @@ interface PlayerCandidate {
   name: string;
   shortName?: string;
   clubName?: string | null;
+  clubId?: number | null;
+  imageUrl?: string | null;
+}
+
+interface PlayerSuggestion {
+  athleteId: number;
+  name: string;
+  club: string | null;
+  clubId: number | null;
+  imageUrl: string | null;
 }
 
 interface Best365Resolution {
@@ -694,7 +710,45 @@ interface Best365Resolution {
   /** Medium confidence with rivals — ask the user to confirm ("قصدك ...؟"). */
   ambiguous: boolean;
   /** Top few real 365 hits for a "did you mean" prompt (never invented). */
-  suggestions: Array<{ athleteId: number; name: string; club: string | null }>;
+  suggestions: PlayerSuggestion[];
+}
+
+/** "رافينيا (برشلونة)" / "Raphinha (Barcelona)" → club hint for ranking. */
+function extractClubHint(query: string): string | null {
+  const m = (query ?? '').match(/\(([^)]+)\)\s*$/);
+  const club = m?.[1]?.trim();
+  return club && club.length >= 2 ? club : null;
+}
+
+function stripClubHint(query: string): string {
+  return (query ?? '').replace(/\s*\([^)]+\)\s*$/, '').trim();
+}
+
+function playerFameBoost(a: PlayerCandidate): number {
+  if (a.clubId && FAMOUS_CLUB_IDS.has(a.clubId)) return 0.14;
+  if (!a.clubName) return 0;
+  const clubNorm = normalizeSearchText(a.clubName);
+  if (!clubNorm) return 0;
+  for (const rec of FOOTBALL_SEARCH_INDEX) {
+    if (rec.type !== 'club') continue;
+    const aliases = [rec.canonicalName, ...rec.aliases].map(normalizeSearchText);
+    if (aliases.some((al) => al && (clubNorm.includes(al) || al.includes(clubNorm)))) {
+      return 0.12;
+    }
+  }
+  return 0;
+}
+
+function toPlayerSuggestion(a: PlayerCandidate): PlayerSuggestion {
+  return {
+    athleteId: a.athleteId,
+    name: a.name,
+    club: a.clubName ?? null,
+    clubId: a.clubId ?? null,
+    imageUrl:
+      a.imageUrl ??
+      (a.athleteId > 0 ? buildScores365AthletePhotoUrl(a.athleteId, 80) : null),
+  };
 }
 
 /** Fold Arabic orthographic variants so 365 search matches typos/spelling. */
@@ -722,17 +776,22 @@ async function resolveBest365Player(
     suggestions: [],
   };
 
-  const mapping = await resolvePlayerName(rawName);
+  const clubHint = extractClubHint(rawName);
+  const bareName = stripClubHint(rawName) || rawName;
+
+  const mapping = await resolvePlayerName(bareName);
   const canonical =
     mapping?.english && mapping.resolvedBy && mapping.resolvedBy !== 'raw'
       ? mapping.english
       : null;
-  const normalized = normalizeArabicQuery(rawName);
-  const translit = containsArabicScript(rawName) ? transliterateArabicToLatin(rawName) : null;
+  const normalized = normalizeArabicQuery(bareName);
+  const translit = containsArabicScript(bareName) ? transliterateArabicToLatin(bareName) : null;
 
   // Try the strongest queries first; stop at the first that yields hits.
   const queries = Array.from(
-    new Set([canonical, normalized, rawName, translit].filter((q): q is string => !!q && q.length >= 2)),
+    new Set(
+      [canonical, normalized, bareName, translit].filter((q): q is string => !!q && q.length >= 2),
+    ),
   );
 
   let athletes: PlayerCandidate[] = [];
@@ -748,14 +807,14 @@ async function resolveBest365Player(
     }
   }
 
-  let scored = rankPlayerCandidates(rawName, normalized, canonical, athletes);
+  let scored = rankPlayerCandidates(bareName, normalized, canonical, athletes, clubHint);
   let best = scored[0];
   let confident = isConfidentPlayerScore(scored);
 
   // App-ranked entity search as a fallback when athlete search is empty/weak.
-  if (!confident && rawName.length >= 2) {
+  if (!confident && bareName.length >= 2) {
     try {
-      const all = await threeSixFiveScoresService.searchEntities(rawName, language);
+      const all = await threeSixFiveScoresService.searchEntities(bareName, language);
       const extra = (all.data?.players ?? []) as PlayerCandidate[];
       if (extra.length) {
         const byId = new Map<number, PlayerCandidate>();
@@ -763,7 +822,7 @@ async function resolveBest365Player(
           if (a?.athleteId) byId.set(a.athleteId, a);
         }
         athletes = [...byId.values()];
-        scored = rankPlayerCandidates(rawName, normalized, canonical, athletes);
+        scored = rankPlayerCandidates(bareName, normalized, canonical, athletes, clubHint);
         best = scored[0];
         confident = isConfidentPlayerScore(scored);
       }
@@ -773,12 +832,30 @@ async function resolveBest365Player(
   }
   if (!best) return empty;
 
+  // Same short name with several real hits → show the famous top-3 picker
+  // unless one candidate is an overwhelming winner (or the user already
+  // pinned a club via "Name (Club)").
+  const strongHits = scored.filter((s) => s.score >= 0.5);
+  const gap = best.score - (scored[1]?.score ?? 0);
+  if (strongHits.length >= 2 && gap < 0.22 && !clubHint) {
+    confident = false;
+  } else if (clubHint && gap >= 0.08 && best.score >= 0.55) {
+    // User already picked from the choice UI — trust the club-qualified hit.
+    confident = true;
+  }
+
   const ambiguous = !confident && best.score >= PLAYER_AMBIGUOUS_SCORE;
 
-  const suggestions = scored
+  // Surface the most famous matches first (big club → name score).
+  const suggestions = [...scored]
     .filter((s) => s.score >= 0.4)
+    .sort((x, y) => {
+      const fameDiff = playerFameBoost(y.a) - playerFameBoost(x.a);
+      if (Math.abs(fameDiff) >= 0.01) return fameDiff;
+      return y.score - x.score;
+    })
     .slice(0, 3)
-    .map((s) => ({ athleteId: s.a.athleteId, name: s.a.name, club: s.a.clubName ?? null }));
+    .map((s) => toPlayerSuggestion(s.a));
 
   return { best: best.a, bestScore: best.score, confident, ambiguous, suggestions };
 }
@@ -788,6 +865,7 @@ function rankPlayerCandidates(
   normalized: string,
   canonical: string | null,
   athletes: PlayerCandidate[],
+  clubHint: string | null = null,
 ) {
   const targetNames = Array.from(
     new Set(
@@ -802,6 +880,11 @@ function rankPlayerCandidates(
       score = Math.max(score, scoreEntityNameMatch(normalized, a.name));
       if (canonical) score = Math.max(score, scoreEntityNameMatch(canonical, a.name));
       if (a.shortName) score = Math.max(score, scoreEntityNameMatch(normalized, a.shortName));
+      score += playerFameBoost(a);
+      if (clubHint && a.clubName) {
+        const clubScore = scoreEntityNameMatch(clubHint, a.clubName);
+        if (clubScore >= 0.55) score += 0.28 * clubScore;
+      }
       return { a, score };
     })
     .sort((x, y) => y.score - x.score);

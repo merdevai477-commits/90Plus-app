@@ -347,7 +347,12 @@ export function ChatNavLinks({ links, onChoose }: Props) {
   const onPress = useCallback(
     (link: ChatNavLink) => {
       if (link.choice && onChoose) {
-        const q = (link.query || link.label || '').trim();
+        // Prefer club-qualified query for players so the agent resolves the exact pick.
+        const club = (link.subtitle || link.teamName || '').trim();
+        const q =
+          link.type === 'player' && club
+            ? `${link.label} (${club})`.trim()
+            : (link.query || link.label || '').trim();
         if (q) onChoose(q);
         return;
       }
@@ -360,17 +365,65 @@ export function ChatNavLinks({ links, onChoose }: Props) {
 
   const extraMatches = links.filter((l) => l.type === 'match' && links.some((x) => x.type !== 'match'));
   const primary = links.filter((l) => !extraMatches.includes(l));
-  const choices = primary.filter((l) => l.choice);
+  const choices = primary.filter((l) => l.choice).slice(0, 3);
   const isSelection = choices.length >= 2;
+  const playerChoices = choices.filter((l) => l.type === 'player');
+  const isPlayerSelection = playerChoices.length >= 2 && playerChoices.length === choices.length;
+  const isClubSelection = choices.length >= 2 && choices.every((l) => l.type === 'club');
 
   if (isSelection) {
+    const hint = isPlayerSelection
+      ? t.chat.navChoosePlayer
+      : isClubSelection
+        ? t.chat.navChooseClub
+        : t.chat.navChooseEntity;
+
     return (
       <View style={styles.wrap}>
-        <Text style={styles.chooseHint}>{t.chat.navChooseClub}</Text>
+        <Text style={[styles.chooseHint, rtl && styles.chooseHintRtl]}>{hint}</Text>
         <View style={styles.choiceGrid}>
           {choices.map((link) => {
+            if (link.type === 'player') {
+              const photoUris = resolveChatNavPlayerPhotos(link);
+              const badgeUris = resolveChatNavClubBadgeCandidates(link);
+              const club = (link.subtitle || link.teamName || '').trim();
+              const a11y = club ? `${link.label}, ${club}` : link.label;
+              return (
+                <Pressable
+                  key={`${link.type}:${link.id ?? link.label}`}
+                  onPress={() => onPress(link)}
+                  style={({ pressed }) => [
+                    styles.choiceTile,
+                    styles.choiceTilePlayer,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={a11y}
+                >
+                  <FollowAvatar
+                    photoUris={photoUris}
+                    photoKind="player"
+                    badgeUris={badgeUris}
+                    rtl={rtl}
+                  />
+                  <Text style={styles.choiceName} numberOfLines={2}>
+                    {link.label}
+                  </Text>
+                  {club ? (
+                    <Text style={styles.choiceSub} numberOfLines={1}>
+                      {club}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            }
+
             const media = resolveChatNavAvatar(link);
-            const logo = media.kind === 'club' ? media.uri : undefined;
+            const logo =
+              media.kind === 'club'
+                ? media.uri
+                : resolveChatNavClubPhotos(link)[0];
+            const sub = (link.subtitle || link.country || '').trim();
             return (
               <Pressable
                 key={`${link.type}:${link.id ?? link.label}`}
@@ -389,6 +442,11 @@ export function ChatNavLinks({ links, onChoose }: Props) {
                 <Text style={styles.choiceName} numberOfLines={2}>
                   {link.label}
                 </Text>
+                {sub ? (
+                  <Text style={styles.choiceSub} numberOfLines={1}>
+                    {sub}
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -431,6 +489,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 20,
   },
+  chooseHintRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   choiceGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -449,6 +511,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(167,139,250,0.35)',
   },
+  choiceTilePlayer: {
+    minHeight: 148,
+    gap: 10,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(124,58,237,0.22)',
+    borderColor: 'rgba(196,181,253,0.45)',
+  },
   choiceCrest: {
     width: 72,
     height: 72,
@@ -462,6 +531,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  choiceSub: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: -4,
+    opacity: 0.95,
   },
   profileCard: {
     flexWrap: 'nowrap',

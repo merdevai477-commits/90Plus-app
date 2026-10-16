@@ -223,13 +223,19 @@ function addClarificationChoices(map: Map<string, ChatNavLink>, parsed: Record<s
       positiveId(raw.competitorId) ||
       (raw.type === 'player' ? null : positiveId(raw.id));
     if (athleteId && label) {
+      const club = asLabel(raw.club ?? raw.teamName ?? raw.country) || null;
+      const clubId =
+        positiveId(raw.clubId) || positiveId(raw.teamId) || positiveId(raw.competitorId);
       addLink(map, {
         type: 'player',
         id: athleteId,
         label,
-        query: label,
+        // Club-qualified query so a tap resolves the exact player, not the name again.
+        query: club ? `${label} (${club})` : label,
         choice: true,
-        subtitle: asLabel(raw.club ?? raw.country) || null,
+        subtitle: club,
+        teamName: club,
+        ...(clubId ? { teamId: clubId, logo: competitorLogoUrl(clubId) } : {}),
         photo:
           firstHttpUrl(raw.photo, raw.photoUrl, raw.imageUrl) ??
           buildScores365AthletePhotoUrl(athleteId, 80),

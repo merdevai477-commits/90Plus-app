@@ -3264,6 +3264,8 @@ export const en = {
     navViewMatch: 'View match',
     navViewMatchA11y: 'View match details',
     navChooseClub: 'Did you mean Egyptian Al Ahly or Saudi Al Ahli?',
+    navChoosePlayer: 'Which player did you mean? Top matches:',
+    navChooseEntity: 'Which one did you mean?',
 
     exportUserLabel: 'You',
     exportAiLabel: '90Plus AI',

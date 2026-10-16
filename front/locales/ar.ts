@@ -3183,6 +3183,8 @@ export const ar = {
     navViewMatch: 'عرض المباراة',
     navViewMatchA11y: 'عرض تفاصيل المباراة',
     navChooseClub: 'قصدك الأهلي المصري ولا السعودي؟',
+    navChoosePlayer: 'قصدك أنهي لاعب؟ أشهر النتائج:',
+    navChooseEntity: 'قصدك أنهي؟',
 
     exportUserLabel: 'أنت',
     exportAiLabel: '90Plus AI',

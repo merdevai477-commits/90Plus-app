@@ -75,6 +75,34 @@ describe('chatNavLinks', () => {
     );
   });
 
+  it('keeps player clarification choices with photo, club subtitle and teamId', () => {
+    const [link] = sanitizeChatNavLinks([
+      {
+        type: 'player',
+        id: 110445,
+        label: 'رافينيا',
+        choice: true,
+        subtitle: 'برشلونة',
+        teamName: 'برشلونة',
+        teamId: 132,
+        photo: 'https://img/raphinha.png',
+        query: 'رافينيا (برشلونة)',
+      },
+    ]);
+    expect(link).toEqual(
+      expect.objectContaining({
+        type: 'player',
+        id: 110445,
+        choice: true,
+        subtitle: 'برشلونة',
+        teamName: 'برشلونة',
+        teamId: 132,
+        photo: 'https://img/raphinha.png',
+        query: 'رافينيا (برشلونة)',
+      }),
+    );
+  });
+
   it('infers Egyptian vs Saudi Al Ahly choices from a bare الأهلي question', () => {
     const links = inferChatNavLinksFromQuestion('معلومات عن النادي الاهلي', 'ar');
     expect(links.map((l) => l.id)).toEqual([8200, 8946]);

@@ -67,4 +67,40 @@ describe('ChatNavLinks match cards', () => {
     fireEvent.press(screen.getByLabelText("View today's matches"));
     expect(mockRouter.push).toHaveBeenCalledWith('/(tabs)/matches');
   });
+
+  it('renders a player disambiguation picker with club subtitles and sends a club-qualified choice', () => {
+    const onChoose = jest.fn();
+    render(
+      <ChatNavLinks
+        onChoose={onChoose}
+        links={[
+          {
+            type: 'player',
+            id: 1,
+            label: 'Raphinha',
+            choice: true,
+            subtitle: 'Barcelona',
+            teamName: 'Barcelona',
+            teamId: 132,
+            photo: 'https://img/raphinha.png',
+          },
+          {
+            type: 'player',
+            id: 2,
+            label: 'Raphinha',
+            choice: true,
+            subtitle: 'Other Club',
+            teamName: 'Other Club',
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('Which player did you mean? Top matches:')).toBeTruthy();
+    expect(screen.getByText('Barcelona')).toBeTruthy();
+    expect(screen.getByText('Other Club')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Raphinha, Barcelona'));
+    expect(onChoose).toHaveBeenCalledWith('Raphinha (Barcelona)');
+  });
 });
