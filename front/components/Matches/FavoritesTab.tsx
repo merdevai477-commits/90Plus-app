@@ -15,6 +15,8 @@ import {
     ActivityIndicator,
     LayoutAnimation,
     Platform,
+    type StyleProp,
+    type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown, ChevronUp, ChevronRight, Heart, Search } from 'lucide-react-native';
@@ -61,6 +63,8 @@ export interface FavoritesTabProps {
     onOpenLeague?: (league: StoredFollowedLeague) => void;
     onChooseFavoriteTeam?: () => void;
     refreshControl?: React.ReactElement;
+    /** Optional FlashList style — used by the matches horizontal pager for a bounded height. */
+    listStyle?: StyleProp<ViewStyle>;
 }
 
 function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label: string }) {
@@ -368,6 +372,7 @@ export default function FavoritesTab({
     onOpenLeague,
     onChooseFavoriteTeam,
     refreshControl,
+    listStyle,
 }: FavoritesTabProps) {
     const { t } = useTranslation();
     const chooseLabel =
@@ -467,6 +472,7 @@ export default function FavoritesTab({
             keyExtractor={(row) => row.id}
             renderItem={renderItem}
             drawDistance={250}
+            style={listStyle}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             contentContainerStyle={{
                 paddingHorizontal: 16,

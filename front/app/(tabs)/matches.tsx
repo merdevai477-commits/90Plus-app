@@ -2150,6 +2150,9 @@ export default function MatchesHubScreenV2() {
   // ── Swipeable filter pager (same idea as match-details tabs) ──────────────
   const { width: windowWidth } = useWindowDimensions();
   const [pagerWidth, setPagerWidth] = useState(windowWidth);
+  // Explicit height for horizontal page children — iOS nested FlashList can
+  // collapse to 0 when pages only rely on flex inside a paging ScrollView.
+  const [pagerHeight, setPagerHeight] = useState(0);
   const pagerRef = useRef<ScrollView>(null);
   const chipsScrollRef = useRef<ScrollView>(null);
   const chipLayoutsRef = useRef<Record<string, { x: number; width: number }>>({});
@@ -2259,6 +2262,8 @@ export default function MatchesHubScreenV2() {
 
   const onPagerLayout = useCallback((e: LayoutChangeEvent) => {
     const width = Math.round(e.nativeEvent.layout.width);
+    const height = Math.round(e.nativeEvent.layout.height);
+    if (height > 0) setPagerHeight(height);
     if (width <= 0) return;
     setPagerWidth(width);
     jumpPagerTo(activeFilterIndexRef.current, width, false);
@@ -2565,16 +2570,17 @@ export default function MatchesHubScreenV2() {
 
   const { refreshing: listPullRefreshing, onRefresh: onListPullRefresh } = usePullToRefresh(onListPull);
 
+  // Always attach RefreshControl on every page so swipe→settle never flips the
+  // prop from undefined→element (iOS nested FlashList remount risk).
   const refreshControlFor = useCallback(
-    (pageFilter: MatchFilter) =>
-      pageFilter === filter ? (
-        <RefreshControl
-          refreshing={listPullRefreshing}
-          onRefresh={onListPullRefresh}
-          tintColor={PURPLE_SOFT}
-          colors={[PURPLE_PRIMARY]}
-        />
-      ) : undefined,
+    (pageFilter: MatchFilter) => (
+      <RefreshControl
+        refreshing={pageFilter === filter && listPullRefreshing}
+        onRefresh={onListPullRefresh}
+        tintColor={PURPLE_SOFT}
+        colors={[PURPLE_PRIMARY]}
+      />
+    ),
     [filter, listPullRefreshing, onListPullRefresh],
   );
 
@@ -2583,50 +2589,59 @@ export default function MatchesHubScreenV2() {
       const refreshControl = refreshControlFor(pageFilter);
       if (pageFilter === 'WorldCup') {
         return (
-          <FlashList
-            data={worldCupLeagueGroups}
-            keyExtractor={(g) => g.id}
-            renderItem={renderLeagueCardFor(pageFilter)}
-            ItemSeparatorComponent={ITEM_SEPARATOR_10}
-            drawDistance={250}
-            contentContainerStyle={styles.pagerListContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={emptyNodeFor(pageFilter)}
-            refreshControl={refreshControl}
-          />
+          <View style={styles.pagerListWrap}>
+            <FlashList
+              data={worldCupLeagueGroups}
+              keyExtractor={(g) => g.id}
+              renderItem={renderLeagueCardFor(pageFilter)}
+              ItemSeparatorComponent={ITEM_SEPARATOR_10}
+              drawDistance={250}
+              style={styles.pagerList}
+              contentContainerStyle={styles.pagerListContent}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={emptyNodeFor(pageFilter)}
+              refreshControl={refreshControl}
+            />
+          </View>
         );
       }
       if (pageFilter === 'Favorite') {
         return (
-          <FavoritesTab
-            followedTeams={followedTeams}
-            followedLeagues={followedLeagues}
-            notifiedMatches={notifiedMatches}
-            loading={favoritesFeedLoading}
-            headerOffset={8}
-            listHeader={null}
-            renderFixture={renderFavoriteFixture}
-            onOpenTeam={handleOpenFavoriteTeam}
-            onOpenLeague={handleOpenFavoriteLeague}
-            onChooseFavoriteTeam={() => router.push('/search' as any)}
-            refreshControl={refreshControl}
-          />
+          <View style={styles.pagerListWrap}>
+            <FavoritesTab
+              followedTeams={followedTeams}
+              followedLeagues={followedLeagues}
+              notifiedMatches={notifiedMatches}
+              loading={favoritesFeedLoading}
+              headerOffset={8}
+              listHeader={null}
+              renderFixture={renderFavoriteFixture}
+              onOpenTeam={handleOpenFavoriteTeam}
+              onOpenLeague={handleOpenFavoriteLeague}
+              onChooseFavoriteTeam={() => router.push('/search' as any)}
+              refreshControl={refreshControl}
+              listStyle={styles.pagerList}
+            />
+          </View>
         );
       }
       return (
-        <FlashList
-          data={countryGroupsByFilter[pageFilter] ?? []}
-          keyExtractor={(cg) => cg.country}
-          renderItem={renderCountryAccordion}
-          drawDistance={250}
-          ItemSeparatorComponent={ITEM_SEPARATOR_8}
-          contentContainerStyle={styles.pagerListContent}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={pinnedHeaderFor(pageFilter)}
-          ListEmptyComponent={emptyNodeFor(pageFilter)}
-          refreshControl={refreshControl}
-          onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingListLayout : undefined}
-        />
+        <View style={styles.pagerListWrap}>
+          <FlashList
+            data={countryGroupsByFilter[pageFilter] ?? []}
+            keyExtractor={(cg) => cg.country}
+            renderItem={renderCountryAccordion}
+            drawDistance={250}
+            ItemSeparatorComponent={ITEM_SEPARATOR_8}
+            style={styles.pagerList}
+            contentContainerStyle={styles.pagerListContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={pinnedHeaderFor(pageFilter)}
+            ListEmptyComponent={emptyNodeFor(pageFilter)}
+            refreshControl={refreshControl}
+            onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingListLayout : undefined}
+          />
+        </View>
       );
     },
     [
@@ -2662,14 +2677,18 @@ export default function MatchesHubScreenV2() {
         return (
           <View
             key={pageFilter}
-            style={[styles.pagerPage, { width: pagerWidth }]}
+            style={[
+              styles.pagerPage,
+              { width: pagerWidth },
+              pagerHeight > 0 ? { height: pagerHeight } : null,
+            ]}
             onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingPageLayout : undefined}
           >
             {keep ? renderFilterPage(pageFilter) : null}
           </View>
         );
       }),
-    [visibleFilters, mountedPagesVersion, pagerWidth, renderFilterPage, onUpcomingPageLayout],
+    [visibleFilters, mountedPagesVersion, pagerWidth, pagerHeight, renderFilterPage, onUpcomingPageLayout],
   );
 
   return (
@@ -2720,12 +2739,18 @@ export default function MatchesHubScreenV2() {
           horizontal
           pagingEnabled
           style={styles.pager}
+          // Pin content height so iOS page children get a real vertical box
+          // (flex-only pages inside horizontal ScrollView can measure as 0).
+          contentContainerStyle={pagerHeight > 0 ? { height: pagerHeight } : undefined}
           onLayout={onPagerLayout}
           showsHorizontalScrollIndicator={false}
+          directionalLockEnabled
           decelerationRate="fast"
           disableIntervalMomentum
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          bounces={false}
           onScrollBeginDrag={onPagerScrollBeginDrag}
           onScroll={onPagerScroll}
           onMomentumScrollEnd={onPagerSettle}
@@ -2876,6 +2901,10 @@ const styles = StyleSheet.create({
   pagerShell: { flex: 1 },
   pager: { flex: 1 },
   pagerPage: { flex: 1 },
+  // Concrete flex box for FlashList inside each horizontal page (same idea as
+  // allMatchesListWrap — without this iOS can paint an empty content area).
+  pagerListWrap: { flex: 1 },
+  pagerList: { flex: 1 },
   pagerListContent: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
   pinnedWcWrap: { marginBottom: 10 },
   staleBanner: {
