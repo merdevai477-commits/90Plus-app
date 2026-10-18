@@ -78,6 +78,7 @@ import {
 import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
 import { matchCardToApiFixture } from '../../utils/matchCardToApiFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
+import { logger } from '../../utils/logger';
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -161,6 +162,12 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
 
 /** Country-list filters that share the accordion FlashList (not Favorite / WorldCup). */
 const COUNTRY_LIST_FILTERS: readonly MatchFilter[] = ['All', 'Live', 'Upcoming', 'Finished'];
+
+/**
+ * TEMP — iOS blank Upcoming investigation. Remove after diagnostics are collected.
+ * Logs only in __DEV__; refs/onLayout only — no setState, no behavior changes.
+ */
+const MATCHES_PAGER_DIAG = typeof __DEV__ !== 'undefined' && __DEV__;
 
 // Map API match status to display status
 function mapStatus(status: string): 'LIVE' | 'FT' | 'UPCOMING' {
@@ -2162,6 +2169,57 @@ export default function MatchesHubScreenV2() {
   const visibleFiltersRef = useRef(visibleFilters);
   visibleFiltersRef.current = visibleFilters;
 
+  // TEMP diag refs — write-only from onLayout / render sync; never trigger rerenders.
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  const highlightIndexRef = useRef(highlightIndex);
+  highlightIndexRef.current = highlightIndex;
+  const countryGroupsByFilterRef = useRef(countryGroupsByFilter);
+  countryGroupsByFilterRef.current = countryGroupsByFilter;
+  const lastPagerOffsetXRef = useRef(0);
+  const upcomingPageLayoutRef = useRef<{ width: number; height: number } | null>(null);
+  const upcomingListLayoutRef = useRef<{ width: number; height: number } | null>(null);
+
+  const logUpcomingPagerDiag = useCallback((
+    source: string,
+    extras?: { offsetX?: number; settledIndex?: number; settledFilter?: MatchFilter },
+  ) => {
+    if (!MATCHES_PAGER_DIAG) return;
+    const width = pagerWidthRef.current;
+    const offsetX = extras?.offsetX ?? lastPagerOffsetXRef.current;
+    const calcPageIndex = width > 0 ? Math.round(offsetX / width) : -1;
+    const upcomingGroupCount = countryGroupsByFilterRef.current.Upcoming?.length ?? 0;
+    logger.warn('[MatchesPagerDiag]', {
+      source,
+      platform: Platform.OS,
+      filter: filterRef.current,
+      highlightIndex: highlightIndexRef.current,
+      pagerIndexRef: pagerIndexRef.current,
+      calcPageIndex,
+      settledIndex: extras?.settledIndex ?? null,
+      settledFilter: extras?.settledFilter ?? null,
+      pagerWidth: width,
+      offsetX,
+      upcomingGroupCount,
+      upcomingPageLayout: upcomingPageLayoutRef.current,
+      upcomingListLayout: upcomingListLayoutRef.current,
+      upcomingMounted: mountedPagesRef.current.has('Upcoming'),
+      emptyStateExpected: upcomingGroupCount === 0,
+    });
+  }, []);
+
+  const onUpcomingPageLayout = useCallback((e: LayoutChangeEvent) => {
+    if (!MATCHES_PAGER_DIAG) return;
+    const { width, height } = e.nativeEvent.layout;
+    upcomingPageLayoutRef.current = { width, height };
+  }, []);
+
+  const onUpcomingListLayout = useCallback((e: LayoutChangeEvent) => {
+    if (!MATCHES_PAGER_DIAG) return;
+    const { width, height } = e.nativeEvent.layout;
+    upcomingListLayoutRef.current = { width, height };
+  }, []);
+
   useEffect(() => {
     if (pagerDraggingRef.current) return;
     setHighlightIndex(activeFilterIndex);
@@ -2245,8 +2303,24 @@ export default function MatchesHubScreenV2() {
       pagerIndexRef.current = index;
       setHighlightIndex(index);
       jumpPagerTo(index, pagerWidthRef.current, true);
+      // TEMP diag: chip path snapshot (immediate + after animated scroll / layout).
+      if (MATCHES_PAGER_DIAG && f === 'Upcoming') {
+        // Mirror pending React state so the snapshot is not one frame stale.
+        filterRef.current = f;
+        highlightIndexRef.current = index;
+        const width = pagerWidthRef.current;
+        const offsetX = index * width;
+        lastPagerOffsetXRef.current = offsetX;
+        logUpcomingPagerDiag('chip', { offsetX, settledIndex: index, settledFilter: f });
+        setTimeout(() => {
+          logUpcomingPagerDiag('chip+100ms', { offsetX, settledIndex: index, settledFilter: f });
+        }, 100);
+        setTimeout(() => {
+          logUpcomingPagerDiag('chip+400ms', { offsetX, settledIndex: index, settledFilter: f });
+        }, 400);
+      }
     },
-    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo, ensurePagesMounted],
+    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo, ensurePagesMounted, logUpcomingPagerDiag],
   );
 
   const onPagerScrollBeginDrag = useCallback(() => {
@@ -2258,6 +2332,7 @@ export default function MatchesHubScreenV2() {
       const width = pagerWidthRef.current;
       if (width <= 0) return;
       const offsetX = e.nativeEvent.contentOffset.x;
+      if (MATCHES_PAGER_DIAG) lastPagerOffsetXRef.current = offsetX;
       // Prefetch the page we're sliding into before the round settles.
       ensurePagesMounted(Math.floor(offsetX / width));
       ensurePagesMounted(Math.ceil(offsetX / width));
@@ -2275,7 +2350,9 @@ export default function MatchesHubScreenV2() {
       pagerDraggingRef.current = false;
       const width = pagerWidthRef.current;
       if (width <= 0) return;
-      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      const offsetX = e.nativeEvent.contentOffset.x;
+      if (MATCHES_PAGER_DIAG) lastPagerOffsetXRef.current = offsetX;
+      const index = Math.round(offsetX / width);
       const tabs = visibleFiltersRef.current;
       const f = tabs[index];
       if (!f) return;
@@ -2294,8 +2371,18 @@ export default function MatchesHubScreenV2() {
         handleFilterPress(f, { deferSideEffects: true });
       }
       scrollChipIntoView(f);
+      // TEMP diag: swipe (and chip animation end) settle on Upcoming.
+      if (MATCHES_PAGER_DIAG && f === 'Upcoming') {
+        // Mirror pending React state so the snapshot is not one frame stale.
+        filterRef.current = f;
+        highlightIndexRef.current = index;
+        logUpcomingPagerDiag('settle', { offsetX, settledIndex: index, settledFilter: f });
+        setTimeout(() => {
+          logUpcomingPagerDiag('settle+100ms', { offsetX, settledIndex: index, settledFilter: f });
+        }, 100);
+      }
     },
-    [ensurePagesMounted, wcTabLocked, jumpPagerTo, handleFilterPress, filter, scrollChipIntoView],
+    [ensurePagesMounted, wcTabLocked, jumpPagerTo, handleFilterPress, filter, scrollChipIntoView, logUpcomingPagerDiag],
   );
 
   // onScrollEndDrag fires before fling momentum; only settle here when the
@@ -2538,6 +2625,7 @@ export default function MatchesHubScreenV2() {
           ListHeaderComponent={pinnedHeaderFor(pageFilter)}
           ListEmptyComponent={emptyNodeFor(pageFilter)}
           refreshControl={refreshControl}
+          onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingListLayout : undefined}
         />
       );
     },
@@ -2557,6 +2645,7 @@ export default function MatchesHubScreenV2() {
       countryGroupsByFilter,
       renderCountryAccordion,
       pinnedHeaderFor,
+      onUpcomingListLayout,
     ],
   );
 
@@ -2571,12 +2660,16 @@ export default function MatchesHubScreenV2() {
       visibleFilters.map((pageFilter) => {
         const keep = mountedPagesVersion >= 0 && mountedPagesRef.current.has(pageFilter);
         return (
-          <View key={pageFilter} style={[styles.pagerPage, { width: pagerWidth }]}>
+          <View
+            key={pageFilter}
+            style={[styles.pagerPage, { width: pagerWidth }]}
+            onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingPageLayout : undefined}
+          >
             {keep ? renderFilterPage(pageFilter) : null}
           </View>
         );
       }),
-    [visibleFilters, mountedPagesVersion, pagerWidth, renderFilterPage],
+    [visibleFilters, mountedPagesVersion, pagerWidth, renderFilterPage, onUpcomingPageLayout],
   );
 
   return (
