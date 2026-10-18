@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { logger } from '../utils/logger';
+import { lagAudit } from '../utils/lag-audit';
 import { MatchChatGateway } from './match-chat/match-chat.gateway';
 
 /**
@@ -410,6 +411,15 @@ export class WebSocketService {
      * Requirements: 21.5
      */
     static sendMatchUpdate(matchId: number, update: MatchUpdatePayload): void {
+        // TEMP [LAG-AUDIT]: emit time vs payload minute. Gated by LAG_AUDIT=1.
+        lagAudit('ws_emit', {
+          matchId,
+          minute: update.minute ?? null,
+          extra: update.extra ?? null,
+          status: update.status ?? null,
+          hg: update.homeScore ?? null,
+          ag: update.awayScore ?? null,
+        });
         this.sendToRoom(`match:${matchId}`, 'match_update', update);
     }
 

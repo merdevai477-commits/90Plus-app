@@ -5,8 +5,10 @@
 
 import { getRedisClient } from '../lib/redis';
 import { logger } from '../utils/logger';
+import { lagAudit } from '../utils/lag-audit';
 import { clearEmptyUpstreamBackoff } from './empty-upstream-backoff.service';
 import {
+  FOOTBALL_365_LIVE_ABSENT_KEY_PREFIX,
   FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX,
   FOOTBALL_365_LIVE_MATCHES_KEY,
   FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX,
@@ -40,6 +42,12 @@ const AUTHORITATIVE_TERMINAL_TTL_SEC = 24 * 60 * 60;
 const TERMINAL_LATCH_TTL_SEC = 24 * 60 * 60;
 /** Max one post-match correction re-invalidate per fixture per 6h. */
 const TERMINAL_CORRECTION_TTL_SEC = 6 * 60 * 60;
+/** Confirmed 365 omission must last this long before a weak FT. */
+const SCORES365_LIVE_ABSENCE_GRACE_MS = 180_000;
+/** Accepted REPLACE/CLEAR ticks required, so one clock jump cannot finalize. */
+const SCORES365_LIVE_ABSENCE_MIN_MISSES = 3;
+/** Refreshed on each accepted miss. Longer than the grace window, so a 20s tick cannot expire it. */
+const SCORES365_LIVE_ABSENCE_TTL_SEC = 15 * 60;
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -151,9 +159,19 @@ function terminalCorrectionKey(fixtureId: number): string {
   return `${FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX}${fixtureId}`;
 }
 
+function liveAbsent365Key(fixtureId: number): string {
+  return `${FOOTBALL_365_LIVE_ABSENT_KEY_PREFIX}${fixtureId}`;
+}
+
 export type WriteTerminalOptions = {
   /** Game-by-id / details confirmed FT — must not be revived by the allscores live set. */
   authoritative?: boolean;
+  /**
+   * Inferred FT from a confirmed live-feed absence.
+   * Writes the short tombstone and does not take the 24h latch.
+   * Ignored when the write is authoritative.
+   */
+  skipLatch?: boolean;
 };
 
 type TerminalFixturePayload = FixtureFromAPI & { _authoritativeTerminal?: boolean };
@@ -382,9 +400,41 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
   }
 }
 
+type LiveRedis = NonNullable<ReturnType<typeof getRedisClient>>;
+
+/**
+ * One accepted omission of a 365 live row.
+ * HSETNX keeps the first timestamp when two ticks overlap, so a later tick cannot
+ * restart the grace window.
+ */
+async function record365LiveAbsence(
+  redis: LiveRedis,
+  fixtureId: number,
+  nowMs: number,
+): Promise<{ ready: boolean; misses: number }> {
+  const key = liveAbsent365Key(fixtureId);
+  await redis.hsetnx(key, 'since', String(nowMs));
+  const misses = Number(await redis.hincrby(key, 'misses', 1));
+  await redis.expire(key, SCORES365_LIVE_ABSENCE_TTL_SEC);
+  if (!Number.isFinite(misses)) return { ready: false, misses: 0 };
+
+  const sinceRaw = await redis.hget(key, 'since');
+  const since = Number(sinceRaw);
+  const ready =
+    sinceRaw != null &&
+    sinceRaw !== '' &&
+    Number.isFinite(since) &&
+    since > 0 &&
+    nowMs - since >= SCORES365_LIVE_ABSENCE_GRACE_MS &&
+    misses >= SCORES365_LIVE_ABSENCE_MIN_MISSES;
+  return { ready, misses };
+}
+
 /**
  * Replace the 365 live list with the current allscores live set (not a merge).
- * IDs that left the set are tombstoned and dropped; API-Football rows stay intact.
+ * An owned live id missing from an accepted snapshot stays on the list until it
+ * has been absent for 180s across 3 accepted ticks, then gets a weak FT tombstone.
+ * API-Football rows stay intact.
  */
 export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAPI[]): Promise<void> {
   const redis = getRedisClient();
@@ -450,34 +500,105 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
       await writeTerminalFixtureSnapshot(terminal, '365');
     }
 
+    // An owned live row missing from one accepted REPLACE/CLEAR is not FT.
+    // This function only runs for accepted snapshots, so a failed sync never
+    // counts. Absence has to reach 180s and 3 misses. Until then the last live
+    // row stays readable. A stale clock, an existing tombstone, or a non-live
+    // row still finalizes on this tick.
+    const retainedLive: FixtureFromAPI[] = [];
+    const seenMissing = new Set<number>();
+    const nowMs = Date.now();
+
     for (const previous of existing) {
       const id = previous?.fixture?.id;
-      if (id == null || incomingIds.has(id)) continue;
-      if (isScores365OwnedLiveRow(previous)) {
-        const terminal = asTerminalFinishedFixture(previous);
+      if (id == null || incomingIds.has(id) || seenMissing.has(id)) continue;
+      seenMissing.add(id);
+      if (!isScores365OwnedLiveRow(previous)) continue;
+
+      const short = previous.fixture?.status?.short ?? '';
+      const terminal = asTerminalFinishedFixture(previous);
+      if (!LIVE_STATUSES_SET.has(short)) {
         await writeTerminalFixtureSnapshot(terminal, '365');
         droppedForDb.push(terminal);
+        await redis.del(liveAbsent365Key(id));
+        continue;
       }
+
+      if (
+        isStaleMappedInPlayClock({
+          statusShort: short,
+          elapsed: previous.fixture?.status?.elapsed ?? null,
+          extra: previous.fixture?.status?.extra ?? null,
+          kickoffIso: previous.fixture?.date ?? null,
+          nowMs,
+        })
+      ) {
+        await writeTerminalFixtureSnapshot(terminal, '365');
+        droppedForDb.push(terminal);
+        await redis.del(liveAbsent365Key(id));
+        continue;
+      }
+
+      const tomb = await redis.get(terminalFixtureKey(id));
+      if (tomb != null) {
+        // Authoritative / explicit / retire tombstones keep today's immediate drop.
+        // A weak absence tombstone must not be promoted to the 24h latch.
+        await writeTerminalFixtureSnapshot(
+          terminal,
+          '365',
+          isAuthoritativeTerminalRaw(tomb) ? undefined : { skipLatch: true },
+        );
+        droppedForDb.push(terminal);
+        await redis.del(liveAbsent365Key(id));
+        continue;
+      }
+
+      const absence = await record365LiveAbsence(redis, id, nowMs);
+      if (!absence.ready) {
+        retainedLive.push(previous);
+        continue;
+      }
+
+      await writeTerminalFixtureSnapshot(terminal, '365', { skipLatch: true });
+      droppedForDb.push(terminal);
+      await redis.del(liveAbsent365Key(id));
+      logger.info(
+        `[LiveFixtureCache] 365 absence grace elapsed fixture=${id} misses=${absence.misses} — weak FT without latch`,
+      );
     }
 
+    const retainedIds = new Set(
+      retainedLive
+        .map((fixture) => fixture?.fixture?.id)
+        .filter((id): id is number => id != null),
+    );
+    const publishedLive = [...incomingLive, ...retainedLive];
+
     const pipeline = redis.pipeline();
-    pipeline.setex(FOOTBALL_365_LIVE_MATCHES_KEY, ttl, JSON.stringify(incomingLive));
+    pipeline.setex(FOOTBALL_365_LIVE_MATCHES_KEY, ttl, JSON.stringify(publishedLive));
     pipeline.setex(
       FOOTBALL_LIVE_MATCHES_KEY,
       combinedTtl,
-      JSON.stringify(mergeFixtureLists(parseFixtureList(apiRaw), incomingLive)),
+      JSON.stringify(mergeFixtureLists(parseFixtureList(apiRaw), publishedLive)),
     );
 
     for (const previous of existing) {
       const id = previous?.fixture?.id;
-      if (id == null || incomingIds.has(id)) continue;
+      if (id == null || incomingIds.has(id) || retainedIds.has(id)) continue;
       pipeline.del(providerLiveFixtureKey('365', id));
+    }
+
+    for (const fixture of retainedLive) {
+      const id = fixture?.fixture?.id;
+      if (id == null) continue;
+      pipeline.setex(providerLiveFixtureKey('365', id), ttl, JSON.stringify(fixture));
     }
 
     for (const fixture of incomingLive) {
       const id = fixture?.fixture?.id;
       if (id == null) continue;
       pipeline.del(terminalFixtureKey(id));
+      pipeline.del(liveAbsent365Key(id));
       void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
         diagBeforeCacheWrite(id, fixture.fixture?.status?.short ?? '', 'redis-365-merge', '365');
       });
@@ -485,6 +606,38 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
     }
 
     await pipeline.exec();
+    const writeAt = new Date().toISOString();
+    const prevElapsed = new Map(
+      existing.map((row) => [
+        row?.fixture?.id,
+        {
+          elapsed: row?.fixture?.status?.elapsed ?? null,
+          extra: row?.fixture?.status?.extra ?? null,
+          short: row?.fixture?.status?.short ?? null,
+        },
+      ]),
+    );
+    const diffs = incomingLive
+      .map((fixture) => {
+        const id = fixture?.fixture?.id;
+        const elapsed = fixture?.fixture?.status?.elapsed ?? null;
+        const extra = fixture?.fixture?.status?.extra ?? null;
+        const short = fixture?.fixture?.status?.short ?? null;
+        const prev = id != null ? prevElapsed.get(id) : undefined;
+        if (!prev || prev.elapsed !== elapsed || prev.extra !== extra || prev.short !== short) {
+          return { id, elapsed, extra, short, prevElapsed: prev?.elapsed ?? null, prevShort: prev?.short ?? null };
+        }
+        return null;
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
+    // TEMP [LAG-AUDIT]: list + per-id Redis keys are the same incomingLive payload.
+    lagAudit('redis_write_365_live', {
+      writeAt,
+      incoming: incomingLive.length,
+      existing: existing.length,
+      diffCount: diffs.length,
+      diffs,
+    });
 
     if (droppedForDb.length > 0) {
       try {
@@ -556,6 +709,21 @@ export async function writeTerminalFixtureSnapshot(
     // Details already holds the FT bundle — do not wipe it. Still set the 24h latch.
     if (authoritative) {
       await tryAcquireTerminalInvalidate(id);
+      return;
+    }
+
+    // Inferred absence FT: short tombstone only. Do not take the latch that
+    // blocks pull-to-refresh and makes the decision irreversible.
+    if (options?.skipLatch === true) {
+      if (existingRaw == null) {
+        void import('./football-data-cache.service')
+          .then(({ footballDataCacheService }) =>
+            footballDataCacheService.invalidateFixtureDetailCaches(id, 'LIVE→FT'),
+          )
+          .catch((err) =>
+            logger.warn(`[LiveFixtureCache] detail invalidate failed for ${id}:`, err),
+          );
+      }
       return;
     }
 

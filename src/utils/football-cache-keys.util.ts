@@ -13,6 +13,11 @@ export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:'
 export const FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX = 'football:fixture_terminal_latched:';
 /** Rate-limit post-match correction re-checks (P1-3). */
 export const FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX = 'football:fixture_terminal_correction:';
+/**
+ * Per-fixture confirmed absence from an accepted 365 live REPLACE/CLEAR.
+ * Hash fields: `since` (epoch ms of the first miss) and `misses`.
+ */
+export const FOOTBALL_365_LIVE_ABSENT_KEY_PREFIX = 'football:live_absent:365:';
 /** Consecutive upstream_empty streak for live fixtures (P1-7 backoff). */
 export const FOOTBALL_EMPTY_UPSTREAM_STREAK_KEY_PREFIX = 'football:empty_streak:';
 /** Last time a pull-to-refresh was allowed to schedule a cache-layer refresh. */

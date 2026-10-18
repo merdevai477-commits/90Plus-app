@@ -12,6 +12,7 @@ import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES, TE
 import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
+import { lagAudit } from '../utils/lag-audit';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
 import { isPurposeAllowed } from './api-football-quota.service';
@@ -496,6 +497,23 @@ class LiveFixtureSyncService {
 
             if (changed) {
                 this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra, seenAt: nowMs });
+                lagAudit('ws_broadcast_decision', {
+                  fixtureId: id,
+                  elapsed,
+                  extra,
+                  status,
+                  hg: homeScore,
+                  ag: awayScore,
+                  reason: !prev
+                    ? 'first_seen'
+                    : scoreChanged
+                      ? 'score'
+                      : statusChanged
+                        ? 'status'
+                        : extraChanged
+                          ? 'extra'
+                          : 'elapsed',
+                });
                 this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
 
                 if (scoreChanged) {

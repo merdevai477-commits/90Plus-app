@@ -3517,10 +3517,11 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
       try {
         const game = await fetchScores365GameById(fixtureId, { force: true, language: lang });
         if (!game) {
-          const dbRow = dbByFixtureId.get(fixtureId);
-          const converted = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
-          const { fixtureFromMissing365Game } = await import('../utils/fixture-terminal.util');
-          return fixtureFromMissing365Game(fixtureId, converted);
+          // 404, an empty 200, and a cold timeout/network miss all arrive here as
+          // null. None of them is an authoritative finished status, so this tick
+          // must not synthesize FT, latch, or broadcast. The last live row stays
+          // until a real payload or the allscores absence grace says otherwise.
+          return null;
         }
         const dbRow = dbByFixtureId.get(fixtureId);
         const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
