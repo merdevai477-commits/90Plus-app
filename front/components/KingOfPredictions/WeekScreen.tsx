@@ -90,11 +90,15 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
 
   const selectedKey = localDateKey(days[dayIndex] ?? days[0]);
 
+  const loadGenRef = useRef(0);
+
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     const [dayMatches, token] = await Promise.all([
       fetchKingMatches(selectedKey).catch(() => []),
       getTokenRef.current().catch(() => null),
     ]);
+    if (gen !== loadGenRef.current) return;
     setDayMatchIds(dayMatches.map((match) => String(match.id)));
 
     if (!token) {
@@ -110,6 +114,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       ).catch(() => null),
       PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null),
     ]);
+    if (gen !== loadGenRef.current) return;
     if (picks) useKingPicksStore.getState().hydrate(picks);
     setBoard(leaderboard);
   }, [mode, period, selectedKey]);
@@ -132,6 +137,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       });
       return () => {
         active = false;
+        loadGenRef.current += 1;
       };
     }, [load]),
   );

@@ -116,12 +116,17 @@ export function KingPlayScreen({
   const navBottom = Math.max(insets.bottom, 12) + 8;
   const listBottom = navBottom + NAV_HEIGHT + 20;
 
+  const loadGenRef = useRef(0);
+
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setError(false);
     const dayMatches = await fetchKingMatches(dateKey || localDateKey(new Date()));
+    if (gen !== loadGenRef.current) return;
     setMatches(dayMatches);
 
     const token = await getTokenRef.current().catch(() => null);
+    if (gen !== loadGenRef.current) return;
     if (!token) {
       useKingPicksStore.getState().clear();
       return;
@@ -130,6 +135,7 @@ export function KingPlayScreen({
       token,
       dayMatches.map((match) => match.id),
     ).catch(() => null);
+    if (gen !== loadGenRef.current) return;
     if (picks) useKingPicksStore.getState().hydrate(picks);
   }, [dateKey]);
 
@@ -146,6 +152,8 @@ export function KingPlayScreen({
         });
       return () => {
         active = false;
+        // Invalidate in-flight loads so a blur→focus race cannot apply a stale map.
+        loadGenRef.current += 1;
       };
     }, [load]),
   );
@@ -171,12 +179,12 @@ export function KingPlayScreen({
   }, [copy, showError]);
 
   const isLocked = useCallback(
-    (match: Match) => dayPassed || started(match) || saved[match.id]?.correct != null,
+    (match: Match) => dayPassed || started(match) || saved[String(match.id)]?.correct != null,
     [dayPassed, saved],
   );
 
   const openSheet = (match: Match) => {
-    const prev = saved[match.id];
+    const prev = saved[String(match.id)];
     setHomeText(prev?.home != null ? String(prev.home) : '');
     setAwayText(prev?.away != null ? String(prev.away) : '');
     setSheetPick(prev?.type ?? null);
@@ -209,8 +217,9 @@ export function KingPlayScreen({
       leagueName: match.league?.name,
     };
     const picks = useKingPicksStore.getState();
+    const matchId = String(match.id);
     const seq = picks.begin(
-      match.id,
+      matchId,
       { type: predictionType, home: isGame ? null : home, away: isGame ? null : away, correct: null },
       meta,
     );
@@ -220,7 +229,7 @@ export function KingPlayScreen({
       predictionType === 'home' ? teamName(match.homeTeam) : predictionType === 'away' ? teamName(match.awayTeam) : copy.draw;
     setToast({
       variant: 'success',
-      title: saved[match.id] ? copy.updated : copy.saved,
+      title: saved[matchId] ? copy.updated : copy.saved,
       pick: isGame ? pickName : `${away} - ${home}`,
       caption: `${teamName(match.awayTeam)} ${copy.vs} ${teamName(match.homeTeam)}`,
     });
@@ -236,9 +245,9 @@ export function KingPlayScreen({
           predictedHomeScore: isGame ? undefined : home!,
           predictedAwayScore: isGame ? undefined : away!,
         });
-        picks.confirm(match.id, seq);
+        picks.confirm(matchId, seq);
       } catch (err) {
-        picks.revert(match.id, seq);
+        picks.revert(matchId, seq);
         explain(err);
       }
     })();
@@ -249,11 +258,13 @@ export function KingPlayScreen({
     : parseScore(homeText) != null && parseScore(awayText) != null;
 
   const savedLabel = (match: Match): string | null => {
-    const prev = saved[match.id];
+    const prev = saved[String(match.id)];
     if (!prev) return null;
     const exact = prev.home != null && prev.away != null;
+    // King of Results — exact scoreline.
     if (!isGame) return exact ? `${prev.away} - ${prev.home}` : null;
-    if (exact) return null;
+    // King of Game — winner pick. Prefer `type` even if the API echoes 0-0
+    // placeholders for scores (that used to hide the pending yellow button).
     if (prev.type === 'home') return teamName(match.homeTeam);
     if (prev.type === 'away') return teamName(match.awayTeam);
     if (prev.type === 'draw') return copy.draw;
@@ -263,7 +274,7 @@ export function KingPlayScreen({
   // King of Results is about the exact scoreline, so a right winner with the
   // wrong score still reads as wrong here once the final score is known.
   const verdictOf = (match: Match): Verdict | null => {
-    const prev = saved[match.id];
+    const prev = saved[String(match.id)];
     if (!prev || savedLabel(match) == null) return null;
     if (prev.correct == null) return 'pending';
     if (!prev.correct) return 'wrong';

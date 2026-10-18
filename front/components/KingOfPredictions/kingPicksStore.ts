@@ -49,6 +49,20 @@ function samePick(a: KingPick, b: KingPick): boolean {
   return a.type === b.type && a.home === b.home && a.away === b.away;
 }
 
+function rowToPick(row: ServerRow): KingPick {
+  return {
+    type: row.prediction?.type,
+    home: row.predictedHomeScore ?? null,
+    away: row.predictedAwayScore ?? null,
+    correct: row.isCorrect ?? null,
+  };
+}
+
+function stripLocal(pick: LocalPick): KingPick {
+  const { meta: _meta, seq: _seq, ...saved } = pick;
+  return saved;
+}
+
 export const useKingPicksStore = create<KingPicksState>((set) => ({
   server: {},
   local: {},
@@ -56,23 +70,35 @@ export const useKingPicksStore = create<KingPicksState>((set) => ({
 
   hydrate: (predictionsMap) =>
     set((state) => {
-      const server: Record<string, KingPick> = {};
+      const incoming: Record<string, KingPick> = {};
       for (const [id, raw] of Object.entries(predictionsMap ?? {})) {
-        const row = raw as ServerRow;
-        server[id] = {
-          type: row.prediction?.type,
-          home: row.predictedHomeScore ?? null,
-          away: row.predictedAwayScore ?? null,
-          correct: row.isCorrect ?? null,
-        };
+        incoming[String(id)] = rowToPick(raw as ServerRow);
       }
-      // A cached server read can predate a save; keep the local pick until the
+
+      // A cached/stale GET can predate a save; keep the local pick until the
       // server returns the same values.
       const local: Record<string, LocalPick> = {};
       for (const [id, pick] of Object.entries(state.local)) {
-        const fromServer = server[id];
-        if (!fromServer || !samePick(fromServer, pick)) local[id] = pick;
+        const key = String(id);
+        const fromServer = incoming[key];
+        if (!fromServer || !samePick(fromServer, pick)) local[key] = pick;
       }
+
+      const server: Record<string, KingPick> = { ...incoming };
+
+      // Re-apply in-flight locals the payload omitted (empty/stale cache race).
+      for (const [id, pick] of Object.entries(local)) {
+        if (!server[id]) server[id] = stripLocal(pick);
+      }
+
+      // Pending picks already confirmed into `server` must not vanish when a
+      // later hydrate arrives empty (common after iOS blur→focus reloads).
+      for (const [id, pick] of Object.entries(state.server)) {
+        const key = String(id);
+        if (server[key]) continue;
+        if (pick.correct == null) server[key] = pick;
+      }
+
       return { server, local };
     }),
 
@@ -80,7 +106,8 @@ export const useKingPicksStore = create<KingPicksState>((set) => ({
 
   begin: (matchId, pick, meta) => {
     const seq = ++nextSeq;
-    set((state) => ({ local: { ...state.local, [matchId]: { ...pick, meta, seq } } }));
+    const id = String(matchId);
+    set((state) => ({ local: { ...state.local, [id]: { ...pick, meta, seq } } }));
     return seq;
   },
 
@@ -88,19 +115,20 @@ export const useKingPicksStore = create<KingPicksState>((set) => ({
   // this bump never drop the row in between.
   confirm: (matchId, seq) =>
     set((state) => {
-      const pick = state.local[matchId];
+      const id = String(matchId);
+      const pick = state.local[id];
       if (!pick || pick.seq !== seq) return state;
-      const { meta: _meta, seq: _seq, ...saved } = pick;
       return {
-        server: { ...state.server, [matchId]: saved },
+        server: { ...state.server, [id]: stripLocal(pick) },
         confirmed: state.confirmed + 1,
       };
     }),
 
   revert: (matchId, seq) =>
     set((state) => {
-      if (state.local[matchId]?.seq !== seq) return state;
-      const { [matchId]: _failed, ...local } = state.local;
+      const id = String(matchId);
+      if (state.local[id]?.seq !== seq) return state;
+      const { [id]: _failed, ...local } = state.local;
       return { local };
     }),
 }));
