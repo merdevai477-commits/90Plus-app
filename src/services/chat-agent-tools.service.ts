@@ -6,6 +6,7 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { logger } from '../utils/logger';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
+import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
 import type { MessageLanguage } from '../utils/message-language.util';
 import { localDateKey } from '../utils/world-cup-campaign.util';
 import { resolveFootballSeason } from '../utils/football-season.util';
@@ -1797,10 +1798,7 @@ async function toolLiveMatches(language: MessageLanguage) {
 }
 
 function teamNamesMatch(a: string, b: string): boolean {
-  const na = a.trim().toLowerCase();
-  const nb = b.trim().toLowerCase();
-  if (!na || !nb) return false;
-  return na === nb || na.includes(nb) || nb.includes(na);
+  return teamNamesLooselyMatch(a, b);
 }
 
 async function toolResolveMatch(args: Record<string, unknown>) {

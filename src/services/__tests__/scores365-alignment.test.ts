@@ -79,6 +79,63 @@ describe('mapScores365ToApiFootballFixture alignment fallback', () => {
     });
   });
 
+  it('keeps Al Ahly distinct from National Bank and writes 365 competitor ids', async () => {
+    const ahlyBankGame = {
+      ...game,
+      id: 4_900_001,
+      competitionId: 11,
+      homeCompetitor: { id: 8200, name: 'الأهلي', score: 2 },
+      awayCompetitor: { id: 50527, name: 'البنك الأهلي', score: 0 },
+    } as typeof game;
+    // Same kickoff sides, but API-Football leftover ids. Substring matching used to
+    // also confuse these names when the DB row was swapped.
+    const dbBase: FixtureFromAPI = {
+      ...mismatchedDbBase,
+      fixture: { ...mismatchedDbBase.fixture, id: 4_900_001 },
+      teams: {
+        home: { id: 1015, name: 'الأهلي', logo: 'ahly.png', winner: null },
+        away: { id: 9999, name: 'البنك الأهلي', logo: 'bank.png', winner: null },
+      },
+      goals: { home: 2, away: 0 },
+    };
+
+    const fixture = await mapScores365ToApiFootballFixture(ahlyBankGame, dbBase, 4_900_001);
+    expect(fixture).not.toBeNull();
+    expect(fixture?.teams.home.id).toBe(8200);
+    expect(fixture?.teams.away.id).toBe(50527);
+    expect(fixture?.teams.home.name).toBe('الأهلي');
+    expect(fixture?.teams.away.name).toBe('البنك الأهلي');
+    expect(fixture?.goals).toEqual({ home: 2, away: 0 });
+  });
+
+  it('does not mis-align a swapped DB row of Al Ahly vs National Bank', async () => {
+    const ahlyBankGame = {
+      ...game,
+      id: 4_900_002,
+      competitionId: 11,
+      homeCompetitor: { id: 8200, name: 'الأهلي', score: 2 },
+      awayCompetitor: { id: 50527, name: 'البنك الأهلي', score: 0 },
+    } as typeof game;
+    const swappedDbBase: FixtureFromAPI = {
+      ...mismatchedDbBase,
+      fixture: { ...mismatchedDbBase.fixture, id: 4_900_002 },
+      teams: {
+        home: { id: 9999, name: 'البنك الأهلي', logo: 'bank.png', winner: null },
+        away: { id: 1015, name: 'الأهلي', logo: 'ahly.png', winner: null },
+      },
+      goals: { home: 0, away: 2 },
+    };
+
+    const fixture = await mapScores365ToApiFootballFixture(ahlyBankGame, swappedDbBase, 4_900_002);
+    expect(fixture).not.toBeNull();
+    const byId = new Map([
+      [fixture!.teams.home.id, { name: fixture!.teams.home.name, goals: fixture!.goals.home }],
+      [fixture!.teams.away.id, { name: fixture!.teams.away.name, goals: fixture!.goals.away }],
+    ]);
+    expect(byId.get(8200)).toEqual({ name: 'الأهلي', goals: 2 });
+    expect(byId.get(50527)).toEqual({ name: 'البنك الأهلي', goals: 0 });
+  });
+
   it('maps venue capacity, referee, and broadcast channels', async () => {
     const fixture = await mapScores365ToApiFootballFixture(
       {

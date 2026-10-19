@@ -32,6 +32,7 @@ import {
 } from '../utils/scores365-match-info.util';
 import { resolveVenueImage } from './stadium-image.service';
 import { coerceAllScoresLiveStatus } from '../utils/scores365-live-identity.util';
+import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
   SCORES365_LEAGUE_ID_OFFSET,
@@ -1776,22 +1777,7 @@ function kickoffMs(iso?: string): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-/** Normalize team labels for fuzzy cross-provider matching (365Scores ↔ API-Football DB). */
-function normalizeTeamNameForMatch(name?: string | null): string {
-  if (!name) return '';
-  return name
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, '');
-}
-
-function teamNamesMatch(a?: string | null, b?: string | null): boolean {
-  const na = normalizeTeamNameForMatch(a);
-  const nb = normalizeTeamNameForMatch(b);
-  if (!na || !nb) return false;
-  return na === nb || na.includes(nb) || nb.includes(na);
-}
+const teamNamesMatch = teamNamesLooselyMatch;
 
 type Scores365TeamAlignment = { swapped: boolean };
 
@@ -2666,8 +2652,12 @@ export async function mapScores365ToApiFootballFixture(
   })();
   const home365 = game.homeCompetitor;
   const away365 = game.awayCompetitor;
-  const homeDisplay = alignment.swapped ? away365?.name : home365?.name;
-  const awayDisplay = alignment.swapped ? home365?.name : away365?.name;
+  const homeCompetitor = alignment.swapped ? away365 : home365;
+  const awayCompetitor = alignment.swapped ? home365 : away365;
+  const homeDisplay = homeCompetitor?.name;
+  const awayDisplay = awayCompetitor?.name;
+  const homeCompetitorId = homeCompetitor?.id ?? base.teams.home.id;
+  const awayCompetitorId = awayCompetitor?.id ?? base.teams.away.id;
   const crowdPrediction = extractScores365CrowdWinPrediction(game, {
     swapped: alignment.swapped,
   });
@@ -2730,7 +2720,14 @@ export async function mapScores365ToApiFootballFixture(
     teams: {
       home: {
         ...base.teams.home,
+        // Prefer 365 competitorId so team-profile / display maps hit Al Ahly (8200)
+        // instead of an API-Football leftover (e.g. 1015) or National Bank (50527).
+        id: homeCompetitorId,
         name: homeDisplay ?? base.teams.home.name,
+        logo:
+          (homeCompetitorId ? build365CompetitorLogo(homeCompetitorId) : '') ||
+          base.teams.home.logo ||
+          '',
         winner:
           status.short === 'FT' && homeScore != null && awayScore != null
             ? homeScore > awayScore
@@ -2742,7 +2739,12 @@ export async function mapScores365ToApiFootballFixture(
       },
       away: {
         ...base.teams.away,
+        id: awayCompetitorId,
         name: awayDisplay ?? base.teams.away.name,
+        logo:
+          (awayCompetitorId ? build365CompetitorLogo(awayCompetitorId) : '') ||
+          base.teams.away.logo ||
+          '',
         winner:
           status.short === 'FT' && homeScore != null && awayScore != null
             ? awayScore > homeScore

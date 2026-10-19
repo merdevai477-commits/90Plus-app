@@ -28,6 +28,7 @@ import {
   buildScores365AthletePhotoUrl,
   buildScores365CoachPhotoUrl,
 } from '../utils/scores365-athlete-photo';
+import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
 import {
   competitionIndexRecords,
   DEFAULT_ARABIC_COUNTRY_ID,
@@ -5170,20 +5171,9 @@ export class ThreeSixFiveScoresService {
     game: Scores365Game,
     row: { homeTeamName: string; awayTeamName: string },
   ): number {
-    const norm = (s?: string) =>
-      (s ?? '')
-        .normalize('NFD')
-        .replace(/\p{M}/gu, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-    const match = (a?: string, b?: string) => {
-      const na = norm(a);
-      const nb = norm(b);
-      return na && nb && (na === nb || na.includes(nb) || nb.includes(na));
-    };
     let hits = 0;
-    if (match(game.homeCompetitor?.name, row.homeTeamName)) hits++;
-    if (match(game.awayCompetitor?.name, row.awayTeamName)) hits++;
+    if (teamNamesLooselyMatch(game.homeCompetitor?.name, row.homeTeamName)) hits++;
+    if (teamNamesLooselyMatch(game.awayCompetitor?.name, row.awayTeamName)) hits++;
     return hits;
   }
 

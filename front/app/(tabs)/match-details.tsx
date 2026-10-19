@@ -1692,12 +1692,13 @@ const MatchDetailsScreen = () => {
       const team = row.team;
       if (!team?.id && !team?.name) return;
       const navParams: Record<string, string> = {};
-      if (team.id) navParams.id = String(team.id);
+      // Standings on 365 fixtures use 365 competitorIds; otherwise resolve by name.
+      if (is365Fixture && team.id) navParams.id = String(team.id);
       if (team.name) navParams.name = team.name;
       if (team.logo) navParams.logo = team.logo;
       router.push({ pathname: '/team-profile' as any, params: navParams } as any);
     },
-    [router],
+    [router, is365Fixture],
   );
 
   const parseFormation = (formation: string | null): number[] => {

@@ -1,5 +1,6 @@
 import { calendarDateFromKickoff } from './calendar-day-bounds.util';
 import { SCORES365_LEAGUE_ID_OFFSET } from './scores365-league-id.util';
+import { teamNamesLooselyMatch } from './team-name-match.util';
 
 export type SyntheticIdentityRow = {
   fixtureId: number;
@@ -28,9 +29,17 @@ export function normalizeScores365TeamName(value?: string | null): string {
 }
 
 export function scores365TeamNamesMatch(a?: string | null, b?: string | null): boolean {
+  // Prefer Unicode-aware matching so Arabic club names (الأهلي vs البنك الأهلي)
+  // stay distinct. Fall back to the legacy ASCII key for Latin-only rows.
+  if (teamNamesLooselyMatch(a, b)) return true;
   const na = normalizeScores365TeamName(a);
   const nb = normalizeScores365TeamName(b);
-  return Boolean(na && nb && (na === nb || na.includes(nb) || nb.includes(na)));
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const strip = (value: string) => value.replace(/(sc|fc|cf|ac|afc|cfc)$/i, '');
+  const sa = strip(na);
+  const sb = strip(nb);
+  return sa.length >= 3 && sb.length >= 3 && sa === sb;
 }
 
 export function isHotAllScoresPersistItem(

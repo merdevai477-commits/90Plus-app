@@ -62,18 +62,26 @@ export default function TeamProfileScreen() {
     const rawId = parseInt(params.id ?? '0', 10);
     const hasDirectId = Number.isFinite(rawId) && rawId > 0;
     const nameParam = (params.name ?? '').trim();
+    // API-Football leftovers (e.g. Al Ahly 1015) fail on the 365 competitor API.
+    // After a failed direct load, resolve by name so the profile still opens.
+    const [preferNameResolve, setPreferNameResolve] = useState(false);
 
-    // Resolve competitorId from a team name when no numeric id was provided.
+    // Resolve competitorId from a team name when no numeric id was provided,
+    // or when the provided id is not a valid 365 competitor.
     const resolveQ = useQuery({
         queryKey: ['competitor365-resolve', nameParam.toLowerCase()],
         queryFn: () => ApiFootballService.resolveCompetitor365ByName(nameParam),
-        enabled: !hasDirectId && nameParam.length >= 2,
+        enabled: (!hasDirectId || preferNameResolve) && nameParam.length >= 2,
         staleTime: 30 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
     });
 
-    const competitorId = hasDirectId ? rawId : resolveQ.data?.competitorId ?? 0;
+    const competitorId = preferNameResolve
+        ? resolveQ.data?.competitorId ?? 0
+        : hasDirectId
+          ? rawId
+          : resolveQ.data?.competitorId ?? 0;
     const validId = competitorId > 0;
 
     const [activeTab, setActiveTab] = useState<TeamTabKey>('overview');
@@ -84,6 +92,17 @@ export default function TeamProfileScreen() {
     const matchesQ = useCompetitorMatches(competitorId, validId);
     const info = infoQ.data ?? null;
     const isNationalTeam = info?.type === 2;
+
+    useEffect(() => {
+        if (
+            hasDirectId &&
+            !preferNameResolve &&
+            infoQ.isError &&
+            nameParam.length >= 2
+        ) {
+            setPreferNameResolve(true);
+        }
+    }, [hasDirectId, preferNameResolve, infoQ.isError, nameParam]);
 
     const statsCompetitionId =
         info?.mainCompetitionId ??
