@@ -87,6 +87,7 @@ import { extractMatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import { match365CompetitionId } from '../../utils/matchTopPlayers';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
+import { logger } from '../../utils/logger';
 import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import { with365ImageSize } from '../../utils/scores365AthletePhoto';
@@ -855,20 +856,30 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, is365Fixture, t?.matchDetails?.loadLineupsFailed, lineupFetchAttempts]);
 
-  // Cap exhausted — surface in Sentry once per fixture only when lineups are
-  // expected (live + provider hasn't said "none"). Empty / upcoming / known-unavailable
-  // matches used to spam Sentry with expected upstream_empty noise.
+  // Cap exhausted — Sentry only when the provider said lineups exist (`true`)
+  // and we still have no authoritative set. Unknown (`null`) / unavailable live
+  // empties are expected upstream noise → breadcrumb + logger only.
   useEffect(() => {
     if (lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) return;
     if (isAuthoritativeLineupData(lineups)) return;
     if (lineupCapReportedForRef.current === fixtureId) return;
-    if (lineupsAvailable === false) return;
     if (!isLive()) return;
     lineupCapReportedForRef.current = fixtureId;
-    captureMessage(
-      `[MatchDetails] lineups retry cap (${MAX_LINEUP_AUTO_RETRIES}) fixture=${fixtureId}`,
-      'warning',
-    );
+    if (lineupsAvailable === true) {
+      captureMessage(
+        `[MatchDetails] lineups retry cap (${MAX_LINEUP_AUTO_RETRIES}) fixture=${fixtureId}`,
+        'warning',
+      );
+      return;
+    }
+    addBreadcrumb('lineups retry cap (expected empty/unknown)', 'match-details.lineups', 'info', {
+      fixtureId,
+      lineupsAvailable,
+    });
+    logger.warn('[MatchDetails] lineups retry cap without provider available flag', {
+      fixtureId,
+      lineupsAvailable,
+    });
   }, [lineupFetchAttempts, lineups, fixtureId, lineupsAvailable, isLive]);
 
   const retryLineups = useCallback(() => {

@@ -24,6 +24,7 @@ import {
   setTag,
   setContext,
   measureAsync,
+  shouldDropNativeNoiseEvent,
 } from '../../services/sentry.service';
 import { logger } from '../../services/logger';
 
@@ -64,7 +65,7 @@ jest.mock('../../services/logger', () => ({
 }));
 
 describe('Sentry Service Unit Tests', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   const originalDev = (global as any).__DEV__ as boolean | undefined;
 
   beforeEach(() => {
@@ -77,8 +78,15 @@ describe('Sentry Service Unit Tests', () => {
     (Sentry.addBreadcrumb as jest.Mock).mockImplementation(() => {});
     (Sentry.setTag as jest.Mock).mockImplementation(() => {});
     (Sentry.setContext as jest.Mock).mockImplementation(() => {});
-    
-    process.env = { ...originalEnv };
+
+    // Mutate process.env in place — replacing the object breaks assignments on Node/Jest.
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, originalEnv);
+    delete process.env.EXPO_PUBLIC_SENTRY_DSN;
     (global as any).__DEV__ = false;
     
     // Reset Constants mock
@@ -94,7 +102,12 @@ describe('Sentry Service Unit Tests', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, originalEnv);
     (global as any).__DEV__ = originalDev;
   });
 
@@ -653,7 +666,8 @@ describe('Sentry Service Unit Tests', () => {
 
       expect(Sentry.init).toHaveBeenCalledWith(
         expect.objectContaining({
-          release: '1.0.0',
+          release: 'com.mhmdsh1892.ninetyplusapp@1.0.0+100',
+          dist: '100',
         })
       );
     });
@@ -681,7 +695,8 @@ describe('Sentry Service Unit Tests', () => {
 
       expect(Sentry.init).toHaveBeenCalledWith(
         expect.objectContaining({
-          release: undefined,
+          release: 'com.mhmdsh1892.ninetyplusapp@0.0.0+100',
+          dist: '100',
         })
       );
     });
@@ -783,9 +798,125 @@ describe('Sentry Service Unit Tests', () => {
             'Unauthorized',
             '401',
             '404',
+            'dispatchGetDisplayList',
+            'Background ANR',
           ]),
         })
       );
+    });
+
+    test('should raise appHangTimeoutInterval above the 2s default', () => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
+
+      initSentry();
+
+      expect(Sentry.init).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enableAppHangTracking: true,
+          appHangTimeoutInterval: 4,
+        }),
+      );
+    });
+
+    test('shouldDropNativeNoiseEvent drops battery App Hang frames', () => {
+      expect(
+        shouldDropNativeNoiseEvent({
+          exception: {
+            values: [
+              {
+                type: 'App Hanging',
+                value: 'App hanging for at least 2000 ms.',
+                stacktrace: {
+                  frames: [
+                    { function: 'IOPSCopyPowerSourcesInfo' },
+                    { function: 'batteryInformationChanged' },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      ).toBe(true);
+    });
+
+    test('shouldDropNativeNoiseEvent drops Expo MainApplication Background ANR', () => {
+      expect(
+        shouldDropNativeNoiseEvent({
+          culprit: 'MainApplication.onCreate',
+          exception: {
+            values: [
+              {
+                type: 'ApplicationNotResponding',
+                value: 'Background ANR',
+                stacktrace: {
+                  frames: [
+                    { function: 'ExpoModulesPackageList.getPackageList' },
+                    { module: 'expo.modules.ExpoModulesPackageList' },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      ).toBe(true);
+    });
+
+    test('shouldDropNativeNoiseEvent drops ViewGroup.dispatchGetDisplayList NPE', () => {
+      expect(
+        shouldDropNativeNoiseEvent({
+          exception: {
+            values: [
+              {
+                type: 'NullPointerException',
+                value: "Attempt to read from field 'int android.view.View.mViewFlags' on a null object reference",
+                stacktrace: {
+                  frames: [{ function: 'android.view.ViewGroup.dispatchGetDisplayList' }],
+                },
+              },
+            ],
+          },
+        }),
+      ).toBe(true);
+    });
+
+    test('shouldDropNativeNoiseEvent keeps unrelated JS exceptions', () => {
+      expect(
+        shouldDropNativeNoiseEvent({
+          exception: {
+            values: [
+              {
+                type: 'TypeError',
+                value: "Cannot read property 'foo' of undefined",
+                stacktrace: {
+                  frames: [{ function: 'MatchDetailsScreen.render', filename: 'match-details.tsx' }],
+                },
+              },
+            ],
+          },
+        }),
+      ).toBe(false);
+    });
+
+    test('beforeSend drops native noise events', () => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
+
+      initSentry();
+
+      const beforeSend = (Sentry.init as jest.Mock).mock.calls[0][0].beforeSend;
+      const dropped = beforeSend({
+        exception: {
+          values: [
+            {
+              type: 'NullPointerException',
+              value: 'mViewFlags',
+              stacktrace: {
+                frames: [{ function: 'ViewGroup.dispatchGetDisplayList' }],
+              },
+            },
+          ],
+        },
+      });
+      expect(dropped).toBeNull();
     });
   });
 

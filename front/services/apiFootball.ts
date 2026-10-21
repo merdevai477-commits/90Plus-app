@@ -1900,19 +1900,20 @@ export const ApiFootballService = {
     fixtureId: number,
     options?: { skipCache?: boolean; timeout?: number },
   ): Promise<FixtureEvent[]> {
-    const timeout = options?.timeout;
+    // Cap focused live polls so Match Details cannot stall ~30s on a hung upstream.
+    const timeout = options?.timeout ?? 8_000;
     try {
       if (options?.skipCache) {
         return await fetchFromProxy<FixtureEvent[]>(
           `/cached/fixture/${fixtureId}/events`,
           {},
-          { fresh: true, ...(timeout ? { timeout } : {}) },
+          { fresh: true, timeout },
         );
       }
       return await fetchFromProxy<FixtureEvent[]>(
         `/cached/fixture/${fixtureId}/events`,
         {},
-        timeout ? { timeout } : undefined,
+        { timeout },
       );
     } catch (error) {
       // Do not retry aborted/cancelled requests with fresh=1 — that caused
@@ -1930,7 +1931,7 @@ export const ApiFootballService = {
         return await fetchFromProxy<FixtureEvent[]>(
           `/cached/fixture/${fixtureId}/events`,
           {},
-          timeout ? { timeout } : undefined,
+          { timeout },
         );
       } catch {
         return [];

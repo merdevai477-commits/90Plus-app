@@ -24,6 +24,88 @@ function isSignedOutClerkError(value: string | undefined): boolean {
   return /you are signed out/i.test(value) || /\bsigned out\b/i.test(value);
 }
 
+/** Flatten exception + thread frames for native noise matching. */
+function collectEventStackText(event: {
+  exception?: { values?: Array<{ stacktrace?: { frames?: Array<{ function?: string; module?: string; filename?: string }> } }> };
+  threads?: { values?: Array<{ stacktrace?: { frames?: Array<{ function?: string; module?: string; filename?: string }> } }> };
+  culprit?: string;
+}): string {
+  const parts: string[] = [];
+  if (event.culprit) parts.push(event.culprit);
+  const pushFrames = (
+    frames?: Array<{ function?: string; module?: string; filename?: string }>,
+  ) => {
+    for (const f of frames ?? []) {
+      if (f.function) parts.push(f.function);
+      if (f.module) parts.push(f.module);
+      if (f.filename) parts.push(f.filename);
+    }
+  };
+  for (const v of event.exception?.values ?? []) {
+    pushFrames(v.stacktrace?.frames);
+  }
+  for (const t of event.threads?.values ?? []) {
+    pushFrames(t.stacktrace?.frames);
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Drop known mobile false positives (battery App Hang, Expo cold-start ANR,
+ * RN ViewGroup display-list NPE). Exported for unit tests.
+ */
+export function shouldDropNativeNoiseEvent(event: {
+  message?: string;
+  culprit?: string;
+  exception?: {
+    values?: Array<{
+      type?: string;
+      value?: string;
+      stacktrace?: { frames?: Array<{ function?: string; module?: string; filename?: string }> };
+    }>;
+  };
+  threads?: {
+    values?: Array<{
+      stacktrace?: { frames?: Array<{ function?: string; module?: string; filename?: string }> };
+    }>;
+  };
+}): boolean {
+  const exceptionValue = event.exception?.values?.[0]?.value ?? '';
+  const exceptionType = event.exception?.values?.[0]?.type ?? '';
+  const eventMessage = event.message ?? '';
+  const combined = `${exceptionType} ${exceptionValue} ${eventMessage}`.trim();
+  const stackText = collectEventStackText(event);
+  const haystack = `${combined} ${stackText} ${event.culprit ?? ''}`;
+
+  // iOS App Hang with only system/battery power frames (90PLUS-APP-1F / 1E).
+  if (
+    /app hang|app hanging|watchdogtermination/i.test(combined) &&
+    /IOPSCopyPowerSources|io_ps_copy_powersources|batteryInformationChanged|IOPM|PowerSources/i.test(
+      haystack,
+    )
+  ) {
+    return true;
+  }
+
+  // Background ANR during Expo modules init on MainApplication.onCreate (90PLUS-APP-13).
+  if (
+    /background anr|applicationnotresponding|anr/i.test(combined) &&
+    /MainApplication\.onCreate|ExpoModulesPackageList|getPackageList|sortPackages/i.test(haystack)
+  ) {
+    return true;
+  }
+
+  // Known RN/Android ViewGroup race on low-end devices (90PLUS-APP-Q).
+  if (
+    /nullpointerexception/i.test(combined) &&
+    /dispatchGetDisplayList|mViewFlags/i.test(haystack)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function validateDSN(dsn: string): boolean {
   if (!dsn || typeof dsn !== 'string') {
     return false;
@@ -98,6 +180,10 @@ export function initSentry(): void {
     enableNativeCrashHandling: true,
     attachStacktrace: true,
 
+    // Raise above the noisy 2s default so brief iOS freezes (battery UI) stay quiet.
+    enableAppHangTracking: true,
+    appHangTimeoutInterval: 4,
+
     // Enable in production only (disable in dev to avoid noise)
     enabled: !__DEV__,
     
@@ -165,6 +251,10 @@ export function initSentry(): void {
       if (/pausing an activity that is not the current activity/i.test(combined)) {
         return null;
       }
+
+      if (shouldDropNativeNoiseEvent(event)) {
+        return null;
+      }
       
       return event;
     },
@@ -206,6 +296,10 @@ export function initSentry(): void {
       "You've added multiple <ClerkProvider>",
       'Pausing an activity that is not the current activity',
       'Video load failed',
+
+      // Native false positives (also filtered in beforeSend with stack context)
+      'dispatchGetDisplayList',
+      'Background ANR',
     ],
   });
   

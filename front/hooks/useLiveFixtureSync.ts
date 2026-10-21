@@ -9,7 +9,7 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { logger } from '../utils/logger';
 import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
-import { addBreadcrumb, captureMessage } from '../services/sentry.service';
+import { addBreadcrumb } from '../services/sentry.service';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
@@ -20,7 +20,7 @@ const LIVE_FIXTURE_EVENTS_RECONCILE_MS = 60_000;
 const LIVE_FIXTURE_EVENTS_POLL_MS = 15_000;
 /** Skip HTTP events reconcile when WS recently patched this fixture. */
 const LIVE_FIXTURE_EVENTS_WS_FRESH_MS = 45_000;
-/** Only Sentry-report truly slow polls (cold cache / upstream lag). */
+/** Log (not Sentry-issue) when a focused events poll exceeds this. */
 const LIVE_FIXTURE_EVENTS_SLOW_MS = 12_000;
 
 /**
@@ -42,6 +42,8 @@ export function useLiveFixtureSync(): void {
   const trustTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTickRef = useRef<() => Promise<void>>(async () => {});
   const lastFocusedEventsAtRef = useRef(0);
+  /** Prevents stacking overlapping focused /events polls for one fixture. */
+  const eventsPollInFlightRef = useRef(false);
 
   useEffect(() => {
     const clearTrustTimer = () => {
@@ -62,6 +64,7 @@ export function useLiveFixtureSync(): void {
     });
 
     const maybeRefreshFocusedEvents = async () => {
+      if (eventsPollInFlightRef.current) return;
       const state = useLiveFixtureStore.getState();
       const focusedId = state.focusedFixtureId;
       if (focusedId == null) return;
@@ -85,19 +88,25 @@ export function useLiveFixtureSync(): void {
       }
 
       lastFocusedEventsAtRef.current = now;
+      eventsPollInFlightRef.current = true;
       addBreadcrumb('events poll fired', 'match-details.events', 'info', {
         fixtureId: focusedId,
         wsTrusted: wsTrustedRef.current,
         reconcileMs: intervalMs,
       });
       const pollStarted = Date.now();
-      await state.fetchAndIngestEvents(focusedId);
-      const pollMs = Date.now() - pollStarted;
-      if (pollMs > LIVE_FIXTURE_EVENTS_SLOW_MS) {
-        captureMessage(
-          `[MatchDetails] events poll slow (${pollMs}ms) fixture=${focusedId}`,
-          'warning',
-        );
+      try {
+        await state.fetchAndIngestEvents(focusedId);
+        const pollMs = Date.now() - pollStarted;
+        if (pollMs > LIVE_FIXTURE_EVENTS_SLOW_MS) {
+          addBreadcrumb('events poll slow', 'match-details.events', 'warning', {
+            fixtureId: focusedId,
+            pollMs,
+          });
+          logger.warn('[LiveFixtureSync] events poll slow', { fixtureId: focusedId, pollMs });
+        }
+      } finally {
+        eventsPollInFlightRef.current = false;
       }
     };
 
