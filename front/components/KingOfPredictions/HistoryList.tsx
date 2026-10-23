@@ -129,6 +129,8 @@ export function KingHistoryList({
 
   // Saves still on their way to the server show here right away, and an edit
   // replaces the stored pick on its card.
+  // A local pick for the *other* King mode must not hide the server row — that
+  // used to wipe history cards when the user had fiddled with Game and Results.
   const localPicks = useKingPicksStore((state) => state.local);
   const { shown, shownCounts } = useMemo(() => {
     const exact = mode === 'results';
@@ -138,7 +140,7 @@ export function KingHistoryList({
     const merged = items.flatMap((item) => {
       const local = localPicks[String(item.apiMatchId)];
       if (!local) return [item];
-      if (isExactPick(local) !== exact) return [];
+      if (isExactPick(local) !== exact) return [item];
       const row = byMatch.get(item.apiMatchId);
       byMatch.delete(item.apiMatchId);
       return row
