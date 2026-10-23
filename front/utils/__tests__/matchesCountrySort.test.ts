@@ -41,4 +41,35 @@ describe('sortCountryGroupsForMatches', () => {
       'Argentina',
     ]);
   });
+
+  test('orders England leagues by importance, not alphabet (PL above Championship)', () => {
+    const sorted = sortCountryGroupsForMatches([
+      cg('England', [
+        { id: 40, name: 'Championship', country: 'England', live: true },
+        { id: 41, name: 'League One', country: 'England' },
+        { id: 39, name: 'Premier League', country: 'England' },
+        { id: 45, name: 'FA Cup', country: 'England' },
+        { id: 48, name: 'EFL Cup', country: 'England' },
+      ]),
+    ]);
+
+    expect(sorted[0].leagues.map((l) => l.leagueName)).toEqual([
+      'Premier League',
+      'FA Cup',
+      'EFL Cup',
+      'Championship',
+      'League One',
+    ]);
+  });
+
+  test('orders Scores365 England ids the same way (PL above Championship)', () => {
+    const sorted = sortCountryGroupsForMatches([
+      cg('England', [
+        { id: 7_000_001, name: 'Championship', country: 'England' },
+        { id: 7_000_007, name: 'Premier League', country: 'England' },
+      ]),
+    ]);
+
+    expect(sorted[0].leagues.map((l) => l.leagueId)).toEqual([7_000_007, 7_000_001]);
+  });
 });

@@ -4,6 +4,7 @@ import {
   getInternationalSortTier,
   isInternationalCompetition,
 } from './internationalCompetition';
+import { getDomesticLeaguePriority } from './domesticLeaguePriority';
 import {
   isFollowedCompetitionId,
   toCompetitionId,
@@ -111,10 +112,21 @@ function compareCountryGroups(a: CountryGroup, b: CountryGroup): number {
 
 function sortLeaguesInCountry(leagues: GroupedMatches[]): GroupedMatches[] {
   return [...leagues].sort((a, b) => {
-    const aIntl = isInternationalCompetition(leagueRef(a));
-    const bIntl = isInternationalCompetition(leagueRef(b));
+    const aRef = leagueRef(a);
+    const bRef = leagueRef(b);
+    const aIntl = isInternationalCompetition(aRef);
+    const bIntl = isInternationalCompetition(bRef);
     if (aIntl && bIntl) {
-      return compareInternationalLeagues(leagueRef(a), leagueRef(b));
+      return compareInternationalLeagues(aRef, bRef);
+    }
+    // Importance always wins over A→Z (and over live) so Championship never
+    // outranks Premier League just because of the letter C or a live kickoff.
+    if (!aIntl && !bIntl) {
+      const priDiff = getDomesticLeaguePriority(aRef) - getDomesticLeaguePriority(bRef);
+      if (priDiff !== 0) return priDiff;
+    } else if (aIntl !== bIntl) {
+      // Rare mixed bucket: keep international comps above unranked domestic noise.
+      return aIntl ? -1 : 1;
     }
     const aLive = a.matches.some((m) => m.status === 'live');
     const bLive = b.matches.some((m) => m.status === 'live');
