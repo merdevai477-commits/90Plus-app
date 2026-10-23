@@ -19,4 +19,10 @@ describe('getDomesticLeaguePriority', () => {
       getDomesticLeaguePriority({ id: 999998, name: 'Championship', country: 'England' }),
     );
   });
+
+  test('ranks bare LaLiga above LaLiga 2 without country on the ref', () => {
+    expect(getDomesticLeaguePriority({ name: 'LaLiga' })).toBeLessThan(
+      getDomesticLeaguePriority({ name: 'LaLiga 2' }),
+    );
+  });
 });

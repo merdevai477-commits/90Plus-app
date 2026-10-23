@@ -110,10 +110,13 @@ function compareCountryGroups(a: CountryGroup, b: CountryGroup): number {
   return a.country.localeCompare(b.country, 'en');
 }
 
-function sortLeaguesInCountry(leagues: GroupedMatches[]): GroupedMatches[] {
+function sortLeaguesInCountry(leagues: GroupedMatches[], country: string): GroupedMatches[] {
   return [...leagues].sort((a, b) => {
-    const aRef = leagueRef(a);
-    const bRef = leagueRef(b);
+    const aBase = leagueRef(a);
+    const bBase = leagueRef(b);
+    // Country group label fills empty match.league.country (common on 365 rows).
+    const aRef = { ...aBase, country: aBase.country || country };
+    const bRef = { ...bBase, country: bBase.country || country };
     const aIntl = isInternationalCompetition(aRef);
     const bIntl = isInternationalCompetition(bRef);
     if (aIntl && bIntl) {
@@ -140,7 +143,7 @@ export function sortCountryGroupsForMatches(groups: CountryGroup[]): CountryGrou
   return [...groups]
     .map((cg) => ({
       ...cg,
-      leagues: sortLeaguesInCountry(cg.leagues),
+      leagues: sortLeaguesInCountry(cg.leagues, cg.country),
     }))
     .sort(compareCountryGroups);
 }

@@ -72,4 +72,44 @@ describe('sortCountryGroupsForMatches', () => {
 
     expect(sorted[0].leagues.map((l) => l.leagueId)).toEqual([7_000_007, 7_000_001]);
   });
+
+  test('orders Spain LaLiga above LaLiga 2 even when match.league.country is empty', () => {
+    const sorted = sortCountryGroupsForMatches([
+      {
+        country: 'Spain',
+        countryFlag: null,
+        leagues: [
+          {
+            leagueId: 90012,
+            leagueName: 'LaLiga 2',
+            matches: [{ id: '1', status: 'upcoming', league: { id: 90012, name: 'LaLiga 2' } } as any],
+          },
+          {
+            leagueId: 90011,
+            leagueName: 'LaLiga',
+            matches: [{ id: '2', status: 'upcoming', league: { id: 90011, name: 'LaLiga' } } as any],
+          },
+          {
+            leagueId: 90090,
+            leagueName: 'Liga F',
+            matches: [{ id: '3', status: 'upcoming', league: { id: 90090, name: 'Liga F' } } as any],
+          },
+          {
+            leagueId: 90075,
+            leagueName: 'Primera Division RFEF',
+            matches: [
+              { id: '4', status: 'upcoming', league: { id: 90075, name: 'Primera Division RFEF' } } as any,
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(sorted[0].leagues.map((l) => l.leagueName)).toEqual([
+      'LaLiga',
+      'LaLiga 2',
+      'Primera Division RFEF',
+      'Liga F',
+    ]);
+  });
 });

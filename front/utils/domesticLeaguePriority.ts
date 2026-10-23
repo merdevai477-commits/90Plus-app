@@ -99,39 +99,45 @@ function normalize(s?: string | null): string {
 
 /**
  * Name/country fallback when id is missing or unmapped.
- * Country-scoped so "Premier League" (Egypt) does not beat England PL via name alone
- * when ids are present — this only runs after id lookup fails.
+ * Check 2nd-tier / women's names BEFORE bare top-flight names so "LaLiga 2"
+ * never wins over "LaLiga" when league.country is empty on the match payload.
  */
 function priorityFromName(ref: LeagueRef): number | null {
   const name = normalize(ref.name);
   const country = normalize(ref.country);
   if (!name) return null;
 
-  // Top-flight patterns (country-qualified where ambiguous)
-  if (/^premier league$/.test(name) && /england/.test(country)) return 10;
-  if (/^la\s*liga$|^laliga$/.test(name) && /spain/.test(country)) return 10;
-  if (/^serie a$/.test(name) && /italy/.test(country)) return 10;
-  if (/^bundesliga$/.test(name) && /germany/.test(country)) return 10;
-  if (/^ligue 1$/.test(name) && /france/.test(country)) return 10;
-  if (/premier/.test(name) && /egypt/.test(country)) return 10;
+  // Second / lower tiers first (do not require country — name is distinctive)
+  if (/laliga\s*2|la\s*liga\s*2|segunda(?:\s*divisi[oó]n)?/.test(name)) return 50;
+  if (/^championship$/.test(name) || (/championship/.test(name) && /england/.test(country))) return 50;
+  if (/serie b/.test(name)) return 50;
+  if (/2\.?\s*bundesliga|2nd bundesliga/.test(name)) return 50;
+  if (/ligue 2/.test(name)) return 50;
+  if (/league one/.test(name)) return 60;
+  if (/league two/.test(name)) return 70;
+  if (/primera\s*divisi[oó]n\s*rfef|primera\s*rfef/.test(name)) return 75;
+  if (/^liga f$|liga\s*f\b|women|femenina|نسائ/.test(name)) return 90;
+
+  // Top flights — prefer country when present; allow bare brand names used by 365
+  if (/^premier league$/.test(name)) {
+    if (!country || /england/.test(country)) return 10;
+    if (/egypt/.test(country)) return 10;
+    if (/saudi/.test(country)) return 10;
+    return 40; // other "Premier League" labels stay mid-pack
+  }
+  if (/^la\s*liga$|^laliga$/.test(name)) return 10;
+  if (/^serie a$/.test(name)) return 10;
+  if (/^bundesliga$/.test(name)) return 10;
+  if (/^ligue 1$/.test(name)) return 10;
   if (/(saudi|pro league)/.test(name) && /saudi/.test(country)) return 10;
 
-  // Domestic cups before 2nd tiers
+  // Domestic cups before lower tiers already handled above for 2nd tier
   if (/\bfa cup\b|كأس الاتحاد/.test(name)) return 25;
   if (/\befl cup\b|carabao|league cup/.test(name)) return 30;
   if (/copa del rey|كأس الملك/.test(name)) return 25;
   if (/coppa italia|كأس إيطاليا/.test(name)) return 25;
   if (/dfb[\s-]?pokal|كأس ألمانيا/.test(name)) return 25;
   if (/coupe de france|كأس فرنسا/.test(name)) return 25;
-
-  // Second tiers — after top flight & cups
-  if (/^championship$/.test(name) && /england/.test(country)) return 50;
-  if (/laliga\s*2|segunda|la liga 2/.test(name)) return 50;
-  if (/serie b/.test(name) && /italy/.test(country)) return 50;
-  if (/2\.?\s*bundesliga|2nd bundesliga/.test(name)) return 50;
-  if (/ligue 2/.test(name)) return 50;
-  if (/league one/.test(name) && /england/.test(country)) return 60;
-  if (/league two/.test(name) && /england/.test(country)) return 70;
 
   return null;
 }
