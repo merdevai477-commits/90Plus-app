@@ -191,4 +191,15 @@ describe('useLiveDisplayClock HT lifecycle', () => {
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
+
+  it('showSeconds false returns minute fallback (matches list)', () => {
+    const { result } = renderHook(() =>
+      useLiveDisplayClock({
+        ...liveInput,
+        fallbackLabel: "51'",
+        showSeconds: false,
+      }),
+    );
+    expect(result.current).toBe("51'");
+  });
 });

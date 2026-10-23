@@ -14,8 +14,8 @@ type MatchListLiveClockProps = {
 };
 
 /**
- * Isolated list-row clock. Ticks via the shared 1Hz ticker so MatchRow / FlashList
- * grouping do not re-render every second.
+ * Matches-list live minute (no MM:SS). Match details uses useLiveDisplayClock
+ * with seconds enabled.
  *
  * Named distinctly from `liveMatchClock.ts` (pure MM:SS helpers) because Windows
  * is case-insensitive.
@@ -36,6 +36,7 @@ export const MatchListLiveClock = memo(function MatchListLiveClock({
     elapsed,
     extra,
     fallbackLabel,
+    showSeconds: false,
   });
 
   return (

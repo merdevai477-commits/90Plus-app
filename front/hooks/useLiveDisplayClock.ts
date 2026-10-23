@@ -15,7 +15,8 @@ import { subscribeSharedSecondTicker } from '../components/Matches/sharedSecondT
  * Does not write Match / Zustand / network.
  */
 export function useLiveDisplayClock(input: LiveDisplayClockInput): string {
-  const enabled = isLiveClockSecondsEnabled();
+  const enabled =
+    isLiveClockSecondsEnabled() && input.showSeconds !== false;
   const identity = liveDisplayClockIdentity(input);
   const identityRef = useRef<string | null>(null);
   const anchorRef = useRef<number | null>(null);

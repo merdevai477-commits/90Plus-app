@@ -3,8 +3,8 @@
  * Canonical elapsed/status/score live in the server pipeline — this file
  * never writes Match objects, Zustand, or network.
  *
- * Seconds are on for the matches list and match details.
- * Set EXPO_PUBLIC_LIVE_CLOCK_SECONDS=0 to turn them off.
+ * Seconds are for match details only (pass `showSeconds: false` on the list).
+ * Set EXPO_PUBLIC_LIVE_CLOCK_SECONDS=0 to turn them off everywhere.
  */
 
 import { formatLiveMinuteDisplay } from './formatLiveMinuteDisplay';
@@ -30,6 +30,8 @@ export type LiveDisplayClockInput = {
   elapsed?: number | null;
   extra?: number | null;
   fallbackLabel: string;
+  /** When false, return minute-only fallback (matches list). Default true. */
+  showSeconds?: boolean;
 };
 
 export type LiveDisplayClockMode = 'tick' | 'frozen' | 'fallback';
