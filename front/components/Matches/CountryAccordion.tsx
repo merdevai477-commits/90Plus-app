@@ -1,26 +1,18 @@
 /**
  * CountryAccordion
  *
- * Country → League → Matches nested accordion for the matches screen.
+ * Country → League → Matches for the matches screen.
  *
- * Performance notes (the screen used to feel instant — keep it that way):
- *  - Both country *and* league sections start COLLAPSED. Expanding the
- *    country alone never paints any match cards; the user has to also
- *    open a league. This caps the worst-case render budget on first
- *    paint to England + live countries (default-expanded).
- *  - LayoutAnimation runs on iOS only. On Android the legacy
- *    LayoutAnimation pipeline blocks the JS thread for ~200–300ms per
- *    toggle and stutters mid-scroll, so we just snap on Android.
- *  - Images use cachePolicy="memory-disk" with NO transition and NO
- *    recyclingKey. expo-image already keys its memory cache by URI;
- *    setting recyclingKey={uri} forces a re-decode per cell which is
- *    the opposite of what we want.
+ * Country headers stay permanently open (no collapse chevron). Leagues still
+ * start collapsed so first paint does not mount every match card.
+ *
+ * LayoutAnimation for league toggles is iOS-only — on Android it blocks the
+ * JS thread ~200–300ms per toggle.
  */
 
 import React, { memo, useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import { useRecyclingState } from '@shopify/flash-list';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
@@ -29,8 +21,6 @@ import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHel
 import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
 import { isMisTaggedWorldCupLeagueName } from '../../constants/worldCup';
 
-// LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
-// Don't even enable it on Android.
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
 
 const MATCHES_PREVIEW_COUNT = 2;
@@ -67,6 +57,7 @@ interface CountryAccordionProps {
   countryGroup: CountryGroup;
   renderMatchCard: (match: Match, index: number) => React.ReactNode;
   onViewAllLeague?: (leagueId: number, leagueName: string) => void;
+  /** @deprecated Countries are always open; kept so call sites do not break. */
   defaultExpanded?: boolean;
 }
 
@@ -171,25 +162,14 @@ const LeagueSection = memo(function LeagueSection({
   );
 });
 
-/** Country accordion — the outer collapsible header */
+/** Country block — header is always open (no collapse control). */
 export const CountryAccordion = memo(function CountryAccordion({
   countryGroup,
   renderMatchCard,
   onViewAllLeague,
-  defaultExpanded = false,
 }: CountryAccordionProps) {
-  // FlashList recycles cells: plain useState would carry another country's
-  // expanded state over and ignore defaultExpanded.
-  const [expanded, setExpanded] = useRecyclingState(defaultExpanded, [countryGroup.country]);
   const { language } = useTranslation();
   const localizedCountryName = getCountryDisplayName(countryGroup.country, language);
-
-  const toggle = useCallback(() => {
-    if (ANIMATE_TOGGLE) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    }
-    setExpanded(prev => !prev);
-  }, [setExpanded]);
 
   // Sum is O(leagues) — cheap, no useMemo needed.
   let totalMatches = 0;
@@ -197,33 +177,22 @@ export const CountryAccordion = memo(function CountryAccordion({
 
   return (
     <View style={styles.countryContainer}>
-      {/* Country Header */}
-      <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
+      <View style={styles.countryHeader}>
         <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
         <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
         <Text style={styles.totalBadge}>{totalMatches}</Text>
-        {expanded ? (
-          <ChevronUp size={16} color="rgba(255,255,255,0.5)" />
-        ) : (
-          <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
-        )}
-      </TouchableOpacity>
+      </View>
 
-      {/* Leagues are only mounted when the country is expanded. This is the
-          single biggest win — non-expanded countries pay zero cost beyond
-          their header. */}
-      {expanded && (
-        <View style={styles.leaguesWrapper}>
-          {countryGroup.leagues.map(league => (
-            <LeagueSection
-              key={league.leagueId}
-              league={league}
-              renderMatchCard={renderMatchCard}
-              onViewAllLeague={onViewAllLeague}
-            />
-          ))}
-        </View>
-      )}
+      <View style={styles.leaguesWrapper}>
+        {countryGroup.leagues.map(league => (
+          <LeagueSection
+            key={league.leagueId}
+            league={league}
+            renderMatchCard={renderMatchCard}
+            onViewAllLeague={onViewAllLeague}
+          />
+        ))}
+      </View>
     </View>
   );
 });
