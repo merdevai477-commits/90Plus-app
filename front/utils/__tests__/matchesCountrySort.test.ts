@@ -73,6 +73,17 @@ describe('sortCountryGroupsForMatches', () => {
     expect(sorted[0].leagues.map((l) => l.leagueId)).toEqual([7_000_007, 7_000_001]);
   });
 
+  test('orders Spain Scores365 LaLiga (11) above LaLiga 2 (12)', () => {
+    const sorted = sortCountryGroupsForMatches([
+      cg('Spain', [
+        { id: 7_000_012, name: 'LaLiga 2', country: 'Spain' },
+        { id: 7_000_011, name: 'LaLiga', country: 'Spain' },
+        { id: 7_000_099, name: 'Liga F', country: 'Spain' },
+      ]),
+    ]);
+    expect(sorted[0].leagues.map((l) => l.leagueName)).toEqual(['LaLiga', 'LaLiga 2', 'Liga F']);
+  });
+
   test('orders Spain LaLiga above LaLiga 2 even when match.league.country is empty', () => {
     const sorted = sortCountryGroupsForMatches([
       {

@@ -92,15 +92,42 @@ describe('internationalCompetition', () => {
     expect(sorted.map((l) => l.id)).toEqual([6, 4, 15, 2, 3, 12]);
   });
 
-  test('365 synthetic UCL id sorts as UCL tier', () => {
+  test('365 synthetic UCL competition id sorts as UCL tier', () => {
     expect(
-      getInternationalSortTier({ id: 7_000_002, name: 'Champions League', country: 'Europe' }),
+      getInternationalSortTier({ id: 7_000_572, name: 'Champions League', country: 'Europe' }),
     ).toBe(INTERNATIONAL_TIER.UCL);
     expect(
       isInternationalCompetition(
-        { id: 7_000_002, name: 'Champions League', country: 'Europe' },
+        { id: 7_000_572, name: 'Champions League', country: 'Europe' },
         { excludeLeagueId: 1 },
       ),
     ).toBe(true);
+  });
+
+  test('365 LaLiga 2 competition id 12 is domestic, not CAF CL', () => {
+    expect(
+      isInternationalCompetition({
+        id: 7_000_012,
+        name: 'LaLiga 2',
+        country: 'Spain',
+      }),
+    ).toBe(false);
+    expect(
+      isInternationalCompetition({
+        id: 7_000_011,
+        name: 'LaLiga',
+        country: 'Spain',
+      }),
+    ).toBe(false);
+  });
+
+  test('365 League One competition id 2 is not treated as UCL', () => {
+    expect(
+      isInternationalCompetition({
+        id: 7_000_002,
+        name: 'League One',
+        country: 'England',
+      }),
+    ).toBe(false);
   });
 });

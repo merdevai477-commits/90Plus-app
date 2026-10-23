@@ -43,6 +43,7 @@ const CONTINENTAL_COUNTRIES = new Set([
  * Keep in sync with common catalog; unknown international comps fall through
  * to country / name heuristics at OTHER (or a named major tier).
  */
+/** API-Football league ids only — never apply to Scores365 competition ids. */
 const TIER_BY_LEAGUE_ID = new Map<number, InternationalTier>([
   // Major continental / Club World Cup
   [4, INTERNATIONAL_TIER.MAJOR_CONTINENTAL], // Euro
@@ -71,6 +72,17 @@ const TIER_BY_LEAGUE_ID = new Map<number, InternationalTier>([
   [34, INTERNATIONAL_TIER.OTHER],
   [10, INTERNATIONAL_TIER.OTHER], // Friendlies
   [1, INTERNATIONAL_TIER.OTHER], // World Cup (excluded via excludeLeagueId in practice)
+]);
+
+/**
+ * Scores365 competition ids that are international / continental.
+ * These must NOT be confused with API-Football league ids after stripping
+ * the 7_000_000 offset (e.g. 365 competition 12 is LaLiga 2, not CAF CL).
+ */
+const TIER_BY_SCORES365_COMPETITION_ID = new Map<number, InternationalTier>([
+  [572, INTERNATIONAL_TIER.UCL], // UEFA Champions League
+  [573, INTERNATIONAL_TIER.TOP_EUROPE], // Europa League
+  [624, INTERNATIONAL_TIER.OTHER], // CAF Champions League
 ]);
 
 const GOVERNING_BODY_RE =
@@ -124,16 +136,24 @@ export function isInternationalCompetition(
 ): boolean {
   if (!league) return false;
   const rawId = league.id ?? null;
+  const offset = options?.scores365Offset ?? 7_000_000;
   const excludeId = options?.excludeLeagueId ?? null;
   if (excludeId != null && rawId === excludeId) return false;
 
-  const canonical = resolveCanonicalLeagueId(rawId, options?.scores365Offset);
+  const isScores365Synthetic = rawId != null && rawId >= offset;
+  const canonical = resolveCanonicalLeagueId(rawId, offset);
   if (excludeId != null && canonical === excludeId) return false;
   // Dedicated FIFA World Cup tab — never list WC under International.
-  if (canonical === 1) return false;
-  if (rawId === 1) return false;
+  if (!isScores365Synthetic && (canonical === 1 || rawId === 1)) return false;
 
-  if (canonical != null && TIER_BY_LEAGUE_ID.has(canonical)) return true;
+  // API-Football id map — only for non-365 ids (365 competition ids collide:
+  // 12 = LaLiga 2 on 365, CAF CL on API-Football).
+  if (!isScores365Synthetic && canonical != null && TIER_BY_LEAGUE_ID.has(canonical)) {
+    return true;
+  }
+  if (isScores365Synthetic && canonical != null && TIER_BY_SCORES365_COMPETITION_ID.has(canonical)) {
+    return true;
+  }
 
   const country = normalizeCountry(league.country);
   if (CONTINENTAL_COUNTRIES.has(country)) return true;
@@ -151,10 +171,18 @@ export function getInternationalSortTier(
   options?: { scores365Offset?: number },
 ): InternationalTier {
   if (!league) return INTERNATIONAL_TIER.OTHER;
-  const canonical = resolveCanonicalLeagueId(league.id, options?.scores365Offset);
+  const offset = options?.scores365Offset ?? 7_000_000;
+  const rawId = league.id ?? null;
+  const isScores365Synthetic = rawId != null && rawId >= offset;
+  const canonical = resolveCanonicalLeagueId(rawId, offset);
   if (canonical != null) {
-    const byId = TIER_BY_LEAGUE_ID.get(canonical);
-    if (byId != null) return byId;
+    if (isScores365Synthetic) {
+      const by365 = TIER_BY_SCORES365_COMPETITION_ID.get(canonical);
+      if (by365 != null) return by365;
+    } else {
+      const byId = TIER_BY_LEAGUE_ID.get(canonical);
+      if (byId != null) return byId;
+    }
   }
   const fromName = tierFromName(normalizeName(league.name));
   if (fromName != null) return fromName;
