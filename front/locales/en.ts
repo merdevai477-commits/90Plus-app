@@ -1179,6 +1179,7 @@ export const en = {
     loadError: 'Could not load matches',
     retry: 'Try again',
     noMatches: 'No matches on this day',
+    noOpenMatches: 'No matches open for prediction right now',
     tabPredict: 'Predict',
     tabHistory: 'History',
     filterAll: 'All',

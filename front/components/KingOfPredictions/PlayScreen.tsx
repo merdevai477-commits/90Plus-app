@@ -288,6 +288,19 @@ export function KingPlayScreen({
     return 'correct';
   };
 
+  // Skip cards that would only show "predictions closed" — keep open matches
+  // and ones the user already picked (pending / settled).
+  const visibleMatches = useMemo(
+    () =>
+      matches.filter((match) => {
+        if (!isLocked(match)) return true;
+        return savedLabel(match) != null || verdictOf(match) != null;
+      }),
+    // savedLabel / verdictOf close over saved, isGame, teamName, copy
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: recompute when list or picks change
+    [matches, saved, isGame, dayPassed, language, copy.draw],
+  );
+
   return (
     <View style={styles.root}>
       <KingHeader />
@@ -303,21 +316,26 @@ export function KingPlayScreen({
         </Pressable>
       ) : matches.length === 0 ? (
         <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
+      ) : visibleMatches.length === 0 ? (
+        <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noOpenMatches}</Text>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.cardList, { paddingBottom: listBottom }]}
           showsVerticalScrollIndicator={false}
         >
-          {matches.map((match) => {
+          {visibleMatches.map((match) => {
             const locked = isLocked(match);
             const verdict = verdictOf(match);
+            const pick = savedLabel(match);
             const label =
               verdict === 'correct'
                 ? copy.resultCorrect
                 : verdict === 'wrong'
                   ? copy.resultWrong
-                  : savedLabel(match) ?? (locked ? copy.closed : copy.predictNow);
-            const state: ButtonState = verdict ?? (locked ? 'closed' : 'open');
+                  : pick ?? copy.predictNow;
+            // Never show the gray "closed" lock on a visible card: locked + pick
+            // uses pending/correct/wrong; unlocked uses open.
+            const state: ButtonState = verdict ?? 'open';
             const look = BUTTON_LOOK[state];
             return (
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
