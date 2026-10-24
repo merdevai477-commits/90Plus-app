@@ -330,22 +330,6 @@ export function PreMatchRecentStats({
               mode="higher"
             />
           ) : null}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
-        {/* One card: win rings + remaining % rows together */}
-        <View style={styles.trendsCard}>
-          <TrendCrestRow
-            label={labels.won}
-            homeValue={formatTrendValue(homeWins)}
-            awayValue={formatTrendValue(awayWins)}
-            homePct={homeWins.pct}
-            awayPct={awayWins.pct}
-            homeLogo={homeLogo}
-            awayLogo={awayLogo}
-          />
           <CompareRow
             label={labels.btts}
             homeValue={formatTrendValue(homeBtts)}
@@ -377,6 +361,21 @@ export function PreMatchRecentStats({
             homeNum={homeCs.pct}
             awayNum={awayCs.pct}
             mode="higher"
+          />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
+        <View style={styles.trendsCard}>
+          <TrendCrestRow
+            label={labels.won}
+            homeValue={formatTrendValue(homeWins)}
+            awayValue={formatTrendValue(awayWins)}
+            homePct={homeWins.pct}
+            awayPct={awayWins.pct}
+            homeLogo={homeLogo}
+            awayLogo={awayLogo}
           />
         </View>
       </View>
