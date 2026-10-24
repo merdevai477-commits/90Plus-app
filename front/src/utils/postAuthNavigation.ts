@@ -44,6 +44,14 @@ export async function navigateAfterAuth(
       // explain a transient hiccup, never block entry.
       try {
         const user = await AuthService.syncUserWithBackend(token);
+        // Claim parked invite codes immediately after the backend user exists —
+        // do not wait for PreloadInitializer's delayed boot pass.
+        try {
+          const { redeemPendingReferral } = await import('../../hooks/useShareWin');
+          await redeemPendingReferral(getToken);
+        } catch {
+          // PreloadInitializer retries on the next signed-in launch.
+        }
         try {
           const status = await fetchAgeStatus(token);
           await routeFromAgeStatus(router, status, user);
@@ -56,6 +64,12 @@ export async function navigateAfterAuth(
         try {
           await new Promise((r) => setTimeout(r, 1200));
           const user = await AuthService.syncUserWithBackend(token);
+          try {
+            const { redeemPendingReferral } = await import('../../hooks/useShareWin');
+            await redeemPendingReferral(getToken);
+          } catch {
+            // Retry on next launch via PreloadInitializer.
+          }
           try {
             const status = await fetchAgeStatus(token);
             await routeFromAgeStatus(router, status, user);

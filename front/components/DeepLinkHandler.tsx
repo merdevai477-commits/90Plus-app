@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
-import { router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import {
-  parseReelIdFromUrl,
-  parseProfileUsernameFromUrl,
-  parseReferralCodeFromUrl,
-} from '../constants/shareLinks';
-import { capturePendingReferral } from '../utils/pendingReferral';
+import { navigateShareDeepLink } from '../utils/navigateShareDeepLink';
 import {
   setPendingDeepLink,
   consumePendingDeepLink,
@@ -19,51 +13,6 @@ import { logger } from '../services/logger';
 
 function isAuthCallback(url: string): boolean {
   return /auth-callback/i.test(url);
-}
-
-/**
- * Route a parked share URL. Unsigned users never enter app content — invite
- * codes are parked for claim after registration; everything else waits on /auth.
- */
-function navigateForUrl(url: string, isSignedIn: boolean): boolean {
-  const referralCode = parseReferralCodeFromUrl(url);
-  if (referralCode) {
-    void capturePendingReferral(referralCode).then(() => {
-      if (!isSignedIn) {
-        router.replace('/auth');
-        return;
-      }
-      // Already registered — attribution will no-op; do not open Share & Win
-      // (that screen is for referrers, not invitees).
-      router.replace('/(tabs)/matches');
-    });
-    return true;
-  }
-
-  if (!isSignedIn) {
-    router.replace('/auth');
-    return true;
-  }
-
-  const profileUsername = parseProfileUsernameFromUrl(url);
-  if (profileUsername) {
-    router.push({
-      pathname: '/user/[username]',
-      params: { username: profileUsername },
-    });
-    return true;
-  }
-
-  const reelId = parseReelIdFromUrl(url);
-  if (reelId) {
-    router.push({
-      pathname: '/(tabs)/reels',
-      params: { reelId },
-    });
-    return true;
-  }
-
-  return false;
 }
 
 /**
@@ -122,8 +71,8 @@ export function DeepLinkHandler() {
       }
       handledUrls.current.add(pending);
       logger.debug('[DeepLink] Navigating:', pending, { isSignedIn: Boolean(isSignedIn) });
-      navigateForUrl(pending, Boolean(isSignedIn));
-      // Clear on next tick after router.push is scheduled.
+      navigateShareDeepLink(pending, Boolean(isSignedIn));
+      // Clear on next tick after router.replace is scheduled.
       setTimeout(() => consumePendingDeepLink(), 0);
     });
 

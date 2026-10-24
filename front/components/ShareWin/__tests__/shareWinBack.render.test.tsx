@@ -53,6 +53,10 @@ jest.mock('expo-router', () => {
   return { useRouter: () => instance, router: instance };
 });
 
+jest.mock('@clerk/clerk-expo', () => ({
+  useAuth: () => ({ isLoaded: true, isSignedIn: true, getToken: async () => 'tok' }),
+}));
+
 import ShareWinScreen from '../ShareWinScreen';
 
 const mockRouter = jest.requireMock('expo-router').router as {
