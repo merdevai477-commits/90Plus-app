@@ -80,6 +80,9 @@ const EGYPT_SLOTS: readonly Slot[] = [
   { key: 'egypt5', left: 235, top: 360.93, logo: { width: 64, height: 64, top: 22 }, labelTop: 95.5 },
 ];
 
+/** Alias for Europe layout — Hermes Fast Refresh can keep a stale `SLOTS` bind. */
+const SLOTS = EUROPE_SLOTS;
+
 type PitchTabProps = {
   picks: Partial<Record<TsfLeagueKey, TsfPlayer>>;
   /** Leagues whose gameweek has already kicked off (empty slots stay locked). */
@@ -101,7 +104,7 @@ export function PitchTab({
   onOpenLeague,
   onRemove,
 }: PitchTabProps) {
-  const slots = mode === 'egypt' ? EGYPT_SLOTS : EUROPE_SLOTS;
+  const pitchSlots = mode === 'egypt' ? EGYPT_SLOTS : SLOTS;
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
   const copy = t.topScorersFive;
@@ -203,7 +206,7 @@ export function PitchTab({
           </View>
         </View>
 
-        {slots.map((slot) => {
+        {pitchSlots.map((slot) => {
           const player = picks[slot.key];
           const slotLocked = Boolean(player?.locked || (!player && leagueLocked?.[slot.key]));
           const leagueLabel = pickCopy.leagues[slot.key] ?? pickCopy.choosePlayer;
