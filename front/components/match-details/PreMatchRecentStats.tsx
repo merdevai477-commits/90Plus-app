@@ -36,15 +36,18 @@ function ValuePill({
   value,
   highlight,
   side,
+  wide,
 }: {
   value: string;
   highlight: boolean;
   side: 'home' | 'away';
+  wide?: boolean;
 }) {
   return (
     <View
       style={[
         styles.pill,
+        wide && styles.pillWide,
         highlight
           ? side === 'home'
             ? styles.pillHomeOn
@@ -87,33 +90,36 @@ function CompareRow({
   );
 }
 
+/** Crest + progress ring under each team (Figma 1454:3652). */
 function TrendRing({
   pct,
   logo,
-  highlight,
+  side,
 }: {
   pct: number;
   logo?: string | null;
-  highlight: boolean;
+  side: 'home' | 'away';
 }) {
   const size = 64;
-  const stroke = 5;
+  const stroke = 6;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(100, pct));
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0));
   const dash = (clamped / 100) * c;
-  const ringColor = highlight ? PURPLE_SECONDARY : PURPLE;
+  // Home arc = secondary purple; away = primary (matches Figma).
+  const ringColor = side === 'home' ? PURPLE_SECONDARY : PURPLE;
 
   return (
     <View style={styles.ringWrap}>
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFillObject}>
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           stroke="#1A1421"
           strokeWidth={stroke}
-          fill="none"
+          fill="#1A1421"
+          fillOpacity={0.35}
         />
         <Circle
           cx={size / 2}
@@ -122,7 +128,7 @@ function TrendRing({
           stroke={ringColor}
           strokeWidth={stroke}
           fill="none"
-          strokeDasharray={`${dash} ${c - dash}`}
+          strokeDasharray={`${dash} ${Math.max(0.01, c - dash)}`}
           strokeLinecap="round"
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
@@ -136,7 +142,7 @@ function TrendRing({
   );
 }
 
-function TrendWinRow({
+function TrendCrestRow({
   label,
   homeValue,
   awayValue,
@@ -156,16 +162,18 @@ function TrendWinRow({
   const highlight = pickHighlightSide(homePct, awayPct, 'higher');
   return (
     <View style={styles.trendRow}>
+      {/* Home (left): pill then crest ring */}
       <View style={styles.trendSide}>
-        <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" />
-        <TrendRing pct={homePct} logo={homeLogo} highlight={highlight === 'home'} />
+        <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" wide />
+        <TrendRing pct={homePct} logo={homeLogo} side="home" />
       </View>
-      <Text style={styles.rowLabel} numberOfLines={2}>
+      <Text style={styles.trendLabel} numberOfLines={2}>
         {label}
       </Text>
+      {/* Away (right): crest ring then pill */}
       <View style={[styles.trendSide, styles.trendSideEnd]}>
-        <TrendRing pct={awayPct} logo={awayLogo} highlight={highlight === 'away'} />
-        <ValuePill value={awayValue} highlight={highlight === 'away'} side="away" />
+        <TrendRing pct={awayPct} logo={awayLogo} side="away" />
+        <ValuePill value={awayValue} highlight={highlight === 'away'} side="away" wide />
       </View>
     </View>
   );
@@ -334,8 +342,9 @@ export function PreMatchRecentStats({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
+        {/* Figma 1454:3652 — crest + ring under each team for “won the match” */}
         <View style={styles.trendsCard}>
-          <TrendWinRow
+          <TrendCrestRow
             label={labels.won}
             homeValue={formatTrendValue(homeWins)}
             awayValue={formatTrendValue(awayWins)}
@@ -344,6 +353,8 @@ export function PreMatchRecentStats({
             homeLogo={homeLogo}
             awayLogo={awayLogo}
           />
+        </View>
+        <View style={styles.card}>
           <CompareRow
             label={labels.btts}
             homeValue={formatTrendValue(homeBtts)}
@@ -443,7 +454,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingHorizontal: 15,
     paddingVertical: 17,
-    gap: 18,
+    gap: 20,
     width: '100%',
   },
   row: {
@@ -460,6 +471,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  trendLabel: {
+    flexShrink: 1,
+    maxWidth: 110,
+    color: LABEL,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   pill: {
     minWidth: 50,
     height: 23,
@@ -468,7 +487,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
-    borderColor: PILL_BORDER,
+    borderColor: '#222223',
+  },
+  pillWide: {
+    minWidth: 67,
+    paddingHorizontal: 12,
   },
   pillIdle: {
     backgroundColor: PILL_IDLE,
@@ -489,12 +512,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    gap: 6,
+    gap: 8,
   },
   trendSide: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   trendSideEnd: {
     justifyContent: 'flex-end',
