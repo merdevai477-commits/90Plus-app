@@ -566,8 +566,7 @@ export const en = {
     recentFormStatsTitle: 'Average stats',
     recentFormStatsHint: 'Last 4 matches — not this match’s live statistics.',
     recentAveragesBanner: 'Last 4 matches stats',
-    recentAveragesBannerHint:
-      'These numbers are each team’s recent form. Once the match starts, this tab switches to live match stats (possession, passes, shots).',
+    recentAveragesBannerHint: 'Live match stats will appear once kickoff starts',
     lastNMatchesColumn: 'Last {n} matches',
     goalsScoredAvg: 'Goals scored',
     goalsConcededAvg: 'Goals conceded',

@@ -2231,6 +2231,8 @@ const MatchDetailsScreen = () => {
             columnLabel={t.matchDetails.lastNMatchesColumn || 'Last {n} matches'}
             homeName={getTeamDisplayName(homeTeamName, language)}
             awayName={getTeamDisplayName(awayTeamName, language)}
+            homeLogo={fixture?.teams?.home?.logo ?? null}
+            awayLogo={fixture?.teams?.away?.logo ?? null}
             homeScore={homeSummary}
             awayScore={awaySummary}
             enrichment={recentFormAverages}

@@ -1,22 +1,12 @@
 /**
- * Pre-kickoff Statistics tab: last-N averages + trends on a 90Plus
- * liquid-glass surface (purple / electric blue / gold).
+ * Pre-kickoff Statistics tab — last-N averages + trends (Figma 1449:3130).
  */
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text } from './MatchText';
+import { View, StyleSheet, I18nManager } from 'react-native';
+import { Image } from 'expo-image';
+import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  BLUE_ELECTRIC,
-  BLUE_PRIMARY,
-  GOLD_PRIMARY,
-  PURPLE_DARK,
-  PURPLE_GLOW,
-  PURPLE_PRIMARY,
-  PURPLE_SOFT,
-  TEXT_PRIMARY,
-  TEXT_SECONDARY,
-} from '../../constants/tokens';
+import { Text } from './MatchText';
 import {
   formatPenaltyPair,
   formatStatAverage,
@@ -27,6 +17,18 @@ import {
   type RecentTeamAverages,
   type RecentTrend,
 } from '../../utils/recentTeamFormStats';
+
+const INFO_ICON = require('../../assets/match-details/info-icon.svg');
+
+const PURPLE = '#8B5CF6';
+const PURPLE_SECONDARY = '#A855F7';
+const PURPLE_DEEP = '#513690';
+const PILL_IDLE = '#1C1C1C';
+const PILL_BORDER = '#2B2B2B';
+const CARD_BG = '#110C2A';
+const LABEL = '#BFBFBF';
+const TITLE = '#D7D7D7';
+const HINT = '#CDCDCD';
 
 type AvgKey = keyof RecentFormAveragesNumbers;
 
@@ -42,30 +44,15 @@ function ValuePill({
   return (
     <View
       style={[
-        styles.valueSlot,
+        styles.pill,
         highlight
           ? side === 'home'
-            ? styles.pillHome
-            : styles.pillAway
+            ? styles.pillHomeOn
+            : styles.pillAwayOn
           : styles.pillIdle,
       ]}
     >
-      {highlight ? (
-        <LinearGradient
-          colors={
-            side === 'home'
-              ? ['#9F6BFF', PURPLE_PRIMARY, PURPLE_DARK]
-              : ['#38BDF8', BLUE_PRIMARY, '#1D4ED8']
-          }
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
-      <Text
-        style={[styles.valueText, highlight && styles.valueTextOn]}
-        numberOfLines={1}
-      >
+      <Text style={styles.pillText} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -88,6 +75,7 @@ function CompareRow({
   mode: 'higher' | 'lower' | 'none';
 }) {
   const highlight = mode === 'none' ? null : pickHighlightSide(homeNum, awayNum, mode);
+  // Figma LTR: home left, away right (matches scoreboard crest order).
   return (
     <View style={styles.row}>
       <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" />
@@ -95,6 +83,90 @@ function CompareRow({
         {label}
       </Text>
       <ValuePill value={awayValue} highlight={highlight === 'away'} side="away" />
+    </View>
+  );
+}
+
+function TrendRing({
+  pct,
+  logo,
+  highlight,
+}: {
+  pct: number;
+  logo?: string | null;
+  highlight: boolean;
+}) {
+  const size = 64;
+  const stroke = 5;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct));
+  const dash = (clamped / 100) * c;
+  const ringColor = highlight ? PURPLE_SECONDARY : PURPLE;
+
+  return (
+    <View style={styles.ringWrap}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="#1A1421"
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={ringColor}
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={`${dash} ${c - dash}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.ringLogo} contentFit="contain" />
+      ) : (
+        <View style={styles.ringLogoPlaceholder} />
+      )}
+    </View>
+  );
+}
+
+function TrendWinRow({
+  label,
+  homeValue,
+  awayValue,
+  homePct,
+  awayPct,
+  homeLogo,
+  awayLogo,
+}: {
+  label: string;
+  homeValue: string;
+  awayValue: string;
+  homePct: number;
+  awayPct: number;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+}) {
+  const highlight = pickHighlightSide(homePct, awayPct, 'higher');
+  return (
+    <View style={styles.trendRow}>
+      <View style={styles.trendSide}>
+        <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" />
+        <TrendRing pct={homePct} logo={homeLogo} highlight={highlight === 'home'} />
+      </View>
+      <Text style={styles.rowLabel} numberOfLines={2}>
+        {label}
+      </Text>
+      <View style={[styles.trendSide, styles.trendSideEnd]}>
+        <TrendRing pct={awayPct} logo={awayLogo} highlight={highlight === 'away'} />
+        <ValuePill value={awayValue} highlight={highlight === 'away'} side="away" />
+      </View>
     </View>
   );
 }
@@ -108,9 +180,11 @@ export function PreMatchRecentStats({
   bannerTitle,
   bannerHint,
   title,
-  columnLabel,
-  homeName,
-  awayName,
+  columnLabel: _columnLabel,
+  homeName: _homeName,
+  awayName: _awayName,
+  homeLogo,
+  awayLogo,
   homeScore,
   awayScore,
   enrichment,
@@ -123,6 +197,8 @@ export function PreMatchRecentStats({
   columnLabel: string;
   homeName: string;
   awayName: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   homeScore: RecentTeamAverages;
   awayScore: RecentTeamAverages;
   enrichment: RecentFormAveragesPayload | null;
@@ -144,6 +220,11 @@ export function PreMatchRecentStats({
     trendsTitle: string;
   };
 }) {
+  void lastN;
+  void _columnLabel;
+  void _homeName;
+  void _awayName;
+
   const homeAvg: RecentFormAveragesNumbers = {
     goalsFor: enrichment?.home.averages.goalsFor ?? homeScore.avgGoalsFor,
     goalsAgainst: enrichment?.home.averages.goalsAgainst ?? homeScore.avgGoalsAgainst,
@@ -196,8 +277,6 @@ export function PreMatchRecentStats({
   const homeCs = enrichment?.home.trends.cleanSheets ?? homeScore.cleanSheets;
   const awayCs = enrichment?.away.trends.cleanSheets ?? awayScore.cleanSheets;
 
-  const lastLabel = columnLabel.replace('{n}', String(lastN));
-
   const avgRow = (
     key: AvgKey,
     rowLabel: string,
@@ -215,271 +294,225 @@ export function PreMatchRecentStats({
   );
 
   return (
-    <View style={styles.cardOuter}>
+    <View style={styles.root}>
       <LinearGradient
-        colors={['#1C0E3A', '#120A2A', '#0B0618']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+        colors={[PURPLE, PURPLE_DEEP]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.banner}
+      >
+        <Image source={INFO_ICON} style={styles.infoIcon} contentFit="contain" />
+        <View style={styles.bannerTextCol}>
+          <Text style={styles.bannerTitle}>{bannerTitle}</Text>
+          <Text style={styles.bannerHint}>{bannerHint}</Text>
+        </View>
+      </LinearGradient>
 
-      <View style={styles.banner}>
-        <LinearGradient
-          colors={['rgba(124,58,237,0.65)', 'rgba(91,33,182,0.45)', 'rgba(59,130,246,0.35)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.goldHairline} />
-        <Text style={styles.bannerTitle}>{bannerTitle}</Text>
-        <Text style={styles.bannerHint}>{bannerHint}</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <View style={styles.card}>
+          {avgRow('goalsFor', labels.goalsScored, 'higher')}
+          {avgRow('goalsAgainst', labels.goalsConceded, 'lower')}
+          {showXg ? avgRow('xg', labels.expectedGoals, 'higher') : null}
+          {showXga ? avgRow('xga', labels.expectedGoalsAgainst, 'lower') : null}
+          {showShots ? avgRow('shots', labels.shots, 'higher') : null}
+          {showSot ? avgRow('shotsOnTarget', labels.shotsOnTarget, 'higher') : null}
+          {showCorners ? avgRow('corners', labels.corners, 'higher') : null}
+          {showCards ? avgRow('cards', labels.cards, 'lower') : null}
+          {showPens ? (
+            <CompareRow
+              label={labels.penalties}
+              homeValue={homePens ?? '—'}
+              awayValue={awayPens ?? '—'}
+              homeNum={numOrNull((homeAvg.penaltiesScored ?? 0) + (homeAvg.penaltiesWon ?? 0))}
+              awayNum={numOrNull((awayAvg.penaltiesScored ?? 0) + (awayAvg.penaltiesWon ?? 0))}
+              mode="higher"
+            />
+          ) : null}
+        </View>
       </View>
 
-      <View style={styles.body}>
-        <Text style={styles.title}>{title}</Text>
-        <View style={styles.namesRow}>
-          <Text style={[styles.teamName, styles.teamNameHome]} numberOfLines={1}>
-            {homeName}
-          </Text>
-          <Text style={[styles.teamName, styles.teamNameAway]} numberOfLines={1}>
-            {awayName}
-          </Text>
-        </View>
-        <View style={styles.columnHeaders}>
-          <Text style={styles.columnLabel}>{lastLabel}</Text>
-          <Text style={styles.columnLabel}>{lastLabel}</Text>
-        </View>
-
-        {avgRow('goalsFor', labels.goalsScored, 'higher')}
-        {avgRow('goalsAgainst', labels.goalsConceded, 'lower')}
-        {showXg ? avgRow('xg', labels.expectedGoals, 'higher') : null}
-        {showXga ? avgRow('xga', labels.expectedGoalsAgainst, 'lower') : null}
-        {showShots ? avgRow('shots', labels.shots, 'higher') : null}
-        {showSot ? avgRow('shotsOnTarget', labels.shotsOnTarget, 'higher') : null}
-        {showCorners ? avgRow('corners', labels.corners, 'higher') : null}
-        {showCards ? avgRow('cards', labels.cards, 'lower') : null}
-        {showPens ? (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
+        <View style={styles.trendsCard}>
+          <TrendWinRow
+            label={labels.won}
+            homeValue={formatTrendValue(homeWins)}
+            awayValue={formatTrendValue(awayWins)}
+            homePct={homeWins.pct}
+            awayPct={awayWins.pct}
+            homeLogo={homeLogo}
+            awayLogo={awayLogo}
+          />
           <CompareRow
-            label={labels.penalties}
-            homeValue={homePens ?? '—'}
-            awayValue={awayPens ?? '—'}
-            homeNum={numOrNull((homeAvg.penaltiesScored ?? 0) + (homeAvg.penaltiesWon ?? 0))}
-            awayNum={numOrNull((awayAvg.penaltiesScored ?? 0) + (awayAvg.penaltiesWon ?? 0))}
+            label={labels.btts}
+            homeValue={formatTrendValue(homeBtts)}
+            awayValue={formatTrendValue(awayBtts)}
+            homeNum={homeBtts.pct}
+            awayNum={awayBtts.pct}
             mode="higher"
           />
-        ) : null}
-
-        <View style={styles.trendsHead}>
-          <LinearGradient
-            colors={['transparent', PURPLE_SOFT, BLUE_ELECTRIC, 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.trendsRule}
+          <CompareRow
+            label={labels.over25}
+            homeValue={formatTrendValue(homeOver)}
+            awayValue={formatTrendValue(awayOver)}
+            homeNum={homeOver.pct}
+            awayNum={awayOver.pct}
+            mode="higher"
           />
-          <Text style={styles.trendsTitle}>{labels.trendsTitle}</Text>
-          <LinearGradient
-            colors={['transparent', BLUE_ELECTRIC, PURPLE_SOFT, 'transparent']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.trendsRule}
+          <CompareRow
+            label={labels.winOrDraw}
+            homeValue={formatTrendValue(homeDc)}
+            awayValue={formatTrendValue(awayDc)}
+            homeNum={homeDc.pct}
+            awayNum={awayDc.pct}
+            mode="higher"
+          />
+          <CompareRow
+            label={labels.cleanSheets}
+            homeValue={formatTrendValue(homeCs)}
+            awayValue={formatTrendValue(awayCs)}
+            homeNum={homeCs.pct}
+            awayNum={awayCs.pct}
+            mode="higher"
           />
         </View>
-        <CompareRow
-          label={labels.won}
-          homeValue={formatTrendValue(homeWins)}
-          awayValue={formatTrendValue(awayWins)}
-          homeNum={homeWins.pct}
-          awayNum={awayWins.pct}
-          mode="higher"
-        />
-        <CompareRow
-          label={labels.btts}
-          homeValue={formatTrendValue(homeBtts)}
-          awayValue={formatTrendValue(awayBtts)}
-          homeNum={homeBtts.pct}
-          awayNum={awayBtts.pct}
-          mode="higher"
-        />
-        <CompareRow
-          label={labels.over25}
-          homeValue={formatTrendValue(homeOver)}
-          awayValue={formatTrendValue(awayOver)}
-          homeNum={homeOver.pct}
-          awayNum={awayOver.pct}
-          mode="higher"
-        />
-        <CompareRow
-          label={labels.winOrDraw}
-          homeValue={formatTrendValue(homeDc)}
-          awayValue={formatTrendValue(awayDc)}
-          homeNum={homeDc.pct}
-          awayNum={awayDc.pct}
-          mode="higher"
-        />
-        <CompareRow
-          label={labels.cleanSheets}
-          homeValue={formatTrendValue(homeCs)}
-          awayValue={formatTrendValue(awayCs)}
-          homeNum={homeCs.pct}
-          awayNum={awayCs.pct}
-          mode="higher"
-        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  cardOuter: {
+  root: {
     width: '100%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.28)',
-    backgroundColor: '#120A2A',
-    shadowColor: PURPLE_GLOW,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    elevation: 10,
+    gap: 24,
   },
   banner: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    overflow: 'hidden',
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 25,
+    paddingHorizontal: 20,
+    borderRadius: 16,
   },
-  goldHairline: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: GOLD_PRIMARY,
-    opacity: 0.9,
+  infoIcon: {
+    width: 24,
+    height: 24,
+    marginTop: 2,
+  },
+  bannerTextCol: {
+    flex: 1,
+    gap: 4,
+    alignItems: I18nManager.isRTL ? 'flex-end' : 'flex-start',
   },
   bannerTitle: {
-    color: TEXT_PRIMARY,
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 20,
     fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 0.2,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    width: '100%',
   },
   bannerHint: {
-    color: TEXT_SECONDARY,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-    marginTop: 6,
+    color: HINT,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    width: '100%',
   },
-  body: {
-    paddingBottom: 8,
+  section: {
+    gap: 16,
+    width: '100%',
   },
-  title: {
-    color: GOLD_PRIMARY,
-    fontSize: 18,
+  sectionTitle: {
+    color: TITLE,
+    fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 8,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    width: '100%',
   },
-  namesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 14,
-    marginBottom: 2,
+  card: {
+    backgroundColor: CARD_BG,
+    borderRadius: 24,
+    paddingHorizontal: 15,
+    paddingVertical: 24,
+    gap: 23,
+    width: '100%',
   },
-  teamName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  teamNameHome: {
-    color: PURPLE_SOFT,
-    textAlign: 'left',
-  },
-  teamNameAway: {
-    color: BLUE_ELECTRIC,
-    textAlign: 'right',
-  },
-  columnHeaders: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    marginBottom: 6,
-  },
-  columnLabel: {
-    color: GOLD_PRIMARY,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    opacity: 0.85,
-  },
-  trendsHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 4,
-  },
-  trendsRule: {
-    flex: 1,
-    height: 1,
-  },
-  trendsTitle: {
-    color: TEXT_PRIMARY,
-    fontSize: 15,
-    fontWeight: '700',
+  trendsCard: {
+    backgroundColor: CARD_BG,
+    borderRadius: 24,
+    paddingHorizontal: 15,
+    paddingVertical: 17,
+    gap: 18,
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(167,139,250,0.18)',
-    gap: 6,
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 8,
   },
   rowLabel: {
     flex: 1,
-    color: '#EDE9FE',
-    fontSize: 13,
+    color: LABEL,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },
-  valueSlot: {
-    minWidth: 68,
-    maxWidth: 96,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 14,
+  pill: {
+    minWidth: 50,
+    height: 23,
+    paddingHorizontal: 16,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 0.5,
+    borderColor: PILL_BORDER,
   },
   pillIdle: {
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderColor: 'rgba(167,139,250,0.22)',
+    backgroundColor: PILL_IDLE,
   },
-  pillHome: {
-    backgroundColor: PURPLE_PRIMARY,
-    borderColor: PURPLE_SOFT,
+  pillHomeOn: {
+    backgroundColor: PURPLE_SECONDARY,
   },
-  pillAway: {
-    backgroundColor: BLUE_PRIMARY,
-    borderColor: BLUE_ELECTRIC,
+  pillAwayOn: {
+    backgroundColor: PURPLE,
   },
-  valueText: {
-    color: 'rgba(221,214,254,0.7)',
-    fontSize: 13,
-    fontWeight: '700',
-    zIndex: 1,
+  pillText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  valueTextOn: {
-    color: TEXT_PRIMARY,
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 6,
+  },
+  trendSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trendSideEnd: {
+    justifyContent: 'flex-end',
+  },
+  ringWrap: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringLogo: {
+    width: 36,
+    height: 36,
+  },
+  ringLogoPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
 });
