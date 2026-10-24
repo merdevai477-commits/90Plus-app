@@ -1,11 +1,14 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Two cinematic challenge cards (Europe / Egypt). The whole card is the tap
- * target; a refined CTA label reinforces affordance without nested pressables.
+ * Root layout cause of the empty black void: cards lived in a ScrollView with
+ * only `minHeight`, so `contentContainerStyle.flexGrow` expanded the container
+ * while the cards stayed short. Fix: a flex column where each card is `flex:1`
+ * and fills half the remaining viewport. Scroll only kicks in when a card's
+ * readable minimum exceeds half the screen (small devices / large fonts).
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -32,8 +35,10 @@ const EUROPE_TITLE = '#E8D6FF';
 const EGYPT_TITLE = '#FFF8EC';
 const CTA_PURPLE = '#A78BFA';
 const GOLD = 'rgba(212, 175, 105, 0.9)';
-const CARD_GAP = 14;
-const CARD_RADIUS = 22;
+const CARD_GAP = 12;
+const CARD_RADIUS = 20;
+/** Floor so faces + logo + copy never crush on short phones. */
+const CARD_MIN_READABLE = 280;
 
 type Accent = 'europe' | 'egypt';
 
@@ -51,12 +56,12 @@ type ChallengeCardProps = {
   exploreCta: string;
   isAr: boolean;
   s: (n: number) => number;
-  minHeight: number;
+  /** When set, card is a fixed height (scroll mode). Otherwise flex:1. */
+  height?: number;
+  flexFill?: boolean;
   fontHeavy: string | undefined;
   fontSemi: string | undefined;
   fontMedium: string | undefined;
-  contentTopPad?: number;
-  contentBottomPad?: number;
   onPress: () => void;
 };
 
@@ -74,15 +79,14 @@ function ChallengeCard({
   exploreCta,
   isAr,
   s,
-  minHeight,
+  height,
+  flexFill,
   fontHeavy,
   fontSemi,
   fontMedium,
-  contentTopPad = 0,
-  contentBottomPad = 0,
   onPress,
 }: ChallengeCardProps) {
-  const logoSize = s(72);
+  const logoSize = s(64);
   const badgeBorder =
     accent === 'egypt' ? 'rgba(212,175,105,0.45)' : 'rgba(167,139,250,0.45)';
   const badgeText = accent === 'egypt' ? GOLD : 'rgba(232,214,255,0.95)';
@@ -96,21 +100,22 @@ function ChallengeCard({
       testID={testID}
       style={({ pressed }) => [
         styles.card,
+        flexFill ? styles.cardFlex : null,
+        height != null ? { height } : null,
         {
-          minHeight,
           borderRadius: s(CARD_RADIUS),
           opacity: pressed ? 0.94 : 1,
-          transform: [{ scale: pressed ? 0.985 : 1 }],
+          transform: [{ scale: pressed ? 0.988 : 1 }],
         },
       ]}
     >
-      {/* Art — faces kept bright; only the lower band darkens for copy. */}
       <View style={styles.art} pointerEvents="none">
         {image != null ? (
           <Image
             source={image as ImageSourcePropType}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            // Tall cards: keep upper faces in frame (portrait heroes).
             contentPosition="top"
             cachePolicy="memory-disk"
             priority="high"
@@ -126,40 +131,28 @@ function ChallengeCard({
             style={StyleSheet.absoluteFill}
           />
         )}
-        {/* Soft top vignette only — keep player faces lit. */}
         <LinearGradient
-          colors={['rgba(3,3,3,0.28)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0)']}
-          locations={[0, 0.22, 1]}
+          colors={['rgba(3,3,3,0.22)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0)']}
+          locations={[0, 0.18, 1]}
           style={StyleSheet.absoluteFill}
         />
-        {/* Bottom scrim for hierarchy — starts late so faces stay clear. */}
         <LinearGradient
-          colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.45)', 'rgba(3,3,3,0.92)']}
-          locations={[0.42, 0.68, 1]}
+          colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.4)', 'rgba(3,3,3,0.94)']}
+          locations={[0.48, 0.72, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
 
-      <View
-        style={[
-          styles.content,
-          {
-            paddingTop: contentTopPad,
-            paddingBottom: contentBottomPad + s(16),
-            paddingHorizontal: s(20),
-          },
-        ]}
-      >
+      <View style={[styles.content, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
         <View style={styles.spacer} />
 
-        {/* Crest — balanced size so it never covers faces. */}
         <View
           style={[
             styles.logoWrap,
             {
-              width: logoSize + s(16),
-              height: logoSize + s(16),
-              borderRadius: (logoSize + s(16)) / 2,
+              width: logoSize + s(14),
+              height: logoSize + s(14),
+              borderRadius: (logoSize + s(14)) / 2,
             },
           ]}
         >
@@ -179,13 +172,18 @@ function ChallengeCard({
           style={[
             styles.badgeRow,
             {
-              marginTop: s(12),
+              marginTop: s(10),
               gap: s(8),
               flexDirection: isAr ? 'row-reverse' : 'row',
             },
           ]}
         >
-          <View style={[styles.badge, { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) }]}>
+          <View
+            style={[
+              styles.badge,
+              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+            ]}
+          >
             <Text
               style={[styles.badgeText, { color: badgeText, fontFamily: fontSemi, fontSize: s(10) }]}
               maxFontSizeMultiplier={1.1}
@@ -193,7 +191,12 @@ function ChallengeCard({
               {badgeGoal}
             </Text>
           </View>
-          <View style={[styles.badge, { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) }]}>
+          <View
+            style={[
+              styles.badge,
+              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+            ]}
+          >
             <Text
               style={[styles.badgeText, { color: badgeText, fontFamily: fontSemi, fontSize: s(10) }]}
               maxFontSizeMultiplier={1.1}
@@ -209,8 +212,8 @@ function ChallengeCard({
             {
               color: titleColor,
               fontFamily: fontHeavy,
-              fontSize: s(26),
-              marginTop: s(10),
+              fontSize: s(24),
+              marginTop: s(8),
               textShadowColor: 'rgba(0,0,0,0.75)',
               textShadowOffset: { width: 0, height: 1 },
               textShadowRadius: 6,
@@ -226,8 +229,8 @@ function ChallengeCard({
             {
               fontFamily: fontMedium,
               fontSize: s(13),
-              lineHeight: s(19),
-              marginTop: s(6),
+              lineHeight: s(18),
+              marginTop: s(5),
               maxWidth: s(340),
               textShadowColor: 'rgba(0,0,0,0.8)',
               textShadowOffset: { width: 0, height: 1 },
@@ -243,7 +246,7 @@ function ChallengeCard({
           style={[
             styles.ctaRow,
             {
-              marginTop: s(14),
+              marginTop: s(12),
               gap: s(6),
               flexDirection: isAr ? 'row-reverse' : 'row',
             },
@@ -284,13 +287,16 @@ export default function TopScorersFiveHubScreen() {
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
 
-  /**
-   * Keep cards cinematic on tall phones; on short screens ScrollView lets the
-   * second challenge stay reachable without crushing either face crop.
-   */
-  const headerReserve = insets.top + s(52);
-  const available = height - headerReserve - insets.bottom - CARD_GAP - s(20);
-  const cardMinH = Math.max(available / 2, s(300));
+  const layout = useMemo(() => {
+    const padX = s(12);
+    const headerH = insets.top + s(48);
+    const bottomPad = Math.max(insets.bottom, 10) + s(8);
+    const bodyH = height - headerH - bottomPad - CARD_GAP;
+    const half = bodyH / 2;
+    const needsScroll = half < CARD_MIN_READABLE;
+    const cardH = needsScroll ? CARD_MIN_READABLE : half;
+    return { padX, headerH, bottomPad, needsScroll, cardH };
+  }, [height, insets.bottom, insets.top, s]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -305,64 +311,84 @@ export default function TopScorersFiveHubScreen() {
     router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
   }, [router]);
 
+  const cards = (
+    <>
+      <ChallengeCard
+        testID="top-scorers-five-hub-europe"
+        title={hub.europeTitle}
+        subtitle={hub.europeSubtitle}
+        titleColor={EUROPE_TITLE}
+        image={TSF_ART.hero}
+        logo={TSF_HUB_LOGO.europe}
+        logoTint="#FFFFFF"
+        accent="europe"
+        badgeGoal={hub.badgeGoal}
+        badgePlayers={hub.badgePlayers}
+        exploreCta={hub.exploreCta}
+        isAr={isAr}
+        s={s}
+        flexFill={!layout.needsScroll}
+        height={layout.needsScroll ? layout.cardH : undefined}
+        fontHeavy={fontHeavy}
+        fontSemi={fontSemi}
+        fontMedium={fontMedium}
+        onPress={openEurope}
+      />
+      <ChallengeCard
+        testID="top-scorers-five-hub-egypt"
+        title={hub.egyptTitle}
+        subtitle={hub.egyptSubtitle}
+        titleColor={EGYPT_TITLE}
+        image={TSF_ART.egyptHub}
+        logo={TSF_HUB_LOGO.egypt}
+        logoTint="#FFFFFF"
+        accent="egypt"
+        badgeGoal={hub.badgeGoal}
+        badgePlayers={hub.badgePlayers}
+        exploreCta={hub.exploreCta}
+        isAr={isAr}
+        s={s}
+        flexFill={!layout.needsScroll}
+        height={layout.needsScroll ? layout.cardH : undefined}
+        fontHeavy={fontHeavy}
+        fontSemi={fontSemi}
+        fontMedium={fontMedium}
+        onPress={openEgypt}
+      />
+    </>
+  );
+
   return (
     <View style={styles.root}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: headerReserve,
-            paddingBottom: Math.max(insets.bottom, 12) + s(8),
-            paddingHorizontal: s(12),
+      {layout.needsScroll ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{
+            paddingTop: layout.headerH,
+            paddingBottom: layout.bottomPad,
+            paddingHorizontal: layout.padX,
             gap: CARD_GAP,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-        bounces
-      >
-        <ChallengeCard
-          testID="top-scorers-five-hub-europe"
-          title={hub.europeTitle}
-          subtitle={hub.europeSubtitle}
-          titleColor={EUROPE_TITLE}
-          image={TSF_ART.hero}
-          logo={TSF_HUB_LOGO.europe}
-          logoTint="#FFFFFF"
-          accent="europe"
-          badgeGoal={hub.badgeGoal}
-          badgePlayers={hub.badgePlayers}
-          exploreCta={hub.exploreCta}
-          isAr={isAr}
-          s={s}
-          minHeight={cardMinH}
-          fontHeavy={fontHeavy}
-          fontSemi={fontSemi}
-          fontMedium={fontMedium}
-          onPress={openEurope}
-        />
-
-        <ChallengeCard
-          testID="top-scorers-five-hub-egypt"
-          title={hub.egyptTitle}
-          subtitle={hub.egyptSubtitle}
-          titleColor={EGYPT_TITLE}
-          image={TSF_ART.egyptHub}
-          logo={TSF_HUB_LOGO.egypt}
-          logoTint="#FFFFFF"
-          accent="egypt"
-          badgeGoal={hub.badgeGoal}
-          badgePlayers={hub.badgePlayers}
-          exploreCta={hub.exploreCta}
-          isAr={isAr}
-          s={s}
-          minHeight={cardMinH}
-          fontHeavy={fontHeavy}
-          fontSemi={fontSemi}
-          fontMedium={fontMedium}
-          onPress={openEgypt}
-        />
-      </ScrollView>
+          }}
+          showsVerticalScrollIndicator={false}
+          bounces
+        >
+          {cards}
+        </ScrollView>
+      ) : (
+        <View
+          style={[
+            styles.fillColumn,
+            {
+              paddingTop: layout.headerH,
+              paddingBottom: layout.bottomPad,
+              paddingHorizontal: layout.padX,
+              gap: CARD_GAP,
+            },
+          ]}
+        >
+          {cards}
+        </View>
+      )}
 
       <View
         style={[
@@ -382,14 +408,7 @@ export default function TopScorersFiveHubScreen() {
           accessibilityRole="button"
           accessibilityLabel={copy.back}
           testID="top-scorers-five-hub-back"
-          style={[
-            styles.backButton,
-            {
-              width: s(40),
-              height: s(40),
-              borderRadius: s(20),
-            },
-          ]}
+          style={[styles.backButton, { width: s(40), height: s(40), borderRadius: s(20) }]}
         >
           <Ionicons name="arrow-back" size={s(22)} color="#FFFFFF" />
         </TouchableOpacity>
@@ -401,14 +420,15 @@ export default function TopScorersFiveHubScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   scroll: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
+  fillColumn: { flex: 1 },
   card: {
     overflow: 'hidden',
     backgroundColor: '#0A0614',
   },
+  cardFlex: { flex: 1 },
   art: { ...StyleSheet.absoluteFillObject },
   content: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
   },
   spacer: { flex: 1 },
