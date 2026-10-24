@@ -1,8 +1,8 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Two equal stacked halves, each matching the intro language (hero, title,
- * subtitle, purple CTA). Tapping a half opens that competition's pitch/pick.
+ * Two equal stacked halves. Each keeps the hero art readable (light bottom
+ * scrim only) and routes straight into that competition's pitch/pick.
  */
 
 import { useCallback } from 'react';
@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  type ImageSourcePropType,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,10 +28,10 @@ import { TSF_ART, TSF_DESIGN_WIDTH } from './assets';
 
 const BG = '#030303';
 const CTA_BG = '#8C5CF5';
-/** SwiftUI: Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50) */
-const EGYPT_WASH = 'rgba(128, 59, 69, 0.50)';
+/** Soft Egypt tint — full 50% wash buried the art. */
+const EGYPT_WASH = 'rgba(128, 59, 69, 0.28)';
 const EUROPE_TITLE = '#B896FC';
-const DIVIDER = 'rgba(255,255,255,0.10)';
+const DIVIDER = 'rgba(255,255,255,0.14)';
 
 type HalfProps = {
   testID: string;
@@ -39,14 +40,17 @@ type HalfProps = {
   subtitle: string;
   cta: string;
   titleColor: string;
-  subtitleColor: string;
+  image: number | null;
+  fallbackColors: readonly [string, string, string, string];
   wash?: string;
-  contentPosition: 'top' | 'bottom';
+  /** expo-image contentPosition — keeps faces / pitch framed per half. */
+  contentPosition: 'top' | 'center' | 'bottom';
   isAr: boolean;
   s: (n: number) => number;
   fontHeavy: string | undefined;
   fontMedium: string | undefined;
   fontSemi: string | undefined;
+  topPad?: number;
   bottomPad?: number;
   onPress: () => void;
 };
@@ -58,7 +62,8 @@ function CompetitionHalf({
   subtitle,
   cta,
   titleColor,
-  subtitleColor,
+  image,
+  fallbackColors,
   wash,
   contentPosition,
   isAr,
@@ -66,6 +71,7 @@ function CompetitionHalf({
   fontHeavy,
   fontMedium,
   fontSemi,
+  topPad = 0,
   bottomPad = 0,
   onPress,
 }: HalfProps) {
@@ -77,55 +83,52 @@ function CompetitionHalf({
       testID={testID}
       style={styles.half}
     >
-      {TSF_ART.hero != null ? (
-        <Image
-          source={TSF_ART.hero}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          contentPosition={contentPosition}
-          transition={0}
-        />
-      ) : (
+      {/* Art fills the half; copy sits in a bottom band so players stay visible. */}
+      <View style={styles.art} pointerEvents="none">
+        {image != null ? (
+          <Image
+            source={image as ImageSourcePropType}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            contentPosition={contentPosition}
+            cachePolicy="memory-disk"
+            priority="high"
+            transition={0}
+          />
+        ) : (
+          <LinearGradient colors={[...fallbackColors]} style={StyleSheet.absoluteFill} />
+        )}
+        {wash ? <View style={[StyleSheet.absoluteFill, { backgroundColor: wash }]} /> : null}
+        {/* Bottom-only scrim — keeps the upper art clean and readable. */}
         <LinearGradient
-          colors={
-            wash
-              ? ['#5A1F2A', '#3A1520', BG]
-              : ['#5B21B6', '#3B0F7A', '#14052E', BG]
-          }
-          style={StyleSheet.absoluteFill}
+          colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.94)']}
+          locations={[0, 0.55, 1]}
+          style={styles.scrim}
         />
-      )}
-      {wash ? <View style={[StyleSheet.absoluteFill, { backgroundColor: wash }]} /> : null}
-      <LinearGradient
-        colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.35)', 'rgba(3,3,3,0.92)']}
-        locations={[0.15, 0.5, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      </View>
 
       <View
         style={[
           styles.copy,
           {
+            paddingTop: topPad,
+            paddingBottom: bottomPad + s(16),
             paddingHorizontal: s(24),
-            paddingBottom: bottomPad + s(18),
-            width: s(387),
-            alignSelf: 'center',
           },
         ]}
       >
-        <Text style={[styles.ball, { fontSize: s(40), lineHeight: s(48) }]}>⚽</Text>
+        <Text style={[styles.ball, { fontSize: s(36), lineHeight: s(44) }]}>⚽</Text>
         <Text
           style={[
             styles.title,
             {
               color: titleColor,
               fontFamily: fontHeavy,
-              fontSize: s(28),
-              marginTop: s(6),
+              fontSize: s(26),
+              marginTop: s(4),
             },
           ]}
-          maxFontSizeMultiplier={1.12}
+          maxFontSizeMultiplier={1.1}
         >
           {title}
         </Text>
@@ -133,14 +136,14 @@ function CompetitionHalf({
           style={[
             styles.subtitle,
             {
-              color: subtitleColor,
               fontFamily: fontMedium,
-              fontSize: s(15),
-              lineHeight: s(22),
-              marginTop: s(8),
+              fontSize: s(14),
+              lineHeight: s(20),
+              marginTop: s(6),
+              maxWidth: s(360),
             },
           ]}
-          maxFontSizeMultiplier={1.12}
+          maxFontSizeMultiplier={1.1}
         >
           {subtitle}
         </Text>
@@ -154,12 +157,12 @@ function CompetitionHalf({
           style={[
             styles.cta,
             {
-              width: s(320),
-              height: s(48),
+              width: s(360),
+              height: s(50),
               borderRadius: s(14),
-              marginTop: s(16),
+              marginTop: s(14),
               gap: s(10),
-              paddingHorizontal: s(18),
+              paddingHorizontal: s(20),
               flexDirection: isAr ? 'row-reverse' : 'row',
             },
           ]}
@@ -204,12 +207,10 @@ export default function TopScorersFiveHubScreen() {
     else router.replace('/(tabs)/rank' as never);
   }, [router]);
 
-  /** Europe → pitch / formation pick. */
   const openEurope = useCallback(() => {
     router.push('/top-scorers-five/pick' as never);
   }, [router]);
 
-  /** Egypt → same pick shell with egypt mode (player pool follows). */
   const openEgypt = useCallback(() => {
     router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
   }, [router]);
@@ -223,13 +224,15 @@ export default function TopScorersFiveHubScreen() {
         subtitle={hub.europeSubtitle}
         cta={copy.cta}
         titleColor={EUROPE_TITLE}
-        subtitleColor="#9E9E9E"
+        image={TSF_ART.hero}
+        fallbackColors={['#5B21B6', '#3B0F7A', '#14052E', BG]}
         contentPosition="top"
         isAr={isAr}
         s={s}
         fontHeavy={fontHeavy}
         fontMedium={fontMedium}
         fontSemi={fontSemi}
+        topPad={insets.top + s(44)}
         onPress={openEurope}
       />
 
@@ -242,15 +245,17 @@ export default function TopScorersFiveHubScreen() {
         subtitle={hub.egyptSubtitle}
         cta={copy.cta}
         titleColor="#FFFFFF"
-        subtitleColor="#9E9E9E"
+        // Distinct art from Europe until an Egypt players hero ships.
+        image={TSF_ART.egyptHub}
+        fallbackColors={['#5A1F2A', '#3A1520', '#1A0A0E', BG]}
         wash={EGYPT_WASH}
-        contentPosition="bottom"
+        contentPosition="center"
         isAr={isAr}
         s={s}
         fontHeavy={fontHeavy}
         fontMedium={fontMedium}
         fontSemi={fontSemi}
-        bottomPad={Math.max(insets.bottom, 8)}
+        bottomPad={Math.max(insets.bottom, 10)}
         onPress={openEgypt}
       />
 
@@ -283,8 +288,16 @@ export default function TopScorersFiveHubScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
-  half: { flex: 1, overflow: 'hidden' },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: DIVIDER },
+  half: { flex: 1, overflow: 'hidden', backgroundColor: BG },
+  art: { ...StyleSheet.absoluteFillObject },
+  scrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '58%',
+  },
+  divider: { height: 1, backgroundColor: DIVIDER },
   header: {
     position: 'absolute',
     top: 0,
@@ -301,7 +314,7 @@ const styles = StyleSheet.create({
   },
   ball: { textAlign: 'center' },
   title: { textAlign: 'center' },
-  subtitle: { textAlign: 'center' },
+  subtitle: { color: 'rgba(255,255,255,0.82)', textAlign: 'center' },
   cta: {
     alignItems: 'center',
     justifyContent: 'center',
