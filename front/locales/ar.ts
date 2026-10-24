@@ -2085,6 +2085,9 @@ export const ar = {
       egyptTitle: 'توب فايف دوري مصري',
       egyptSubtitle: 'اختر 5 لاعبين من الدوري المصري وتوقع عدد الأهداف واربح تيشرت كرة القدم',
       enter: 'ادخل',
+      badgeGoal: 'توقع أهداف',
+      badgePlayers: '5 لاعبين',
+      exploreCta: 'استكشف التحدي',
     },
     egypt: {
       title: 'خماسي الهدافين',

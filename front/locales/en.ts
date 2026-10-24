@@ -2133,6 +2133,9 @@ export const en = {
       egyptSubtitle:
         'Pick 5 players from the Egyptian league, predict their goals and win a football shirt',
       enter: 'Enter',
+      badgeGoal: 'Goal prediction',
+      badgePlayers: '5 players',
+      exploreCta: 'Explore challenge',
     },
     egypt: {
       title: 'Top Scorers Five',
