@@ -16,22 +16,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  TSF_LIVE_LEAGUES,
+  tsfLiveLeaguesFor,
   TsfApiError,
   topScorersFiveService,
+  type TsfApiTournament,
 } from '../../services/topScorersFive.service';
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../utils/logger';
 import { useScreenFont } from '../../utils/fontSetup';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
-import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
+import { TSF_DESIGN_WIDTH, type TsfLeagueKey, type TsfTournamentMode } from './assets';
 import { tsfPickFromSelection, tsfPlayerFromApi } from './liveData';
 import { LockedPickSheet, type TsfLockedNotice } from './LockedPickSheet';
 import { type TsfPlayer } from './mockData';
@@ -43,12 +44,18 @@ import { TsfNav, type TsfTabKey } from './TsfNav';
 
 const BG = '#030303';
 
-const isLive = (league: TsfLeagueKey) => TSF_LIVE_LEAGUES.includes(league);
+function parseMode(raw: string | string[] | undefined): TsfTournamentMode {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === 'egypt' ? 'egypt' : 'europe';
+}
 
 export default function TopScorersFivePickScreen() {
   useScreenFont();
 
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const mode = parseMode(params.mode);
+  const liveLeagues = tsfLiveLeaguesFor(mode as TsfApiTournament);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { t, language } = useTranslation();
@@ -77,18 +84,36 @@ export default function TopScorersFivePickScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    for (const league of TSF_LIVE_LEAGUES) {
+    setLivePlayers({});
+    setPicks({});
+    setLeagueLocked({});
+    // Egypt slots share one attackers pool — fetch once, mirror onto every slot.
+    const poolSource = mode === 'egypt' ? liveLeagues[0] : null;
+    if (poolSource) {
       topScorersFiveService
-        .getPlayers(league, language)
+        .getPlayers(poolSource, language)
         .then((players) => {
-          if (!cancelled) setLivePlayers((prev) => ({ ...prev, [league]: players.map(tsfPlayerFromApi) }));
+          if (cancelled) return;
+          const mapped = players.map(tsfPlayerFromApi);
+          const next: Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>> = {};
+          for (const league of liveLeagues) next[league] = mapped;
+          setLivePlayers(next);
         })
         .catch((error) => logger.warn('[TopScorersFive] players load failed', error));
+    } else {
+      for (const league of liveLeagues) {
+        topScorersFiveService
+          .getPlayers(league, language)
+          .then((players) => {
+            if (!cancelled) setLivePlayers((prev) => ({ ...prev, [league]: players.map(tsfPlayerFromApi) }));
+          })
+          .catch((error) => logger.warn('[TopScorersFive] players load failed', error));
+      }
     }
     return () => {
       cancelled = true;
     };
-  }, [language]);
+  }, [language, liveLeagues, mode]);
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -96,7 +121,7 @@ export default function TopScorersFivePickScreen() {
     (async () => {
       const token = await getTokenRef.current().catch(() => null);
       if (!token || cancelled) return;
-      for (const league of TSF_LIVE_LEAGUES) {
+      for (const league of liveLeagues) {
         try {
           const data = await topScorersFiveService.getSelection(token, league, language);
           const pick = tsfPickFromSelection(data);
@@ -116,7 +141,7 @@ export default function TopScorersFivePickScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, language]);
+  }, [isSignedIn, language, liveLeagues]);
 
   /**
    * One scale for the pitch and the nav: the pitch is pinned to design
@@ -167,6 +192,8 @@ export default function TopScorersFivePickScreen() {
       if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_LOCKED') {
         setLeagueLocked((prev) => ({ ...prev, [league]: true }));
         setLockedNotice({ league, player, reason: 'gameweek' });
+      } else if (error instanceof TsfApiError && error.reason === 'PLAYER_ALREADY_PICKED') {
+        Alert.alert(pickCopy.alreadyPickedTitle, pickCopy.alreadyPickedBody);
       } else if (error instanceof TsfApiError && error.status === 401) {
         Alert.alert(pickCopy.signInTitle, pickCopy.signInBody);
       } else {
@@ -189,13 +216,18 @@ export default function TopScorersFivePickScreen() {
   );
 
   const handlePick = useCallback((league: TsfLeagueKey, player: TsfPlayer) => {
-    if (!isLive(league)) {
-      setPick(league, player);
-      setOpenLeague(null);
-      return;
+    // Egypt: block picking the same attacker into a second slot before confirm.
+    if (mode === 'egypt') {
+      const taken = Object.entries(picks).some(
+        ([slot, current]) => slot !== league && current?.id === player.id,
+      );
+      if (taken) {
+        Alert.alert(pickCopy.alreadyPickedTitle, pickCopy.alreadyPickedBody);
+        return;
+      }
     }
     setPending(player);
-  }, [setPick]);
+  }, [mode, picks, pickCopy, setPick]);
 
   const closePicker = useCallback(() => {
     setPending(null);
@@ -267,7 +299,7 @@ export default function TopScorersFivePickScreen() {
         return;
       }
       setPick(league, undefined);
-      if (!isLive(league) || !previous) return;
+      if (!previous) return;
 
       (async () => {
         const token = isSignedIn ? await getTokenRef.current().catch(() => null) : null;
@@ -293,13 +325,13 @@ export default function TopScorersFivePickScreen() {
   /** Design order, so a tab reads the same whichever one opened it. */
   const picked = useMemo(
     () =>
-      (['pl', 'laliga', 'bundesliga', 'ligue1', 'seriea'] as const)
+      liveLeagues
         .map((league) => {
           const player = picks[league];
           return player ? { league, player } : null;
         })
         .filter((entry): entry is { league: TsfLeagueKey; player: TsfPlayer } => entry != null),
-    [picks],
+    [liveLeagues, picks],
   );
 
   return (
@@ -308,6 +340,7 @@ export default function TopScorersFivePickScreen() {
         <PitchTab
           picks={picks}
           leagueLocked={leagueLocked}
+          mode={mode}
           scale={scale}
           onBack={handleBack}
           onOpenLeague={handleOpenLeague}
@@ -316,10 +349,12 @@ export default function TopScorersFivePickScreen() {
       ) : null}
 
       {tab === 'matches' ? (
-        <MatchesTab picked={picked} onBack={handleBack} onGoToPitch={goToPitch} />
+        <MatchesTab picked={picked} tournament={mode} onBack={handleBack} onGoToPitch={goToPitch} />
       ) : null}
 
-      {tab === 'ranking' ? <RankingTab onBack={handleBack} onPickNow={goToPitch} /> : null}
+      {tab === 'ranking' ? (
+        <RankingTab tournament={mode} onBack={handleBack} onPickNow={goToPitch} />
+      ) : null}
 
       <TsfNav activeTab={tab} onChange={setTab} scale={scale} />
 

@@ -272,7 +272,7 @@ export default function TopScorersFiveHubScreen() {
   }, [router]);
 
   const openEurope = useCallback(() => {
-    router.push('/top-scorers-five/pick' as never);
+    router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'europe' } } as never);
   }, [router]);
 
   const openEgypt = useCallback(() => {

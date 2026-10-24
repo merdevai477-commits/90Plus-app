@@ -10,14 +10,22 @@
 import 'dotenv/config';
 import prisma from '../src/lib/prisma';
 import { resolveTopScorersFivePool, seedTopScorersFivePool } from '../src/services/top-scorers-five-pool.service';
-import type { TsfLeagueKey } from '../src/services/top-scorers-five-scoring';
+import {
+  getTsfLeagueConfig,
+  TSF_EGYPT_POOL_KEY,
+  type TsfLeagueKey,
+} from '../src/services/top-scorers-five-scoring';
 
 async function main() {
-  const leagueKey = (process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ?? 'laliga') as TsfLeagueKey;
+  const raw = process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ?? 'laliga';
   const force = process.argv.includes('--force');
+  const leagueKey = raw as TsfLeagueKey | typeof TSF_EGYPT_POOL_KEY;
+  const cfg = getTsfLeagueConfig(leagueKey);
+  const poolKey =
+    leagueKey === TSF_EGYPT_POOL_KEY || cfg?.tournament === 'egypt' ? TSF_EGYPT_POOL_KEY : leagueKey;
 
   const { upserted } = await seedTopScorersFivePool(leagueKey);
-  console.log(`seeded ${upserted} ${leagueKey} player(s)`);
+  console.log(`seeded ${upserted} ${poolKey} player(s)`);
 
   const outcomes = await resolveTopScorersFivePool(leagueKey, { force });
   for (const o of outcomes) {
@@ -25,7 +33,9 @@ async function main() {
       `${o.status.padEnd(10)} ${o.nameAr} -> ${o.externalPlayerId ?? '-'} ${o.matchedName ?? ''}${o.note ? `  [${o.note}]` : ''}`,
     );
   }
-  const unresolved = await prisma.topScorersFivePlayer.count({ where: { leagueKey, externalPlayerId: null } });
+  const unresolved = await prisma.topScorersFivePlayer.count({
+    where: { leagueKey: poolKey, externalPlayerId: null },
+  });
   console.log(`unresolved remaining: ${unresolved}`);
 }
 

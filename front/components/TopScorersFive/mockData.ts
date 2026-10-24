@@ -35,7 +35,7 @@ export type TsfPlayer = {
   readonly confirmed?: boolean;
 };
 
-export const TSF_MOCK_PLAYERS: Record<TsfLeagueKey, readonly TsfPlayer[]> = {
+export const TSF_MOCK_PLAYERS: Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>> = {
   pl: [
     { id: 'pl-haaland', name: 'Erling Haaland', position: 'CF', club: 'Man City', goals: 18, assists: 3 },
     { id: 'pl-salah', name: 'Mohamed Salah', position: 'RW', club: 'Liverpool', goals: 14, assists: 9 },
@@ -92,12 +92,17 @@ export type TsfFixture = {
 };
 
 /** Opponents a club is paired against, so every player gets a plausible run. */
-const OPPONENTS: Record<TsfLeagueKey, readonly string[]> = {
+const OPPONENTS: Partial<Record<TsfLeagueKey, readonly string[]>> = {
   pl: ['Fulham', 'Wolves', 'Southampton', 'Tottenham', 'Bournemouth', 'Brentford'],
   laliga: ['Getafe', 'Osasuna', 'Sevilla', 'Valencia', 'Celta Vigo', 'Mallorca'],
   bundesliga: ['Mainz', 'Augsburg', 'Bremen', 'Freiburg', 'Hoffenheim', 'Union'],
   seriea: ['Torino', 'Bologna', 'Udinese', 'Lazio', 'Empoli', 'Genoa'],
   ligue1: ['Nantes', 'Rennes', 'Lille', 'Nice', 'Strasbourg', 'Lens'],
+  egypt1: ['الزمالك', 'بيراميدز', 'المصري', 'سموحة', 'إنبي', 'الإسماعيلي'],
+  egypt2: ['الأهلي', 'بيراميدز', 'المصري', 'سموحة', 'إنبي', 'البنك الأهلي'],
+  egypt3: ['الأهلي', 'الزمالك', 'المصري', 'سموحة', 'إنبي', 'سيراميكا'],
+  egypt4: ['الأهلي', 'الزمالك', 'بيراميدز', 'سموحة', 'إنبي', 'المصري'],
+  egypt5: ['الأهلي', 'الزمالك', 'بيراميدز', 'المصري', 'إنبي', 'سموحة'],
 };
 
 /** Kick-off times the design shows, reused in order. */
@@ -116,7 +121,7 @@ const KICKOFFS: readonly { hour: number; minute: number }[] = [
  * the list reading as upcoming however long the placeholder stays in.
  */
 export function tsfMockFixtures(league: TsfLeagueKey, player: TsfPlayer): readonly TsfFixture[] {
-  const opponents = OPPONENTS[league];
+  const opponents = OPPONENTS[league] ?? ['TBD'];
   const base = new Date();
   base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7));
 

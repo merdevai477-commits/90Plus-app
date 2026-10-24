@@ -125,11 +125,12 @@ const PLAIN = {
 } as const;
 
 type RankingTabProps = {
+  tournament?: 'europe' | 'egypt';
   onBack: () => void;
   onPickNow: () => void;
 };
 
-export function RankingTab({ onBack, onPickNow }: RankingTabProps) {
+export function RankingTab({ tournament = 'europe', onBack, onPickNow }: RankingTabProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t, language } = useTranslation();
@@ -159,7 +160,7 @@ export function RankingTab({ onBack, onPickNow }: RankingTabProps) {
       const token = await getTokenRef.current().catch(() => null);
       if (!token || cancelled) return;
       try {
-        const board = await topScorersFiveService.getLeaderboard(token, filter);
+        const board = await topScorersFiveService.getLeaderboard(token, filter, 50, tournament);
         if (!cancelled) setBoards((prev) => ({ ...prev, [filter]: tsfLeaderboardRows(board) }));
       } catch (error) {
         logger.warn('[TopScorersFive] leaderboard load failed', error);
@@ -168,7 +169,7 @@ export function RankingTab({ onBack, onPickNow }: RankingTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [filter, isSignedIn]);
+  }, [filter, isSignedIn, tournament]);
 
   const rows = boards[filter] ?? [];
 

@@ -24,7 +24,12 @@ import {
 } from '../services/top-scorers-five.service';
 import { processTopScorersFive, syncTsfPickFixtures } from '../services/top-scorers-five-processing.service';
 import { resolveTopScorersFivePool, seedTopScorersFivePool } from '../services/top-scorers-five-pool.service';
-import { getTsfLeagueConfig, type TsfLeagueKey } from '../services/top-scorers-five-scoring';
+import {
+  getTsfLeagueConfig,
+  parseTsfTournament,
+  TSF_EGYPT_POOL_KEY,
+  type TsfLeagueKey,
+} from '../services/top-scorers-five-scoring';
 
 const router = Router();
 
@@ -34,6 +39,7 @@ const ERROR_MAP: Record<TsfErrorCode, ErrorCodeValue> = {
   PLAYER_NOT_FOUND: ErrorCode.NOT_FOUND,
   PLAYER_NOT_ELIGIBLE: ErrorCode.VALIDATION,
   PLAYER_UNRESOLVED: ErrorCode.VALIDATION,
+  PLAYER_ALREADY_PICKED: ErrorCode.VALIDATION,
   GAMEWEEK_LOCKED: ErrorCode.CONFLICT,
   GAMEWEEK_PICK_LOCKED: ErrorCode.CONFLICT,
 };
@@ -111,7 +117,8 @@ router.get('/leagues/:leagueKey/fixtures/upcoming', handle('upcoming fixtures', 
 router.get('/me/fixtures', requireAuth, handle('my fixtures', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
-  res.json({ success: true, data: await getTsfMyFixtures(id, language(req)) });
+  const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
+  res.json({ success: true, data: await getTsfMyFixtures(id, language(req), undefined, tournament) });
 }));
 
 /** DELETE /leagues/:leagueKey/selection — drop an unconfirmed pick while open. */
@@ -126,16 +133,18 @@ router.delete('/leagues/:leagueKey/selection', requireAuth, handle('clear select
 router.get('/me/score', requireAuth, handle('score', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
-  res.json({ success: true, data: await getTsfUserScore(id) });
+  const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
+  res.json({ success: true, data: await getTsfUserScore(id, tournament) });
 }));
 
-/** GET /leaderboard?period=week|all&limit=50 */
+/** GET /leaderboard?period=week|all&limit=50&tournament=europe|egypt */
 router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
   const period = req.query.period === 'all' ? 'all' : 'week';
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '50'), 10) || 50, 1), 100);
-  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit }) });
+  const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
+  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit, tournament }) });
 }));
 
 /** GET /players/:playerId/fixtures — the player's club's next league fixtures. */
@@ -145,8 +154,9 @@ router.get('/players/:playerId/fixtures', handle('fixtures', async (req, res) =>
 
 // ─── Admin ──────────────────────────────────────────────────────────────────
 
-function adminLeague(req: Request, res: Response): TsfLeagueKey | null {
+function adminLeague(req: Request, res: Response): TsfLeagueKey | typeof TSF_EGYPT_POOL_KEY | null {
   const key = String(req.body?.leagueKey ?? req.query.leagueKey ?? '');
+  if (key === TSF_EGYPT_POOL_KEY) return TSF_EGYPT_POOL_KEY;
   const cfg = getTsfLeagueConfig(key);
   if (!cfg) {
     sendError(req, res, ErrorCode.VALIDATION, 'Unsupported leagueKey');
@@ -165,7 +175,13 @@ router.post('/admin/process', requireAuth, requireAdmin, handle('process', async
 router.get('/admin/players', requireAuth, requireAdmin, handle('admin players', async (req, res) => {
   const leagueKey = adminLeague(req, res);
   if (!leagueKey) return;
-  const data = await prisma.topScorersFivePlayer.findMany({ where: { leagueKey }, orderBy: { sortOrder: 'asc' } });
+  const cfg = getTsfLeagueConfig(leagueKey);
+  const poolKey =
+    leagueKey === TSF_EGYPT_POOL_KEY || cfg?.tournament === 'egypt' ? TSF_EGYPT_POOL_KEY : leagueKey;
+  const data = await prisma.topScorersFivePlayer.findMany({
+    where: { leagueKey: poolKey },
+    orderBy: { sortOrder: 'asc' },
+  });
   res.json({ success: true, data });
 }));
 

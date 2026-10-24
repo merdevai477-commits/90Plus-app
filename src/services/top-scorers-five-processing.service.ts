@@ -22,7 +22,8 @@ import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { classifyScores365MatchStatus, fetchScores365GameById } from './scores365-experiment.service';
 import {
   computeTsfPoints,
-  enabledTsfLeagues,
+  enabledTsfGameweekConfigs,
+  tsfGameweekLeagueKey,
   extractTsfStatsFrom365Game,
   getTsfLeagueConfig,
   isTsfFinishedStatus,
@@ -395,13 +396,22 @@ export async function processTopScorersFive(
   options: { leagueKey?: string } = {},
   deps: TsfProcessingDeps = defaultDeps,
 ): Promise<TsfProcessReport[]> {
-  const leagues = enabledTsfLeagues().filter((cfg) => !options.leagueKey || cfg.key === options.leagueKey);
+  const leagues = enabledTsfGameweekConfigs().filter((cfg) => {
+    if (!options.leagueKey) return true;
+    const wanted = getTsfLeagueConfig(options.leagueKey);
+    if (!wanted) return cfg.key === options.leagueKey;
+    return tsfGameweekLeagueKey(cfg) === tsfGameweekLeagueKey(wanted);
+  });
   const reports: TsfProcessReport[] = [];
   for (const cfg of leagues) {
     try {
       const current = await ensureTsfGameweek(cfg.key, deps.now());
       const pending = await prisma.topScorersFiveGameweek.findMany({
-        where: { leagueKey: cfg.key, status: { not: 'COMPLETED' }, startAt: { lte: current.startAt } },
+        where: {
+          leagueKey: tsfGameweekLeagueKey(cfg),
+          status: { not: 'COMPLETED' },
+          startAt: { lte: current.startAt },
+        },
         orderBy: { startAt: 'asc' },
       });
       for (const gameweek of pending) {

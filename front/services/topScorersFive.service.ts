@@ -6,10 +6,36 @@ import { getApiUrl } from '../config/api.config';
 
 const API_URL = getApiUrl(); // Already includes /api
 
-export type TsfApiLeague = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfApiTournament = 'europe' | 'egypt';
 
-/** Leagues whose pool and scoring come from the backend; the rest stay placeholder. */
-export const TSF_LIVE_LEAGUES: readonly TsfApiLeague[] = ['pl', 'laliga', 'seriea', 'bundesliga', 'ligue1'];
+export type TsfApiEuropeLeague = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfApiEgyptSlot = 'egypt1' | 'egypt2' | 'egypt3' | 'egypt4' | 'egypt5';
+export type TsfApiLeague = TsfApiEuropeLeague | TsfApiEgyptSlot;
+
+/** Europe: one pick per big-five league. */
+export const TSF_EUROPE_LIVE_LEAGUES: readonly TsfApiEuropeLeague[] = [
+  'pl',
+  'laliga',
+  'seriea',
+  'bundesliga',
+  'ligue1',
+];
+
+/** Egypt: five slots that share the Egyptian Premier attackers pool. */
+export const TSF_EGYPT_LIVE_SLOTS: readonly TsfApiEgyptSlot[] = [
+  'egypt1',
+  'egypt2',
+  'egypt3',
+  'egypt4',
+  'egypt5',
+];
+
+/** @deprecated Prefer tournament-scoped lists. */
+export const TSF_LIVE_LEAGUES: readonly TsfApiLeague[] = TSF_EUROPE_LIVE_LEAGUES;
+
+export function tsfLiveLeaguesFor(tournament: TsfApiTournament): readonly TsfApiLeague[] {
+  return tournament === 'egypt' ? TSF_EGYPT_LIVE_SLOTS : TSF_EUROPE_LIVE_LEAGUES;
+}
 
 export interface TsfApiPlayer {
   id: string;
@@ -165,9 +191,17 @@ export const topScorersFiveService = {
     request<TsfApiFixture[]>(`/players/${encodeURIComponent(playerId)}/fixtures?lang=${lang}`),
 
   /** Only the fixtures of my picked players this gameweek, with results once stored. */
-  getMyFixtures: (token: string, lang: string) =>
-    request<TsfApiMyFixtures>(`/me/fixtures?lang=${lang}`, { token }),
+  getMyFixtures: (token: string, lang: string, tournament: TsfApiTournament = 'europe') =>
+    request<TsfApiMyFixtures>(`/me/fixtures?lang=${lang}&tournament=${tournament}`, { token }),
 
-  getLeaderboard: (token: string, period: 'week' | 'all', limit = 50) =>
-    request<TsfApiLeaderboard>(`/leaderboard?period=${period}&limit=${limit}`, { token }),
+  getLeaderboard: (
+    token: string,
+    period: 'week' | 'all',
+    limit = 50,
+    tournament: TsfApiTournament = 'europe',
+  ) =>
+    request<TsfApiLeaderboard>(
+      `/leaderboard?period=${period}&limit=${limit}&tournament=${tournament}`,
+      { token },
+    ),
 };

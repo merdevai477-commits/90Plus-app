@@ -47,7 +47,12 @@ export const TSF_CARD_ART = {
 };
 export const TSF_CARD_ART_BOX = { left: -1, top: -7, width: 114.48, height: 185 };
 
-export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfEuropeLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfEgyptSlotKey = 'egypt1' | 'egypt2' | 'egypt3' | 'egypt4' | 'egypt5';
+export type TsfLeagueKey = TsfEuropeLeagueKey | TsfEgyptSlotKey;
+export type TsfTournamentMode = 'europe' | 'egypt';
+
+const EGYPT_CREST = require('../../assets/images/top-scorers-five/league-egypt.png') as number;
 
 export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
   pl: require('../../assets/images/king-of-predictions/league-pl.png'),
@@ -55,6 +60,11 @@ export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
   bundesliga: require('../../assets/images/king-of-predictions/league-bundesliga.png'),
   seriea: require('../../assets/images/king-of-predictions/league-seriea.png'),
   ligue1: require('../../assets/images/king-of-predictions/league-ligue1.png'),
+  egypt1: EGYPT_CREST,
+  egypt2: EGYPT_CREST,
+  egypt3: EGYPT_CREST,
+  egypt4: EGYPT_CREST,
+  egypt5: EGYPT_CREST,
 };
 
 /**
@@ -65,6 +75,11 @@ export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
 export const TSF_LOGO_TINT_ON_DARK: Partial<Record<TsfLeagueKey, string>> = {
   pl: '#FFFFFF',
   ligue1: '#FFFFFF',
+  egypt1: '#FFFFFF',
+  egypt2: '#FFFFFF',
+  egypt3: '#FFFFFF',
+  egypt4: '#FFFFFF',
+  egypt5: '#FFFFFF',
 };
 
 /**

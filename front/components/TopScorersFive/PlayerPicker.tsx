@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TSF_LIVE_LEAGUES } from '../../services/topScorersFive.service';
+import { TSF_EGYPT_LIVE_SLOTS, TSF_EUROPE_LIVE_LEAGUES } from '../../services/topScorersFive.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 
@@ -125,9 +125,9 @@ export function PlayerPicker({
   const pool = useMemo(
     () =>
       league
-        ? TSF_LIVE_LEAGUES.includes(league)
+        ? [...TSF_EUROPE_LIVE_LEAGUES, ...TSF_EGYPT_LIVE_SLOTS].includes(league)
           ? livePlayers?.[league] ?? []
-          : TSF_MOCK_PLAYERS[league]
+          : TSF_MOCK_PLAYERS[league] ?? []
         : [],
     [league, livePlayers],
   );

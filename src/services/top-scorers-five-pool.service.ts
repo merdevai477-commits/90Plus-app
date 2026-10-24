@@ -15,7 +15,13 @@ import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
 import { TOP_SCORERS_FIVE_BUNDESLIGA } from '../data/top-scorers-five-bundesliga';
 import { TOP_SCORERS_FIVE_PL } from '../data/top-scorers-five-pl';
 import { TOP_SCORERS_FIVE_LIGUE1 } from '../data/top-scorers-five-ligue1';
-import { scoreTsfNameMatch, tsfPortraitUrl, type TsfLeagueKey } from './top-scorers-five-scoring';
+import {
+  getTsfLeagueConfig,
+  scoreTsfNameMatch,
+  TSF_EGYPT_POOL_KEY,
+  tsfPortraitUrl,
+  type TsfLeagueKey,
+} from './top-scorers-five-scoring';
 import type { ThreeSixFiveSquadPlayer } from './threeSixFiveScores.service';
 
 const SEED_LISTS: Partial<Record<TsfLeagueKey, TopScorersFiveSeedClub[]>> = {
@@ -46,11 +52,130 @@ export function tsfPositionCode(position: string | null | undefined): string | n
   return POSITION_CODES.find(([pattern]) => pattern.test(position))?.[1] ?? null;
 }
 
+/** Strikers + wingers for the Egyptian Premier fantasy (مهاجمين وأجنحة). */
+export function isTsfEgyptAttacker(player: ThreeSixFiveSquadPlayer): boolean {
+  if (player.positionGroup === 'forward') return true;
+  const pos = `${player.position ?? ''}`.toLowerCase();
+  return /\blw\b|\brw\b|\blf\b|\brf\b|winger|left wing|right wing|جناح|مهاجم/.test(pos);
+}
+
 const ACCEPT_SCORE = 0.75;
 const CERTAIN_SCORE = 0.9;
 
-export async function seedTopScorersFivePool(leagueKey: TsfLeagueKey): Promise<{ upserted: number }> {
-  const clubs = SEED_LISTS[leagueKey];
+/**
+ * Pull every Egyptian Premier striker/winger from 365Scores squads into the
+ * shared `egypt` pool (athlete ids already known — no name resolution needed).
+ */
+export async function syncEgyptAttackersPool(): Promise<{ upserted: number; teams: number }> {
+  const { threeSixFiveScoresService } = await import('./threeSixFiveScores.service');
+  const cfg = getTsfLeagueConfig('egypt1');
+  if (!cfg) return { upserted: 0, teams: 0 };
+
+  const [standingsAr, standingsEn] = await Promise.all([
+    threeSixFiveScoresService.getStandings(cfg.scores365CompetitionId, 'ar'),
+    threeSixFiveScoresService.getStandings(cfg.scores365CompetitionId, 'en'),
+  ]);
+  const teamsAr = standingsAr.data ?? [];
+  const enNameById = new Map((standingsEn.data ?? []).map((row) => [row.teamId, row.teamName] as const));
+  if (teamsAr.length === 0) {
+    logger.warn('[TopScorersFive] egypt pool sync: no standings rows for competition 552');
+    return { upserted: 0, teams: 0 };
+  }
+
+  const seenAthleteIds = new Set<number>();
+  let sortOrder = 0;
+  let upserted = 0;
+
+  for (const team of teamsAr) {
+    if (!team.teamId) continue;
+    const [squadAr, squadEn] = await Promise.all([
+      threeSixFiveScoresService.getCompetitorSquad(team.teamId, 'ar'),
+      threeSixFiveScoresService.getCompetitorSquad(team.teamId, 'en'),
+    ]);
+    const enById = new Map((squadEn.data?.players ?? []).map((p) => [p.athleteId, p] as const));
+    const clubNameAr = team.teamName || '—';
+    const clubNameEn = enNameById.get(team.teamId) ?? clubNameAr;
+
+    for (const player of squadAr.data?.players ?? []) {
+      if (!isTsfEgyptAttacker(player) && !isTsfEgyptAttacker(enById.get(player.athleteId) ?? player)) continue;
+      if (seenAthleteIds.has(player.athleteId)) continue;
+      seenAthleteIds.add(player.athleteId);
+      sortOrder += 1;
+
+      const en = enById.get(player.athleteId);
+      const position = tsfPositionCode(en?.position ?? player.position) ?? 'CF';
+      const nameAr = player.name?.trim() || player.shortName?.trim() || `Player ${player.athleteId}`;
+      const nameEn = en?.name?.trim() || en?.shortName?.trim() || null;
+
+      const byAthlete = await prisma.topScorersFivePlayer.findFirst({
+        where: { leagueKey: TSF_EGYPT_POOL_KEY, externalPlayerId: player.athleteId },
+        select: { id: true },
+      });
+      const byName = byAthlete
+        ? null
+        : await prisma.topScorersFivePlayer.findUnique({
+            where: { leagueKey_nameAr: { leagueKey: TSF_EGYPT_POOL_KEY, nameAr } },
+            select: { id: true, externalPlayerId: true },
+          });
+
+      const data = {
+        nameAr,
+        nameEn,
+        clubNameAr,
+        clubNameEn,
+        teamId: team.teamId,
+        externalPlayerId: player.athleteId,
+        photoUrl: tsfPortraitUrl(player.athleteId),
+        position,
+        sortOrder,
+        active: true,
+        resolvedAt: new Date(),
+        resolveNote: 'egypt_squad_sync',
+      };
+
+      if (byAthlete) {
+        await prisma.topScorersFivePlayer.update({ where: { id: byAthlete.id }, data });
+      } else if (byName && byName.externalPlayerId == null) {
+        await prisma.topScorersFivePlayer.update({ where: { id: byName.id }, data });
+      } else if (byName) {
+        // Same Arabic name, different athlete — keep both via a disambiguated name.
+        await prisma.topScorersFivePlayer.create({
+          data: { leagueKey: TSF_EGYPT_POOL_KEY, ...data, nameAr: `${nameAr} (${clubNameAr})` },
+        });
+      } else {
+        await prisma.topScorersFivePlayer.create({
+          data: { leagueKey: TSF_EGYPT_POOL_KEY, ...data },
+        });
+      }
+      upserted += 1;
+    }
+  }
+
+  if (seenAthleteIds.size > 0) {
+    await prisma.topScorersFivePlayer.updateMany({
+      where: {
+        leagueKey: TSF_EGYPT_POOL_KEY,
+        active: true,
+        OR: [{ externalPlayerId: null }, { externalPlayerId: { notIn: [...seenAthleteIds] } }],
+      },
+      data: { active: false },
+    });
+  }
+
+  logger.info(
+    `[TopScorersFive] egypt pool sync: ${upserted} attacker(s) from ${teamsAr.length} club(s)`,
+  );
+  return { upserted, teams: teamsAr.length };
+}
+
+export async function seedTopScorersFivePool(leagueKey: TsfLeagueKey | typeof TSF_EGYPT_POOL_KEY): Promise<{ upserted: number }> {
+  const cfg = getTsfLeagueConfig(leagueKey);
+  if (leagueKey === TSF_EGYPT_POOL_KEY || cfg?.tournament === 'egypt') {
+    const synced = await syncEgyptAttackersPool();
+    return { upserted: synced.upserted };
+  }
+
+  const clubs = SEED_LISTS[leagueKey as TsfLeagueKey];
   if (!clubs) return { upserted: 0 };
 
   let sortOrder = 0;
@@ -136,23 +261,30 @@ function squadCandidates(
  * `force`). One player failing never stops the rest.
  */
 export async function resolveTopScorersFivePool(
-  leagueKey: TsfLeagueKey,
+  leagueKey: TsfLeagueKey | typeof TSF_EGYPT_POOL_KEY,
   options: { force?: boolean } = {},
 ): Promise<TsfResolveOutcome[]> {
+  const cfg = getTsfLeagueConfig(leagueKey);
+  const poolKey =
+    leagueKey === TSF_EGYPT_POOL_KEY || cfg?.tournament === 'egypt'
+      ? TSF_EGYPT_POOL_KEY
+      : (leagueKey as TsfLeagueKey);
+
   const { threeSixFiveScoresService } = await import('./threeSixFiveScores.service');
   const players = await prisma.topScorersFivePlayer.findMany({
-    where: { leagueKey, ...(options.force ? {} : { externalPlayerId: null }) },
+    where: { leagueKey: poolKey, ...(options.force ? {} : { externalPlayerId: null }) },
     orderBy: { sortOrder: 'asc' },
   });
 
+  const seedKey = poolKey === TSF_EGYPT_POOL_KEY ? null : (poolKey as TsfLeagueKey);
   const leagueClubs = new Map(
-    (SEED_LISTS[leagueKey] ?? []).map((club) => [club.teamId, club] as const),
+    (seedKey ? SEED_LISTS[seedKey] ?? [] : []).map((club) => [club.teamId, club] as const),
   );
   const listedClubByName = new Map(
-    (SEED_LISTS[leagueKey] ?? []).flatMap((club) => club.players.map((p) => [p.nameAr, club] as const)),
+    (seedKey ? SEED_LISTS[seedKey] ?? [] : []).flatMap((club) => club.players.map((p) => [p.nameAr, club] as const)),
   );
   const pinnedByName = new Map(
-    (SEED_LISTS[leagueKey] ?? []).flatMap((club) =>
+    (seedKey ? SEED_LISTS[seedKey] ?? [] : []).flatMap((club) =>
       club.players.flatMap((p) => (p.athleteId != null ? [[p.nameAr, p.athleteId] as const] : [])),
     ),
   );

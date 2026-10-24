@@ -8,7 +8,30 @@ import type { TopScorersFiveGameweekStatus } from '@prisma/client';
 export const TSF_POINTS_PER_GOAL = 3;
 export const TSF_POINTS_PER_ASSIST = 1;
 
-export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfTournament = 'europe' | 'egypt';
+
+export type TsfEuropeLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+export type TsfEgyptSlotKey = 'egypt1' | 'egypt2' | 'egypt3' | 'egypt4' | 'egypt5';
+export type TsfLeagueKey = TsfEuropeLeagueKey | TsfEgyptSlotKey;
+
+/** DB key for Egyptian Premier attackers (shared by the five pitch slots). */
+export const TSF_EGYPT_POOL_KEY = 'egypt';
+
+export const TSF_EUROPE_LEAGUE_KEYS: readonly TsfEuropeLeagueKey[] = [
+  'pl',
+  'laliga',
+  'bundesliga',
+  'seriea',
+  'ligue1',
+];
+
+export const TSF_EGYPT_SLOT_KEYS: readonly TsfEgyptSlotKey[] = [
+  'egypt1',
+  'egypt2',
+  'egypt3',
+  'egypt4',
+  'egypt5',
+];
 
 export type TsfLeagueConfig = {
   key: TsfLeagueKey;
@@ -16,18 +39,36 @@ export type TsfLeagueConfig = {
   competitionLeagueId: number;
   /** 365Scores competition id, for its season leaderboards. */
   scores365CompetitionId: number;
+  tournament: TsfTournament;
+  /**
+   * Where pool players and the shared gameweek row live. Egypt's five slots
+   * all point at `egypt`; Europe leaves this unset (same as `key`).
+   */
+  poolKey?: string;
+};
+
+const EGYPT_COMP = {
+  competitionLeagueId: 7000552,
+  scores365CompetitionId: 552,
+  tournament: 'egypt' as const,
+  poolKey: TSF_EGYPT_POOL_KEY,
 };
 
 /**
- * Leagues whose pool and scoring are live. The other keys stay on the app's
- * placeholder data until their player lists are supplied.
+ * Leagues whose pool and scoring are live. Europe = one pick per big-five
+ * league; Egypt = five picks from the Egyptian Premier attackers pool.
  */
 export const TSF_LEAGUES: Partial<Record<TsfLeagueKey, TsfLeagueConfig>> = {
-  laliga: { key: 'laliga', competitionLeagueId: 7000011, scores365CompetitionId: 11 },
-  seriea: { key: 'seriea', competitionLeagueId: 7000017, scores365CompetitionId: 17 },
-  bundesliga: { key: 'bundesliga', competitionLeagueId: 7000025, scores365CompetitionId: 25 },
-  pl: { key: 'pl', competitionLeagueId: 7000007, scores365CompetitionId: 7 },
-  ligue1: { key: 'ligue1', competitionLeagueId: 7000035, scores365CompetitionId: 35 },
+  laliga: { key: 'laliga', competitionLeagueId: 7000011, scores365CompetitionId: 11, tournament: 'europe' },
+  seriea: { key: 'seriea', competitionLeagueId: 7000017, scores365CompetitionId: 17, tournament: 'europe' },
+  bundesliga: { key: 'bundesliga', competitionLeagueId: 7000025, scores365CompetitionId: 25, tournament: 'europe' },
+  pl: { key: 'pl', competitionLeagueId: 7000007, scores365CompetitionId: 7, tournament: 'europe' },
+  ligue1: { key: 'ligue1', competitionLeagueId: 7000035, scores365CompetitionId: 35, tournament: 'europe' },
+  egypt1: { key: 'egypt1', ...EGYPT_COMP },
+  egypt2: { key: 'egypt2', ...EGYPT_COMP },
+  egypt3: { key: 'egypt3', ...EGYPT_COMP },
+  egypt4: { key: 'egypt4', ...EGYPT_COMP },
+  egypt5: { key: 'egypt5', ...EGYPT_COMP },
 };
 
 /**
@@ -38,12 +79,47 @@ export function tsfPortraitUrl(athleteId: number): string {
   return `https://imagecache.365scores.com/image/upload/e_background_removal,f_png,w_256,h_256,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
 }
 
+export function tsfPoolKey(cfg: TsfLeagueConfig): string {
+  return cfg.poolKey ?? cfg.key;
+}
+
+/** Gameweek row key — Egypt slots share one week under `egypt`. */
+export function tsfGameweekLeagueKey(cfg: TsfLeagueConfig): string {
+  return cfg.poolKey ?? cfg.key;
+}
+
 export function getTsfLeagueConfig(leagueKey: string): TsfLeagueConfig | null {
+  if (leagueKey === TSF_EGYPT_POOL_KEY) return TSF_LEAGUES.egypt1 ?? null;
   return (TSF_LEAGUES as Record<string, TsfLeagueConfig | undefined>)[leagueKey] ?? null;
 }
 
-export function enabledTsfLeagues(): TsfLeagueConfig[] {
-  return Object.values(TSF_LEAGUES).filter((cfg): cfg is TsfLeagueConfig => cfg != null);
+export function enabledTsfLeagues(tournament?: TsfTournament): TsfLeagueConfig[] {
+  return Object.values(TSF_LEAGUES).filter(
+    (cfg): cfg is TsfLeagueConfig => cfg != null && (tournament == null || cfg.tournament === tournament),
+  );
+}
+
+/** One config per shared gameweek (Egypt collapses to a single entry). */
+export function enabledTsfGameweekConfigs(tournament?: TsfTournament): TsfLeagueConfig[] {
+  const seen = new Set<string>();
+  const out: TsfLeagueConfig[] = [];
+  for (const cfg of enabledTsfLeagues(tournament)) {
+    const key = tsfGameweekLeagueKey(cfg);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cfg);
+  }
+  return out;
+}
+
+export function tsfSiblingSlotKeys(cfg: TsfLeagueConfig): readonly TsfLeagueKey[] {
+  if (cfg.tournament === 'egypt') return TSF_EGYPT_SLOT_KEYS;
+  return [cfg.key];
+}
+
+export function parseTsfTournament(raw: unknown): TsfTournament | undefined {
+  if (raw === 'egypt' || raw === 'europe') return raw;
+  return undefined;
 }
 
 export type TsfStatLine = { goals: number; assists: number };

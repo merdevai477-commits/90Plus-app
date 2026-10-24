@@ -66,11 +66,12 @@ type Picked = { league: TsfLeagueKey; player: TsfPlayer };
 
 type MatchesTabProps = {
   picked: readonly Picked[];
+  tournament?: 'europe' | 'egypt';
   onBack: () => void;
   onGoToPitch: () => void;
 };
 
-export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
+export function MatchesTab({ picked, tournament = 'europe', onBack, onGoToPitch }: MatchesTabProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t, language } = useTranslation();
@@ -100,7 +101,7 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
       const token = await getTokenRef.current().catch(() => null);
       if (!token || cancelled) return;
       try {
-        const data = await topScorersFiveService.getMyFixtures(token, language);
+        const data = await topScorersFiveService.getMyFixtures(token, language, tournament);
         if (!cancelled) setMine(data);
       } catch (error) {
         logger.warn('[TopScorersFive] my fixtures load failed', error);
@@ -109,7 +110,7 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [hasLivePick, isSignedIn, language]);
+  }, [hasLivePick, isSignedIn, language, tournament]);
 
   const fixtures = useMemo<readonly TsfFixture[]>(() => {
     if (!active) return [];

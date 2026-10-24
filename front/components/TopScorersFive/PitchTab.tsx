@@ -55,7 +55,7 @@ type Slot = {
   readonly labelTop: number;
 };
 
-const SLOTS: readonly Slot[] = [
+const EUROPE_SLOTS: readonly Slot[] = [
   { key: 'pl', left: 128.5, top: 0, logo: { width: 49, height: 81, top: 14.5 }, labelTop: 103.5 },
   { key: 'bundesliga', left: 0, top: 170.47, logo: { width: 67, height: 67, top: 21.5 }, labelTop: 96.5 },
   { key: 'seriea', left: 257, top: 170.47, logo: { width: 50, height: 85, top: 12.5 }, labelTop: 105.5 },
@@ -71,17 +71,37 @@ const SLOTS: readonly Slot[] = [
   { key: 'laliga', left: 235, top: 360.93, logo: { width: 85, height: 65, top: 22.5 }, labelTop: 95.5 },
 ];
 
+/** Same formation layout; every empty card shows the Egyptian league crest. */
+const EGYPT_SLOTS: readonly Slot[] = [
+  { key: 'egypt1', left: 128.5, top: 0, logo: { width: 64, height: 64, top: 22 }, labelTop: 103.5 },
+  { key: 'egypt2', left: 0, top: 170.47, logo: { width: 64, height: 64, top: 22 }, labelTop: 96.5 },
+  { key: 'egypt3', left: 257, top: 170.47, logo: { width: 64, height: 64, top: 22 }, labelTop: 105.5 },
+  { key: 'egypt4', left: 22, top: 360.93, logo: { width: 64, height: 64, top: 22 }, labelTop: 99.5 },
+  { key: 'egypt5', left: 235, top: 360.93, logo: { width: 64, height: 64, top: 22 }, labelTop: 95.5 },
+];
+
 type PitchTabProps = {
   picks: Partial<Record<TsfLeagueKey, TsfPlayer>>;
   /** Leagues whose gameweek has already kicked off (empty slots stay locked). */
   leagueLocked?: Partial<Record<TsfLeagueKey, boolean>>;
+  /** Europe = five leagues; Egypt = five Egyptian Premier attackers. */
+  mode?: 'europe' | 'egypt';
   scale: number;
   onBack: () => void;
   onOpenLeague: (league: TsfLeagueKey) => void;
   onRemove: (league: TsfLeagueKey) => void;
 };
 
-export function PitchTab({ picks, leagueLocked, scale, onBack, onOpenLeague, onRemove }: PitchTabProps) {
+export function PitchTab({
+  picks,
+  leagueLocked,
+  mode = 'europe',
+  scale,
+  onBack,
+  onOpenLeague,
+  onRemove,
+}: PitchTabProps) {
+  const slots = mode === 'egypt' ? EGYPT_SLOTS : EUROPE_SLOTS;
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
   const copy = t.topScorersFive;
@@ -183,9 +203,10 @@ export function PitchTab({ picks, leagueLocked, scale, onBack, onOpenLeague, onR
           </View>
         </View>
 
-        {SLOTS.map((slot) => {
+        {slots.map((slot) => {
           const player = picks[slot.key];
           const slotLocked = Boolean(player?.locked || (!player && leagueLocked?.[slot.key]));
+          const leagueLabel = pickCopy.leagues[slot.key] ?? pickCopy.choosePlayer;
           return (
             <View
               key={slot.key}
@@ -201,7 +222,7 @@ export function PitchTab({ picks, leagueLocked, scale, onBack, onOpenLeague, onR
                 activeOpacity={0.85}
                 onPress={() => onOpenLeague(slot.key)}
                 accessibilityRole="button"
-                accessibilityLabel={`${pickCopy.leagues[slot.key]} — ${
+                accessibilityLabel={`${leagueLabel} — ${
                   player ? player.name : pickCopy.choosePlayer
                 }`}
                 testID={`top-scorers-five-slot-${slot.key}`}
@@ -318,7 +339,7 @@ export function PitchTab({ picks, leagueLocked, scale, onBack, onOpenLeague, onR
                   accessibilityLabel={
                     player
                       ? pickCopy.lockedA11y.replace('{name}', player.name)
-                      : `${pickCopy.leagues[slot.key]} — ${pickCopy.lockedUntilNext}`
+                      : `${leagueLabel} — ${pickCopy.lockedUntilNext}`
                   }
                   style={[
                     styles.remove,
