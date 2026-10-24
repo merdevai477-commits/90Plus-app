@@ -335,7 +335,7 @@ export function PreMatchRecentStats({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
-        {/* Figma 1454:3652 — crest + ring under each team for “won the match” */}
+        {/* One card: win rings + remaining % rows together */}
         <View style={styles.trendsCard}>
           <TrendCrestRow
             label={labels.won}
@@ -346,8 +346,6 @@ export function PreMatchRecentStats({
             homeLogo={homeLogo}
             awayLogo={awayLogo}
           />
-        </View>
-        <View style={styles.card}>
           <CompareRow
             label={labels.btts}
             homeValue={formatTrendValue(homeBtts)}
