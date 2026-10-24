@@ -2127,9 +2127,11 @@ export const en = {
     back: 'Back',
     hub: {
       europeTitle: 'Top Five Europe',
-      europeSubtitle: 'Five major European leagues — pick one player from each',
+      europeSubtitle:
+        'Pick 5 players from 5 leagues, predict their goals and win a football shirt',
       egyptTitle: 'Top Five Egyptian League',
-      egyptSubtitle: 'Pick 5 players from the Egyptian league and predict goals',
+      egyptSubtitle:
+        'Pick 5 players from the Egyptian league, predict their goals and win a football shirt',
       enter: 'Enter',
     },
     egypt: {

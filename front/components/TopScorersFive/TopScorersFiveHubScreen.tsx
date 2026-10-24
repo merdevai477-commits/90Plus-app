@@ -1,9 +1,8 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Two equal stacked halves:
- *   top    → Top Five Europe
- *   bottom → Top Five Egyptian League
+ * Two equal stacked halves, each matching the intro language (hero, title,
+ * subtitle, purple CTA). Tapping a half opens that competition's pitch/pick.
  */
 
 import { useCallback } from 'react';
@@ -27,16 +26,20 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 import { TSF_ART, TSF_DESIGN_WIDTH } from './assets';
 
 const BG = '#030303';
+const CTA_BG = '#8C5CF5';
+/** SwiftUI: Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50) */
+const EGYPT_WASH = 'rgba(128, 59, 69, 0.50)';
 const EUROPE_TITLE = '#B896FC';
-const EGYPT_WASH = 'rgba(128, 59, 69, 0.55)';
-const DIVIDER = 'rgba(255,255,255,0.12)';
+const DIVIDER = 'rgba(255,255,255,0.10)';
 
 type HalfProps = {
   testID: string;
+  ctaTestID: string;
   title: string;
   subtitle: string;
-  enter: string;
+  cta: string;
   titleColor: string;
+  subtitleColor: string;
   wash?: string;
   contentPosition: 'top' | 'bottom';
   isAr: boolean;
@@ -50,10 +53,12 @@ type HalfProps = {
 
 function CompetitionHalf({
   testID,
+  ctaTestID,
   title,
   subtitle,
-  enter,
+  cta,
   titleColor,
+  subtitleColor,
   wash,
   contentPosition,
   isAr,
@@ -92,24 +97,35 @@ function CompetitionHalf({
       )}
       {wash ? <View style={[StyleSheet.absoluteFill, { backgroundColor: wash }]} /> : null}
       <LinearGradient
-        colors={['rgba(3,3,3,0.05)', 'rgba(3,3,3,0.45)', 'rgba(3,3,3,0.88)']}
-        locations={[0.2, 0.55, 1]}
+        colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.35)', 'rgba(3,3,3,0.92)']}
+        locations={[0.15, 0.5, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
+
       <View
         style={[
           styles.copy,
           {
-            paddingHorizontal: s(28),
-            paddingBottom: bottomPad + s(22),
+            paddingHorizontal: s(24),
+            paddingBottom: bottomPad + s(18),
+            width: s(387),
+            alignSelf: 'center',
           },
         ]}
       >
-        <Text style={[styles.ball, { fontSize: s(34), lineHeight: s(42) }]}>⚽</Text>
+        <Text style={[styles.ball, { fontSize: s(40), lineHeight: s(48) }]}>⚽</Text>
         <Text
-          style={[styles.title, { color: titleColor, fontFamily: fontHeavy, fontSize: s(26) }]}
-          maxFontSizeMultiplier={1.15}
+          style={[
+            styles.title,
+            {
+              color: titleColor,
+              fontFamily: fontHeavy,
+              fontSize: s(28),
+              marginTop: s(6),
+            },
+          ]}
+          maxFontSizeMultiplier={1.12}
         >
           {title}
         </Text>
@@ -117,33 +133,49 @@ function CompetitionHalf({
           style={[
             styles.subtitle,
             {
+              color: subtitleColor,
               fontFamily: fontMedium,
-              fontSize: s(14),
-              lineHeight: s(20),
-              marginTop: s(6),
+              fontSize: s(15),
+              lineHeight: s(22),
+              marginTop: s(8),
             },
           ]}
-          maxFontSizeMultiplier={1.15}
+          maxFontSizeMultiplier={1.12}
         >
           {subtitle}
         </Text>
-        <View
+
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={cta}
+          testID={ctaTestID}
           style={[
-            styles.enterRow,
+            styles.cta,
             {
-              marginTop: s(12),
-              gap: s(6),
+              width: s(320),
+              height: s(48),
+              borderRadius: s(14),
+              marginTop: s(16),
+              gap: s(10),
+              paddingHorizontal: s(18),
               flexDirection: isAr ? 'row-reverse' : 'row',
             },
           ]}
         >
-          <Text style={[styles.enterText, { fontFamily: fontSemi, fontSize: s(15) }]}>{enter}</Text>
+          <Text
+            style={[styles.ctaText, { fontFamily: fontSemi, fontSize: s(16) }]}
+            maxFontSizeMultiplier={1.1}
+          >
+            {cta}
+          </Text>
           <Ionicons
             name={isAr ? 'chevron-back' : 'chevron-forward'}
-            size={s(18)}
+            size={s(20)}
             color="#FFFFFF"
           />
-        </View>
+        </TouchableOpacity>
       </View>
     </Pressable>
   );
@@ -172,22 +204,26 @@ export default function TopScorersFiveHubScreen() {
     else router.replace('/(tabs)/rank' as never);
   }, [router]);
 
+  /** Europe → pitch / formation pick. */
   const openEurope = useCallback(() => {
-    router.push('/top-scorers-five/europe' as never);
+    router.push('/top-scorers-five/pick' as never);
   }, [router]);
 
+  /** Egypt → same pick shell with egypt mode (player pool follows). */
   const openEgypt = useCallback(() => {
-    router.push('/top-scorers-five/egypt' as never);
+    router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
   }, [router]);
 
   return (
     <View style={styles.root}>
       <CompetitionHalf
         testID="top-scorers-five-hub-europe"
+        ctaTestID="top-scorers-five-hub-europe-cta"
         title={hub.europeTitle}
         subtitle={hub.europeSubtitle}
-        enter={hub.enter}
+        cta={copy.cta}
         titleColor={EUROPE_TITLE}
+        subtitleColor="#9E9E9E"
         contentPosition="top"
         isAr={isAr}
         s={s}
@@ -201,10 +237,12 @@ export default function TopScorersFiveHubScreen() {
 
       <CompetitionHalf
         testID="top-scorers-five-hub-egypt"
+        ctaTestID="top-scorers-five-hub-egypt-cta"
         title={hub.egyptTitle}
         subtitle={hub.egyptSubtitle}
-        enter={hub.enter}
+        cta={copy.cta}
         titleColor="#FFFFFF"
+        subtitleColor="#9E9E9E"
         wash={EGYPT_WASH}
         contentPosition="bottom"
         isAr={isAr}
@@ -262,8 +300,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ball: { textAlign: 'center' },
-  title: { textAlign: 'center', marginTop: 4 },
-  subtitle: { color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
-  enterRow: { alignItems: 'center', justifyContent: 'center' },
-  enterText: { color: '#FFFFFF' },
+  title: { textAlign: 'center' },
+  subtitle: { textAlign: 'center' },
+  cta: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CTA_BG,
+  },
+  ctaText: { color: '#FFFFFF' },
 });
