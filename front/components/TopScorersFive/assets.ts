@@ -26,9 +26,9 @@ export const TSF_ART: {
   egyptHub: require('../../assets/images/top-scorers-five/hero-egypt.jpg'),
 };
 
-/** Hub watermarks — tap targets instead of a CTA button. */
+/** Hub crests — tap targets instead of a CTA button. */
 export const TSF_HUB_LOGO = {
-  europe: require('../../assets/images/king-of-predictions/league-pl.png') as number,
+  europe: require('../../assets/images/top-scorers-five/league-ucl.png') as number,
   egypt: require('../../assets/images/top-scorers-five/league-egypt.png') as number,
 };
 

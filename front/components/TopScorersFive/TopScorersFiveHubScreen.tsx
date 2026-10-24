@@ -1,8 +1,8 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Two equal stacked halves. Each shows hero art with a large league-logo
- * watermark (the tap target). No CTA button — press the crest to enter.
+ * Two stacked halves with a slim gap. Each shows hero art, a clear league crest
+ * (tap target), and crisp title copy — no CTA button.
  */
 
 import { useCallback } from 'react';
@@ -27,9 +27,8 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 import { TSF_ART, TSF_DESIGN_WIDTH, TSF_HUB_LOGO } from './assets';
 
 const BG = '#030303';
-const EGYPT_WASH = 'rgba(128, 59, 69, 0.22)';
-const EUROPE_TITLE = '#B896FC';
-const DIVIDER = 'rgba(255,255,255,0.14)';
+const GAP = 10;
+const EUROPE_TITLE = '#E8D6FF';
 
 type HalfProps = {
   testID: string;
@@ -39,10 +38,8 @@ type HalfProps = {
   titleColor: string;
   image: number | null;
   logo: number;
-  /** White tint helps dark-on-transparent crests read as a shadow on photos. */
   logoTint?: string;
   fallbackColors: readonly [string, string, string, string];
-  wash?: string;
   contentPosition: 'top' | 'center' | 'bottom';
   s: (n: number) => number;
   fontHeavy: string | undefined;
@@ -62,7 +59,6 @@ function CompetitionHalf({
   logo,
   logoTint,
   fallbackColors,
-  wash,
   contentPosition,
   s,
   fontHeavy,
@@ -71,7 +67,7 @@ function CompetitionHalf({
   bottomPad = 0,
   onPress,
 }: HalfProps) {
-  const logoSize = s(132);
+  const logoSize = s(118);
 
   return (
     <View style={styles.half}>
@@ -89,12 +85,11 @@ function CompetitionHalf({
         ) : (
           <LinearGradient colors={[...fallbackColors]} style={StyleSheet.absoluteFill} />
         )}
-        {wash ? <View style={[StyleSheet.absoluteFill, { backgroundColor: wash }]} /> : null}
-        {/* Soft full-frame shade so the crest reads as a shadow on the photo. */}
+        {/* Light shade + bottom fade for readable type — keep art visible. */}
         <View style={styles.photoShade} />
         <LinearGradient
-          colors={['rgba(3,3,3,0.15)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.72)', 'rgba(3,3,3,0.96)']}
-          locations={[0, 0.28, 0.68, 1]}
+          colors={['rgba(3,3,3,0.1)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.92)']}
+          locations={[0, 0.35, 0.72, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -104,58 +99,49 @@ function CompetitionHalf({
           styles.copy,
           {
             paddingTop: topPad,
-            paddingBottom: bottomPad + s(20),
+            paddingBottom: bottomPad + s(18),
             paddingHorizontal: s(24),
           },
         ]}
         pointerEvents="box-none"
       >
-        {/* Crest watermark — primary tap target. */}
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
           accessibilityLabel={title}
           testID={logoTestID}
-          hitSlop={16}
+          hitSlop={20}
           style={({ pressed }) => [
             styles.logoPress,
             {
               width: logoSize,
               height: logoSize,
-              opacity: pressed ? 0.75 : 1,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
+              opacity: pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
             },
           ]}
         >
-          <Image
-            source={logo}
+          {/* Soft drop shadow disc behind the crest. */}
+          <View
             style={[
-              styles.logo,
+              styles.logoGlow,
               {
-                width: logoSize,
-                height: logoSize,
-                opacity: 0.42,
-                ...(logoTint ? { tintColor: logoTint } : null),
+                width: logoSize * 1.15,
+                height: logoSize * 1.15,
+                borderRadius: logoSize,
               },
             ]}
-            contentFit="contain"
-            transition={0}
           />
-          {/* Soft duplicate underneath for a cast-shadow feel. */}
           <Image
             source={logo}
-            style={[
-              styles.logoShadow,
-              {
-                width: logoSize,
-                height: logoSize,
-                opacity: 0.22,
-                tintColor: '#000000',
-              },
-            ]}
+            style={{
+              width: logoSize,
+              height: logoSize,
+              opacity: 1,
+              ...(logoTint ? { tintColor: logoTint } : null),
+            }}
             contentFit="contain"
             transition={0}
-            pointerEvents="none"
           />
         </Pressable>
 
@@ -166,8 +152,11 @@ function CompetitionHalf({
               {
                 color: titleColor,
                 fontFamily: fontHeavy,
-                fontSize: s(26),
-                marginTop: s(10),
+                fontSize: s(24),
+                marginTop: s(12),
+                textShadowColor: 'rgba(0,0,0,0.85)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 8,
               },
             ]}
             maxFontSizeMultiplier={1.1}
@@ -179,10 +168,13 @@ function CompetitionHalf({
               styles.subtitle,
               {
                 fontFamily: fontMedium,
-                fontSize: s(14),
-                lineHeight: s(20),
+                fontSize: s(13),
+                lineHeight: s(19),
                 marginTop: s(6),
-                maxWidth: s(360),
+                maxWidth: s(340),
+                textShadowColor: 'rgba(0,0,0,0.9)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 6,
               },
             ]}
             maxFontSizeMultiplier={1.1}
@@ -240,11 +232,11 @@ export default function TopScorersFiveHubScreen() {
         s={s}
         fontHeavy={fontHeavy}
         fontMedium={fontMedium}
-        topPad={insets.top + s(48)}
+        topPad={insets.top + s(44)}
         onPress={openEurope}
       />
 
-      <View style={styles.divider} />
+      <View style={{ height: GAP, backgroundColor: BG }} />
 
       <CompetitionHalf
         testID="top-scorers-five-hub-egypt"
@@ -256,7 +248,6 @@ export default function TopScorersFiveHubScreen() {
         logo={TSF_HUB_LOGO.egypt}
         logoTint="#FFFFFF"
         fallbackColors={['#5A1F2A', '#3A1520', '#1A0A0E', BG]}
-        wash={EGYPT_WASH}
         contentPosition="top"
         s={s}
         fontHeavy={fontHeavy}
@@ -298,9 +289,8 @@ const styles = StyleSheet.create({
   art: { ...StyleSheet.absoluteFillObject },
   photoShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.22)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
-  divider: { height: 1, backgroundColor: DIVIDER },
   header: {
     position: 'absolute',
     top: 0,
@@ -319,15 +309,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: {
-    zIndex: 2,
-  },
-  logoShadow: {
+  logoGlow: {
     position: 'absolute',
-    top: 6,
-    left: 4,
-    zIndex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   title: { textAlign: 'center' },
-  subtitle: { color: 'rgba(255,255,255,0.82)', textAlign: 'center', alignSelf: 'center' },
+  subtitle: {
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
+    alignSelf: 'center',
+  },
 });
