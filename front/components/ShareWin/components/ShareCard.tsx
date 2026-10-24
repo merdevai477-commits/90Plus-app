@@ -54,8 +54,8 @@ const ShareCard = memo(function ShareCard({
         try {
           if (await Linking.canOpenURL(schemeUrl)) {
             await Linking.openURL(schemeUrl);
-            // Only count if the user actually left this app for the channel.
-            if (await confirmExternalShare()) {
+            // Only count a real leave — `inactive` alone (sheet/flash) is not enough.
+            if (await confirmExternalShare(undefined, ['background'])) {
               onShared(channel);
               return;
             }

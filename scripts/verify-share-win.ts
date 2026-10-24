@@ -138,11 +138,11 @@ async function main() {
   check('firstScoredAt is stamped by syncStanding', moStanding.firstScoredAt !== null, true);
 
   const board = await getLeaderboard(cycle.id, 10);
-  check('board order by confirmed shares, not link visits', board.map((r) => r.shares), [4, 0]);
-  check('visits do not outrank shares', board.map((r) => r.participants), [5, 1]);
+  check('board order by invited friends, not empty shares', board.map((r) => r.participants), [5, 1]);
+  check('shares are secondary on the board', board.map((r) => r.shares), [4, 0]);
   check('board ranks are 1..n', board.map((r) => r.rank), [1, 2]);
 
-  // ── Tie-break: same share count, earlier confirmed share wins ─────────────
+  // ── Tie-break: same friends, then shares; earlier activity wins on share tie ─
   const tieA = await makeUser('tieA');
   const tieB = await makeUser('tieB');
   await recordShare(tieA.id, 'whatsapp', new Date(NOW.getTime() + 40_000));
@@ -151,8 +151,8 @@ async function main() {
   const rankA = (await getShareWinOverview(tieA.id, { now: NOW })).rank;
   const rankB = (await getShareWinOverview(tieB.id, { now: NOW })).rank;
   const rankAhmed = (await getShareWinOverview(ahmed.id, { now: NOW })).rank;
-  check('share count outranks a later visit-only standing', [rankA, rankB, rankAhmed], [2, 3, 4]);
-  check('earlier confirmed share ranks higher on a tie', rankA < rankB, true);
+  check('invited friends outrank share-only standings', [rankAhmed, rankA, rankB], [2, 3, 4]);
+  check('earlier confirmed share ranks higher on a share-count tie', rankA < rankB, true);
   const boardRanks = (await getLeaderboard(cycle.id, 10)).map((r) => r.rank);
   check('leaderboard ranks match per-user ranks', boardRanks, [1, 2, 3, 4]);
   check('rank is stable across repeated reads', (await getShareWinOverview(tieA.id, { now: NOW })).rank, rankA);

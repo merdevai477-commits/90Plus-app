@@ -1292,7 +1292,7 @@ export const ar = {
     titleRest: ' واربح',
     subtitle: 'شارك التطبيق مع أصدقائك واربح جوائز رائعة!',
     perShareLead: 'الترتيب حسب ',
-    perSharePoints: 'عدد الشيرات الحقيقية',
+    perSharePoints: 'عدد الأصدقاء اللي انضموا',
     perShareXp: 'XP',
 
     // بطاقة عجلة الحظ
@@ -1314,7 +1314,7 @@ export const ar = {
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
     leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
-    boardUnit: 'شير',
+    boardUnit: 'صديق',
     close: 'إغلاق',
     backToRank: 'رجوع للرانك',
 
@@ -1330,10 +1330,10 @@ export const ar = {
     channelInstagram: 'إنستغرام',
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
-    referralHintLead: 'الشير يتحسب لما تبعت الرابط من ',
-    referralHintXp: 'واتساب أو فيسبوك',
+    referralHintLead: 'الترتيب يزيد لما صاحبك يسجّل من ',
+    referralHintXp: 'رابطك',
     linkCopied: 'تم نسخ الرابط',
-    linkCopiedDetail: 'الصقه في محادثة — الشير يتحسب لما تبعت الرابط',
+    linkCopiedDetail: 'الصقه في محادثة — الترتيب يزيد لما صاحبك ينضم',
     copyFailed: 'تعذّر نسخ الرابط',
     shareFailed: 'تعذّر تسجيل المشاركة — سنحاول لاحقاً',
 

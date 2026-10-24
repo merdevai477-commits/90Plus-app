@@ -22,7 +22,7 @@ export interface LeaderboardRowProps {
   avatar: string | null;
   /** Pre-formatted so no Intl work happens during scroll. */
   scoreLabel: string;
-  /** Unit next to the count — confirmed shares, not link visits. */
+  /** Unit next to the count — invited friends who joined. */
   scoreUnit: string;
   /** Visual tier index — clamped by the caller (0-4 in Figma). */
   tierIndex: number;

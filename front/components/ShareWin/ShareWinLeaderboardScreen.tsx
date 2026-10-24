@@ -22,7 +22,7 @@
  *   • windowing tuned down from the defaults for low-end Android
  *
  * Rank is server-computed from confirmed share count; this screen only
- * paginates and formats. Rows show shares, never link visits or XP.
+ * paginates and formats. Rows show invited friends, never empty shares or XP.
  * =============================================================================
  */
 
@@ -94,7 +94,7 @@ export default function ShareWinLeaderboardScreen() {
         key: entry.userId,
         entry,
         name: displayNameOf(entry),
-        scoreLabel: formatNumber(entry.shares, language),
+        scoreLabel: formatNumber(entry.participants, language),
         isMe: entry.userId === me?.userId,
       })),
     [entries, language, me?.userId],
@@ -268,7 +268,7 @@ export default function ShareWinLeaderboardScreen() {
             username={me.username}
             name={displayNameOf(me)}
             avatar={me.avatar}
-            scoreLabel={formatNumber(me.shares, language)}
+            scoreLabel={formatNumber(me.participants, language)}
             scoreUnit={copy.boardUnit}
             tierIndex={me.rank - 1}
             isCurrentUser

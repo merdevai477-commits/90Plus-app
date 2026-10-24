@@ -1,7 +1,7 @@
 /**
  * Share & Win hero — Figma node 119:625.
  * "شارك" in purple + " واربح" in white, then the ranking rule:
- * standings follow confirmed shares to another app, not link visits.
+ * standings follow friends who joined via your link, not empty share taps.
  */
 
 import React, { memo } from 'react';

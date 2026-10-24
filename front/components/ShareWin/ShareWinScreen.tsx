@@ -10,7 +10,7 @@
  *   <View>                            screen shell (safe area via insets —
  *                                     RN's SafeAreaView is a no-op on Android)
  *     <ScrollView>
- *       <HeroHeader/>                 "شارك واربح" + ranking-by-shares line
+ *       <HeroHeader/>                 "شارك واربح" + ranking-by-friends line
  *       <WeeklyRankingCard/>          countdown + top 5 + full-ranking pill
  *       <WeeklyPrizes/>               cycle prize carousel
  *       <ShareCard/>                  referral link, copy, channels, hint

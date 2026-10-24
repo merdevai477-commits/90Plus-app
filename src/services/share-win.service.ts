@@ -2,22 +2,21 @@
  * Share & Win — شارك واربح
  *
  * Weekly referral competition. Every user gets a unique referral code. Sharing
- * it to a real destination (WhatsApp, the OS share sheet, …) raises their
- * share count. Each week is ranked by that count — not by link visits — and
- * archived independently.
+ * it raises their share count (stats only). Each week is ranked by converted
+ * referrals (friends who joined via the link) — never by empty share taps,
+ * link visits, or XP — and archived independently.
  *
  * ── Invariants this module guarantees ────────────────────────────────────────
  *  • The database is the source of truth. Nothing the client sends can change
  *    a share count, participant count or rank directly.
- *  • Weekly rank is confirmed share count (a real handoff to another app),
- *    never link visits and never XP.
+ *  • Weekly rank is converted participant count, then share count as tie-break.
  *  • A user can be attributed to at most ONE referrer, ever
  *    (`share_win_referrals.referredUserId` is UNIQUE — races lose on the index,
  *    not on a read-then-write check).
  *  • Self-referral, already-attributed users and pre-existing accounts are
  *    rejected before a referral row is written.
  *  • Closing a cycle never deletes anything: standings keep `finalRank` so
- *    "who won week N, with how many confirmed shares" stays answerable forever.
+ *    "who won week N, with how many invited friends" stays answerable forever.
  */
 
 import { Prisma, ShareWinCycleStatus, type ShareWinCycle } from '@prisma/client';
@@ -31,7 +30,7 @@ import { awardXp, XP_VALUES } from './xp.service';
 
 /** Each successful referral conversion is worth +3 weekly points. */
 export const SCORE_PER_PARTICIPANT = 3;
-/** Share-only actions are what the weekly leaderboard ranks by. */
+/** Share taps do not add points — ranking is by converted friends. */
 export const SCORE_PER_SHARE = 0;
 
 /**
@@ -231,6 +230,7 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
     if (!cycle || cycle.status === ShareWinCycleStatus.COMPLETED) return;
 
     // Single UPDATE ... FROM — no per-user round trips regardless of size.
+    // Same order as live getLeaderboard / getRankFor.
     await tx.$executeRaw`
       UPDATE "share_win_standings" AS s
       SET "finalRank" = ranked.rank
@@ -239,6 +239,7 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
           "id",
           ROW_NUMBER() OVER (
             ORDER BY
+              "participantCount" DESC,
               "shareCount" DESC,
               COALESCE("firstScoredAt", 'infinity'::timestamp) ASC,
               "userId" ASC
@@ -275,7 +276,7 @@ async function syncStanding(
   ]);
 
   const score = computeScore(participantCount, shareCount);
-  const hasShare = shareCount > 0;
+  const hasActivity = shareCount > 0 || participantCount > 0;
 
   await tx.shareWinStanding.upsert({
     where: { cycleId_userId: { cycleId, userId } },
@@ -285,22 +286,21 @@ async function syncStanding(
       shareCount,
       participantCount,
       score,
-      firstScoredAt: hasShare ? now : null,
-      lastScoredAt: hasShare ? now : null,
+      firstScoredAt: hasActivity ? now : null,
+      lastScoredAt: hasActivity ? now : null,
     },
     update: {
       shareCount,
       participantCount,
       score,
-      lastScoredAt: hasShare ? now : undefined,
+      lastScoredAt: hasActivity ? now : undefined,
       // firstScoredAt is deliberately untouched here — it is the tie-breaker
       // and must keep its original value once set.
     },
   });
 
-  // Stamp firstScoredAt on the first confirmed share. Rank is share-count, so
-  // a referral conversion must not start the clock.
-  if (hasShare) {
+  // Stamp firstScoredAt on first conversion or confirmed share (tie-break clock).
+  if (hasActivity) {
     await tx.$executeRaw`
       UPDATE "share_win_standings"
       SET "firstScoredAt" = ${now}
@@ -500,10 +500,12 @@ async function getRankFor(cycleId: string, userId: string): Promise<number | nul
       ON me."cycleId" = s."cycleId" AND me."userId" = ${userId}
     WHERE s."cycleId" = ${cycleId}
       AND (
+        -s."participantCount",
         -s."shareCount",
         COALESCE(s."firstScoredAt", 'infinity'::timestamp),
         s."userId"
       ) < (
+        -me."participantCount",
         -me."shareCount",
         COALESCE(me."firstScoredAt", 'infinity'::timestamp),
         me."userId"
@@ -593,6 +595,7 @@ export async function getLeaderboard(
   const standings = await prisma.shareWinStanding.findMany({
     where: { cycleId },
     orderBy: [
+      { participantCount: 'desc' },
       { shareCount: 'desc' },
       { firstScoredAt: 'asc' },
       { userId: 'asc' },
