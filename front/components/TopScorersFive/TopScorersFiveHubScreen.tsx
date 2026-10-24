@@ -1,8 +1,8 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Two equal stacked halves. Each keeps the hero art readable (light bottom
- * scrim only) and routes straight into that competition's pitch/pick.
+ * Two equal stacked halves. Each shows hero art with a large league-logo
+ * watermark (the tap target). No CTA button — press the crest to enter.
  */
 
 import { useCallback } from 'react';
@@ -24,32 +24,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 
-import { TSF_ART, TSF_DESIGN_WIDTH } from './assets';
+import { TSF_ART, TSF_DESIGN_WIDTH, TSF_HUB_LOGO } from './assets';
 
 const BG = '#030303';
-const CTA_BG = '#8C5CF5';
-/** Soft Egypt tint — full 50% wash buried the art. */
-const EGYPT_WASH = 'rgba(128, 59, 69, 0.28)';
+const EGYPT_WASH = 'rgba(128, 59, 69, 0.22)';
 const EUROPE_TITLE = '#B896FC';
 const DIVIDER = 'rgba(255,255,255,0.14)';
 
 type HalfProps = {
   testID: string;
-  ctaTestID: string;
+  logoTestID: string;
   title: string;
   subtitle: string;
-  cta: string;
   titleColor: string;
   image: number | null;
+  logo: number;
+  /** White tint helps dark-on-transparent crests read as a shadow on photos. */
+  logoTint?: string;
   fallbackColors: readonly [string, string, string, string];
   wash?: string;
-  /** expo-image contentPosition — keeps faces / pitch framed per half. */
   contentPosition: 'top' | 'center' | 'bottom';
-  isAr: boolean;
   s: (n: number) => number;
   fontHeavy: string | undefined;
   fontMedium: string | undefined;
-  fontSemi: string | undefined;
   topPad?: number;
   bottomPad?: number;
   onPress: () => void;
@@ -57,33 +54,27 @@ type HalfProps = {
 
 function CompetitionHalf({
   testID,
-  ctaTestID,
+  logoTestID,
   title,
   subtitle,
-  cta,
   titleColor,
   image,
+  logo,
+  logoTint,
   fallbackColors,
   wash,
   contentPosition,
-  isAr,
   s,
   fontHeavy,
   fontMedium,
-  fontSemi,
   topPad = 0,
   bottomPad = 0,
   onPress,
 }: HalfProps) {
+  const logoSize = s(132);
+
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      testID={testID}
-      style={styles.half}
-    >
-      {/* Art fills the half; copy sits in a bottom band so players stay visible. */}
+    <View style={styles.half}>
       <View style={styles.art} pointerEvents="none">
         {image != null ? (
           <Image
@@ -99,11 +90,12 @@ function CompetitionHalf({
           <LinearGradient colors={[...fallbackColors]} style={StyleSheet.absoluteFill} />
         )}
         {wash ? <View style={[StyleSheet.absoluteFill, { backgroundColor: wash }]} /> : null}
-        {/* Bottom-only scrim — keeps the upper art clean and readable. */}
+        {/* Soft full-frame shade so the crest reads as a shadow on the photo. */}
+        <View style={styles.photoShade} />
         <LinearGradient
-          colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.94)']}
-          locations={[0, 0.55, 1]}
-          style={styles.scrim}
+          colors={['rgba(3,3,3,0.15)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.72)', 'rgba(3,3,3,0.96)']}
+          locations={[0, 0.28, 0.68, 1]}
+          style={StyleSheet.absoluteFill}
         />
       </View>
 
@@ -112,75 +104,94 @@ function CompetitionHalf({
           styles.copy,
           {
             paddingTop: topPad,
-            paddingBottom: bottomPad + s(16),
+            paddingBottom: bottomPad + s(20),
             paddingHorizontal: s(24),
           },
         ]}
+        pointerEvents="box-none"
       >
-        <Text style={[styles.ball, { fontSize: s(36), lineHeight: s(44) }]}>⚽</Text>
-        <Text
-          style={[
-            styles.title,
-            {
-              color: titleColor,
-              fontFamily: fontHeavy,
-              fontSize: s(26),
-              marginTop: s(4),
-            },
-          ]}
-          maxFontSizeMultiplier={1.1}
-        >
-          {title}
-        </Text>
-        <Text
-          style={[
-            styles.subtitle,
-            {
-              fontFamily: fontMedium,
-              fontSize: s(14),
-              lineHeight: s(20),
-              marginTop: s(6),
-              maxWidth: s(360),
-            },
-          ]}
-          maxFontSizeMultiplier={1.1}
-        >
-          {subtitle}
-        </Text>
-
-        <TouchableOpacity
+        {/* Crest watermark — primary tap target. */}
+        <Pressable
           onPress={onPress}
-          activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={cta}
-          testID={ctaTestID}
-          style={[
-            styles.cta,
+          accessibilityLabel={title}
+          testID={logoTestID}
+          hitSlop={16}
+          style={({ pressed }) => [
+            styles.logoPress,
             {
-              width: s(360),
-              height: s(50),
-              borderRadius: s(14),
-              marginTop: s(14),
-              gap: s(10),
-              paddingHorizontal: s(20),
-              flexDirection: isAr ? 'row-reverse' : 'row',
+              width: logoSize,
+              height: logoSize,
+              opacity: pressed ? 0.75 : 1,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
             },
           ]}
         >
+          <Image
+            source={logo}
+            style={[
+              styles.logo,
+              {
+                width: logoSize,
+                height: logoSize,
+                opacity: 0.42,
+                ...(logoTint ? { tintColor: logoTint } : null),
+              },
+            ]}
+            contentFit="contain"
+            transition={0}
+          />
+          {/* Soft duplicate underneath for a cast-shadow feel. */}
+          <Image
+            source={logo}
+            style={[
+              styles.logoShadow,
+              {
+                width: logoSize,
+                height: logoSize,
+                opacity: 0.22,
+                tintColor: '#000000',
+              },
+            ]}
+            contentFit="contain"
+            transition={0}
+            pointerEvents="none"
+          />
+        </Pressable>
+
+        <Pressable onPress={onPress} accessibilityRole="button" testID={testID}>
           <Text
-            style={[styles.ctaText, { fontFamily: fontSemi, fontSize: s(16) }]}
+            style={[
+              styles.title,
+              {
+                color: titleColor,
+                fontFamily: fontHeavy,
+                fontSize: s(26),
+                marginTop: s(10),
+              },
+            ]}
             maxFontSizeMultiplier={1.1}
           >
-            {cta}
+            {title}
           </Text>
-          <Ionicons
-            name={isAr ? 'chevron-back' : 'chevron-forward'}
-            size={s(20)}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
+          <Text
+            style={[
+              styles.subtitle,
+              {
+                fontFamily: fontMedium,
+                fontSize: s(14),
+                lineHeight: s(20),
+                marginTop: s(6),
+                maxWidth: s(360),
+              },
+            ]}
+            maxFontSizeMultiplier={1.1}
+          >
+            {subtitle}
+          </Text>
+        </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -190,14 +201,12 @@ export default function TopScorersFiveHubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const copy = t.topScorersFive;
   const hub = copy.hub;
-  const isAr = language === 'ar';
 
   const fontHeavy = useAppFont(800);
   const fontMedium = useAppFont(500);
-  const fontSemi = useAppFont(600);
 
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
@@ -219,20 +228,19 @@ export default function TopScorersFiveHubScreen() {
     <View style={styles.root}>
       <CompetitionHalf
         testID="top-scorers-five-hub-europe"
-        ctaTestID="top-scorers-five-hub-europe-cta"
+        logoTestID="top-scorers-five-hub-europe-logo"
         title={hub.europeTitle}
         subtitle={hub.europeSubtitle}
-        cta={copy.cta}
         titleColor={EUROPE_TITLE}
         image={TSF_ART.hero}
+        logo={TSF_HUB_LOGO.europe}
+        logoTint="#FFFFFF"
         fallbackColors={['#5B21B6', '#3B0F7A', '#14052E', BG]}
         contentPosition="top"
-        isAr={isAr}
         s={s}
         fontHeavy={fontHeavy}
         fontMedium={fontMedium}
-        fontSemi={fontSemi}
-        topPad={insets.top + s(44)}
+        topPad={insets.top + s(48)}
         onPress={openEurope}
       />
 
@@ -240,20 +248,19 @@ export default function TopScorersFiveHubScreen() {
 
       <CompetitionHalf
         testID="top-scorers-five-hub-egypt"
-        ctaTestID="top-scorers-five-hub-egypt-cta"
+        logoTestID="top-scorers-five-hub-egypt-logo"
         title={hub.egyptTitle}
         subtitle={hub.egyptSubtitle}
-        cta={copy.cta}
         titleColor="#FFFFFF"
         image={TSF_ART.egyptHub}
+        logo={TSF_HUB_LOGO.egypt}
+        logoTint="#FFFFFF"
         fallbackColors={['#5A1F2A', '#3A1520', '#1A0A0E', BG]}
         wash={EGYPT_WASH}
         contentPosition="top"
-        isAr={isAr}
         s={s}
         fontHeavy={fontHeavy}
         fontMedium={fontMedium}
-        fontSemi={fontSemi}
         bottomPad={Math.max(insets.bottom, 10)}
         onPress={openEgypt}
       />
@@ -289,12 +296,9 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   half: { flex: 1, overflow: 'hidden', backgroundColor: BG },
   art: { ...StyleSheet.absoluteFillObject },
-  scrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '58%',
+  photoShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.22)',
   },
   divider: { height: 1, backgroundColor: DIVIDER },
   header: {
@@ -311,13 +315,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  ball: { textAlign: 'center' },
-  title: { textAlign: 'center' },
-  subtitle: { color: 'rgba(255,255,255,0.82)', textAlign: 'center' },
-  cta: {
+  logoPress: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: CTA_BG,
   },
-  ctaText: { color: '#FFFFFF' },
+  logo: {
+    zIndex: 2,
+  },
+  logoShadow: {
+    position: 'absolute',
+    top: 6,
+    left: 4,
+    zIndex: 1,
+  },
+  title: { textAlign: 'center' },
+  subtitle: { color: 'rgba(255,255,255,0.82)', textAlign: 'center', alignSelf: 'center' },
 });

@@ -26,6 +26,12 @@ export const TSF_ART: {
   egyptHub: require('../../assets/images/top-scorers-five/hero-egypt.jpg'),
 };
 
+/** Hub watermarks — tap targets instead of a CTA button. */
+export const TSF_HUB_LOGO = {
+  europe: require('../../assets/images/king-of-predictions/league-pl.png') as number,
+  egypt: require('../../assets/images/top-scorers-five/league-egypt.png') as number,
+};
+
 /** Prize art on the ranking tab — the shirt the week's top score wins. */
 export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.webp');
 
