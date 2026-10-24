@@ -77,9 +77,9 @@ export default function TopScorersFiveEgyptScreen() {
         ]}
         pointerEvents="none"
       >
-        {TSF_ART.hero != null ? (
+        {TSF_ART.egyptHub != null ? (
           <Image
-            source={TSF_ART.hero}
+            source={TSF_ART.egyptHub}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             contentPosition="top"

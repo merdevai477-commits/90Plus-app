@@ -245,11 +245,10 @@ export default function TopScorersFiveHubScreen() {
         subtitle={hub.egyptSubtitle}
         cta={copy.cta}
         titleColor="#FFFFFF"
-        // Distinct art from Europe until an Egypt players hero ships.
         image={TSF_ART.egyptHub}
         fallbackColors={['#5A1F2A', '#3A1520', '#1A0A0E', BG]}
         wash={EGYPT_WASH}
-        contentPosition="center"
+        contentPosition="top"
         isAr={isAr}
         s={s}
         fontHeavy={fontHeavy}

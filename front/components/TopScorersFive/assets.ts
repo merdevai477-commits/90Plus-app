@@ -18,12 +18,12 @@
 export const TSF_ART: {
   hero: number | null;
   pitch: number | null;
-  /** Hub bottom half — stadium art until an Egypt players hero is supplied. */
+  /** Hub / Egypt intro — Egyptian league players hero. */
   egyptHub: number | null;
 } = {
   hero: require('../../assets/images/top-scorers-five/hero.jpg'),
   pitch: require('../../assets/images/top-scorers-five/pitch.jpg'),
-  egyptHub: require('../../assets/images/top-scorers-five/pitch.jpg'),
+  egyptHub: require('../../assets/images/top-scorers-five/hero-egypt.jpg'),
 };
 
 /** Prize art on the ranking tab — the shirt the week's top score wins. */
