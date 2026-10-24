@@ -139,16 +139,88 @@ function gameweekDto(gameweek: TopScorersFiveGameweek, now: Date = new Date(), p
   };
 }
 
+const tsfFixtureHydrateAt = new Map<string, number>();
+const tsfFixtureHydrateInflight = new Map<string, Promise<void>>();
+const TSF_FIXTURE_HYDRATE_TTL_MS = 15 * 60_000;
+
+/**
+ * Egyptian (and other) TSF competitions are often missing from the daily
+ * allscores cache. Pull the competition's fixtures from 365 once per window
+ * so empty slots are not falsely locked.
+ */
+async function hydrateTsfCompetitionFixtures(
+  cfg: TsfLeagueConfig,
+  gameweek: TopScorersFiveGameweek,
+): Promise<void> {
+  const key = `${cfg.competitionLeagueId}:${gameweek.weekKey}`;
+  const last = tsfFixtureHydrateAt.get(key) ?? 0;
+  if (Date.now() - last < TSF_FIXTURE_HYDRATE_TTL_MS) return;
+
+  const existing = await prisma.cachedFixture.count({
+    where: {
+      leagueId: cfg.competitionLeagueId,
+      matchDate: { gte: gameweek.startAt, lt: gameweek.endAt },
+    },
+  });
+  if (existing > 0) {
+    tsfFixtureHydrateAt.set(key, Date.now());
+    return;
+  }
+
+  const inflight = tsfFixtureHydrateInflight.get(key);
+  if (inflight) {
+    await inflight;
+    return;
+  }
+
+  const run = (async () => {
+    try {
+      const n = await threeSixFiveScoresService.syncCompetitionFixtures(cfg.scores365CompetitionId);
+      if (n > 0) {
+        logger.info(
+          `[TopScorersFive] hydrated ${n} fixture(s) for competition ${cfg.scores365CompetitionId} (${cfg.key})`,
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `[TopScorersFive] fixture hydrate failed for ${cfg.key}: ${(error as Error)?.message}`,
+      );
+    } finally {
+      tsfFixtureHydrateAt.set(key, Date.now());
+      tsfFixtureHydrateInflight.delete(key);
+    }
+  })();
+  tsfFixtureHydrateInflight.set(key, run);
+  await run;
+}
+
+async function tsfAnyFixturesInWindow(
+  cfg: TsfLeagueConfig,
+  gameweek: TopScorersFiveGameweek,
+): Promise<boolean> {
+  const n = await prisma.cachedFixture.count({
+    where: {
+      leagueId: cfg.competitionLeagueId,
+      matchDate: { gte: gameweek.startAt, lt: gameweek.endAt },
+    },
+  });
+  return n > 0;
+}
+
 /**
  * Clubs that still have a not-started league fixture inside the gameweek
  * window — those are the only teams whose players remain selectable.
+ * Returns `null` when the window has no fixtures yet (cache cold / midweek
+ * break): callers then treat every active pool player as selectable.
  */
 export async function tsfPickableTeamIds(
   cfg: TsfLeagueConfig,
   gameweek: TopScorersFiveGameweek,
   now: Date = new Date(),
-): Promise<Set<number>> {
+): Promise<Set<number> | null> {
   if (!isTsfLeaguePickingOpen(gameweek, now)) return new Set();
+  await hydrateTsfCompetitionFixtures(cfg, gameweek);
+
   const rows = await prisma.cachedFixture.findMany({
     where: {
       leagueId: cfg.competitionLeagueId,
@@ -163,6 +235,7 @@ export async function tsfPickableTeamIds(
     ids.add(row.homeTeamId);
     ids.add(row.awayTeamId);
   }
+  if (ids.size === 0 && !(await tsfAnyFixturesInWindow(cfg, gameweek))) return null;
   return ids;
 }
 
@@ -173,6 +246,8 @@ async function leaguePickingOpen(
 ): Promise<boolean> {
   if (!isTsfLeaguePickingOpen(gameweek, now)) return false;
   const teams = await tsfPickableTeamIds(cfg, gameweek, now);
+  // null = no fixtures in the window yet → keep picking open.
+  if (teams == null) return true;
   return teams.size > 0;
 }
 
@@ -316,13 +391,15 @@ export async function listTsfEligiblePlayers(
   if (cfg.tournament === 'egypt') await ensureEgyptAttackersPool();
   const gameweek = await ensureTsfGameweek(cfg.key, now);
   const pickableTeams = await tsfPickableTeamIds(cfg, gameweek, now);
-  if (pickableTeams.size === 0) return [];
+  // Empty set = every club already kicked off → nothing left to pick.
+  // null = no fixtures in the window yet → show the whole active pool.
+  if (pickableTeams && pickableTeams.size === 0) return [];
   const players = await prisma.topScorersFivePlayer.findMany({
     where: {
       leagueKey: tsfPoolKey(cfg),
       active: true,
       externalPlayerId: { not: null },
-      teamId: { in: [...pickableTeams] },
+      ...(pickableTeams ? { teamId: { in: [...pickableTeams] } } : {}),
     },
     orderBy: { sortOrder: 'asc' },
   });
@@ -468,8 +545,13 @@ export async function saveTsfSelection(
   if (!isTsfLeaguePickingOpen(gameweek, now)) {
     throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'Picks are locked for this gameweek');
   }
-  if (player.teamId == null || !(await tsfPickableTeamIds(cfg, gameweek, now)).has(player.teamId)) {
-    throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'This player\'s match has already started');
+  const pickableTeams = await tsfPickableTeamIds(cfg, gameweek, now);
+  if (pickableTeams) {
+    if (player.teamId == null || !pickableTeams.has(player.teamId)) {
+      throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'This player\'s match has already started');
+    }
+  } else if (player.teamId == null) {
+    throw new TopScorersFiveError('PLAYER_NOT_ELIGIBLE', 'Player is not linked to a club');
   }
 
   const siblings = tsfSiblingSlotKeys(cfg).filter((key) => key !== cfg.key);
