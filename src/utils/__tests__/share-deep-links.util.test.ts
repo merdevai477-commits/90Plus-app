@@ -150,9 +150,11 @@ describe('referral landing page — the app-is-not-installed path', () => {
     expect(decodeURIComponent(fallback)).not.toContain('/invite/');
   });
 
-  it('sends iPhones without the app to the App Store', () => {
+  it('sends phones without the app to their platform store', () => {
     expect(html).toContain(`var appStoreUrl = ${JSON.stringify(APP_STORE_URL)}`);
-    expect(html).toContain('window.location.replace(appStoreUrl)');
+    expect(html).toContain(`var playStoreUrl = ${JSON.stringify(PLAY_STORE_URL)}`);
+    expect(html).toContain('window.location.replace(storeUrl)');
+    expect(html).toContain('function goToStore()');
   });
 
   it('detects iPadOS, which reports itself as a Mac', () => {

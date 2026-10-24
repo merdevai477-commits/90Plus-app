@@ -7,6 +7,10 @@ export const APP_STORE_URL = 'https://apps.apple.com/us/app/90plus/id6758296989'
 
 const ANDROID_PACKAGE = 'com.mhmdsh1892.ninetyplusapp';
 
+/** How long we wait before assuming the app did not open, then go to the store. */
+const STORE_FALLBACK_MS_IOS = 900;
+const STORE_FALLBACK_MS_ANDROID = 1_200;
+
 const LANDING_STYLES = `
     body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; padding: 24px; text-align: center; }
     .card { max-width: 360px; }
@@ -22,6 +26,8 @@ const LANDING_STYLES = `
      */
     .download { display: block; }
     body.opening .download { opacity: 0.85; }
+    /* JS hides the wrong-platform store so the user only sees their store. */
+    .store-btn { display: block; }
 `;
 
 /** Helmet sets script-src 'self'; these pages need an inline opener. Override per response. */
@@ -51,6 +57,84 @@ function buildAndroidIntentUrl(deepPath: string, storeFallbackUrl: string = PLAY
   return `intent://${deepPath}#Intent;scheme=ninetyplus;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallback};end`;
 }
 
+/**
+ * Inline opener: try the app once, then send the user straight to their
+ * platform store. Desktop keeps both store buttons.
+ */
+function buildStoreRedirectScript(intentUrl: string, customSchemeUrl: string): string {
+  return `
+    (function() {
+      var customScheme = ${JSON.stringify(customSchemeUrl)};
+      var intentUrl = ${JSON.stringify(intentUrl)};
+      var playStoreUrl = ${JSON.stringify(PLAY_STORE_URL)};
+      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
+      var ua = navigator.userAgent || '';
+      var isAndroid = /Android/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+        (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
+      var storeUrl = isAndroid ? playStoreUrl : (isIOS ? appStoreUrl : null);
+      var fallbackMs = isAndroid ? ${STORE_FALLBACK_MS_ANDROID} : ${STORE_FALLBACK_MS_IOS};
+
+      function appLikelyOpened() {
+        return document.hidden || document.webkitHidden;
+      }
+
+      function goToStore() {
+        if (!storeUrl) return;
+        window.location.replace(storeUrl);
+      }
+
+      function preferPlatformStore() {
+        var androidBtn = document.getElementById('store-android');
+        var iosBtn = document.getElementById('store-ios');
+        var openBtn = document.getElementById('open-app');
+        if (isAndroid) {
+          if (iosBtn) iosBtn.style.display = 'none';
+          if (androidBtn) {
+            androidBtn.className = 'btn primary store-btn';
+          }
+          if (openBtn) openBtn.setAttribute('href', intentUrl);
+        } else if (isIOS) {
+          if (androidBtn) androidBtn.style.display = 'none';
+          if (iosBtn) {
+            iosBtn.className = 'btn primary store-btn';
+          }
+        }
+      }
+
+      preferPlatformStore();
+      document.body.classList.add('opening');
+
+      if (isAndroid) {
+        // Intent fallback is Play Store; JS backup covers WebViews that ignore it.
+        window.location.href = intentUrl;
+        setTimeout(function() {
+          if (appLikelyOpened()) return;
+          goToStore();
+        }, fallbackMs);
+        return;
+      }
+
+      if (isIOS) {
+        window.location.href = customScheme;
+        setTimeout(function() {
+          if (appLikelyOpened()) return;
+          goToStore();
+        }, fallbackMs);
+      }
+    })();
+  `;
+}
+
+function storeButtonsHtml(openAppHref: string): string {
+  const safeHref = openAppHref.replace(/"/g, '&quot;');
+  return `
+      <a class="btn primary" id="open-app" href="${safeHref}">افتح في التطبيق</a>
+      <a class="btn secondary store-btn" id="store-android" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
+      <a class="btn secondary store-btn" id="store-ios" href="${APP_STORE_URL}">حمّل من App Store</a>
+  `;
+}
+
 type ContentLandingOptions = {
   title: string;
   ogTitle: string;
@@ -65,7 +149,6 @@ type ContentLandingOptions = {
 function buildSmartLandingPage(options: ContentLandingOptions): string {
   // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
   const intentUrl = buildAndroidIntentUrl(options.deepPath);
-  const customHref = options.customSchemeUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -77,55 +160,6 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
   <meta property="og:description" content="${options.ogDescription}">
   <meta property="og:url" content="${options.ogUrl}">
   <style>${LANDING_STYLES}</style>
-  <script>
-    /*
-     * This page is only ever REACHED when the OS did not hand the link to the
-     * app itself. On iOS that means the universal link was not claimed (app not
-     * installed, or an in-app browser such as Instagram/Facebook that strips
-     * universal links); on Android, that the App Link was not verified.
-     *
-     * So: try the custom scheme once — which still works from in-app browsers
-     * and is what carries the referral code — and if we are still on this page
-     * a moment later, send the user to their platform's STORE. Sitting on the
-     * website is the one outcome a share must never end in.
-     */
-    (function() {
-      var customScheme = ${JSON.stringify(options.customSchemeUrl)};
-      var intentUrl = ${JSON.stringify(intentUrl)};
-      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
-      var ua = navigator.userAgent || '';
-      var isAndroid = /Android/i.test(ua);
-      var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
-        // iPadOS 13+ reports itself as a Mac; the touch points give it away.
-        (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
-
-      function appLikelyOpened() {
-        return document.hidden || document.webkitHidden;
-      }
-
-      function tryOpenApp() {
-        document.body.classList.add('opening');
-        if (isAndroid) {
-          // The intent's own browser_fallback_url is the Play Store, so a
-          // missing app resolves in one hop without coming back here.
-          window.location.href = intentUrl;
-          return;
-        }
-        if (isIOS) {
-          var start = Date.now();
-          window.location.href = customScheme;
-          setTimeout(function() {
-            if (appLikelyOpened() || Date.now() - start >= 3000) return;
-            // Still here: the app is not installed — go to the App Store.
-            window.location.replace(appStoreUrl);
-          }, 1600);
-          return;
-        }
-      }
-
-      tryOpenApp();
-    })();
-  </script>
 </head>
 <body>
   <div class="card">
@@ -135,27 +169,26 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
     </div>
     <div class="download">
       <p>${options.downloadText}</p>
-      <a class="btn primary" id="open-app" href="${customHref}">افتح في التطبيق</a>
-      <a class="btn secondary" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
-      <a class="btn secondary" href="${APP_STORE_URL}">حمّل من App Store</a>
+      ${storeButtonsHtml(options.customSchemeUrl)}
     </div>
   </div>
   <script>
-    (function() {
-      var ua = navigator.userAgent || '';
-      if (!/Android/i.test(ua)) return;
-      var el = document.getElementById('open-app');
-      if (el) el.setAttribute('href', ${JSON.stringify(intentUrl)});
-    })();
+    /*
+     * This page is only ever REACHED when the OS did not hand the link to the
+     * app itself. Try the app once (keeps the referral / deep path), then send
+     * the user to their platform store immediately — never leave them on the site.
+     */
+    ${buildStoreRedirectScript(intentUrl, options.customSchemeUrl)}
   </script>
 </body>
 </html>`;
 }
 
-/** App invite — try open app; if missing, stay on landing page with store links */
+/** App invite — try open app; if missing, go straight to the platform store. */
 export function buildAppInviteLandingPage(): string {
   const landingUrl = `${SHARE_BASE_URL}/`;
   const intentUrl = buildAndroidIntentUrl('open');
+  const customScheme = 'ninetyplus://';
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -167,60 +200,20 @@ export function buildAppInviteLandingPage(): string {
   <meta property="og:description" content="توقعات، اختبارات، وريلز كروية">
   <meta property="og:url" content="${landingUrl}">
   <style>${LANDING_STYLES}</style>
-  <script>
-    (function() {
-      var intentUrl = ${JSON.stringify(intentUrl)};
-      var customScheme = 'ninetyplus://';
-      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
-      var ua = navigator.userAgent || '';
-      var isAndroid = /Android/i.test(ua);
-      var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
-        (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
-
-      function appLikelyOpened() {
-        return document.hidden || document.webkitHidden;
-      }
-
-      function tryOpenApp() {
-        document.body.classList.add('opening');
-        if (isAndroid) {
-          // Intent fallback is the Play Store — see buildAndroidIntentUrl.
-          window.location.href = intentUrl;
-          return;
-        }
-        if (isIOS) {
-          var start = Date.now();
-          window.location.href = customScheme;
-          setTimeout(function() {
-            if (appLikelyOpened() || Date.now() - start >= 3000) return;
-            window.location.replace(appStoreUrl);
-          }, 1600);
-        }
-      }
-
-      tryOpenApp();
-    })();
-  </script>
 </head>
 <body>
   <div class="card">
     <h1>90Plus</h1>
     <div class="loading">
-      <p>جاري فتح التطبيق…</p>
+      <p>جاري فتح التطبيق أو التحويل للمتجر…</p>
     </div>
     <div class="download">
       <p>أفضل تطبيق لكرة القدم — توقعات، اختبارات، وريلز</p>
-      <a class="btn primary" id="open-app" href="ninetyplus://">افتح في التطبيق</a>
-      <a class="btn secondary" href="${PLAY_STORE_URL}">Google Play</a>
-      <a class="btn secondary" href="${APP_STORE_URL}">App Store</a>
+      ${storeButtonsHtml(customScheme)}
     </div>
   </div>
   <script>
-    (function() {
-      if (!/Android/i.test(navigator.userAgent || '')) return;
-      var el = document.getElementById('open-app');
-      if (el) el.setAttribute('href', ${JSON.stringify(intentUrl)});
-    })();
+    ${buildStoreRedirectScript(intentUrl, customScheme)}
   </script>
 </body>
 </html>`;
@@ -232,7 +225,7 @@ export function buildReelLandingPage(reelId: string): string {
     ogTitle: '90Plus — شاهد هذا الفيديو',
     ogDescription: 'افتح الفيديو في تطبيق 90Plus',
     ogUrl: shareUrl(`/reels/${reelId}`),
-    loadingText: 'جاري فتح الفيديو في التطبيق…',
+    loadingText: 'جاري فتح الفيديو أو التحويل للمتجر…',
     downloadText: 'حمّل 90Plus لمشاهدة هذا الفيديو',
     deepPath: `reel/${reelId}`,
     customSchemeUrl: `ninetyplus://reel/${reelId}`,
@@ -247,7 +240,7 @@ export function buildProfileLandingPage(username: string): string {
     ogDescription: 'افتح البروفايل في تطبيق 90Plus',
     // Canonical share path is /u/:username (chat apps often mangle /@…).
     ogUrl: shareUrl(`/u/${clean}`),
-    loadingText: `جاري فتح بروفايل @${clean}…`,
+    loadingText: `جاري فتح بروفايل @${clean} أو التحويل للمتجر…`,
     downloadText: `حمّل 90Plus لمتابعة @${clean}`,
     deepPath: `user/${clean}`,
     customSchemeUrl: `ninetyplus://user/${clean}`,
@@ -262,7 +255,7 @@ export function buildReferralLandingPage(code: string): string {
     ogTitle: '90Plus — شارك واربح',
     ogDescription: 'سجّل في 90Plus من هذا الرابط وساعد صديقك على الفوز بالجائزة الأسبوعية',
     ogUrl: shareUrl(`/invite/${normalized}`),
-    loadingText: 'جاري فتح الدعوة في التطبيق…',
+    loadingText: 'جاري فتح الدعوة أو التحويل للمتجر…',
     downloadText: 'حمّل 90Plus وانضم عبر دعوة صديقك',
     deepPath: `invite/${normalized}`,
     customSchemeUrl: `ninetyplus://invite/${normalized}`,
