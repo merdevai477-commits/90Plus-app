@@ -1,11 +1,9 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Root layout cause of the empty black void: cards lived in a ScrollView with
- * only `minHeight`, so `contentContainerStyle.flexGrow` expanded the container
- * while the cards stayed short. Fix: a flex column where each card is `flex:1`
- * and fills half the remaining viewport. Scroll only kicks in when a card's
- * readable minimum exceeds half the screen (small devices / large fonts).
+ * Layout note: never put `flex:1` on a Pressable whose children are all
+ * absolutely positioned — RN collapses it (tiny overlapping junk at the top,
+ * huge black void below). Flex lives on a View wrapper; Pressable fills it.
  */
 
 import { useCallback, useMemo } from 'react';
@@ -37,8 +35,7 @@ const CTA_PURPLE = '#A78BFA';
 const GOLD = 'rgba(212, 175, 105, 0.9)';
 const CARD_GAP = 12;
 const CARD_RADIUS = 20;
-/** Floor so faces + logo + copy never crush on short phones. */
-const CARD_MIN_READABLE = 280;
+const CARD_MIN_READABLE = 300;
 
 type Accent = 'europe' | 'egypt';
 
@@ -56,9 +53,8 @@ type ChallengeCardProps = {
   exploreCta: string;
   isAr: boolean;
   s: (n: number) => number;
-  /** When set, card is a fixed height (scroll mode). Otherwise flex:1. */
-  height?: number;
-  flexFill?: boolean;
+  /** Explicit pixel height — always set so layout never depends on Pressable flex. */
+  height: number;
   fontHeavy: string | undefined;
   fontSemi: string | undefined;
   fontMedium: string | undefined;
@@ -80,7 +76,6 @@ function ChallengeCard({
   isAr,
   s,
   height,
-  flexFill,
   fontHeavy,
   fontSemi,
   fontMedium,
@@ -93,179 +88,180 @@ function ChallengeCard({
   const ctaColor = accent === 'egypt' ? GOLD : CTA_PURPLE;
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${exploreCta}`}
-      testID={testID}
-      style={({ pressed }) => [
-        styles.card,
-        flexFill ? styles.cardFlex : null,
-        height != null ? { height } : null,
-        {
-          borderRadius: s(CARD_RADIUS),
-          opacity: pressed ? 0.94 : 1,
-          transform: [{ scale: pressed ? 0.988 : 1 }],
-        },
-      ]}
-    >
-      <View style={styles.art} pointerEvents="none">
-        {image != null ? (
-          <Image
-            source={image as ImageSourcePropType}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            // Tall cards: keep upper faces in frame (portrait heroes).
-            contentPosition="top"
-            cachePolicy="memory-disk"
-            priority="high"
-            transition={0}
-          />
-        ) : (
+    <View style={[styles.cardShell, { height, borderRadius: s(CARD_RADIUS) }]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}. ${exploreCta}`}
+        testID={testID}
+        style={({ pressed }) => [
+          StyleSheet.absoluteFillObject,
+          { opacity: pressed ? 0.94 : 1, transform: [{ scale: pressed ? 0.988 : 1 }] },
+        ]}
+      >
+        <View style={styles.art} pointerEvents="none">
+          {image != null ? (
+            <Image
+              source={image as ImageSourcePropType}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              contentPosition="top"
+              cachePolicy="memory-disk"
+              priority="high"
+              transition={0}
+            />
+          ) : (
+            <LinearGradient
+              colors={
+                accent === 'egypt'
+                  ? ['#5A1F2A', '#3A1520', '#1A0A0E', BG]
+                  : ['#5B21B6', '#3B0F7A', '#14052E', BG]
+              }
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           <LinearGradient
-            colors={
-              accent === 'egypt'
-                ? ['#5A1F2A', '#3A1520', '#1A0A0E', BG]
-                : ['#5B21B6', '#3B0F7A', '#14052E', BG]
-            }
+            colors={['rgba(3,3,3,0.22)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0)']}
+            locations={[0, 0.18, 1]}
             style={StyleSheet.absoluteFill}
           />
-        )}
-        <LinearGradient
-          colors={['rgba(3,3,3,0.22)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0)']}
-          locations={[0, 0.18, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.4)', 'rgba(3,3,3,0.94)']}
-          locations={[0.48, 0.72, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-
-      <View style={[styles.content, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
-        <View style={styles.spacer} />
-
-        <View
-          style={[
-            styles.logoWrap,
-            {
-              width: logoSize + s(14),
-              height: logoSize + s(14),
-              borderRadius: (logoSize + s(14)) / 2,
-            },
-          ]}
-        >
-          <Image
-            source={logo}
-            style={{
-              width: logoSize,
-              height: logoSize,
-              ...(logoTint ? { tintColor: logoTint } : null),
-            }}
-            contentFit="contain"
-            transition={0}
+          <LinearGradient
+            colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.4)', 'rgba(3,3,3,0.94)']}
+            locations={[0.48, 0.72, 1]}
+            style={StyleSheet.absoluteFill}
           />
         </View>
 
-        <View
-          style={[
-            styles.badgeRow,
-            {
-              marginTop: s(10),
-              gap: s(8),
-              flexDirection: isAr ? 'row-reverse' : 'row',
-            },
-          ]}
-        >
+        <View style={[styles.content, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
+          <View style={styles.spacer} />
+
           <View
             style={[
-              styles.badge,
-              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+              styles.logoWrap,
+              {
+                width: logoSize + s(14),
+                height: logoSize + s(14),
+                borderRadius: (logoSize + s(14)) / 2,
+              },
             ]}
           >
-            <Text
-              style={[styles.badgeText, { color: badgeText, fontFamily: fontSemi, fontSize: s(10) }]}
-              maxFontSizeMultiplier={1.1}
-            >
-              {badgeGoal}
-            </Text>
+            <Image
+              source={logo}
+              style={{
+                width: logoSize,
+                height: logoSize,
+                ...(logoTint ? { tintColor: logoTint } : null),
+              }}
+              contentFit="contain"
+              transition={0}
+            />
           </View>
+
           <View
             style={[
-              styles.badge,
-              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+              styles.badgeRow,
+              {
+                marginTop: s(10),
+                gap: s(8),
+                flexDirection: isAr ? 'row-reverse' : 'row',
+              },
             ]}
           >
-            <Text
-              style={[styles.badgeText, { color: badgeText, fontFamily: fontSemi, fontSize: s(10) }]}
-              maxFontSizeMultiplier={1.1}
+            <View
+              style={[
+                styles.badge,
+                { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+              ]}
             >
-              {badgePlayers}
-            </Text>
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: badgeText, fontFamily: fontSemi, fontSize: s(10) },
+                ]}
+                maxFontSizeMultiplier={1.1}
+              >
+                {badgeGoal}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.badge,
+                { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: badgeText, fontFamily: fontSemi, fontSize: s(10) },
+                ]}
+                maxFontSizeMultiplier={1.1}
+              >
+                {badgePlayers}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <Text
-          style={[
-            styles.title,
-            {
-              color: titleColor,
-              fontFamily: fontHeavy,
-              fontSize: s(24),
-              marginTop: s(8),
-              textShadowColor: 'rgba(0,0,0,0.75)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 6,
-            },
-          ]}
-          maxFontSizeMultiplier={1.12}
-        >
-          {title}
-        </Text>
-        <Text
-          style={[
-            styles.subtitle,
-            {
-              fontFamily: fontMedium,
-              fontSize: s(13),
-              lineHeight: s(18),
-              marginTop: s(5),
-              maxWidth: s(340),
-              textShadowColor: 'rgba(0,0,0,0.8)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 5,
-            },
-          ]}
-          maxFontSizeMultiplier={1.12}
-        >
-          {subtitle}
-        </Text>
-
-        <View
-          style={[
-            styles.ctaRow,
-            {
-              marginTop: s(12),
-              gap: s(6),
-              flexDirection: isAr ? 'row-reverse' : 'row',
-            },
-          ]}
-        >
           <Text
-            style={[styles.ctaText, { color: ctaColor, fontFamily: fontSemi, fontSize: s(15) }]}
-            maxFontSizeMultiplier={1.1}
+            style={[
+              styles.title,
+              {
+                color: titleColor,
+                fontFamily: fontHeavy,
+                fontSize: s(24),
+                marginTop: s(8),
+                textShadowColor: 'rgba(0,0,0,0.75)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 6,
+              },
+            ]}
+            maxFontSizeMultiplier={1.12}
           >
-            {exploreCta}
+            {title}
           </Text>
-          <Ionicons
-            name={isAr ? 'arrow-back' : 'arrow-forward'}
-            size={s(16)}
-            color={ctaColor}
-          />
+          <Text
+            style={[
+              styles.subtitle,
+              {
+                fontFamily: fontMedium,
+                fontSize: s(13),
+                lineHeight: s(18),
+                marginTop: s(5),
+                maxWidth: s(340),
+                textShadowColor: 'rgba(0,0,0,0.8)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 5,
+              },
+            ]}
+            maxFontSizeMultiplier={1.12}
+          >
+            {subtitle}
+          </Text>
+
+          <View
+            style={[
+              styles.ctaRow,
+              {
+                marginTop: s(12),
+                gap: s(6),
+                flexDirection: isAr ? 'row-reverse' : 'row',
+              },
+            ]}
+          >
+            <Text
+              style={[styles.ctaText, { color: ctaColor, fontFamily: fontSemi, fontSize: s(15) }]}
+              maxFontSizeMultiplier={1.1}
+            >
+              {exploreCta}
+            </Text>
+            <Ionicons
+              name={isAr ? 'arrow-back' : 'arrow-forward'}
+              size={s(16)}
+              color={ctaColor}
+            />
+          </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 }
 
@@ -291,7 +287,7 @@ export default function TopScorersFiveHubScreen() {
     const padX = s(12);
     const headerH = insets.top + s(48);
     const bottomPad = Math.max(insets.bottom, 10) + s(8);
-    const bodyH = height - headerH - bottomPad - CARD_GAP;
+    const bodyH = Math.max(height - headerH - bottomPad - CARD_GAP, CARD_MIN_READABLE * 2);
     const half = bodyH / 2;
     const needsScroll = half < CARD_MIN_READABLE;
     const cardH = needsScroll ? CARD_MIN_READABLE : half;
@@ -327,8 +323,7 @@ export default function TopScorersFiveHubScreen() {
         exploreCta={hub.exploreCta}
         isAr={isAr}
         s={s}
-        flexFill={!layout.needsScroll}
-        height={layout.needsScroll ? layout.cardH : undefined}
+        height={layout.cardH}
         fontHeavy={fontHeavy}
         fontSemi={fontSemi}
         fontMedium={fontMedium}
@@ -348,8 +343,7 @@ export default function TopScorersFiveHubScreen() {
         exploreCta={hub.exploreCta}
         isAr={isAr}
         s={s}
-        flexFill={!layout.needsScroll}
-        height={layout.needsScroll ? layout.cardH : undefined}
+        height={layout.cardH}
         fontHeavy={fontHeavy}
         fontSemi={fontSemi}
         fontMedium={fontMedium}
@@ -421,11 +415,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   scroll: { flex: 1 },
   fillColumn: { flex: 1 },
-  card: {
+  cardShell: {
     overflow: 'hidden',
     backgroundColor: '#0A0614',
   },
-  cardFlex: { flex: 1 },
   art: { ...StyleSheet.absoluteFillObject },
   content: {
     ...StyleSheet.absoluteFillObject,
