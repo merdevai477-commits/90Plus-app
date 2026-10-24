@@ -37,7 +37,7 @@ import {
   type TsfLeagueConfig,
   type TsfScorableGame,
 } from './top-scorers-five-scoring';
-import { computeTsfLockAt, ensureTsfGameweek } from './top-scorers-five.service';
+import { computeTsfLockAt, ensureTsfGameweek, resolveTsfPickGameweek } from './top-scorers-five.service';
 
 const TICK_MS = 10 * 60 * 1000;
 /** A match is worth re-checking for a final whistle this long after kickoff. */
@@ -297,7 +297,7 @@ export async function processTsfFixture(
 export async function syncTsfPickFixtures(leagueKey: string, teamId: number | null): Promise<void> {
   const cfg = getTsfLeagueConfig(leagueKey);
   if (!cfg || teamId == null) return;
-  const gameweek = await ensureTsfGameweek(cfg.key, defaultDeps.now());
+  const gameweek = await resolveTsfPickGameweek(cfg.key, defaultDeps.now());
   if (gameweek.status === 'COMPLETED') return;
   await storeFixtures(gameweek, await discoverFixtures(cfg, gameweek, [teamId], defaultDeps, { supplement: false }));
 }

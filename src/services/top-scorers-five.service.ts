@@ -116,6 +116,25 @@ export async function ensureTsfGameweek(leagueKey: string, now: Date = new Date(
   }
 }
 
+/**
+ * Gameweek used for picking. When every fixture in the current Tuesday window
+ * has already started/finished (common for Egypt's midweek rounds), roll
+ * forward to the next window so empty slots stay open instead of locking the
+ * whole pitch until the calendar week ends.
+ */
+export async function resolveTsfPickGameweek(
+  leagueKey: string,
+  now: Date = new Date(),
+): Promise<TopScorersFiveGameweek> {
+  const cfg = requireLeague(leagueKey);
+  const current = await ensureTsfGameweek(leagueKey, now);
+  const pickable = await tsfPickableTeamIds(cfg, current, now);
+  // null = no fixtures yet → keep current (soft-open). Empty set = all done → next week.
+  if (!pickable || pickable.size > 0) return current;
+  const next = await ensureTsfGameweek(leagueKey, new Date(current.endAt.getTime() + 60_000));
+  return next.id === current.id ? current : next;
+}
+
 export type TsfGameweekDto = {
   id: string;
   weekKey: string;
@@ -389,7 +408,7 @@ export async function listTsfEligiblePlayers(
 ): Promise<TsfPlayerDto[]> {
   const cfg = requireLeague(leagueKey);
   if (cfg.tournament === 'egypt') await ensureEgyptAttackersPool();
-  const gameweek = await ensureTsfGameweek(cfg.key, now);
+  const gameweek = await resolveTsfPickGameweek(cfg.key, now);
   const pickableTeams = await tsfPickableTeamIds(cfg, gameweek, now);
   // Empty set = every club already kicked off → nothing left to pick.
   // null = no fixtures in the window yet → show the whole active pool.
@@ -496,7 +515,7 @@ function selectionKey(userId: string, gameweekId: string, leagueKey: string) {
 export async function getTsfSelection(clerkUserId: string, leagueKey: string, language: TsfLanguage): Promise<TsfSelectionDto> {
   const userId = await requireUserId(clerkUserId);
   const cfg = requireLeague(leagueKey);
-  const gameweek = await ensureTsfGameweek(cfg.key);
+  const gameweek = await resolveTsfPickGameweek(cfg.key);
   const selection = await prisma.topScorersFiveSelection.findUnique({
     where: selectionKey(userId, gameweek.id, cfg.key),
     include: { player: true },
@@ -530,7 +549,7 @@ export async function saveTsfSelection(
     throw new TopScorersFiveError('PLAYER_UNRESOLVED', 'Player is not linked to match data yet');
   }
 
-  const gameweek = await ensureTsfGameweek(cfg.key, now);
+  const gameweek = await resolveTsfPickGameweek(cfg.key, now);
   const where = selectionKey(userId, gameweek.id, cfg.key);
   const settled = async (): Promise<TsfSelectionDto> => {
     const current = await prisma.topScorersFiveSelection.findUnique({ where, include: { player: true } });
@@ -596,7 +615,7 @@ export async function saveTsfSelection(
 export async function clearTsfSelection(clerkUserId: string, leagueKey: string, now: Date = new Date()): Promise<void> {
   const userId = await requireUserId(clerkUserId);
   const cfg = requireLeague(leagueKey);
-  const gameweek = await ensureTsfGameweek(cfg.key, now);
+  const gameweek = await resolveTsfPickGameweek(cfg.key, now);
   const existing = await prisma.topScorersFiveSelection.findUnique({
     where: selectionKey(userId, gameweek.id, cfg.key),
   });
@@ -948,7 +967,7 @@ async function tsfLeaguePicks(
 ): Promise<LeaguePick[]> {
   return Promise.all(
     enabledTsfLeagues(tournament).map(async (cfg) => {
-      const gameweek = await ensureTsfGameweek(cfg.key, now);
+      const gameweek = await resolveTsfPickGameweek(cfg.key, now);
       const selection = await prisma.topScorersFiveSelection.findUnique({
         where: selectionKey(userId, gameweek.id, cfg.key),
         include: { player: true },
