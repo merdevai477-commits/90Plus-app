@@ -2125,6 +2125,19 @@ export const en = {
       'Pick 5 players from 5 leagues, predict their goals and win a football shirt',
     cta: 'Start picking',
     back: 'Back',
+    hub: {
+      europeTitle: 'Top Five Europe',
+      europeSubtitle: 'Five major European leagues — pick one player from each',
+      egyptTitle: 'Top Five Egyptian League',
+      egyptSubtitle: 'Pick 5 players from the Egyptian league and predict goals',
+      enter: 'Enter',
+    },
+    egypt: {
+      title: 'Top Scorers Five',
+      subtitle:
+        'Pick 5 players from the Egyptian league, predict their goals and win a football shirt',
+      cta: 'Start picking',
+    },
     pick: {
       goalLabel: 'Goal:',
       goalPoints: '3 points',

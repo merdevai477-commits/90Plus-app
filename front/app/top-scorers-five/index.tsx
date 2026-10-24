@@ -1,12 +1,11 @@
 /**
- * Top Scorers Five route — /top-scorers-five
+ * Top Scorers Five hub — /top-scorers-five
  *
- * Thin entry point; the screen lives in components/TopScorersFive, matching
- * how share-win and king-of-predictions delegate to their hub screens.
+ * Rank opens here into two interlocking competitions: Europe and Egypt.
  */
 
-import TopScorersFiveScreen from '../../components/TopScorersFive/TopScorersFiveScreen';
+import TopScorersFiveHubScreen from '../../components/TopScorersFive/TopScorersFiveHubScreen';
 
 export default function TopScorersFiveRoute() {
-  return <TopScorersFiveScreen />;
+  return <TopScorersFiveHubScreen />;
 }

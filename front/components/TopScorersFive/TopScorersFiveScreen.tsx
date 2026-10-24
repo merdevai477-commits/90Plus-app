@@ -83,12 +83,12 @@ export default function TopScorersFiveScreen() {
   const introGap = Math.max(s(INTRO_TOP) - (insets.top + s(48)), s(16));
 
   /**
-   * Rank is the only way into this screen, so a missing history stack (cold
-   * start from a deep link) still lands the user back there.
+   * Hub is the parent of this Europe intro. Cold starts still land on the hub
+   * rather than Rank so the user can pick Egypt or Europe again.
    */
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/rank' as never);
+    else router.replace('/top-scorers-five' as never);
   }, [router]);
 
   const handleStart = useCallback(() => {
