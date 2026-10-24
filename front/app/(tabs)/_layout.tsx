@@ -1,4 +1,5 @@
 import { Tabs, useRouter, usePathname, useNavigation } from "expo-router";
+import { useAuth } from "@clerk/clerk-expo";
 import { User, Video, Brain, BarChart2, Gift } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
@@ -26,6 +27,14 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const navigation = useNavigation();
+  const { isLoaded, isSignedIn } = useAuth();
+
+  // No tab content without an account — invite / deep links must land on /auth.
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace('/auth');
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => {
     let backPressCount = 0;
@@ -68,6 +77,10 @@ export default function TabLayout() {
       }
     };
   }, [navigation, pathname, router]);
+
+  if (!isLoaded || !isSignedIn) {
+    return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>

@@ -26,7 +26,7 @@
  * =============================================================================
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -37,6 +37,7 @@ import {
   type ListRenderItemInfo,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -64,6 +65,7 @@ export default function ShareWinLeaderboardScreen() {
   useScreenFont();
 
   const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
   const insets = useSafeAreaInsets();
   const { sw, metrics } = useShareWinStyles();
   const { t, language } = useTranslation();
@@ -83,6 +85,12 @@ export default function ShareWinLeaderboardScreen() {
     loadMore,
     refetch,
   } = useShareWinLeaderboard();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace('/auth');
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   /**
    * Names and scores are formatted once per data change, not per render pass,
@@ -147,6 +155,10 @@ export default function ShareWinLeaderboardScreen() {
     ),
     [isRefetching, refetch],
   );
+
+  if (!isLoaded || !isSignedIn) {
+    return <View style={sw.root} />;
+  }
 
   const header = (
     <View style={[sw.lbHeader, { paddingTop: insets.top + s(12) }]}>

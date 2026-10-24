@@ -21,12 +21,27 @@ function isAuthCallback(url: string): boolean {
   return /auth-callback/i.test(url);
 }
 
-function navigateForUrl(url: string): boolean {
+/**
+ * Route a parked share URL. Unsigned users never enter app content — invite
+ * codes are parked for claim after registration; everything else waits on /auth.
+ */
+function navigateForUrl(url: string, isSignedIn: boolean): boolean {
   const referralCode = parseReferralCodeFromUrl(url);
   if (referralCode) {
     void capturePendingReferral(referralCode).then(() => {
-      router.push('/share-win');
+      if (!isSignedIn) {
+        router.replace('/auth');
+        return;
+      }
+      // Already registered — attribution will no-op; do not open Share & Win
+      // (that screen is for referrers, not invitees).
+      router.replace('/(tabs)/matches');
     });
+    return true;
+  }
+
+  if (!isSignedIn) {
+    router.replace('/auth');
     return true;
   }
 
@@ -53,11 +68,12 @@ function navigateForUrl(url: string): boolean {
 
 /**
  * Owns share / QR / universal-link opens. Lives under BootReady + Clerk so it
- * can wait until navigation will stick, then route to the profile/reel/invite.
+ * can wait until navigation will stick, then route to the profile/reel/invite
+ * — or to registration when the visitor has no account.
  */
 export function DeepLinkHandler() {
   const { navigationReady } = useBootReady();
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const [pendingUrl, setPendingUrl] = useState<string | null>(peekPendingDeepLink);
   const handledUrls = useRef(new Set<string>());
 
@@ -105,14 +121,14 @@ export function DeepLinkHandler() {
         return;
       }
       handledUrls.current.add(pending);
-      logger.debug('[DeepLink] Navigating:', pending);
-      navigateForUrl(pending);
+      logger.debug('[DeepLink] Navigating:', pending, { isSignedIn: Boolean(isSignedIn) });
+      navigateForUrl(pending, Boolean(isSignedIn));
       // Clear on next tick after router.push is scheduled.
       setTimeout(() => consumePendingDeepLink(), 0);
     });
 
     return () => cancelAnimationFrame(timer);
-  }, [navigationReady, isLoaded, pendingUrl]);
+  }, [navigationReady, isLoaded, isSignedIn, pendingUrl]);
 
   return null;
 }

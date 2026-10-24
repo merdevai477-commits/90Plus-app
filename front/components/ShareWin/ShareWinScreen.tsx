@@ -32,7 +32,7 @@
  * =============================================================================
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -43,6 +43,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useShareWin, type ShareChannel } from '../../hooks/useShareWin';
@@ -72,6 +73,7 @@ export default function ShareWinScreen() {
   useScreenFont();
 
   const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
   const insets = useSafeAreaInsets();
   const { sw, metrics } = useShareWinStyles();
   const { t, language } = useTranslation();
@@ -89,6 +91,13 @@ export default function ShareWinScreen() {
     trackShare,
   } = useShareWin();
 
+  // Invitees must register first — never browse Share & Win signed out.
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace('/auth');
+    }
+  }, [isLoaded, isSignedIn, router]);
+
   /** The page simply ends after the stats bar — nothing floats over it. */
   const scrollBottomPadding = insets.bottom + s(PAGE_END_GAP);
   /**
@@ -104,12 +113,16 @@ export default function ShareWinScreen() {
   }, [router]);
 
   /**
-   * Always Rank. `router.back()` can land on Matches (tab history) or nowhere
-   * at all after a cold-start invite link — this page is entered from Rank.
+   * Always Rank when signed in. Unsigned users are sent to registration —
+   * never into the main tabs without an account.
    */
   const handleLeave = useCallback(() => {
+    if (!isSignedIn) {
+      router.replace('/auth');
+      return;
+    }
     router.replace('/(tabs)/rank');
-  }, [router]);
+  }, [isSignedIn, router]);
 
   /** Same header on every state — loading, error and ready. */
   const pageHeader = (
@@ -184,6 +197,10 @@ export default function ShareWinScreen() {
     ),
     [isRefetching, refetch],
   );
+
+  if (!isLoaded || !isSignedIn) {
+    return <View style={sw.root} />;
+  }
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading && !overview) {
