@@ -2,10 +2,9 @@
  * Pre-kickoff Statistics tab — last-N averages + trends (Figma 1449:3130).
  */
 import React from 'react';
-import { View, StyleSheet, I18nManager } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import Svg, { Circle } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
 import {
   formatPenaltyPair,
@@ -22,13 +21,11 @@ const INFO_ICON = require('../../assets/match-details/info-icon.svg');
 
 const PURPLE = '#8B5CF6';
 const PURPLE_SECONDARY = '#A855F7';
-const PURPLE_DEEP = '#513690';
 const PILL_IDLE = '#1C1C1C';
 const PILL_BORDER = '#2B2B2B';
 const CARD_BG = '#110C2A';
 const LABEL = '#BFBFBF';
 const TITLE = '#D7D7D7';
-const HINT = '#CDCDCD';
 
 type AvgKey = keyof RecentFormAveragesNumbers;
 
@@ -303,18 +300,14 @@ export function PreMatchRecentStats({
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={[PURPLE, PURPLE_DEEP]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.banner}
-      >
-        <Image source={INFO_ICON} style={styles.infoIcon} contentFit="contain" />
+      {/* Figma banner: text then info icon on the trailing edge (SwiftUI HStack). */}
+      <View style={styles.banner}>
         <View style={styles.bannerTextCol}>
           <Text style={styles.bannerTitle}>{bannerTitle}</Text>
           <Text style={styles.bannerHint}>{bannerHint}</Text>
         </View>
-      </LinearGradient>
+        <Image source={INFO_ICON} style={styles.infoIcon} contentFit="contain" />
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{title}</Text>
@@ -399,12 +392,17 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   banner: {
-    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    paddingVertical: 25,
-    paddingHorizontal: 20,
+    // SwiftUI: top/bottom 25, leading 28–59, trailing 28 — solid primary purple
+    paddingTop: 25,
+    paddingBottom: 25,
+    paddingLeft: 28,
+    paddingRight: 28,
     borderRadius: 16,
+    backgroundColor: PURPLE,
+    width: '100%',
   },
   infoIcon: {
     width: 24,
@@ -414,21 +412,23 @@ const styles = StyleSheet.create({
   bannerTextCol: {
     flex: 1,
     gap: 4,
-    alignItems: I18nManager.isRTL ? 'flex-end' : 'flex-start',
+    alignItems: 'flex-end',
   },
   bannerTitle: {
     color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '700',
-    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    textAlign: 'right',
     width: '100%',
+    writingDirection: 'rtl',
   },
   bannerHint: {
-    color: HINT,
+    color: 'rgba(204,204,204,1)',
     fontSize: 14,
     lineHeight: 20,
-    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    textAlign: 'right',
     width: '100%',
+    writingDirection: 'rtl',
   },
   section: {
     gap: 16,
@@ -438,8 +438,9 @@ const styles = StyleSheet.create({
     color: TITLE,
     fontSize: 16,
     fontWeight: '700',
-    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    textAlign: 'right',
     width: '100%',
+    writingDirection: 'rtl',
   },
   card: {
     backgroundColor: CARD_BG,
