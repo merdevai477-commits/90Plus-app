@@ -924,7 +924,7 @@ export const ar = {
       totalPasses: 'إجمالي التمريرات',
       passesAccurate: 'التمريرات الدقيقة',
       passesPercentage: 'دقة التمرير',
-      expectedGoals: 'الأهداف المتوقعة (xG)',
+      expectedGoals: 'الأهداف المتوقعه (xG)',
       tackles: 'التدخلات',
       attacks: 'الهجمات',
       dangerousAttacks: 'الهجمات الخطيرة',
