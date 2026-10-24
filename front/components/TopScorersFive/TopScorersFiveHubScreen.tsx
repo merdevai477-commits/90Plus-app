@@ -1,9 +1,9 @@
 /**
  * Top Scorers Five hub — entered from Rank.
  *
- * Layout note: never put `flex:1` on a Pressable whose children are all
- * absolutely positioned — RN collapses it (tiny overlapping junk at the top,
- * huge black void below). Flex lives on a View wrapper; Pressable fills it.
+ * Card structure (keeps images painting on Android):
+ *   View[height] → Image absolute + gradients absolute → Pressable flex:1
+ *     (in-flow column, justify flex-end — no absolute text layer)
  */
 
 import { useCallback, useMemo } from 'react';
@@ -15,7 +15,6 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
-  type ImageSourcePropType,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +31,7 @@ const BG = '#030303';
 const EUROPE_TITLE = '#E8D6FF';
 const EGYPT_TITLE = '#FFF8EC';
 const CTA_PURPLE = '#A78BFA';
-const GOLD = 'rgba(212, 175, 105, 0.9)';
+const GOLD = '#D4AF69';
 const CARD_GAP = 12;
 const CARD_RADIUS = 20;
 const CARD_MIN_READABLE = 300;
@@ -44,7 +43,7 @@ type ChallengeCardProps = {
   title: string;
   subtitle: string;
   titleColor: string;
-  image: number | null;
+  image: number;
   logo: number;
   logoTint?: string;
   accent: Accent;
@@ -53,7 +52,6 @@ type ChallengeCardProps = {
   exploreCta: string;
   isAr: boolean;
   s: (n: number) => number;
-  /** Explicit pixel height — always set so layout never depends on Pressable flex. */
   height: number;
   fontHeavy: string | undefined;
   fontSemi: string | undefined;
@@ -81,184 +79,155 @@ function ChallengeCard({
   fontMedium,
   onPress,
 }: ChallengeCardProps) {
-  const logoSize = s(64);
+  const logoSize = s(72);
   const badgeBorder =
-    accent === 'egypt' ? 'rgba(212,175,105,0.45)' : 'rgba(167,139,250,0.45)';
-  const badgeText = accent === 'egypt' ? GOLD : 'rgba(232,214,255,0.95)';
+    accent === 'egypt' ? 'rgba(212,175,105,0.55)' : 'rgba(167,139,250,0.55)';
+  const badgeText = accent === 'egypt' ? GOLD : '#E8D6FF';
   const ctaColor = accent === 'egypt' ? GOLD : CTA_PURPLE;
 
   return (
-    <View style={[styles.cardShell, { height, borderRadius: s(CARD_RADIUS) }]}>
+    <View style={[styles.card, { height, borderRadius: s(CARD_RADIUS) }]}>
+      {/* Hero sits behind — same pattern as TopScorersFiveScreen (works). */}
+      <Image
+        source={image}
+        style={styles.hero}
+        contentFit="cover"
+        contentPosition="top"
+        cachePolicy="memory-disk"
+        priority="high"
+        transition={0}
+      />
+      <LinearGradient
+        colors={['rgba(3,3,3,0.15)', 'transparent', 'transparent']}
+        locations={[0, 0.2, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={['transparent', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.96)']}
+        locations={[0.4, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${title}. ${exploreCta}`}
         testID={testID}
-        style={({ pressed }) => [
-          StyleSheet.absoluteFillObject,
-          { opacity: pressed ? 0.94 : 1, transform: [{ scale: pressed ? 0.988 : 1 }] },
-        ]}
+        style={({ pressed }) => [styles.press, { opacity: pressed ? 0.92 : 1 }]}
       >
-        <View style={styles.art} pointerEvents="none">
-          {image != null ? (
-            <Image
-              source={image as ImageSourcePropType}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              contentPosition="top"
-              cachePolicy="memory-disk"
-              priority="high"
-              transition={0}
-            />
-          ) : (
-            <LinearGradient
-              colors={
-                accent === 'egypt'
-                  ? ['#5A1F2A', '#3A1520', '#1A0A0E', BG]
-                  : ['#5B21B6', '#3B0F7A', '#14052E', BG]
-              }
-              style={StyleSheet.absoluteFill}
-            />
-          )}
-          <LinearGradient
-            colors={['rgba(3,3,3,0.22)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0)']}
-            locations={[0, 0.18, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.4)', 'rgba(3,3,3,0.94)']}
-            locations={[0.48, 0.72, 1]}
-            style={StyleSheet.absoluteFill}
+        <View
+          style={[
+            styles.logoWrap,
+            {
+              width: logoSize + s(16),
+              height: logoSize + s(16),
+              borderRadius: (logoSize + s(16)) / 2,
+              marginBottom: s(10),
+            },
+          ]}
+        >
+          <Image
+            source={logo}
+            style={{
+              width: logoSize,
+              height: logoSize,
+              ...(logoTint ? { tintColor: logoTint } : null),
+            }}
+            contentFit="contain"
+            transition={0}
           />
         </View>
 
-        <View style={[styles.content, { paddingHorizontal: s(20), paddingBottom: s(18) }]}>
-          <View style={styles.spacer} />
-
+        <View
+          style={[
+            styles.badgeRow,
+            { gap: s(8), marginBottom: s(10), flexDirection: isAr ? 'row-reverse' : 'row' },
+          ]}
+        >
           <View
             style={[
-              styles.logoWrap,
-              {
-                width: logoSize + s(14),
-                height: logoSize + s(14),
-                borderRadius: (logoSize + s(14)) / 2,
-              },
-            ]}
-          >
-            <Image
-              source={logo}
-              style={{
-                width: logoSize,
-                height: logoSize,
-                ...(logoTint ? { tintColor: logoTint } : null),
-              }}
-              contentFit="contain"
-              transition={0}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.badgeRow,
-              {
-                marginTop: s(10),
-                gap: s(8),
-                flexDirection: isAr ? 'row-reverse' : 'row',
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.badge,
-                { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.badgeText,
-                  { color: badgeText, fontFamily: fontSemi, fontSize: s(10) },
-                ]}
-                maxFontSizeMultiplier={1.1}
-              >
-                {badgeGoal}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.badge,
-                { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(4) },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.badgeText,
-                  { color: badgeText, fontFamily: fontSemi, fontSize: s(10) },
-                ]}
-                maxFontSizeMultiplier={1.1}
-              >
-                {badgePlayers}
-              </Text>
-            </View>
-          </View>
-
-          <Text
-            style={[
-              styles.title,
-              {
-                color: titleColor,
-                fontFamily: fontHeavy,
-                fontSize: s(24),
-                marginTop: s(8),
-                textShadowColor: 'rgba(0,0,0,0.75)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 6,
-              },
-            ]}
-            maxFontSizeMultiplier={1.12}
-          >
-            {title}
-          </Text>
-          <Text
-            style={[
-              styles.subtitle,
-              {
-                fontFamily: fontMedium,
-                fontSize: s(13),
-                lineHeight: s(18),
-                marginTop: s(5),
-                maxWidth: s(340),
-                textShadowColor: 'rgba(0,0,0,0.8)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 5,
-              },
-            ]}
-            maxFontSizeMultiplier={1.12}
-          >
-            {subtitle}
-          </Text>
-
-          <View
-            style={[
-              styles.ctaRow,
-              {
-                marginTop: s(12),
-                gap: s(6),
-                flexDirection: isAr ? 'row-reverse' : 'row',
-              },
+              styles.badge,
+              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(5) },
             ]}
           >
             <Text
-              style={[styles.ctaText, { color: ctaColor, fontFamily: fontSemi, fontSize: s(15) }]}
-              maxFontSizeMultiplier={1.1}
+              style={{ color: badgeText, fontFamily: fontSemi, fontSize: s(10), letterSpacing: 0.4 }}
+              maxFontSizeMultiplier={1.15}
             >
-              {exploreCta}
+              {badgeGoal}
             </Text>
-            <Ionicons
-              name={isAr ? 'arrow-back' : 'arrow-forward'}
-              size={s(16)}
-              color={ctaColor}
-            />
           </View>
+          <View
+            style={[
+              styles.badge,
+              { borderColor: badgeBorder, paddingHorizontal: s(10), paddingVertical: s(5) },
+            ]}
+          >
+            <Text
+              style={{ color: badgeText, fontFamily: fontSemi, fontSize: s(10), letterSpacing: 0.4 }}
+              maxFontSizeMultiplier={1.15}
+            >
+              {badgePlayers}
+            </Text>
+          </View>
+        </View>
+
+        <Text
+          style={{
+            color: titleColor,
+            fontFamily: fontHeavy,
+            fontSize: s(24),
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.8)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 6,
+          }}
+          maxFontSizeMultiplier={1.15}
+        >
+          {title}
+        </Text>
+        <Text
+          style={{
+            color: 'rgba(255,255,255,0.9)',
+            fontFamily: fontMedium,
+            fontSize: s(13),
+            lineHeight: s(19),
+            textAlign: 'center',
+            marginTop: s(6),
+            maxWidth: s(340),
+            paddingHorizontal: s(8),
+            textShadowColor: 'rgba(0,0,0,0.85)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 5,
+          }}
+          maxFontSizeMultiplier={1.15}
+        >
+          {subtitle}
+        </Text>
+
+        <View
+          style={[
+            styles.ctaRow,
+            {
+              marginTop: s(14),
+              gap: s(6),
+              flexDirection: isAr ? 'row-reverse' : 'row',
+            },
+          ]}
+        >
+          <Text
+            style={{ color: ctaColor, fontFamily: fontSemi, fontSize: s(15) }}
+            maxFontSizeMultiplier={1.1}
+          >
+            {exploreCta}
+          </Text>
+          <Ionicons
+            name={isAr ? 'arrow-back' : 'arrow-forward'}
+            size={s(16)}
+            color={ctaColor}
+          />
         </View>
       </Pressable>
     </View>
@@ -282,6 +251,9 @@ export default function TopScorersFiveHubScreen() {
 
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
+
+  const europeImage = TSF_ART.hero ?? 0;
+  const egyptImage = TSF_ART.egyptHub ?? TSF_ART.hero ?? 0;
 
   const layout = useMemo(() => {
     const padX = s(12);
@@ -314,7 +286,7 @@ export default function TopScorersFiveHubScreen() {
         title={hub.europeTitle}
         subtitle={hub.europeSubtitle}
         titleColor={EUROPE_TITLE}
-        image={TSF_ART.hero}
+        image={europeImage}
         logo={TSF_HUB_LOGO.europe}
         logoTint="#FFFFFF"
         accent="europe"
@@ -334,7 +306,7 @@ export default function TopScorersFiveHubScreen() {
         title={hub.egyptTitle}
         subtitle={hub.egyptSubtitle}
         titleColor={EGYPT_TITLE}
-        image={TSF_ART.egyptHub}
+        image={egyptImage}
         logo={TSF_HUB_LOGO.egypt}
         logoTint="#FFFFFF"
         accent="egypt"
@@ -415,20 +387,26 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   scroll: { flex: 1 },
   fillColumn: { flex: 1 },
-  cardShell: {
+  card: {
     overflow: 'hidden',
-    backgroundColor: '#0A0614',
+    backgroundColor: '#14052E',
   },
-  art: { ...StyleSheet.absoluteFillObject },
-  content: {
+  hero: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
+    width: '100%',
+    height: '100%',
   },
-  spacer: { flex: 1 },
+  press: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
   logoWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   badgeRow: {
     alignItems: 'center',
@@ -436,25 +414,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   badge: {
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderWidth: 1,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  badgeText: {
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  title: { textAlign: 'center' },
-  subtitle: {
-    color: 'rgba(255,255,255,0.88)',
-    textAlign: 'center',
-    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   ctaRow: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaText: {},
   header: {
     position: 'absolute',
     top: 0,
