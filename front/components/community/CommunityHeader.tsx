@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { glassProps, GlassWrapper } from '../../constants/ui';
 import { CI } from './theme';
 
 interface Props {
@@ -23,8 +22,8 @@ const ACCENT = '#A855F7';
 const ROW_H = 40;
 
 /**
- * Same floating glass chrome as Rank / Matches: equal side slots keep the
- * 90 PLUS + title pill optically centred.
+ * Floating transparent header — no blur bar. Equal side slots keep the
+ * 90 PLUS + title pill optically centred over the feed.
  */
 export const CommunityHeader = memo(function CommunityHeader({
   title,
@@ -41,9 +40,12 @@ export const CommunityHeader = memo(function CommunityHeader({
   const topPad = Math.max(insets.top, 10) + 10;
   const BackIcon = I18nManager.isRTL ? ChevronRight : ChevronLeft;
 
-  const chrome = (
-    <>
-      <View style={[styles.side, styles.sideStart]}>
+  return (
+    <View
+      style={[styles.bar, floating && styles.floating, { paddingTop: topPad }]}
+      pointerEvents="box-none"
+    >
+      <View style={[styles.side, styles.sideStart]} pointerEvents="box-none">
         {onBack ? (
           <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.iconBtn}>
             <BackIcon size={20} color="#FFF" strokeWidth={2.4} />
@@ -74,7 +76,7 @@ export const CommunityHeader = memo(function CommunityHeader({
         </View>
       </Pressable>
 
-      <View style={[styles.side, styles.sideEnd]}>
+      <View style={[styles.side, styles.sideEnd]} pointerEvents="box-none">
         {right ??
           (onBell ? (
             <Pressable onPress={onBell} accessibilityRole="button" accessibilityLabel="Notifications" hitSlop={8} style={styles.iconBtn}>
@@ -82,16 +84,7 @@ export const CommunityHeader = memo(function CommunityHeader({
             </Pressable>
           ) : null)}
       </View>
-    </>
-  );
-
-  return (
-    <GlassWrapper
-      {...(glassProps.header as object)}
-      style={[styles.bar, floating && styles.floating, { paddingTop: topPad }]}
-    >
-      {chrome}
-    </GlassWrapper>
+    </View>
   );
 });
 
@@ -106,8 +99,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
     backgroundColor: 'transparent',
   },
   floating: {
