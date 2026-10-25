@@ -1,16 +1,26 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CalendarDays, Crown, Play, Shirt, Target } from 'lucide-react-native';
 
-const CTA = '#8C5CF5';
-const SUBTITLE = '#D1D1D1';
-const CARD_HINT = '#BAA1F7';
-const CARD_BG = '#0A001C';
-const CARD_BORDER = '#240F52';
-const WATERMARK = 'rgba(166,128,252,0.40)';
-const MAROON = 'rgba(128,59,69,0.50)';
+import {
+  CoachArrowIcon,
+  CoachCrownIcon,
+  CoachFieldIcon,
+  CoachTrophyIcon,
+  CoachUsersIcon,
+} from './CoachKingIcons';
+
+const PAGE_BG = '#030303';
+const SUBTITLE = '#D0D0D0';
+const CARD_HINT = '#BBA1F6';
+const CARD_BG = '#09001D';
+const CARD_BORDER = '#241152';
+const WATERMARK = 'rgba(166,128,253,0.40)';
+const PROMO_ASPECT = 404 / 161;
+
+const HERO = require('../../assets/images/coach-king/hero.jpg');
+const PROMO = require('../../assets/images/coach-king/promo.png');
 
 export type CoachKingCopy = {
   title: string;
@@ -32,7 +42,7 @@ type Pillar = {
   key: string;
   title: string;
   hint: string;
-  Icon: typeof Shirt;
+  Icon: React.ComponentType;
 };
 
 interface Props {
@@ -43,69 +53,121 @@ interface Props {
 }
 
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
+  const { width } = useWindowDimensions();
+  const photoHeight = Math.round(Math.min(width * 1.18, 470));
+  const promoWidth = width - 44;
+  const promoHeight = Math.round(promoWidth / PROMO_ASPECT);
+  const dir = isAr ? 'rtl' : 'ltr';
+
   const pillars: Pillar[] = [
-    { key: 'squad', title: copy.squad, hint: copy.squadHint, Icon: Shirt },
-    { key: 'tactics', title: copy.tactics, hint: copy.tacticsHint, Icon: Target },
-    { key: 'matches', title: copy.matches, hint: copy.matchesHint, Icon: CalendarDays },
+    { key: 'squad', title: copy.squad, hint: copy.squadHint, Icon: CoachUsersIcon },
+    { key: 'tactics', title: copy.tactics, hint: copy.tacticsHint, Icon: CoachFieldIcon },
+    { key: 'matches', title: copy.matches, hint: copy.matchesHint, Icon: CoachTrophyIcon },
   ];
 
   return (
     <View style={s.root} testID="coach-king-section">
-      <View style={s.bg} pointerEvents="none">
+      <View style={[s.photo, { height: photoHeight }]}>
         <Image
-          source={require('../../assets/images/arena.jpg')}
-          style={s.arena}
+          source={HERO}
+          style={s.photoImg}
           contentFit="cover"
+          contentPosition="center"
           cachePolicy="memory-disk"
         />
-        <LinearGradient colors={[MAROON, 'rgba(10,0,28,0.55)', '#0A0612']} style={StyleSheet.absoluteFill} />
-      </View>
+        <LinearGradient
+          colors={['transparent', 'transparent', PAGE_BG]}
+          locations={[0, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
-      <Text style={[s.sectionTitle, { fontFamily: fonts.semibold, writingDirection: isAr ? 'rtl' : 'ltr' }]}>
-        {copy.title}
-      </Text>
+        <Text
+          style={[
+            s.sectionTitle,
+            { fontFamily: fonts.semibold, writingDirection: dir },
+          ]}
+        >
+          {copy.title}
+        </Text>
 
-      <View style={s.hero}>
-        <View style={s.crownBox}>
-          <Crown size={22} color="#F5E9FF" fill="rgba(168,85,247,0.35)" />
-        </View>
-        <Text style={[s.heroTitle, { fontFamily: fonts.extrabold }]}>{copy.hero}</Text>
-        <Text style={[s.heroSub, { fontFamily: fonts.medium }]}>{copy.subtitle}</Text>
-      </View>
-
-      <Text pointerEvents="none" style={[s.watermark, { fontFamily: fonts.bold }]}>
-        {copy.brand}
-      </Text>
-
-      <View style={[s.cards, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-        {pillars.map(({ key, title, hint, Icon }) => (
-          <View key={key} style={s.card}>
-            <View style={s.cardIcon}>
-              <Icon size={22} color="#E9D5FF" strokeWidth={2.1} />
-            </View>
-            <Text style={[s.cardTitle, { fontFamily: fonts.bold }]} numberOfLines={2}>
-              {title}
-            </Text>
-            <Text style={[s.cardHint, { fontFamily: fonts.medium }]} numberOfLines={1}>
-              {hint}
+        <View style={s.heroCopy}>
+          <CoachCrownIcon />
+          <View style={s.heroRotate}>
+            <Text style={[s.heroTitle, { fontFamily: fonts.extrabold }]}>{copy.hero}</Text>
+            <Text
+              style={[s.heroSub, { fontFamily: fonts.medium, writingDirection: dir }]}
+            >
+              {copy.subtitle}
             </Text>
           </View>
-        ))}
+        </View>
+
+        <Text pointerEvents="none" style={[s.watermark, { fontFamily: fonts.bold }]}>
+          {copy.brand}
+        </Text>
       </View>
 
-      <Pressable
-        onPress={onStart}
-        disabled={!onStart}
-        accessibilityRole="button"
-        accessibilityLabel={copy.start}
-        testID="coach-king-start"
-        style={({ pressed }) => [s.ctaHit, pressed && { opacity: 0.9 }]}
-      >
-        <View style={s.cta}>
-          <Play size={18} color="#FFF" fill="#FFF" />
-          <Text style={[s.ctaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
+      <View style={s.body}>
+        <View style={s.cards}>
+          {pillars.map(({ key, title, hint, Icon }) => (
+            <View key={key} style={s.card}>
+              <View style={s.cardIcon}>
+                <Icon />
+              </View>
+              <View style={s.cardCopy}>
+                <Text
+                  style={[s.cardTitle, { fontFamily: fonts.bold, writingDirection: dir }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
+                  {title}
+                </Text>
+                <Text
+                  style={[s.cardHint, { fontFamily: fonts.medium, writingDirection: dir }]}
+                  numberOfLines={1}
+                >
+                  {hint}
+                </Text>
+              </View>
+            </View>
+          ))}
         </View>
-      </Pressable>
+
+        <View style={[s.promo, { width: promoWidth, height: promoHeight }]}>
+          <Image
+            source={PROMO}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            accessibilityLabel={copy.title}
+          />
+        </View>
+
+        <Pressable
+          onPress={onStart}
+          disabled={!onStart}
+          accessibilityRole="button"
+          accessibilityLabel={copy.start}
+          testID="coach-king-start"
+          style={({ pressed }) => [s.ctaHit, pressed && { opacity: 0.92 }]}
+        >
+          <View style={s.ctaClip}>
+            <LinearGradient
+              colors={['#8B5CF6', '#2E146A']}
+              locations={[0.12, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={s.ctaRow}>
+              <CoachArrowIcon />
+              <Text style={[s.ctaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
+            </View>
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -113,45 +175,36 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
 const s = StyleSheet.create({
   root: {
     marginTop: 8,
-    paddingTop: 18,
-    paddingBottom: 28,
-    paddingHorizontal: 16,
+    backgroundColor: PAGE_BG,
     overflow: 'hidden',
   },
-  bg: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  arena: {
+  photo: {
     width: '100%',
-    height: '100%',
-    opacity: 0.55,
+    overflow: 'hidden',
+  },
+  photoImg: {
+    ...StyleSheet.absoluteFillObject,
   },
   sectionTitle: {
     color: '#fff',
     fontSize: 20,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 18,
+    marginTop: 18,
   },
-  hero: {
+  heroCopy: {
     alignItems: 'center',
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    marginTop: 16,
+    gap: 10,
   },
-  crownBox: {
-    width: 48,
-    height: 38,
-    borderRadius: 12,
+  heroRotate: {
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(39,8,94,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
-    marginBottom: 10,
+    transform: [{ rotate: '-5deg' }],
+    paddingHorizontal: 20,
   },
   heroTitle: {
-    color: '#fff',
-    fontSize: 34,
+    color: '#F4EEFF',
+    fontSize: 36,
     fontWeight: '800',
     textAlign: 'center',
     marginBottom: 8,
@@ -162,19 +215,29 @@ const s = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 24,
+    maxWidth: 280,
   },
   watermark: {
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
+    width: '100%',
     color: WATERMARK,
     fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 18,
-    marginBottom: 20,
+  },
+  body: {
+    marginTop: -72,
+    paddingHorizontal: 22,
+    paddingBottom: 36,
+    gap: 18,
+    zIndex: 2,
   },
   cards: {
+    flexDirection: 'row',
     gap: 10,
     height: 130,
-    marginBottom: 22,
   },
   card: {
     flex: 1,
@@ -182,49 +245,59 @@ const s = StyleSheet.create({
     height: 130,
     borderRadius: 16,
     backgroundColor: CARD_BG,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0.5,
     borderColor: CARD_BORDER,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
-    gap: 8,
+    gap: 14,
   },
   cardIcon: {
-    width: 32,
-    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+  },
+  cardCopy: {
+    alignItems: 'center',
+    gap: 8,
   },
   cardTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
   },
   cardHint: {
     color: CARD_HINT,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  promo: {
+    alignSelf: 'center',
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   ctaHit: {
     width: '100%',
     alignSelf: 'stretch',
   },
-  cta: {
+  ctaClip: {
     width: '100%',
     height: 58,
     borderRadius: 16,
-    backgroundColor: CTA,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
+    height: 58,
   },
   ctaTxt: {
     color: '#fff',
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '600',
   },
 });
