@@ -2028,6 +2028,19 @@ export const en = {
     topPlayers: 'Top Players',
     viewAll: 'VIEW ALL',
     playNow: 'Play Now',
+    coachKing: {
+      title: 'King of Coaches',
+      hero: 'You are the coach',
+      subtitle: 'Build your squad. Make your calls. Collect the points.',
+      brand: '90Plus',
+      squad: 'My Squad',
+      squadHint: '11 players',
+      tactics: 'Tactics',
+      tacticsHint: 'Pick your plan',
+      matches: 'Matches',
+      matchesHint: 'Collect points',
+      start: 'Start now',
+    },
 
     // Empty / placeholder slots
     emptySlot: 'Empty Slot',

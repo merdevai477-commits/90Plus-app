@@ -1,4 +1,5 @@
 export { default as CompCard } from './CompCard';
+export { default as CoachKingSection } from './CoachKingSection';
 export { default as FifaCard } from './FifaCard';
 export { default as LeaderboardModal } from './LeaderboardModal';
 export { default as PodiumCard } from './PodiumCard';

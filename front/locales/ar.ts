@@ -1983,6 +1983,19 @@ export const ar = {
     topPlayers: 'أفضل اللاعبين',
     viewAll: 'عرض الكل',
     playNow: 'العب الآن',
+    coachKing: {
+      title: 'ملك المدربين',
+      hero: 'أنت المدرب',
+      subtitle: 'ابني تشكيلتك..اتخذ قراراتك..واجمع النقاط',
+      brand: '90Plus',
+      squad: 'تشكيلتي',
+      squadHint: '11 لاعب',
+      tactics: 'التكنيكات',
+      tacticsHint: 'اختر خطتك',
+      matches: 'المباريات',
+      matchesHint: 'جمع النقاط',
+      start: 'ابدأ الان',
+    },
 
     // Empty / placeholder slots
     emptySlot: 'مكان شاغر',
