@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Pressable,
   ScrollView,
@@ -21,6 +20,7 @@ import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from '
 import { AtSign, Hash, RotateCcw, X } from 'lucide-react-native';
 
 import { CommunityAvatar } from '../../components/community/CommunityAvatar';
+import { ConfirmSheet } from '../../components/community/ConfirmSheet';
 import { KeyboardDock } from '../../components/community/KeyboardDock';
 import { MentionSuggestions } from '../../components/community/MentionSuggestions';
 import { activeMentionQuery, isArabicText } from '../../components/community/richTextParse';
@@ -91,6 +91,7 @@ export default function ComposeScreen() {
   const [caret, setCaret] = useState(0);
   const [keepRemoteImage, setKeepRemoteImage] = useState(() => !!existing?.image);
   const [saving, setSaving] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const draft = usePublishStore((st) => st.drafts[clientId]);
   const inputRef = useRef<TextInput>(null);
   const published = useRef(false);
@@ -151,12 +152,9 @@ export default function ComposeScreen() {
       leave();
       return true;
     }
-    Alert.alert(s.discardTitle, s.discardBody, [
-      { text: s.keepEditing, style: 'cancel' },
-      { text: s.discard, style: 'destructive', onPress: leave },
-    ]);
+    setDiscardOpen(true);
     return true;
-  }, [dirty, editing, hasContent, leave, s]);
+  }, [dirty, editing, hasContent, leave]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', confirmLeave);
@@ -378,6 +376,17 @@ export default function ComposeScreen() {
           )}
         </View>
       </KeyboardDock>
+
+      <ConfirmSheet
+        visible={discardOpen}
+        title={s.discardTitle}
+        body={s.discardBody}
+        confirmLabel={s.discard}
+        cancelLabel={s.keepEditing}
+        fontFamily={fonts.semibold}
+        onConfirm={leave}
+        onClose={() => setDiscardOpen(false)}
+      />
     </View>
   );
 }

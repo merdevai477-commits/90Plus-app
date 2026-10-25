@@ -144,27 +144,28 @@ export function usePostActions() {
     [report, s],
   );
 
+  const performDelete = useCallback(
+    async (post: CommunityPost, onDeleted?: () => void) => {
+      removePostEverywhere(qc, post.id);
+      onDeleted?.();
+      try {
+        await communityApi.deletePost(getToken, post.id);
+      } catch (err) {
+        toastManager.showError(s.delete, communityErrorMessage(err, s));
+        void qc.invalidateQueries({ queryKey: ['community', 'feed'] });
+      }
+    },
+    [getToken, qc, s],
+  );
+
   const deletePost = useCallback(
     (post: CommunityPost, onDeleted?: () => void) => {
       Alert.alert(s.deletePostTitle, s.deleteBody, [
         { text: s.cancel, style: 'cancel' },
-        {
-          text: s.delete,
-          style: 'destructive',
-          onPress: async () => {
-            removePostEverywhere(qc, post.id);
-            onDeleted?.();
-            try {
-              await communityApi.deletePost(getToken, post.id);
-            } catch (err) {
-              toastManager.showError(s.delete, communityErrorMessage(err, s));
-              void qc.invalidateQueries({ queryKey: ['community', 'feed'] });
-            }
-          },
-        },
+        { text: s.delete, style: 'destructive', onPress: () => void performDelete(post, onDeleted) },
       ]);
     },
-    [getToken, qc, s],
+    [performDelete, s],
   );
 
   const copyText = useCallback(
@@ -197,5 +198,5 @@ export function usePostActions() {
     [router],
   );
 
-  return { toggleLike, likeOnce, share, askReport, report, deletePost, copyText, openProfile, openHashtag, openPost };
+  return { toggleLike, likeOnce, share, askReport, report, deletePost, performDelete, copyText, openProfile, openHashtag, openPost };
 }

@@ -1,11 +1,11 @@
 import React, { memo } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { I18nManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { BlurView } from 'expo-blur';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LiquidGlassView, isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
-import { C, CI } from './theme';
+import { glassProps, GlassWrapper } from '../../constants/ui';
+import { CI } from './theme';
 
 interface Props {
   title: string;
@@ -16,15 +16,15 @@ interface Props {
   onBrandPress?: () => void;
   onTitlePress?: () => void;
   right?: React.ReactNode;
-  /** When true, header floats over content (matches / rank style). */
   floating?: boolean;
 }
 
-const GlassSurface = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+const ACCENT = '#A855F7';
+const ROW_H = 40;
 
 /**
- * Matches / Rank style floating header: liquid-glass island with the 90 PLUS
- * brand pill, screen title, and actions.
+ * Same floating glass chrome as Rank / Matches: equal side slots keep the
+ * 90 PLUS + title pill optically centred.
  */
 export const CommunityHeader = memo(function CommunityHeader({
   title,
@@ -39,80 +39,76 @@ export const CommunityHeader = memo(function CommunityHeader({
 }: Props) {
   const insets = useSafeAreaInsets();
   const topPad = Math.max(insets.top, 10) + 10;
+  const BackIcon = I18nManager.isRTL ? ChevronRight : ChevronLeft;
 
-  const glassProps = isLiquidGlassSupported
-    ? ({ effect: 'clear', tint: 'rgba(5,1,13,0.1)' } as const)
-    : ({ intensity: Platform.OS === 'ios' ? 28 : 60, tint: 'dark' as const });
+  const chrome = (
+    <>
+      <View style={[styles.side, styles.sideStart]}>
+        {onBack ? (
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.iconBtn}>
+            <BackIcon size={20} color="#FFF" strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <Pressable
+        onPress={onTitlePress ?? onBrandPress}
+        disabled={!onTitlePress && !onBrandPress}
+        accessibilityRole="button"
+        accessibilityLabel={`90 PLUS ${title}`}
+        style={styles.logoPill}
+      >
+        <Text style={styles.logo90}>90</Text>
+        <View style={styles.plusChip}>
+          <Text style={styles.logoPlus}>PLUS</Text>
+        </View>
+        <View style={styles.titleCol}>
+          <Text style={[styles.pillTitle, { fontFamily }]} numberOfLines={1}>
+            {title}
+          </Text>
+          {!!subtitle && (
+            <Text style={[styles.subtitle, { fontFamily }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
+      </Pressable>
+
+      <View style={[styles.side, styles.sideEnd]}>
+        {right ??
+          (onBell ? (
+            <Pressable onPress={onBell} accessibilityRole="button" accessibilityLabel="Notifications" hitSlop={8} style={styles.iconBtn}>
+              <Image source={CI.notification} style={styles.bell} contentFit="contain" />
+            </Pressable>
+          ) : null)}
+      </View>
+    </>
+  );
 
   return (
-    <GlassSurface
-      {...(glassProps as any)}
-      style={[
-        styles.wrap,
-        floating && styles.floating,
-        { paddingTop: topPad },
-        !isLiquidGlassSupported && styles.wrapFallback,
-      ]}
+    <GlassWrapper
+      {...(glassProps.header as object)}
+      style={[styles.bar, floating && styles.floating, { paddingTop: topPad }]}
     >
-      <View style={styles.bar}>
-        <View style={styles.left}>
-          {onBack ? (
-            <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
-              <Image source={CI.back} style={styles.back} contentFit="contain" />
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={onBrandPress}
-            disabled={!onBrandPress}
-            accessibilityRole="button"
-            accessibilityLabel="90 PLUS"
-            style={styles.logoPill}
-          >
-            <Text style={styles.logo90}>90</Text>
-            <View style={styles.plusChip}>
-              <Text style={styles.logoPlus}>PLUS</Text>
-            </View>
-          </Pressable>
-          <Pressable onPress={onTitlePress} disabled={!onTitlePress} style={styles.titleCol}>
-            <Text style={[styles.title, { fontFamily }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-              {title}
-            </Text>
-            {!!subtitle && (
-              <Text style={[styles.subtitle, { fontFamily }]} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            )}
-          </Pressable>
-        </View>
-
-        <View style={styles.right}>
-          {right ??
-            (onBell && (
-              <Pressable onPress={onBell} hitSlop={10} accessibilityRole="button" accessibilityLabel="Notifications" style={styles.bellBtn}>
-                <Image source={CI.notification} style={styles.bell} contentFit="contain" />
-              </Pressable>
-            ))}
-        </View>
-      </View>
-    </GlassSurface>
+      {chrome}
+    </GlassWrapper>
   );
 });
 
-/** Height below the status bar — use as content paddingTop when floating. */
 export function useCommunityHeaderOffset(): number {
   const insets = useSafeAreaInsets();
-  return Math.max(insets.top, 10) + 60;
+  return Math.max(insets.top, 10) + 10 + ROW_H + 10;
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  wrapFallback: {
-    backgroundColor: 'rgba(9,7,16,0.88)',
+    backgroundColor: 'transparent',
   },
   floating: {
     position: 'absolute',
@@ -121,34 +117,33 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 100,
   },
-  bar: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  left: {
+  side: {
     flex: 1,
-    flexDirection: 'row',
+  },
+  sideStart: {
+    alignItems: 'flex-start',
+  },
+  sideEnd: {
+    alignItems: 'flex-end',
+  },
+  iconBtn: {
+    width: ROW_H,
+    height: ROW_H,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168,85,247,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.35)',
     alignItems: 'center',
-    gap: 8,
-    paddingRight: 8,
+    justifyContent: 'center',
   },
-  right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backBtn: {
-    marginRight: -2,
-  },
-  back: { width: 34, height: 34 },
   logoPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    maxWidth: '64%',
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     gap: 5,
@@ -160,7 +155,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   plusChip: {
-    backgroundColor: C.accent,
+    backgroundColor: ACCENT,
     borderRadius: 5,
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -173,27 +168,18 @@ const styles = StyleSheet.create({
   },
   titleCol: {
     flexShrink: 1,
+    marginLeft: 2,
   },
-  title: {
+  pillTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   subtitle: {
-    color: C.muted,
-    fontSize: 11,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 10,
     marginTop: 1,
   },
-  bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: 'rgba(168,85,247,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bell: { width: 22, height: 22 },
+  bell: { width: 20, height: 20 },
 });

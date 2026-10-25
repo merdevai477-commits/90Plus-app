@@ -26,6 +26,7 @@ import { MessageCircle } from 'lucide-react-native';
 
 import type { CommunityPost } from '../../services/community.api';
 import { ActionMenu } from './ActionMenu';
+import { ConfirmSheet } from './ConfirmSheet';
 import { CommentComposer } from './CommentComposer';
 import { formatCount } from './format';
 import { useCommentThread } from './useCommentThread';
@@ -180,6 +181,16 @@ export function CommentsSheet({ post, onClose }: Props) {
           cancelLabel={s.cancel}
           onClose={ctx.closeMenu}
           fontFamily={fonts.semibold}
+        />
+        <ConfirmSheet
+          visible={!!ctx.deleteTarget}
+          title={s.deleteCommentTitle}
+          body={s.deleteBody}
+          confirmLabel={s.delete}
+          cancelLabel={s.cancel}
+          fontFamily={fonts.semibold}
+          onConfirm={ctx.confirmDelete}
+          onClose={ctx.closeDelete}
         />
       </GestureHandlerRootView>
     </Modal>

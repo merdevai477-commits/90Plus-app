@@ -15,6 +15,7 @@ import { usePostActions } from '../../hooks/community/usePostActions';
 import { discardPending, retryPending, usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
 import { findPost } from '../../hooks/community/communityCache';
 import { ActionMenu, type ActionMenuItem } from './ActionMenu';
+import { ConfirmSheet } from './ConfirmSheet';
 import { CommentsSheet } from './CommentsSheet';
 import { FeedSkeleton } from './FeedSkeleton';
 import { GhostPostCard } from './GhostPostCard';
@@ -64,6 +65,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const feed = useCommunityPosts(source);
   const pending = usePublishStore((st) => st.pending);
   const [menuPost, setMenuPost] = useState<CommunityPost | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CommunityPost | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [sheetPostId, setSheetPostId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -205,7 +207,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
         onPress: () => router.push({ pathname: '/community/compose', params: { edit: p.id, photo: '1' } }),
       });
       if (p.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(p.content) });
-      items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => actions.deletePost(p) });
+      items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => setDeleteTarget(p) });
     } else {
       if (p.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(p.content) });
       items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', p.id) });
@@ -281,6 +283,18 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
       )}
 
       <ActionMenu visible={!!menuPost} items={menuItems} cancelLabel={s.cancel} onClose={() => setMenuPost(null)} fontFamily={fonts.semibold} />
+      <ConfirmSheet
+        visible={!!deleteTarget}
+        title={s.deletePostTitle}
+        body={s.deleteBody}
+        confirmLabel={s.delete}
+        cancelLabel={s.cancel}
+        fontFamily={fonts.semibold}
+        onConfirm={() => {
+          if (deleteTarget) void actions.performDelete(deleteTarget);
+        }}
+        onClose={() => setDeleteTarget(null)}
+      />
       <ImageViewerModal visible={!!viewerUrl} imageUrl={viewerUrl ?? ''} onClose={() => setViewerUrl(null)} />
       <CommentsSheet post={sheetPost} onClose={() => setSheetPostId(null)} />
     </View>

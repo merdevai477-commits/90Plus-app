@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { CommunityComment, CommunityPost } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
@@ -28,6 +28,7 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
   const thread = useComments(postId, enabled && !!postId);
   const composerRef = useRef<CommentComposerHandle>(null);
   const [menu, setMenu] = useState<CommunityComment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CommunityComment | null>(null);
 
   const fonts = useMemo(
     () => ({ regular: getAppFont(400, language), medium: getAppFont(500, language), semibold: getAppFont(600, language) }),
@@ -104,11 +105,7 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
         key: 'delete',
         label: s.delete,
         destructive: true,
-        onPress: () =>
-          Alert.alert(s.deleteCommentTitle, s.deleteBody, [
-            { text: s.cancel, style: 'cancel' },
-            { text: s.delete, style: 'destructive', onPress: () => void thread.remove(menu) },
-          ]),
+        onPress: () => setDeleteTarget(menu),
       });
     }
     return items;
@@ -130,6 +127,11 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
     menu,
     menuItems,
     closeMenu: () => setMenu(null),
+    deleteTarget,
+    closeDelete: () => setDeleteTarget(null),
+    confirmDelete: () => {
+      if (deleteTarget) void thread.remove(deleteTarget);
+    },
     fonts,
     isAr,
     s,

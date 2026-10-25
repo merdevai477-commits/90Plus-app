@@ -9,6 +9,7 @@ import { MessageCircle, SearchX } from 'lucide-react-native';
 
 import ImageViewerModal from '../../../components/common/ImageViewerModal';
 import { ActionMenu, type ActionMenuItem } from '../../../components/community/ActionMenu';
+import { ConfirmSheet } from '../../../components/community/ConfirmSheet';
 import { CommentComposer } from '../../../components/community/CommentComposer';
 import { CommunityHeader, useCommunityHeaderOffset } from '../../../components/community/CommunityHeader';
 import { useFeedMetrics } from '../../../components/community/CommunityFeedList';
@@ -35,6 +36,7 @@ export default function CommunityPostScreen() {
   const headerOffset = useCommunityHeaderOffset();
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const postQuery = useQuery({
     queryKey: communityKeys.post(postId),
@@ -80,7 +82,7 @@ export default function CommunityPostScreen() {
         onPress: () => router.push({ pathname: '/community/compose', params: { edit: post.id, photo: '1' } }),
       });
       if (post.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(post.content) });
-      items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => actions.deletePost(post, onBack) });
+      items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => setDeleteOpen(true) });
     } else {
       if (post.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(post.content) });
       items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', post.id, onBack) });
@@ -182,6 +184,28 @@ export default function CommunityPostScreen() {
 
       <ActionMenu visible={menuOpen} items={menuItems} cancelLabel={s.cancel} onClose={() => setMenuOpen(false)} fontFamily={fonts.semibold} />
       <ActionMenu visible={!!ctx.menu} items={ctx.menuItems} cancelLabel={s.cancel} onClose={ctx.closeMenu} fontFamily={fonts.semibold} />
+      <ConfirmSheet
+        visible={!!ctx.deleteTarget}
+        title={s.deleteCommentTitle}
+        body={s.deleteBody}
+        confirmLabel={s.delete}
+        cancelLabel={s.cancel}
+        fontFamily={fonts.semibold}
+        onConfirm={ctx.confirmDelete}
+        onClose={ctx.closeDelete}
+      />
+      <ConfirmSheet
+        visible={deleteOpen}
+        title={s.deletePostTitle}
+        body={s.deleteBody}
+        confirmLabel={s.delete}
+        cancelLabel={s.cancel}
+        fontFamily={fonts.semibold}
+        onConfirm={() => {
+          if (post) void actions.performDelete(post, onBack);
+        }}
+        onClose={() => setDeleteOpen(false)}
+      />
       <ImageViewerModal visible={!!viewerUrl} imageUrl={viewerUrl ?? ''} onClose={() => setViewerUrl(null)} />
     </View>
   );
