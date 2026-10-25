@@ -45,11 +45,12 @@ interface Props {
   source: FeedSource;
   header?: React.ReactElement | null;
   showPending?: boolean;
+  topPadding?: number;
   bottomPadding?: number;
   onPostsCount?: (count: number | undefined) => void;
 }
 
-export function CommunityFeedList({ source, header, showPending = false, bottomPadding = 24, onPostsCount }: Props) {
+export function CommunityFeedList({ source, header, showPending = false, topPadding = 0, bottomPadding = 24, onPostsCount }: Props) {
   const { t, language } = useTranslation();
   const s = t.community;
   const isAr = language === 'ar';
@@ -192,16 +193,25 @@ export function CommunityFeedList({ source, header, showPending = false, bottomP
     const p = menuPost;
     if (!p) return [];
     const items: ActionMenuItem[] = [];
-    items.push({ key: 'open', label: s.comments, onPress: () => actions.openPost(p.id, { comments: true }) });
-    if (p.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(p.content) });
-    if (!p.isMine) {
-      items.push({ key: 'profile', label: s.viewProfile, onPress: () => actions.openProfile(p.author.username) });
-      items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', p.id) });
-    } else {
+    if (p.isMine) {
+      items.push({
+        key: 'edit',
+        label: s.editText,
+        onPress: () => router.push({ pathname: '/community/compose', params: { edit: p.id } }),
+      });
+      items.push({
+        key: 'photo',
+        label: p.image ? s.changePhoto : s.addPhoto,
+        onPress: () => router.push({ pathname: '/community/compose', params: { edit: p.id, photo: '1' } }),
+      });
+      if (p.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(p.content) });
       items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => actions.deletePost(p) });
+    } else {
+      if (p.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(p.content) });
+      items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', p.id) });
     }
     return items;
-  }, [actions, menuPost, s]);
+  }, [actions, menuPost, router, s]);
 
   const sheetPost = sheetPostId ? (feed.posts.find((p) => p.id === sheetPostId) ?? findPost(qc, sheetPostId) ?? null) : null;
 
@@ -250,7 +260,7 @@ export function CommunityFeedList({ source, header, showPending = false, bottomP
           ) : null
         }
         ItemSeparatorComponent={Separator}
-        contentContainerStyle={{ paddingHorizontal: metrics.sidePad, paddingBottom: bottomPadding }}
+        contentContainerStyle={{ paddingHorizontal: metrics.sidePad, paddingTop: topPadding, paddingBottom: bottomPadding }}
         onEndReached={onEndReached}
         onEndReachedThreshold={1.2}
         refreshing={refreshing}

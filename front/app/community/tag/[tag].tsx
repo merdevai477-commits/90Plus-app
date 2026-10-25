@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Hash } from 'lucide-react-native';
 
 import { CommunityFeedList } from '../../../components/community/CommunityFeedList';
-import { CommunityHeader } from '../../../components/community/CommunityHeader';
+import { CommunityHeader, useCommunityHeaderOffset } from '../../../components/community/CommunityHeader';
 import { fillTemplate, formatCount } from '../../../components/community/format';
 import { C } from '../../../components/community/theme';
 import { useTranslation } from '../../../src/i18n';
@@ -20,6 +20,7 @@ export default function CommunityTagScreen() {
   const s = t.community;
   const isAr = language === 'ar';
   const [count, setCount] = useState<number | undefined>(undefined);
+  const headerOffset = useCommunityHeaderOffset();
 
   const source = useMemo(() => ({ kind: 'tag' as const, tag }), [tag]);
   const semibold = getAppFont(600, language);
@@ -51,7 +52,13 @@ export default function CommunityTagScreen() {
   return (
     <View style={styles.root}>
       <CommunityHeader title={`#${tag}`} fontFamily={semibold} onBack={onBack} onBell={() => router.push('/notifications')} />
-      <CommunityFeedList source={source} header={header} onPostsCount={setCount} bottomPadding={insets.bottom + 24} />
+      <CommunityFeedList
+        source={source}
+        header={header}
+        onPostsCount={setCount}
+        topPadding={headerOffset}
+        bottomPadding={insets.bottom + 24}
+      />
     </View>
   );
 }

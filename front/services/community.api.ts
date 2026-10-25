@@ -135,6 +135,17 @@ export const communityApi = {
   createPost: (getToken: GetTokenFn, body: { content: string; mediaId?: string | null; clientId: string }) =>
     request<CommunityPost>(getToken, '/posts', json(body)),
 
+  updatePost: (
+    getToken: GetTokenFn,
+    id: string,
+    body: { content?: string; mediaId?: string | null; removeImage?: boolean },
+  ) =>
+    request<CommunityPost>(getToken, `/posts/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
   deletePost: (getToken: GetTokenFn, id: string) =>
     request<{ deleted: true }>(getToken, `/posts/${id}`, { method: 'DELETE' }),
 

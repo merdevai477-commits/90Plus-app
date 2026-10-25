@@ -709,6 +709,125 @@ export async function deletePost(actor: CommunityActor, postId: string): Promise
     }
 }
 
+/** Owner-only edit: change text and/or attach a new photo. */
+export async function updatePost(
+    actor: CommunityActor,
+    postId: string,
+    input: { content?: unknown; mediaId?: unknown; removeImage?: unknown },
+): Promise<CommunityPostDto> {
+    assertCanWrite(actor);
+    const existing = await prisma.communityPost.findUnique({
+        where: { id: postId },
+        select: {
+            id: true,
+            userId: true,
+            status: true,
+            content: true,
+            imageUrl: true,
+            imageStoragePath: true,
+            imageWidth: true,
+            imageHeight: true,
+            imagePlaceholder: true,
+        },
+    });
+    if (!existing || existing.status === 'DELETED') throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
+    if (existing.userId !== actor.id) throw new CommunityError(403, 'FORBIDDEN', 'You can only edit your own posts');
+
+    const hasContent = Object.prototype.hasOwnProperty.call(input, 'content');
+    const content = hasContent ? normalizeCommunityText(input.content) : existing.content;
+    const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
+    const removeImage = input.removeImage === true || input.removeImage === 'true';
+
+    if (hasContent) {
+        if (content.length > POST_MAX_LENGTH) {
+            throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
+                max: POST_MAX_LENGTH,
+            });
+        }
+        if (content) await moderateOrThrow(actor.id, 'post', content);
+    }
+
+    const media = mediaId
+        ? await prisma.communityMedia.findFirst({
+              where: { id: mediaId, userId: actor.id, attachedAt: null },
+              select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
+          })
+        : null;
+    if (mediaId && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+
+    const clearImage = removeImage && !media;
+    if (!content && !media && (clearImage || !existing.imageUrl)) {
+        throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
+    }
+
+    const oldKey = media || clearImage ? existing.imageStoragePath : null;
+    const tags = extractHashtags(content);
+    const mentioned = await resolveMentionedUsers(content, actor.id);
+
+    const post = await prisma.$transaction(async (tx) => {
+        const updated = await tx.communityPost.update({
+            where: { id: postId },
+            data: {
+                content,
+                ...(media
+                    ? {
+                          imageUrl: media.url,
+                          imageStoragePath: media.storagePath,
+                          imageWidth: media.width,
+                          imageHeight: media.height,
+                          imagePlaceholder: media.placeholder,
+                      }
+                    : clearImage
+                      ? {
+                            imageUrl: null,
+                            imageStoragePath: null,
+                            imageWidth: null,
+                            imageHeight: null,
+                            imagePlaceholder: null,
+                        }
+                      : {}),
+            },
+            select: postSelect,
+        });
+        if (media) {
+            await tx.communityMedia.update({ where: { id: media.id }, data: { attachedAt: new Date() } });
+        }
+        if (hasContent) {
+            await tx.communityPostHashtag.deleteMany({ where: { postId } });
+            await tx.communityMention.deleteMany({ where: { postId } });
+            const hashtagIds = await upsertHashtagIds(tx, tags);
+            if (hashtagIds.length) {
+                await tx.communityPostHashtag.createMany({
+                    data: hashtagIds.map((hashtagId) => ({ postId, hashtagId })),
+                    skipDuplicates: true,
+                });
+            }
+            if (mentioned.length) {
+                await tx.communityMention.createMany({
+                    data: mentioned.map((u) => ({ postId, mentionedUserId: u.id })),
+                });
+            }
+        }
+        return updated;
+    });
+
+    void invalidateFeedCache();
+    const newKey = media?.storagePath ?? (clearImage ? null : oldKey);
+    if (oldKey && oldKey !== newKey) {
+        fireAndForget(() => r2MediaStorage.deleteObject(oldKey));
+    }
+    if (hasContent || media) {
+        void enqueueCommunityAiModeration({
+            kind: 'post',
+            id: post.id,
+            userId: actor.id,
+            text: post.content,
+            imageUrl: post.imageUrl,
+        });
+    }
+    return getPost(actor.id, post.id);
+}
+
 async function hidePost(postId: string): Promise<boolean> {
     const res = await prisma.communityPost.updateMany({
         where: { id: postId, status: 'ACTIVE' },

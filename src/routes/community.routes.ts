@@ -98,6 +98,13 @@ router.post('/posts', requireAuth, writeLimiter, handle((req, _res, actor) => co
 
 router.get('/posts/:id', requireAuth, lenientLimiter, handle((req, _res, actor) => community.getPost(actor.id, param(req, 'id'))));
 
+router.patch(
+    '/posts/:id',
+    requireAuth,
+    writeLimiter,
+    handle((req, _res, actor) => community.updatePost(actor, param(req, 'id'), req.body ?? {})),
+);
+
 router.delete(
     '/posts/:id',
     requireAuth,

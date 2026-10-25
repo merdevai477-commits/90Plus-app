@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrendingUp } from 'lucide-react-native';
 
 import { CommunityFeedList } from '../../components/community/CommunityFeedList';
-import { CommunityHeader } from '../../components/community/CommunityHeader';
+import { CommunityHeader, useCommunityHeaderOffset } from '../../components/community/CommunityHeader';
 import { ComposerCard } from '../../components/community/ComposerCard';
 import { C } from '../../components/community/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
@@ -53,6 +53,7 @@ export default function CommunityScreen() {
   const s = t.community;
   const isAr = language === 'ar';
   const me = useCommunityMe();
+  const headerOffset = useCommunityHeaderOffset();
   const fonts = useMemo(
     () => ({ regular: getAppFont(400, language), semibold: getAppFont(600, language) }),
     [language],
@@ -92,6 +93,7 @@ export default function CommunityScreen() {
         source={FEED_SOURCE}
         header={header}
         showPending
+        topPadding={headerOffset}
         bottomPadding={insets.bottom + TAB_BAR_HEIGHT + 36}
       />
     </View>

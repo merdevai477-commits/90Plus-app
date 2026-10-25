@@ -216,3 +216,13 @@ export function discardPending(clientId: string): void {
   cancelImageUpload(clientId);
   usePublishStore.getState().removePending(clientId);
 }
+
+/** Resolves when the draft's photo finishes uploading (or is already done). */
+export async function waitForImageUpload(clientId: string): Promise<CommunityMedia> {
+  const current = usePublishStore.getState().drafts[clientId];
+  if (!current) throw new CommunityApiError(0, 'MEDIA_NOT_FOUND', 'No image draft');
+  if (current.media) return current.media;
+  const handle = uploads.get(clientId);
+  if (!handle) throw new CommunityApiError(0, 'MEDIA_NOT_FOUND', 'Upload not started');
+  return handle.promise;
+}

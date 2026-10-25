@@ -10,7 +10,7 @@ import { MessageCircle, SearchX } from 'lucide-react-native';
 import ImageViewerModal from '../../../components/common/ImageViewerModal';
 import { ActionMenu, type ActionMenuItem } from '../../../components/community/ActionMenu';
 import { CommentComposer } from '../../../components/community/CommentComposer';
-import { CommunityHeader } from '../../../components/community/CommunityHeader';
+import { CommunityHeader, useCommunityHeaderOffset } from '../../../components/community/CommunityHeader';
 import { useFeedMetrics } from '../../../components/community/CommunityFeedList';
 import { FeedSkeleton } from '../../../components/community/FeedSkeleton';
 import { KeyboardDock } from '../../../components/community/KeyboardDock';
@@ -32,6 +32,7 @@ export default function CommunityPostScreen() {
   const getToken = useCommunityToken();
   const actions = usePostActions();
   const metrics = useFeedMetrics();
+  const headerOffset = useCommunityHeaderOffset();
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
 
@@ -67,15 +68,25 @@ export default function CommunityPostScreen() {
   const menuItems = useMemo<ActionMenuItem[]>(() => {
     if (!post) return [];
     const items: ActionMenuItem[] = [];
-    if (post.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(post.content) });
-    if (!post.isMine) {
-      items.push({ key: 'profile', label: s.viewProfile, onPress: () => actions.openProfile(post.author.username) });
-      items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', post.id, onBack) });
-    } else {
+    if (post.isMine) {
+      items.push({
+        key: 'edit',
+        label: s.editText,
+        onPress: () => router.push({ pathname: '/community/compose', params: { edit: post.id } }),
+      });
+      items.push({
+        key: 'photo',
+        label: post.image ? s.changePhoto : s.addPhoto,
+        onPress: () => router.push({ pathname: '/community/compose', params: { edit: post.id, photo: '1' } }),
+      });
+      if (post.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(post.content) });
       items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => actions.deletePost(post, onBack) });
+    } else {
+      if (post.content) items.push({ key: 'copy', label: s.copyText, onPress: () => void actions.copyText(post.content) });
+      items.push({ key: 'report', label: s.reportPost, destructive: true, onPress: () => actions.askReport('post', post.id, onBack) });
     }
     return items;
-  }, [actions, onBack, post, s]);
+  }, [actions, onBack, post, router, s]);
 
   const notFound = postQuery.error instanceof CommunityApiError && postQuery.error.status === 404;
 
@@ -121,7 +132,7 @@ export default function CommunityPostScreen() {
             </Pressable>
           </View>
         ) : (
-          <View style={{ paddingHorizontal: metrics.sidePad, paddingTop: 16 }}>
+          <View style={{ paddingHorizontal: metrics.sidePad, paddingTop: headerOffset + 16 }}>
             <FeedSkeleton isAr={isAr} imageHeight={metrics.imageHeight} />
           </View>
         )
@@ -133,7 +144,7 @@ export default function CommunityPostScreen() {
             keyExtractor={(r) => r.key}
             getItemType={(r) => r.type}
             ListHeaderComponent={header}
-            contentContainerStyle={{ paddingHorizontal: metrics.sidePad, paddingTop: 16, paddingBottom: 24 }}
+            contentContainerStyle={{ paddingHorizontal: metrics.sidePad, paddingTop: headerOffset + 16, paddingBottom: 24 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             onEndReached={() => {
