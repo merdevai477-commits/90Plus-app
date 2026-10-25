@@ -667,7 +667,13 @@ export async function createPost(
 
     await rememberClientPost(actor.id, clientId, post.id);
     void invalidateFeedCache();
-    if (content) void enqueueCommunityAiModeration({ kind: 'post', id: post.id, userId: actor.id, text: content });
+    void enqueueCommunityAiModeration({
+        kind: 'post',
+        id: post.id,
+        userId: actor.id,
+        text: content,
+        imageUrl: post.imageUrl,
+    });
 
     fireAndForget(async () => {
         await Promise.all(

@@ -2,8 +2,9 @@
  * Community moderation — two layers:
  *   1. Synchronous: obfuscation-aware word list (static + BannedWord table).
  *      Offending posts/comments are rejected before they are stored.
- *   2. Asynchronous: OpenAI omni-moderation on every stored post/comment.
- *      Anything that slipped past the list is hidden within seconds.
+ *   2. Asynchronous: NVIDIA Nemotron 3.5 Content Safety (via OpenRouter) on
+ *      every stored post/comment. Anything that slipped past the list is
+ *      hidden within seconds. Multimodal — text and optional image URL.
  */
 
 import Bull, { Queue } from 'bull';
@@ -19,6 +20,8 @@ import {
 } from './community-profanity';
 import { notifyUser } from './notify.service';
 import { suspendUser } from './moderation.service';
+
+const DEFAULT_SAFETY_MODEL = 'nvidia/nemotron-3.5-content-safety:free';
 
 export type CommunityContentKind = 'post' | 'comment';
 
@@ -124,27 +127,87 @@ async function suspendIfNotAlready(userId: string, reason: string): Promise<void
     await suspendUser(userId, reason, 1);
 }
 
-// ─── Async AI layer ───────────────────────────────────────────────────────
+// ─── Async AI layer (Nemotron Content Safety via OpenRouter) ──────────────
 
 interface AiModerationJob {
     kind: CommunityContentKind;
     id: string;
     userId: string;
     text: string;
+    /** Public image URL when the post has a photo (Nemotron is multimodal). */
+    imageUrl?: string | null;
 }
 
-let openai: OpenAI | null | undefined;
+export type NemotronSafetyVerdict = {
+    safe: boolean;
+    categories: string[];
+    raw: string;
+};
+
+/**
+ * Parse Nemotron's plain-text verdict.
+ * Expected shape:
+ *   User Safety: safe|unsafe
+ *   Safety Categories: Hate, Violence   (only when unsafe)
+ */
+export function parseNemotronSafety(raw: string): NemotronSafetyVerdict {
+    const text = (raw ?? '').trim();
+    const userLine = text.match(/user\s*safety\s*:\s*(safe|unsafe)/i);
+    if (!userLine) {
+        // Fail open when the model returns garbage — never hide on a parse miss.
+        return { safe: true, categories: [], raw: text };
+    }
+    const unsafe = userLine[1].toLowerCase() === 'unsafe';
+    const catLine = text.match(/safety\s*categories\s*:\s*(.+)/i);
+    const categories = catLine
+        ? catLine[1]
+              .split(/[,;|]/)
+              .map((c) => c.trim())
+              .filter(Boolean)
+              .slice(0, 12)
+        : [];
+    return { safe: !unsafe, categories, raw: text };
+}
+
+let safetyClient: OpenAI | null | undefined;
+
+function safetyModel(): string {
+    return (
+        process.env.COMMUNITY_MODERATION_MODEL?.trim() ||
+        process.env.OPENROUTER_SAFETY_MODEL?.trim() ||
+        DEFAULT_SAFETY_MODEL
+    );
+}
 
 function moderationClient(): OpenAI | null {
-    if (openai !== undefined) return openai;
-    const apiKey = process.env.OPENAI_MODERATION_KEY ?? process.env.OPENAI_API_KEY ?? '';
+    if (safetyClient !== undefined) return safetyClient;
+    const apiKey =
+        process.env.OPENROUTER_API_KEY?.trim() ||
+        process.env.AI_API_KEY?.trim() ||
+        process.env.OPENAI_MODERATION_KEY?.trim() ||
+        process.env.OPENAI_API_KEY?.trim() ||
+        '';
     if (!apiKey) {
-        logger.warn('[community-moderation] OPENAI_API_KEY not set — AI moderation layer disabled');
-        openai = null;
+        logger.warn('[community-moderation] OPENROUTER_API_KEY not set — AI safety layer disabled');
+        safetyClient = null;
         return null;
     }
-    openai = new OpenAI({ apiKey, timeout: 10_000, maxRetries: 2 });
-    return openai;
+    const baseURL = (
+        process.env.OPENROUTER_BASE_URL?.trim() ||
+        process.env.AI_BASE_URL?.trim() ||
+        'https://openrouter.ai/api/v1'
+    ).replace(/\/$/, '');
+    safetyClient = new OpenAI({
+        apiKey,
+        baseURL,
+        timeout: 20_000,
+        maxRetries: 1,
+        defaultHeaders: {
+            'HTTP-Referer': 'https://90plus.pro',
+            'X-Title': '90Plus Community Safety',
+        },
+    });
+    return safetyClient;
 }
 
 type HideHandler = (kind: CommunityContentKind, id: string) => Promise<boolean>;
@@ -155,20 +218,36 @@ export function registerCommunityHideHandler(handler: HideHandler): void {
     hideHandler = handler;
 }
 
-async function runAiModeration(job: AiModerationJob): Promise<void> {
+type ChatContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
+
+async function classifyWithNemotron(text: string, imageUrl?: string | null): Promise<NemotronSafetyVerdict> {
     const client = moderationClient();
-    if (!client || !job.text.trim()) return;
+    if (!client) return { safe: true, categories: [], raw: '' };
 
-    const res = await client.moderations.create({
-        model: 'omni-moderation-latest',
-        input: job.text,
+    const trimmed = text.trim();
+    const parts: ChatContentPart[] = [];
+    if (trimmed) parts.push({ type: 'text', text: trimmed });
+    if (imageUrl) parts.push({ type: 'image_url', image_url: { url: imageUrl } });
+    if (!parts.length) return { safe: true, categories: [], raw: '' };
+
+    const res = await client.chat.completions.create({
+        model: safetyModel(),
+        temperature: 0,
+        max_tokens: 256,
+        messages: [{ role: 'user', content: parts as any }],
     });
-    const result = res.results?.[0];
-    if (!result?.flagged) return;
+    const raw = res.choices?.[0]?.message?.content ?? '';
+    return parseNemotronSafety(typeof raw === 'string' ? raw : '');
+}
 
-    const categories = Object.entries(result.categories ?? {})
-        .filter(([, v]) => v)
-        .map(([k]) => k);
+async function runAiModeration(job: AiModerationJob): Promise<void> {
+    if (!moderationClient()) return;
+    if (!job.text.trim() && !job.imageUrl) return;
+
+    const verdict = await classifyWithNemotron(job.text, job.imageUrl);
+    if (verdict.safe) return;
 
     const hidden = hideHandler ? await hideHandler(job.kind, job.id) : false;
     if (!hidden) return;
@@ -179,10 +258,10 @@ async function runAiModeration(job: AiModerationJob): Promise<void> {
             contentType: `community_${job.kind}`,
             contentId: job.id,
             action: 'REMOVED',
-            reason: 'AI moderation',
-            detectedWords: categories,
+            reason: 'AI moderation (Nemotron)',
+            detectedWords: verdict.categories,
             severity: 'high',
-            metadata: { scores: result.category_scores as any },
+            metadata: { model: safetyModel(), raw: verdict.raw.slice(0, 500) } as any,
         },
     });
 
@@ -231,6 +310,7 @@ function getQueue(): Queue<AiModerationJob> | null {
 
 export async function enqueueCommunityAiModeration(job: AiModerationJob): Promise<void> {
     if (!moderationClient()) return;
+    if (!job.text.trim() && !job.imageUrl) return;
     const q = getQueue();
     const runInline = () =>
         setImmediate(() => {
@@ -243,7 +323,12 @@ export async function enqueueCommunityAiModeration(job: AiModerationJob): Promis
         return;
     }
     try {
-        await q.add(job, { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true, removeOnFail: 500 });
+        await q.add(job, {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            removeOnComplete: true,
+            removeOnFail: 500,
+        });
     } catch (err: any) {
         logger.warn('[community-moderation] enqueue failed — running inline:', err?.message);
         runInline();
