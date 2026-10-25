@@ -8,6 +8,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
 import { ErrorCode, sendError } from '../constants/errors';
+import { markCommunitySafetyFlag } from '../services/community-safety-flag';
 
 const router = Router();
 
@@ -480,6 +481,7 @@ router.post('/report/:userId', requireAuth, validate({
         });
 
         logger.info(`User ${currentUser.id} reported user ${targetUserId} for: ${reason}`);
+        void markCommunitySafetyFlag(targetUserId, 'REPORTED');
 
         // Send notification to admin (Apple Guideline 1.2 requirement)
         try {

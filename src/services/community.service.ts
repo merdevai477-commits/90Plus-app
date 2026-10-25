@@ -22,6 +22,7 @@ import {
     registerCommunityHideHandler,
     type CommunityContentKind,
 } from './community-moderation.service';
+import { markCommunitySafetyFlag } from './community-safety-flag';
 import { classifyCommunityImage, type CommunityImageVerdict } from './community-image-safety';
 import {
     consumeCommunityRate,
@@ -130,6 +131,7 @@ function rejectUnsafeImage(userId: string, imageSafety: Extract<CommunityImageVe
         })
         .catch(() => undefined);
     if (scanFailed) throw new CommunityError(503, 'IMAGE_SCAN_FAILED', 'Could not verify the image');
+    void markCommunitySafetyFlag(userId, 'NSFW');
     throw new CommunityError(422, 'IMAGE_REJECTED', 'Image violates community guidelines');
 }
 
@@ -1271,6 +1273,7 @@ export async function reportContent(
             ...(kind === 'post' ? { reportedCommunityPostId: id } : { reportedCommunityCommentId: id }),
         },
     });
+    void markCommunitySafetyFlag(target.userId, 'REPORTED');
 
     const reportsCount =
         kind === 'post'

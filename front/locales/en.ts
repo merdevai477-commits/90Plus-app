@@ -3928,6 +3928,7 @@ export const en = {
     seeMore: 'See more',
     seeLess: 'See less',
     profanity: 'Your text contains language that breaks the community guidelines.',
+    imageRejectedTitle: "Error — this photo isn't allowed",
     imageRejected: 'This photo breaks the community guidelines.',
     imageScanFailed: "Couldn't verify the photo. Try again.",
     spam: 'This looks like spam. Remove extra links or repeated characters.',

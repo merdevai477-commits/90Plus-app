@@ -5,6 +5,7 @@ import { NotificationService } from './notification.service';
 import { ReportPriority } from '@prisma/client';
 import { r2MediaStorage } from './r2-media-storage.service';
 import { getUserLanguage, renderPushTemplate } from './push-templates.service';
+import { markCommunitySafetyFlag } from './community-safety-flag';
 
 const CONTENT_AUTO_DELETE_THRESHOLD = 5;
 const USER_SUSPENSION_THRESHOLD = 10;
@@ -249,6 +250,8 @@ export async function processReport(reportId: string) {
             logger.warn(`Report ${reportId} has no target user`);
             return;
         }
+
+        void markCommunitySafetyFlag(targetUserId, 'REPORTED');
 
         // Map report type to strike type
         const strikeType = StrikeService.mapReportTypeToStrikeType(report.type);

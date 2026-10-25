@@ -17,14 +17,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { AtSign, Hash, RotateCcw, X } from 'lucide-react-native';
+import { AtSign, Hash, RotateCcw, ShieldAlert, X } from 'lucide-react-native';
 
 import { CommunityAvatar } from '../../components/community/CommunityAvatar';
 import { ConfirmSheet } from '../../components/community/ConfirmSheet';
 import { KeyboardDock } from '../../components/community/KeyboardDock';
 import { MentionSuggestions } from '../../components/community/MentionSuggestions';
 import { activeMentionQuery, isArabicText } from '../../components/community/richTextParse';
-import { communityErrorMessage, fillTemplate } from '../../components/community/format';
+import { communityErrorMessage, fillTemplate, isImageRejected } from '../../components/community/format';
 import { C, CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
 import {
   cancelImageUpload,
@@ -316,17 +316,26 @@ export default function ComposeScreen() {
                 </Text>
               </View>
             )}
-            {draft?.status === 'failed' && (
-              <Pressable
-                style={styles.previewShade}
-                onPress={() => startImageUpload(getToken, clientId, draft.local)}
-                accessibilityRole="button"
-              >
-                <RotateCcw size={26} color="#FFF" />
-                <Text style={[styles.previewLabel, { fontFamily: fonts.medium }]}>{communityErrorMessage(draft.error, s)}</Text>
-                <Text style={[styles.previewRetry, { fontFamily: fonts.semibold }]}>{s.retry}</Text>
-              </Pressable>
-            )}
+            {draft?.status === 'failed' &&
+              (isImageRejected(draft.error) ? (
+                <View style={[styles.previewShade, styles.previewShadeDanger]} accessibilityRole="alert">
+                  <View style={styles.errorMark}>
+                    <ShieldAlert size={28} color="#FECACA" />
+                  </View>
+                  <Text style={[styles.previewErrorTitle, { fontFamily: fonts.semibold }]}>{s.imageRejectedTitle}</Text>
+                  <Text style={[styles.previewErrorBody, { fontFamily: fonts.medium }]}>{s.imageRejected}</Text>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.previewShade}
+                  onPress={() => startImageUpload(getToken, clientId, draft.local)}
+                  accessibilityRole="button"
+                >
+                  <RotateCcw size={26} color="#FFF" />
+                  <Text style={[styles.previewLabel, { fontFamily: fonts.medium }]}>{communityErrorMessage(draft.error, s)}</Text>
+                  <Text style={[styles.previewRetry, { fontFamily: fonts.semibold }]}>{s.retry}</Text>
+                </Pressable>
+              ))}
             {draft && draft.status !== 'failed' && <UploadBar progress={draft.status === 'done' ? 1 : draft.progress} />}
             <Pressable
               onPress={() => {
@@ -501,6 +510,32 @@ const styles = StyleSheet.create({
     color: C.accentSoft,
     fontSize: 14,
     fontWeight: '600',
+  },
+  previewShadeDanger: {
+    backgroundColor: 'rgba(127,29,29,0.82)',
+  },
+  errorMark: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.28)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(252,165,165,0.7)',
+    marginBottom: 4,
+  },
+  previewErrorTitle: {
+    color: '#FECACA',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  previewErrorBody: {
+    color: '#FECACA',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   removeImage: {
     position: 'absolute',

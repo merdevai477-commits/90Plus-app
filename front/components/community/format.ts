@@ -70,10 +70,14 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
   }
 }
 
+export function isImageRejected(err: unknown): boolean {
+  return err instanceof CommunityApiError && err.code === 'IMAGE_REJECTED';
+}
+
 /** Errors the user can fix by editing their text — keep the composer open. */
 export function isContentRejection(err: unknown): boolean {
   return (
     err instanceof CommunityApiError &&
-    ['PROFANITY_DETECTED', 'IMAGE_REJECTED', 'IMAGE_SCAN_FAILED', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
+    ['PROFANITY_DETECTED', 'IMAGE_REJECTED', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
   );
 }

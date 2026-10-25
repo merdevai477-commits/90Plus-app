@@ -7,6 +7,7 @@ import { ErrorCode, sendError } from '../constants/errors';
 import { notifyUser } from '../services/notify.service';
 import { NotificationType } from '../services/notification.service';
 import { processReport } from '../services/moderation.service';
+import { markCommunitySafetyFlag } from '../services/community-safety-flag';
 
 const router = Router();
 
@@ -309,6 +310,7 @@ router.post('/user/:userId', requireAuth, strictLimiter, async (req: Request, re
     });
 
     logger.info(`User ${user.id} reported user ${targetUserId} for: ${reason}`);
+    void markCommunitySafetyFlag(targetUserId, 'REPORTED');
 
     notifyUser({
       userId: user.id,

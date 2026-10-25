@@ -49,7 +49,11 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response): Promis
                         id: true,
                         username: true,
                         displayName: true,
+                        email: true,
                         avatar: true,
+                        communitySafetyFlag: true,
+                        communityNsfwAttempts: true,
+                        communityReportHits: true,
                     },
                 },
                 reportedUser: {
@@ -57,7 +61,12 @@ router.get('/reports', requireAdmin, async (req: Request, res: Response): Promis
                         id: true,
                         username: true,
                         displayName: true,
+                        email: true,
                         avatar: true,
+                        communitySafetyFlag: true,
+                        communityNsfwAttempts: true,
+                        communityReportHits: true,
+                        communitySafetyFlagAt: true,
                     },
                 },
                 reportedReel: {
@@ -109,7 +118,11 @@ router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Pr
                         id: true,
                         username: true,
                         displayName: true,
+                        email: true,
                         avatar: true,
+                        communitySafetyFlag: true,
+                        communityNsfwAttempts: true,
+                        communityReportHits: true,
                     },
                 },
                 reportedUser: {
@@ -117,7 +130,12 @@ router.get('/reports/:id', requireAdmin, async (req: Request, res: Response): Pr
                         id: true,
                         username: true,
                         displayName: true,
+                        email: true,
                         avatar: true,
+                        communitySafetyFlag: true,
+                        communityNsfwAttempts: true,
+                        communityReportHits: true,
+                        communitySafetyFlagAt: true,
                     },
                 },
                 reportedReel: {
@@ -1582,6 +1600,68 @@ router.delete('/player-socials/:athleteId', requireAdmin, async (req: Request, r
     } catch (error: unknown) {
         logger.error('Admin player socials delete error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Failed to delete player socials');
+    }
+});
+
+/**
+ * GET /api/admin/community-flags
+ * Users flagged for unsafe Community images (NSFW) and/or reports, with name + email.
+ */
+router.get('/community-flags', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const flag = typeof req.query.flag === 'string' ? req.query.flag.toUpperCase() : '';
+        const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+        const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+        const where =
+            flag === 'NSFW' || flag === 'REPORTED' || flag === 'NSFW_REPORTED'
+                ? { communitySafetyFlag: flag }
+                : { communitySafetyFlag: { not: null } };
+
+        const [users, total] = await Promise.all([
+            prisma.user.findMany({
+                where,
+                orderBy: { communitySafetyFlagAt: 'desc' },
+                take: limit,
+                skip: offset,
+                select: {
+                    id: true,
+                    username: true,
+                    displayName: true,
+                    email: true,
+                    avatar: true,
+                    communitySafetyFlag: true,
+                    communityNsfwAttempts: true,
+                    communityReportHits: true,
+                    communitySafetyFlagAt: true,
+                    isSuspended: true,
+                    isBanned: true,
+                },
+            }),
+            prisma.user.count({ where }),
+        ]);
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                total,
+                users: users.map((u) => ({
+                    id: u.id,
+                    name: u.displayName || u.username,
+                    username: u.username,
+                    email: u.email,
+                    avatar: u.avatar,
+                    flag: u.communitySafetyFlag,
+                    nsfwAttempts: u.communityNsfwAttempts,
+                    reportHits: u.communityReportHits,
+                    flaggedAt: u.communitySafetyFlagAt,
+                    isSuspended: u.isSuspended,
+                    isBanned: u.isBanned,
+                })),
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Get community flags error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 

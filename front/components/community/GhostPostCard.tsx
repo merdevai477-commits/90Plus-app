@@ -9,7 +9,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { RotateCcw, Pencil, X } from 'lucide-react-native';
+import { CircleAlert, RotateCcw, Pencil, X } from 'lucide-react-native';
 
 import { usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
 import { CommunityAvatar } from './CommunityAvatar';
@@ -25,6 +25,7 @@ interface Props {
   fonts: { regular: string; medium: string; semibold: string };
   labels: { publishing: string; failed: string; retry: string; edit: string; discard: string };
   errorText: string | null;
+  errorTitle?: string | null;
   canRetry: boolean;
   onRetry: () => void;
   onEdit: () => void;
@@ -39,6 +40,7 @@ export const GhostPostCard = memo(function GhostPostCard({
   fonts,
   labels,
   errorText,
+  errorTitle,
   canRetry,
   onRetry,
   onEdit,
@@ -118,8 +120,20 @@ export const GhostPostCard = memo(function GhostPostCard({
 
       {failed && (
         <View style={styles.failBox}>
-          {!!errorText && (
-            <Text style={[styles.errorText, { fontFamily: fonts.regular, textAlign: isAr ? 'right' : 'left' }]}>{errorText}</Text>
+          {(!!errorTitle || !!errorText) && (
+            <View style={[styles.errorRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              <CircleAlert size={18} color="#FCA5A5" />
+              <View style={{ flex: 1, gap: 2 }}>
+                {!!errorTitle && (
+                  <Text style={[styles.errorTitle, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left' }]}>
+                    {errorTitle}
+                  </Text>
+                )}
+                {!!errorText && (
+                  <Text style={[styles.errorText, { fontFamily: fonts.regular, textAlign: isAr ? 'right' : 'left' }]}>{errorText}</Text>
+                )}
+              </View>
+            </View>
           )}
           <View style={[styles.failActions, { flexDirection: row }]}>
             {canRetry ? (
@@ -207,6 +221,15 @@ const styles = StyleSheet.create({
   failBox: {
     gap: 12,
     marginTop: -6,
+  },
+  errorRow: {
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  errorTitle: {
+    color: '#FECACA',
+    fontSize: 14,
+    fontWeight: '700',
   },
   errorText: {
     color: '#FCA5A5',

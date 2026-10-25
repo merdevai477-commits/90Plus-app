@@ -20,7 +20,7 @@ import { CommentsSheet } from './CommentsSheet';
 import { FeedSkeleton } from './FeedSkeleton';
 import { GhostPostCard } from './GhostPostCard';
 import { IMAGE_ASPECT, PostCard } from './PostCard';
-import { communityErrorMessage, formatRelativeTime, isContentRejection } from './format';
+import { communityErrorMessage, formatRelativeTime, isContentRejection, isImageRejected } from './format';
 import { C } from './theme';
 
 type FeedSource = { kind: 'feed' } | { kind: 'tag'; tag: string } | { kind: 'user'; username: string };
@@ -159,6 +159,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
             isAr={isAr}
             fonts={fonts}
             labels={ghostLabels}
+            errorTitle={isImageRejected(err) ? s.imageRejectedTitle : null}
             errorText={err ? communityErrorMessage(err, s) : null}
             canRetry={!rejected}
             onRetry={() => retryPending(p.clientId)}

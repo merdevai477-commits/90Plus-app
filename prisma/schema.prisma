@@ -72,6 +72,11 @@ model User {
   bannedAt                      DateTime?
   banReason                     String?
   warningsCount                 Int                       @default(0)
+  /// NSFW | REPORTED | NSFW_REPORTED — Community safety flag for admin identity (name + email).
+  communitySafetyFlag           String?
+  communityNsfwAttempts         Int                       @default(0)
+  communityReportHits           Int                       @default(0)
+  communitySafetyFlagAt         DateTime?
   role                          UserRole                  @default(USER)
   isDeleted                     Boolean                   @default(false)
   deletedAt                     DateTime?
@@ -178,6 +183,7 @@ model User {
   @@index([ageVerifiedAt])
   @@index([ageTier])
   @@index([parentalConsent])
+  @@index([communitySafetyFlag])
   @@index([xp(sort: Desc), level(sort: Desc)])
   @@map("users")
 }
