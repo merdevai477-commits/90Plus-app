@@ -8,7 +8,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import { User, BarChart3, Sparkles, Clapperboard } from 'lucide-react-native';
+import { User, BarChart3, Sparkles, Clapperboard, MessagesSquare } from 'lucide-react-native';
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
 
 import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
@@ -92,6 +92,8 @@ export function BuiltInTabIcon({
       return <PitchIcon color={color} size={size} />;
     case 'rank':
       return <BarChart3 color={color} size={size} strokeWidth={isActive ? 2.5 : 2} />;
+    case 'community':
+      return <MessagesSquare color={color} size={size} strokeWidth={isActive ? 2.5 : 2} />;
     case 'reels':
       return <Clapperboard color={color} size={size} strokeWidth={isActive ? 2.5 : 2} />;
     case 'ai':

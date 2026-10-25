@@ -133,6 +133,12 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="community"
+          options={{
+            title: "Community",
+          }}
+        />
+        <Tabs.Screen
           name="predict-and-win"
           options={{
             href: null,

@@ -111,7 +111,16 @@ export function usePushNotifications(): PushNotificationState {
             const type = data.type as string | undefined;
             const r = routerRef.current;
 
-            if (type === 'APP_UPDATE') {
+            if (data.kind === 'community') {
+                if (data.postId && type !== 'MODERATION_ALERT') {
+                    r.push({
+                        pathname: '/community/post/[id]',
+                        params: { id: String(data.postId), ...(data.commentId ? { comments: '1' } : {}) },
+                    } as any);
+                } else {
+                    r.push('/notifications');
+                }
+            } else if (type === 'APP_UPDATE') {
                 const url =
                     (typeof data.updateUrl === 'string' && data.updateUrl) ||
                     (typeof data.url === 'string' && data.url) ||

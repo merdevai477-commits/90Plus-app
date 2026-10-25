@@ -1,0 +1,50 @@
+/** Community (المجتمع) design tokens — from Figma file X50fmaHSieVpdANUHVi3zL. */
+
+export const C = {
+  screen: '#090710',
+  header: '#0C051A',
+  card: '#090710',
+  cardBorder: '#1A1A1A',
+  composer: '#09001D',
+  composerGlow: 'rgba(139,92,246,0.25)',
+  input: '#110923',
+  inputBorder: '#2A2439',
+  placeholder: '#A1A1A1',
+  text: '#E3E3E3',
+  textStrong: '#FFFFFF',
+  counter: '#D8D8D8',
+  muted: '#A3A3A3',
+  icon: '#CCCCCC',
+  iconDim: '#7E7E7E',
+  accent: '#8B5CF6',
+  accentSoft: '#B79AF8',
+  accentDeep: '#513690',
+  like: '#B72E24',
+  divider: '#262626',
+  danger: '#EF4444',
+  sheet: '#0E0A18',
+  overlay: 'rgba(0,0,0,0.6)',
+} as const;
+
+export const POST_IMAGE_HEIGHT = 216;
+export const POST_IMAGE_RADIUS = 16;
+export const CARD_RADIUS = 19;
+export const AVATAR_SIZE = 54;
+export const COMMENT_AVATAR_SIZE = 36;
+
+export const CI = {
+  overflow: require('../../assets/community/overflow-menu.svg'),
+  verified: require('../../assets/community/verified.svg'),
+  earth: require('../../assets/community/earth.svg'),
+  share: require('../../assets/community/share.svg'),
+  comment: require('../../assets/community/comment.svg'),
+  heartFilled: require('../../assets/community/heart-filled.svg'),
+  heartOutlined: require('../../assets/community/heart-outlined.svg'),
+  commentHeartOutlined: require('../../assets/community/comment-heart-outlined.svg'),
+  back: require('../../assets/community/arrow-back.svg'),
+  plus: require('../../assets/community/plus.svg'),
+  smile: require('../../assets/community/smile.svg'),
+  divider: require('../../assets/community/divider.svg'),
+  image: require('../../assets/community/image.svg'),
+  notification: require('../../assets/community/notification.svg'),
+} as const;

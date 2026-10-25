@@ -599,6 +599,13 @@ export default function NotificationsScreen() {
                 }
 
                 const data = (notif.data ?? {}) as Record<string, any>;
+                if (data.kind === 'community' && data.postId && notif.type !== 'MODERATION_ALERT') {
+                    router.push({
+                        pathname: '/community/post/[id]',
+                        params: { id: String(data.postId), ...(data.commentId ? { comments: '1' } : {}) },
+                    } as any);
+                    return;
+                }
                 switch (notif.type) {
                     case 'FOLLOW': {
                         const username =

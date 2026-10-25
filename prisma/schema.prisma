@@ -8,10 +8,10 @@ datasource db {
 }
 
 model User {
-  id                            String                   @id @default(uuid())
-  clerkUserId                   String?                  @unique
-  email                         String                   @unique
-  username                      String                   @unique
+  id                            String                    @id @default(uuid())
+  clerkUserId                   String?                   @unique
+  email                         String                    @unique
+  username                      String                    @unique
   password                      String?
   displayName                   String?
   avatar                        String?
@@ -19,17 +19,17 @@ model User {
   bio                           String?
   /// Share & Win referral identity. Nullable so existing rows stay valid —
   /// generated lazily the first time a user opens Share & Win.
-  referralCode                  String?                  @unique
-  coins                         Int                      @default(0)
-  level                         Int                      @default(1)
-  xp                            Int                      @default(0)
-  isVerified                    Boolean                  @default(false)
-  isDeveloper                   Boolean                  @default(false)
+  referralCode                  String?                   @unique
+  coins                         Int                       @default(0)
+  level                         Int                       @default(1)
+  xp                            Int                       @default(0)
+  isVerified                    Boolean                   @default(false)
+  isDeveloper                   Boolean                   @default(false)
   favoriteTeam                  String?
   favoriteBrand                 String?
   country                       String?
-  favoriteLeagues               Int[]                    @default([])
-  settings                      Json?                    @default("{}")
+  favoriteLeagues               Int[]                     @default([])
+  settings                      Json?                     @default("{}")
   position                      String?
   countryFlag                   String?
   /// Set when the one-time teams onboarding (Favorites seed) is finished or skipped.
@@ -41,124 +41,131 @@ model User {
   preferredFoot                 String?
   clubLogo                      String?
   brandLogo                     String?
-  socialLinks                   Json?                    @default("[]")
+  socialLinks                   Json?                     @default("[]")
   lastUsernameChange            DateTime?
   lastAvatarChange              DateTime?
   lastCoverChange               DateTime?
   coverImage                    String?
   coverStoragePath              String?
-  profileCompletionSteps        Json?                    @default("{}")
-  profileCompletionPercentage   Int?                     @default(0)
-  firstVideoUploaded            Boolean                  @default(false)
-  storageUsedBytes              BigInt                   @default(0)
-  storageQuotaBytes             BigInt                   @default(5368709120)
-  profileViews                  Int                      @default(0)
+  profileCompletionSteps        Json?                     @default("{}")
+  profileCompletionPercentage   Int?                      @default(0)
+  firstVideoUploaded            Boolean                   @default(false)
+  storageUsedBytes              BigInt                    @default(0)
+  storageQuotaBytes             BigInt                    @default(5368709120)
+  profileViews                  Int                       @default(0)
   lastReelUpload                DateTime?
   /// منع رفعات متزامنة: يُضبط عند بدء الرفع ويُمسح عند النجاح/الفشل (انتهاء تلقائي بعد المدة)
   reelUploadLockedUntil         DateTime?
-  reelDeleteCount               Int                      @default(0)
+  reelDeleteCount               Int                       @default(0)
   lastDailySpin                 DateTime?
   lastLoginDate                 DateTime?
-  consecutiveLoginDays          Int                      @default(0)
+  consecutiveLoginDays          Int                       @default(0)
   expoPushToken                 String?
   /// Multi-device Expo push tokens (Android + iOS can both stay registered).
   pushDevices                   UserPushDevice[]
-  emailVerified                 Boolean                  @default(false)
-  emailVerificationToken        String?                  @unique
+  emailVerified                 Boolean                   @default(false)
+  emailVerificationToken        String?                   @unique
   emailVerificationTokenExpires DateTime?
-  isSuspended                   Boolean                  @default(false)
+  isSuspended                   Boolean                   @default(false)
   suspendedUntil                DateTime?
-  isBanned                      Boolean                  @default(false)
+  isBanned                      Boolean                   @default(false)
   bannedAt                      DateTime?
   banReason                     String?
-  warningsCount                 Int                      @default(0)
-  role                          UserRole                 @default(USER)
-  isDeleted                     Boolean                  @default(false)
+  warningsCount                 Int                       @default(0)
+  role                          UserRole                  @default(USER)
+  isDeleted                     Boolean                   @default(false)
   deletedAt                     DateTime?
   scheduledDeletionAt           DateTime?
   deletionRequestedAt           DateTime?
-  analyticsConsent              Boolean                  @default(true)
-  pushNotificationsConsent      Boolean                  @default(false)
-  emailCommunicationsConsent    Boolean                  @default(true)
-  dataSharingConsent            Boolean                  @default(false)
+  analyticsConsent              Boolean                   @default(true)
+  pushNotificationsConsent      Boolean                   @default(false)
+  emailCommunicationsConsent    Boolean                   @default(true)
+  dataSharingConsent            Boolean                   @default(false)
   privacyPolicyVersion          String?
   privacyPolicyAcceptedAt       DateTime?
-  createdAt                     DateTime                 @default(now())
-  updatedAt                     DateTime                 @updatedAt
+  createdAt                     DateTime                  @default(now())
+  updatedAt                     DateTime                  @updatedAt
   lastActiveAt                  DateTime?
-  streakFreezes                 Int                      @default(0)
-  groupExitCount                Int                      @default(0)
+  streakFreezes                 Int                       @default(0)
+  groupExitCount                Int                       @default(0)
   groupBannedUntil              DateTime?
   dateOfBirth                   DateTime?
   ageVerifiedAt                 DateTime?
   ageTier                       AgeTier?
-  parentalConsent               Boolean                  @default(false)
+  parentalConsent               Boolean                   @default(false)
   parentEmail                   String?
   parentalConsentRequestedAt    DateTime?
   parentalConsentConfirmedAt    DateTime?
-  accountDeletionRequests       AccountDeletionRequest[] @relation("UserAccountDeletions")
-  bannedWordsCreated            BannedWord[]             @relation("BannedWordCreator")
-  blockedByUsers                Block[]                  @relation("UserBlocked")
-  blockedUsers                  Block[]                  @relation("UserBlocking")
+  accountDeletionRequests       AccountDeletionRequest[]  @relation("UserAccountDeletions")
+  bannedWordsCreated            BannedWord[]              @relation("BannedWordCreator")
+  blockedByUsers                Block[]                   @relation("UserBlocked")
+  blockedUsers                  Block[]                   @relation("UserBlocking")
   coinTransactions              CoinTransaction[]
   commentLikes                  CommentLike[]
-  commentMentions               CommentMention[]         @relation("CommentMentions")
+  commentMentions               CommentMention[]          @relation("CommentMentions")
   comments                      Comment[]
-  consentLogs                   ConsentLog[]             @relation("UserConsentLogs")
+  consentLogs                   ConsentLog[]              @relation("UserConsentLogs")
   dailySpins                    DailySpinHistory[]
-  dataExportRequests            DataExportRequest[]      @relation("UserDataExports")
+  dataExportRequests            DataExportRequest[]       @relation("UserDataExports")
   favoriteMatches               FavoriteMatch[]
   favoriteTeams                 FavoriteTeam[]
-  followers                     Follow[]                 @relation("UserFollowers")
-  following                     Follow[]                 @relation("UserFollowing")
-  gdprAuditLogs                 GDPRAuditLog[]           @relation("UserGDPRAuditLogs")
+  followers                     Follow[]                  @relation("UserFollowers")
+  following                     Follow[]                  @relation("UserFollowing")
+  gdprAuditLogs                 GDPRAuditLog[]            @relation("UserGDPRAuditLogs")
   likes                         Like[]
-  loginStreak                   LoginStreak?             @relation("UserLoginStreak")
-  moderationReviews             ModerationLog[]          @relation("ModerationLogReviewer")
-  moderationLogs                ModerationLog[]          @relation("ModerationLogUser")
+  loginStreak                   LoginStreak?              @relation("UserLoginStreak")
+  moderationReviews             ModerationLog[]           @relation("ModerationLogReviewer")
+  moderationLogs                ModerationLog[]           @relation("ModerationLogUser")
   notificationPreferences       NotificationPreferences?
   notifications                 Notification[]
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
-  ownedSponsors                 Sponsor[]                @relation("OwnedSponsors")
+  ownedSponsors                 Sponsor[]                 @relation("OwnedSponsors")
   sponsorFollows                SponsorFollow[]
   competitionEntries            CompetitionEntry[]
   competitionViews              CompetitionView[]
-  ownedPredictionGroups         PredictionGroup[]        @relation("OwnedPredictionGroups")
+  ownedPredictionGroups         PredictionGroup[]         @relation("OwnedPredictionGroups")
   groupMemberships              GroupMember[]
-  groupInvitesSent              GroupInvite[]            @relation("GroupInvitesSent")
-  groupInvitesReceived          GroupInvite[]            @relation("GroupInvitesReceived")
+  groupInvitesSent              GroupInvite[]             @relation("GroupInvitesSent")
+  groupInvitesReceived          GroupInvite[]             @relation("GroupInvitesReceived")
   groupPredictions              GroupPrediction[]
   quizAttempts                  QuizAttempt[]
   reelShares                    ReelShare[]
   reelViews                     ReelView[]
   reels                         Reel[]
   refreshTokens                 RefreshToken[]
-  reportsReceived               Report[]                 @relation("ReportedUser")
-  reportsCreated                Report[]                 @relation("ReportCreator")
-  reportsReviewed               Report[]                 @relation("ReportReviewer")
+  reportsReceived               Report[]                  @relation("ReportedUser")
+  reportsCreated                Report[]                  @relation("ReportCreator")
+  reportsReviewed               Report[]                  @relation("ReportReviewer")
   savedReels                    SavedReel[]
   sessions                      Session[]
   strikes                       Strike[]
   termsAcceptances              TermsAcceptance[]
   achievements                  UserAchievement[]
-  bansIssued                    UserBan[]                @relation("BanIssuer")
-  bans                          UserBan?                 @relation("UserBans")
+  bansIssued                    UserBan[]                 @relation("BanIssuer")
+  bans                          UserBan?                  @relation("UserBans")
   dailyQuizSessions             UserDailyQuizSession[]
   questionChallenges            UserQuestionChallenge[]
   quizAnswers                   UserQuizAnswer[]
   quizState                     UserQuizState?
-  warningsIssued                UserWarning[]            @relation("WarningIssuer")
-  warnings                      UserWarning[]            @relation("UserWarnings")
-  xpDailyCaps                   XpDailyCap[]             @relation("UserXpDailyCaps")
-  xpTransactions                XpTransaction[]          @relation("UserXpTransactions")
+  warningsIssued                UserWarning[]             @relation("WarningIssuer")
+  warnings                      UserWarning[]             @relation("UserWarnings")
+  xpDailyCaps                   XpDailyCap[]              @relation("UserXpDailyCaps")
+  xpTransactions                XpTransaction[]           @relation("UserXpTransactions")
   shareWinShareEvents           ShareWinShareEvent[]
   shareWinStandings             ShareWinStanding[]
-  shareWinReferralsMade         ShareWinReferral[]       @relation("ShareWinReferrer")
-  shareWinReferralReceived      ShareWinReferral?        @relation("ShareWinReferred")
+  shareWinReferralsMade         ShareWinReferral[]        @relation("ShareWinReferrer")
+  shareWinReferralReceived      ShareWinReferral?         @relation("ShareWinReferred")
   matchChatMessages             MatchChatMessage[]
-  matchChatReportsFiled         MatchChatReport[]        @relation("MatchChatReporter")
+  matchChatReportsFiled         MatchChatReport[]         @relation("MatchChatReporter")
   topScorersFiveSelections      TopScorersFiveSelection[]
+  communityPosts                CommunityPost[]
+  communityComments             CommunityComment[]
+  communityPostLikes            CommunityPostLike[]
+  communityCommentLikes         CommunityCommentLike[]
+  communityShares               CommunityShare[]
+  communityMentions             CommunityMention[]        @relation("CommunityMentioned")
+  communityMedia                CommunityMedia[]
 
   @@index([email])
   @@index([username])
@@ -738,11 +745,12 @@ model Reel {
 }
 
 model Hashtag {
-  id        String        @id @default(uuid())
-  name      String        @unique
-  reelCount Int           @default(0)
-  createdAt DateTime      @default(now())
-  reels     ReelHashtag[]
+  id             String                 @id @default(uuid())
+  name           String                 @unique
+  reelCount      Int                    @default(0)
+  createdAt      DateTime               @default(now())
+  reels          ReelHashtag[]
+  communityPosts CommunityPostHashtag[]
 
   @@index([name])
   @@index([reelCount])
@@ -910,27 +918,31 @@ model Notification {
 }
 
 model Report {
-  id                String         @id @default(uuid())
-  reporterId        String
-  reportedUserId    String?
-  reportedReelId    String?
-  reportedCommentId String?
-  type              ReportType
-  reason            String
-  status            ReportStatus   @default(PENDING)
-  priority          ReportPriority @default(MEDIUM)
-  reviewedBy        String?
-  reviewedAt        DateTime?
-  action            ReportAction   @default(NO_ACTION)
-  isDuplicate       Boolean        @default(false)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  reportedComment   Comment?       @relation(fields: [reportedCommentId], references: [id])
-  reportedReel      Reel?          @relation(fields: [reportedReelId], references: [id])
-  reportedUser      User?          @relation("ReportedUser", fields: [reportedUserId], references: [id])
-  reporter          User           @relation("ReportCreator", fields: [reporterId], references: [id])
-  reviewer          User?          @relation("ReportReviewer", fields: [reviewedBy], references: [id])
-  strikes           Strike[]
+  id                         String            @id @default(uuid())
+  reporterId                 String
+  reportedUserId             String?
+  reportedReelId             String?
+  reportedCommentId          String?
+  type                       ReportType
+  reason                     String
+  status                     ReportStatus      @default(PENDING)
+  priority                   ReportPriority    @default(MEDIUM)
+  reviewedBy                 String?
+  reviewedAt                 DateTime?
+  action                     ReportAction      @default(NO_ACTION)
+  isDuplicate                Boolean           @default(false)
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  reportedComment            Comment?          @relation(fields: [reportedCommentId], references: [id])
+  reportedReel               Reel?             @relation(fields: [reportedReelId], references: [id])
+  reportedUser               User?             @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reporter                   User              @relation("ReportCreator", fields: [reporterId], references: [id])
+  reviewer                   User?             @relation("ReportReviewer", fields: [reviewedBy], references: [id])
+  strikes                    Strike[]
+  reportedCommunityPostId    String?
+  reportedCommunityCommentId String?
+  reportedCommunityPost      CommunityPost?    @relation(fields: [reportedCommunityPostId], references: [id], onDelete: Cascade)
+  reportedCommunityComment   CommunityComment? @relation(fields: [reportedCommunityCommentId], references: [id], onDelete: Cascade)
 
   @@index([reporterId])
   @@index([status])
@@ -939,7 +951,160 @@ model Report {
   @@index([priority])
   @@index([reportedReelId])
   @@index([reportedCommentId])
+  @@index([reportedCommunityPostId])
+  @@index([reportedCommunityCommentId])
   @@map("reports")
+}
+
+// ─── Community (المجتمع) — Threads-style feed ────────────────────────────
+
+enum CommunityContentStatus {
+  ACTIVE
+  HIDDEN
+  DELETED
+}
+
+model CommunityPost {
+  id               String                 @id @default(uuid())
+  userId           String
+  content          String
+  imageUrl         String?
+  imageStoragePath String?
+  imageWidth       Int?
+  imageHeight      Int?
+  /// Tiny base64 WebP shown while the full image loads.
+  imagePlaceholder String?
+  status           CommunityContentStatus @default(ACTIVE)
+  likesCount       Int                    @default(0)
+  commentsCount    Int                    @default(0)
+  sharesCount      Int                    @default(0)
+  reportsCount     Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments         CommunityComment[]
+  likes            CommunityPostLike[]
+  shares           CommunityShare[]
+  mentions         CommunityMention[]
+  hashtags         CommunityPostHashtag[]
+  reports          Report[]
+
+  @@index([status, createdAt(sort: Desc), id])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("community_posts")
+}
+
+model CommunityComment {
+  id           String                 @id @default(uuid())
+  postId       String
+  userId       String
+  parentId     String?
+  content      String
+  status       CommunityContentStatus @default(ACTIVE)
+  likesCount   Int                    @default(0)
+  repliesCount Int                    @default(0)
+  reportsCount Int                    @default(0)
+  createdAt    DateTime               @default(now())
+  post         CommunityPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent       CommunityComment?      @relation("CommunityCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      CommunityComment[]     @relation("CommunityCommentReplies")
+  likes        CommunityCommentLike[]
+  mentions     CommunityMention[]
+  reports      Report[]
+
+  @@index([postId, parentId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([userId, createdAt])
+  @@map("community_comments")
+}
+
+model CommunityPostLike {
+  id        String        @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("community_post_likes")
+}
+
+model CommunityCommentLike {
+  id        String           @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   CommunityComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
+  @@map("community_comment_likes")
+}
+
+model CommunityShare {
+  id        String        @id @default(uuid())
+  userId    String
+  postId    String
+  platform  String?
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@map("community_shares")
+}
+
+model CommunityMention {
+  id              String            @id @default(uuid())
+  postId          String?
+  commentId       String?
+  mentionedUserId String
+  createdAt       DateTime          @default(now())
+  post            CommunityPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment         CommunityComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedUser   User              @relation("CommunityMentioned", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([commentId])
+  @@index([mentionedUserId])
+  @@map("community_mentions")
+}
+
+model CommunityPostHashtag {
+  id        String        @id @default(uuid())
+  postId    String
+  hashtagId String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtag   Hashtag       @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, hashtagId])
+  @@index([hashtagId, createdAt(sort: Desc)])
+  @@map("community_post_hashtags")
+}
+
+/// Image uploaded while the user is still typing; attached when the post is published.
+model CommunityMedia {
+  id          String    @id @default(uuid())
+  userId      String
+  url         String
+  storagePath String
+  width       Int
+  height      Int
+  placeholder String?
+  sizeBytes   Int       @default(0)
+  attachedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([attachedAt, createdAt])
+  @@map("community_media")
 }
 
 model Strike {
@@ -1047,15 +1212,15 @@ model FavoriteMatch {
 /// Clubs / national teams a user follows. Drives the followed-team match
 /// notifications (kickoff + same-day upcoming) via the followed-team watcher.
 model FavoriteTeam {
-  id         String   @id @default(uuid())
-  userId     String
-  apiTeamId  Int
-  teamName   String
-  teamLogo   String?
-  country    String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  apiTeamId Int
+  teamName  String
+  teamLogo  String?
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiTeamId])
   @@index([userId])
@@ -1389,12 +1554,12 @@ model PredictionGroup {
   avatarUrl         String?
   avatarStoragePath String?
   inviteCode        String        @unique
-  ownerId    String
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  owner      User          @relation("OwnedPredictionGroups", fields: [ownerId], references: [id], onDelete: Cascade)
-  members    GroupMember[]
-  invites    GroupInvite[]
+  ownerId           String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  owner             User          @relation("OwnedPredictionGroups", fields: [ownerId], references: [id], onDelete: Cascade)
+  members           GroupMember[]
+  invites           GroupInvite[]
 
   @@index([ownerId])
   @@map("prediction_groups")
@@ -1438,12 +1603,12 @@ model GroupInvite {
 }
 
 model GroupRound {
-  id          String           @id @default(uuid())
-  date        String           @unique
+  id          String            @id @default(uuid())
+  date        String            @unique
   matchIds    Json
-  status      GroupRoundStatus @default(OPEN)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  status      GroupRoundStatus  @default(OPEN)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   predictions GroupPrediction[]
 
   @@map("group_rounds")
@@ -1485,25 +1650,25 @@ model GroupPrediction {
 /// managed via API/admin, no app release needed to add new content.
 
 model Sponsor {
-  id           String        @id @default(uuid())
+  id           String          @id @default(uuid())
   name         String
   /// Trade line shown under the sponsor name on the competition card
   /// (Figma `650:5295` — e.g. "متجر أحذية رياضية").
   description  String?
   logoUrl      String?
   address      String?
-  hasDelivery  Boolean       @default(false)
+  hasDelivery  Boolean         @default(false)
   /// { facebook?, instagram?, whatsapp? }
   socialLinks  Json?
   /// Null when the sponsor entity was created directly by an admin.
   ownerId      String?
-  isVerified   Boolean       @default(false)
+  isVerified   Boolean         @default(false)
   /// Admin kill-switch — a disabled sponsor's competitions stop accepting
   /// entries and drop out of the public list.
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  owner        User?          @relation("OwnedSponsors", fields: [ownerId], references: [id], onDelete: SetNull)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  owner        User?           @relation("OwnedSponsors", fields: [ownerId], references: [id], onDelete: SetNull)
   competitions Competition[]
   followers    SponsorFollow[]
 
@@ -1553,7 +1718,7 @@ model PrizeCategory {
 }
 
 model Competition {
-  id                 String             @id @default(uuid())
+  id                 String                @id @default(uuid())
   sponsorId          String
   categoryId         String
   prizeName          String
@@ -1562,7 +1727,7 @@ model Competition {
   prizeDescription   String?
   /// Cash prizes only — amount in EGP (minimum 100).
   prizeCashAmount    Int?
-  winnersCount       Int                @default(1)
+  winnersCount       Int                   @default(1)
   apiMatchId         Int
   homeTeam           String
   awayTeam           String
@@ -1584,27 +1749,27 @@ model Competition {
   /// Free-form entry conditions shown to entrants ("شروط المسابقة").
   rules              String?
   predictionDeadline DateTime
-  predictionMode     PredictionMode     @default(EXACT_SCORE)
-  status             CompetitionStatus  @default(DRAFT)
+  predictionMode     PredictionMode        @default(EXACT_SCORE)
+  status             CompetitionStatus     @default(DRAFT)
   /// Free to enter vs. sponsor-funded entry cost — drives the "المسابقات
   /// المجانية" filter chip.
-  isFree             Boolean            @default(true)
+  isFree             Boolean               @default(true)
   /// Denormalized counter, kept in sync on entry create — backs the "الأكثر
   /// مشاركة" sort without a COUNT() on every list request.
-  participantsCount  Int                @default(0)
+  participantsCount  Int                   @default(0)
   /// Unique viewers of the competition detail (see CompetitionView).
-  viewsCount         Int                @default(0)
+  viewsCount         Int                   @default(0)
   /// Optional human-review note when status becomes REJECTED.
   rejectionReason    String?
   reviewedAt         DateTime?
   /// Set when the sponsor has filled every winner slot (`winnersCount`).
   winnerAwardedAt    DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
   publishedAt        DateTime?
   settledAt          DateTime?
-  sponsor            Sponsor            @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
-  category           PrizeCategory      @relation(fields: [categoryId], references: [id])
+  sponsor            Sponsor               @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  category           PrizeCategory         @relation(fields: [categoryId], references: [id])
   entries            CompetitionEntry[]
   views              CompetitionView[]
   activities         CompetitionActivity[]
@@ -1653,12 +1818,12 @@ model CompetitionEntry {
 
 /// One row per authenticated viewer of a competition detail screen.
 model CompetitionView {
-  id             String      @id @default(uuid())
-  competitionId  String
-  userId         String
-  createdAt      DateTime    @default(now())
-  competition    Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String      @id @default(uuid())
+  competitionId String
+  userId        String
+  createdAt     DateTime    @default(now())
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([competitionId, userId])
   @@index([userId])
@@ -1673,12 +1838,12 @@ enum CompetitionActivityType {
 
 /// Audit trail for the /AsS review desk (approve / reject / award).
 model CompetitionActivity {
-  id             String                   @id @default(uuid())
-  type           CompetitionActivityType
-  competitionId  String
-  payload        Json?
-  createdAt      DateTime                 @default(now())
-  competition    Competition              @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  id            String                  @id @default(uuid())
+  type          CompetitionActivityType
+  competitionId String
+  payload       Json?
+  createdAt     DateTime                @default(now())
+  competition   Competition             @relation(fields: [competitionId], references: [id], onDelete: Cascade)
 
   @@index([createdAt(sort: Desc)])
   @@index([competitionId])
@@ -2208,26 +2373,26 @@ model ChatVoiceOperation {
 }
 
 model MatchChatMessage {
-  id                 String                    @id @default(uuid())
+  id                 String                      @id @default(uuid())
   matchId            Int
   userId             String
   text               String
   normalizedText     String
-  moderationStatus   MatchChatModerationStatus @default(CLEAN)
+  moderationStatus   MatchChatModerationStatus   @default(CLEAN)
   moderationCategory MatchChatModerationCategory @default(CLEAN)
-  moderationScore    Float                     @default(0)
+  moderationScore    Float                       @default(0)
   moderationReason   String?
   clientMessageId    String
   replyToMessageId   String?
   replyToUsername    String?
   replyToDisplayName String?
   replyToText        String?
-  createdAt          DateTime                  @default(now())
+  createdAt          DateTime                    @default(now())
   deletedAt          DateTime?
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   reports            MatchChatReport[]
-  replyToMessage     MatchChatMessage?         @relation("MatchChatReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies            MatchChatMessage[]        @relation("MatchChatReplies")
+  replyToMessage     MatchChatMessage?           @relation("MatchChatReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies            MatchChatMessage[]          @relation("MatchChatReplies")
 
   @@unique([userId, clientMessageId])
   @@index([matchId, createdAt])

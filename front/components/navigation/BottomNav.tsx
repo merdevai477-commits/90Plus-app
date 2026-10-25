@@ -40,6 +40,9 @@ function resolveActiveIndex(pathname: string | null): number {
   if (p.includes('reels')) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'reels');
   }
+  if (p.includes('community')) {
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'community');
+  }
   if (p.includes('chat')) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'ai');
   }
@@ -76,7 +79,8 @@ const BottomNav = memo(function BottomNav() {
   const isChat = pathname?.includes('chat');
   const isPredictAndWinStack = /predict-and-win\/.+/.test(pathname ?? '');
   const isMatchDetails = pathname?.includes('match-details');
-  const hidden = isChat || isPredictAndWinStack || isMatchDetails;
+  const isCommunityStack = /\/community\/.+/.test(pathname ?? '');
+  const hidden = isChat || isPredictAndWinStack || isMatchDetails || isCommunityStack;
 
   const activeIndex = useMemo(
     () => resolveActiveIndex(pathname),

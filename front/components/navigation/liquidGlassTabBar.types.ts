@@ -2,9 +2,9 @@ import type { ComponentType, ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { Href } from 'expo-router';
 
-export type LiquidTabId = 'matches' | 'rank' | 'reels' | 'ai' | 'profile';
+export type LiquidTabId = 'matches' | 'rank' | 'community' | 'reels' | 'ai' | 'profile';
 
-export type LiquidTabIconKind = 'matches' | 'rank' | 'reels' | 'ai' | 'profile';
+export type LiquidTabIconKind = 'matches' | 'rank' | 'community' | 'reels' | 'ai' | 'profile';
 
 export type LiquidTabIconComponent = ComponentType<{
   size?: number;

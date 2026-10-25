@@ -261,6 +261,7 @@ import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
 import shareWinRoutes from './routes/share-win.routes';
+import communityRoutes from './routes/community.routes';
 import matchChatRoutes from './routes/match-chat.routes';
 import authRoutes from './routes/auth.routes';
 import debugRoutes from './routes/debug.routes';
@@ -474,6 +475,7 @@ app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
 app.use(`${API_PREFIX}/share-win`, shareWinRoutes); // Share & Win: referrals, weekly cycles, leaderboard
+app.use(`${API_PREFIX}/community`, communityRoutes); // Community: Threads-style feed, comments, likes, reports
 app.use(`${API_PREFIX}/match-chat`, matchChatRoutes);
 
 // Support and legal pages (without API prefix)
@@ -819,6 +821,15 @@ async function startServer() {
                 );
             } catch (warmErr) {
                 logger.warn('Could not start warmup service (non-fatal):', warmErr);
+            }
+
+            try {
+                const { warmCommunityModeration } = await import('./services/community-moderation.service');
+                const { startCommunityJanitor } = await import('./services/community.service');
+                void warmCommunityModeration();
+                startCommunityJanitor();
+            } catch (communityErr) {
+                logger.warn('Could not start community services (non-fatal):', communityErr);
             }
         }
 

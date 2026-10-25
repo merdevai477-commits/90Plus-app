@@ -18,6 +18,7 @@ export const TAB_BUBBLE_SIZE = TAB_BUBBLE_WIDTH;
 export const TAB_BUBBLE_WIDTHS: Record<LiquidTabItem['id'], number> = {
   matches: 94,
   rank: 68,
+  community: 92,
   reels: 72,
   ai: 58,
   profile: 88,
@@ -78,6 +79,13 @@ export const LIQUID_TAB_ITEMS: LiquidTabItem[] = [
     route: '/(tabs)/rank',
     accent: '#F97316',
     icon: 'rank',
+  },
+  {
+    id: 'community',
+    label: 'Community',
+    route: '/(tabs)/community',
+    accent: '#8C5CF5',
+    icon: 'community',
   },
   {
     id: 'reels',

@@ -392,6 +392,12 @@ function RootLayoutNav() {
       <Stack.Screen name="predict-and-win/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="predict-and-win/create" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="community/compose"
+        options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: '#090710' } }}
+      />
+      <Stack.Screen name="community/post/[id]" options={{ headerShown: false, contentStyle: { backgroundColor: '#090710' } }} />
+      <Stack.Screen name="community/tag/[tag]" options={{ headerShown: false, contentStyle: { backgroundColor: '#090710' } }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />

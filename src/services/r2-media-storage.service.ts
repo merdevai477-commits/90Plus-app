@@ -20,7 +20,14 @@ import { logger } from '../utils/logger';
 import { registerOrphan, resolveOrphan } from './r2-cleanup.service';
 import { redisCacheService } from './redis-cache.service';
 
-export type R2MediaBucket = 'avatars' | 'covers' | 'reels' | 'thumbnails' | 'videos' | 'competitions';
+export type R2MediaBucket =
+  | 'avatars'
+  | 'covers'
+  | 'reels'
+  | 'thumbnails'
+  | 'videos'
+  | 'competitions'
+  | 'community';
 
 export interface R2UploadResult {
   success: boolean;

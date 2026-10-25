@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="51" height="36" viewBox="0 0 51 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="akar-icons:plus">
+<rect width="51" height="36" rx="18" fill="url(#paint0_linear_0_20)"/>
+<path id="Vector" d="M25.5 26V18M25.5 18V10M25.5 18H33.5M25.5 18H17.5" stroke-width="2" stroke-linecap="round" stroke="white"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_20" x1="25.5" y1="0" x2="25.5" y2="36" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#513690"/>
+</linearGradient>
+</defs>
+</svg>

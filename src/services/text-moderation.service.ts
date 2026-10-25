@@ -4,19 +4,11 @@
  */
 
 import { logger } from '../utils/logger';
+import { AR_LEGACY } from '../constants/profanity/ar';
+import { EN_LEGACY } from '../constants/profanity/en';
 
-// Bad words lists (Arabic + English)
-const ARABIC_BAD_WORDS = [
-    'كلب', 'حمار', 'غبي', 'احمق', 'خنزير', 'قذر', 'وسخ', 'عاهر', 'شرموط',
-    'كس', 'زب', 'عرص', 'متناك', 'ابن الكلب', 'ابن الشرموطة', 'يا كلب',
-    'يا حمار', 'يا غبي', 'يا احمق', 'لعنة', 'تفو', 'قرف', 'حقير'
-];
-
-const ENGLISH_BAD_WORDS = [
-    'fuck', 'shit', 'bitch', 'asshole', 'bastard',
-    'dick', 'cock', 'pussy', 'cunt', 'whore', 'slut', 'fag', 'nigger',
-    'retard', 'piss',
-];
+const ARABIC_BAD_WORDS = AR_LEGACY;
+const ENGLISH_BAD_WORDS = EN_LEGACY;
 
 /** Escape regex special chars in a literal phrase */
 function escapeRegex(s: string): string {

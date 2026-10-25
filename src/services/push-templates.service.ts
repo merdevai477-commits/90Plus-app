@@ -123,6 +123,21 @@ export type PushTemplateKey =
     | 'reelCommentLikeBody'
     | 'reelShareTitle'
     | 'reelShareBody'
+    | 'communityLikeTitle'
+    | 'communityLikeBody'
+    | 'communityCommentTitle'
+    | 'communityCommentBody'
+    | 'communityReplyTitle'
+    | 'communityReplyBody'
+    | 'communityCommentLikeTitle'
+    | 'communityCommentLikeBody'
+    | 'communityShareTitle'
+    | 'communityShareBody'
+    | 'communityMentionTitle'
+    | 'communityMentionPostBody'
+    | 'communityMentionCommentBody'
+    | 'communityHiddenTitle'
+    | 'communityHiddenBody'
     // Ranking achievements (top-3 medal + team-of-month diamond streak)
     | 'medalGoldName'
     | 'medalSilverName'
@@ -317,6 +332,21 @@ const en: TemplateMap = {
     reelCommentLikeBody: '{user} liked your comment',
     reelShareTitle: '🔗 Your reel was shared',
     reelShareBody: '{user} shared your reel on {platform}',
+    communityLikeTitle: '❤️ New like',
+    communityLikeBody: '{user} liked your post',
+    communityCommentTitle: '💬 New comment',
+    communityCommentBody: '{user}: {content}',
+    communityReplyTitle: '↩️ New reply',
+    communityReplyBody: '{user} replied: {content}',
+    communityCommentLikeTitle: '❤️ Someone liked your comment',
+    communityCommentLikeBody: '{user} liked your comment',
+    communityShareTitle: '🔗 Your post was shared',
+    communityShareBody: '{user} shared your post',
+    communityMentionTitle: '📣 You were mentioned',
+    communityMentionPostBody: '{user} mentioned you in a post',
+    communityMentionCommentBody: '{user} mentioned you in a comment',
+    communityHiddenTitle: 'Content removed',
+    communityHiddenBody: 'One of your community posts or comments was hidden for breaking the community guidelines.',
     // Ranking achievements
     medalGoldName: 'Gold 🥇',
     medalSilverName: 'Silver 🥈',
@@ -515,6 +545,21 @@ const ar: TemplateMap = {
     reelCommentLikeBody: 'أعجب {user} بتعليقك',
     reelShareTitle: '🔗 شاركوا مقطعك!',
     reelShareBody: '{user} شارك مقطعك على {platform}',
+    communityLikeTitle: '❤️ إعجاب جديد',
+    communityLikeBody: '{user} عجبه منشورك',
+    communityCommentTitle: '💬 تعليق جديد',
+    communityCommentBody: '{user}: {content}',
+    communityReplyTitle: '↩️ رد جديد',
+    communityReplyBody: '{user} رد عليك: {content}',
+    communityCommentLikeTitle: '❤️ إعجاب على تعليقك',
+    communityCommentLikeBody: '{user} عجبه تعليقك',
+    communityShareTitle: '🔗 منشورك اتشارك',
+    communityShareBody: '{user} شارك منشورك',
+    communityMentionTitle: '📣 حد عمل لك منشن',
+    communityMentionPostBody: '{user} عمل لك منشن في منشور',
+    communityMentionCommentBody: '{user} عمل لك منشن في تعليق',
+    communityHiddenTitle: 'تم إخفاء محتوى',
+    communityHiddenBody: 'تم إخفاء منشور أو تعليق ليك في المجتمع لأنه مخالف لقواعد المجتمع.',
     // إنجازات الترتيب
     medalGoldName: 'ذهبية 🥇',
     medalSilverName: 'فضية 🥈',
