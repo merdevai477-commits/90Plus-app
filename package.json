@@ -10,7 +10,7 @@
     "build:web": "npm --prefix web ci --include=dev --no-audit --no-fund && npm --prefix web run build",
     "dev:web": "npm --prefix web run dev",
     "build:railway": "npm run db:deploy && npm run build && npx prisma generate",
-    "db:deploy": "prisma db push",
+    "db:deploy": "prisma migrate deploy && prisma db push --skip-generate",
     "build:reliability": "npm run reliability:check && npm run build",
     "copy:public": "node scripts/copy-public.js",
     "verify:build": "node -e \"const fs = require('fs'); const exists = fs.existsSync('dist/src/main.js'); console.log(exists ? '✅ main.js exists' : '❌ main.js missing'); process.exit(exists ? 0 : 1);\"",
