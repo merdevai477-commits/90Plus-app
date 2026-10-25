@@ -260,7 +260,6 @@ import reportsRoutes from './routes/reports.routes';
 import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
-import quizRoutes from './routes/quiz.routes';
 import shareWinRoutes from './routes/share-win.routes';
 import matchChatRoutes from './routes/match-chat.routes';
 import authRoutes from './routes/auth.routes';
@@ -286,7 +285,6 @@ import {
     generalLimiter,
     lenientLimiter,
     lenientShellDailySpinLimiter,
-    lenientShellQuizLimiter,
     lenientPredictionsReadLimiter,
     userSyncLimiterClerkMe,
     userSyncLimiterClerkStats,
@@ -475,8 +473,6 @@ app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
-app.use(`${API_PREFIX}/quiz`, lenientShellQuizLimiter);
-app.use(`${API_PREFIX}/quiz`, quizRoutes);
 app.use(`${API_PREFIX}/share-win`, shareWinRoutes); // Share & Win: referrals, weekly cycles, leaderboard
 app.use(`${API_PREFIX}/match-chat`, matchChatRoutes);
 
@@ -918,54 +914,6 @@ async function startServer() {
                     } catch (queueErr) {
                         logger.warn('Failed to initialise notification queues (non-fatal):', queueErr);
                     }
-
-                    // Daily quiz packs are independent of Football API plan — always warm + cron.
-                    const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
-                    ensureDailyPacksForToday().catch((err) =>
-                        logger.error('Quiz pack warmup failed:', err),
-                    );
-                    const { regenerateDailyQuestionsChallenges } = await import(
-                        './services/questions-challenges.service'
-                    );
-                    const { ensureQuizEntityDataset } = await import(
-                        './services/quiz-team-roster-sync.service'
-                    );
-
-                    /*
-                     * Questions rounds are authored over the football entity pool, so the
-                     * pool has to exist BEFORE generation runs. Nothing used to refresh it:
-                     * the cron regenerated rounds against an empty TeamPlayer table, every
-                     * mode failed to generate, and old rows were recycled forward instead.
-                     *
-                     * ensureQuizEntityDataset is a no-op (and costs no API quota) whenever
-                     * the pool is already healthy.
-                     */
-                    const warmQuestions = async () => {
-                        await ensureQuizEntityDataset();
-                        await regenerateDailyQuestionsChallenges();
-                    };
-                    warmQuestions().catch((err) =>
-                        logger.error('Questions challenges warmup failed:', err),
-                    );
-                    cron.schedule('0 0 * * *', () => {
-                        logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
-                        ensureDailyPacksForToday().catch((err) =>
-                            logger.error('Daily quiz pack cron error:', err),
-                        );
-                        // Runs at 00:00 UTC — the same moment the API-Football daily
-                        // quota resets, so a pool starved by yesterday's quota refills
-                        // before the day's rounds are authored.
-                        warmQuestions().catch((err) =>
-                            logger.error('Daily questions challenges cron error:', err),
-                        );
-                    });
-                    logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
-
-                    // Quiz-renewal push is DB + Expo only — not API-Football quota.
-                    // Previously gated behind FOOTBALL_API_PLAN=pro, so free-plan
-                    // production never scheduled it even after BACKEND-2V was diagnosed.
-                    const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
-                    startDailyQuizNotifier();
 
                     // Re-engagement push is DB + Expo only, so it runs on every plan.
                     const { startReEngagementNotifier } = await import('./services/re-engagement-notifier.service');

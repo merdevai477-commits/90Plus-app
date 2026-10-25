@@ -1,6 +1,6 @@
 import { Tabs, useRouter, usePathname, useNavigation } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
-import { User, Video, Brain, BarChart2, Gift } from "lucide-react-native";
+import { User, Video, BarChart2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
 import BottomNav from '@/components/navigation/BottomNav';
@@ -135,20 +135,8 @@ export default function TabLayout() {
         <Tabs.Screen
           name="predict-and-win"
           options={{
+            href: null,
             title: "Sponsors",
-            tabBarIcon: ({ color, focused }) => (
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: focused ? 1.1 : 1 },
-                    { translateY: focused ? -2 : 0 }
-                  ],
-                  opacity: focused ? 1 : 0.7
-                }}
-              >
-                <Gift color={color} size={24} />
-              </Animated.View>
-            ),
           }}
         />
         <Tabs.Screen
@@ -166,26 +154,6 @@ export default function TabLayout() {
                 }}
               >
                 <User color={color} size={24} />
-              </Animated.View>
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="quiz"
-          options={{
-            href: null,
-            title: "Quiz",
-            tabBarIcon: ({ color, focused }) => (
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: focused ? 1.1 : 1 },
-                    { translateY: focused ? -2 : 0 }
-                  ],
-                  opacity: focused ? 1 : 0.7
-                }}
-              >
-                <Brain color={color} size={24} />
               </Animated.View>
             ),
           }}

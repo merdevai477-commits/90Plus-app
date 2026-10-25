@@ -18,7 +18,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { ChevronRight, Crown, Gift, HelpCircle, Share2, Trophy, Zap } from 'lucide-react-native';
+import { ChevronRight, Crown, Gift, Share2, Trophy, Zap } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ImageSourcePropType,
@@ -48,7 +48,6 @@ import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
 import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkeletons';
 import { APP_BG } from '../../constants/ui';
-import { prefetchDailyQuiz } from '../../hooks/useDailyQuiz';
 import { useAppShareReward } from '../../hooks/useAppShareReward';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import { useTopPlayers, type TopPlayer, type TopPlayersPeriod } from '../../hooks/useTopPlayers';
@@ -58,9 +57,7 @@ import type { Language } from '../../src/i18n/types';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont, useAppFont } from '../../utils/fontSetup';
-import { useAuth } from '@clerk/clerk-expo';
 import { globalState } from '../../globalState';
-import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#A855F7';
 const VIEW_ALL_HEIGHT = 54;
@@ -181,8 +178,6 @@ export default function RankScreen() {
   // explicit weighted family so headings/names render properly bold.
   const fontBold = useAppFont(700);
   const fontExtraBold = useAppFont(800);
-  const { getToken } = useAuth();
-  const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
   // Default to the all-time board so the leaderboard matches the profile card's
   // XP + global rank out of the box (weekly/monthly remain one tap away).
@@ -236,9 +231,8 @@ export default function RankScreen() {
   const handleCompetitionPress = useCallback(
     (id: string) => {
       if (id === '3') {
-        const quizLang = appLanguage === 'en' ? 'en' : 'ar';
-        void prefetchDailyQuiz(queryClient, getToken, quizLang);
-        router.push('/(tabs)/quiz' as never);
+        // Former Daily Quiz slot — sponsors (Predict & Win) live here now.
+        router.push('/(tabs)/predict-and-win' as never);
       } else if (id === '4') {
         router.push('/top-scorers-five' as never);
       } else if (id === '2') {
@@ -250,7 +244,7 @@ export default function RankScreen() {
         router.push('/king-of-predictions' as never);
       }
     },
-    [router, appLanguage, queryClient, getToken],
+    [router],
   );
 
   const onRefresh = useCallback(async () => {
@@ -282,7 +276,7 @@ export default function RankScreen() {
 
   // Figma 2×2 order (left → right, top → bottom):
   // Row 1: ملك التوقعات | خماسي الهدافين
-  // Row 2: شارك واربح | الأسئلة اليومية
+  // Row 2: شارك واربح | الرعاة
   const competitions = useMemo(
     () => [
       {
@@ -316,12 +310,12 @@ export default function RankScreen() {
       },
       {
         id: '3',
-        title: t.rank.competitionNames.dailyQuiz.title,
-        sub: t.rank.competitionNames.dailyQuiz.sub,
-        actionText: t.rank.competitionNames.dailyQuiz.action,
+        title: t.rank.competitionNames.sponsors.title,
+        sub: t.rank.competitionNames.sponsors.sub,
+        actionText: t.rank.competitionNames.sponsors.action,
         img: require('../../assets/images/rank/comp-quiz.webp') as ImageSourcePropType,
-        titleIcon: HelpCircle,
-        ctaIcon: HelpCircle,
+        titleIcon: Gift,
+        ctaIcon: Gift,
       },
     ],
     [t, shareRewardHint],

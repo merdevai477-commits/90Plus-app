@@ -393,24 +393,6 @@ function RootLayoutNav() {
       <Stack.Screen name="predict-and-win/create" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
-      {/*
-       * QUIZ MODE ROUTE — front/app/quiz/[mode].tsx
-       *
-       * Without this entry expo-router falls back to the default Stack header,
-       * which renders a white bar titled "quiz/[mode]" above every quiz screen.
-       * The quiz screens draw their own header (ModeHeader in
-       * components/Quiz/QuestionsModeScreen.tsx), so the native one is hidden.
-       *
-       * CUSTOMIZE: transition animation, gesture and background colour below.
-       */}
-      <Stack.Screen
-        name="quiz/[mode]"
-        options={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#030303' },
-        }}
-      />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />
       <Stack.Screen

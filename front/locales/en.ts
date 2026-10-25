@@ -2078,10 +2078,10 @@ export const en = {
         sub: 'Pick five scorers and earn points from every goal!',
         action: 'Challenge',
       },
-      dailyQuiz: {
-        title: 'Daily Quiz',
-        sub: 'Answer daily questions and win points!',
-        action: 'Test Now',
+      sponsors: {
+        title: 'Sponsors',
+        sub: 'Predict match outcomes and win prizes from our partners!',
+        action: 'Enter Now',
       },
       shareAndEarn: {
         title: 'Share & Earn',
@@ -3865,7 +3865,6 @@ export const en = {
   bottomNav: {
     matches: 'Matches',
     rank: 'Rank',
-    sponsors: 'Sponsors',
     reels: 'Reels',
     ai: 'AI',
     profile: 'Profile',

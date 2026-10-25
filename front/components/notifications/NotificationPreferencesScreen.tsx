@@ -197,8 +197,6 @@ export default function NotificationPreferencesScreen() {
             <View style={styles.divider} />
             <SwitchRow label={tn.prefGifts} subtitle={tn.prefGiftsSub} value={current.gifts} field="gifts" onToggle={handleToggle} />
             <View style={styles.divider} />
-            <SwitchRow label={tn.prefDailyQuiz} subtitle={tn.prefDailyQuizSub} value={current.dailyQuiz} field="dailyQuiz" onToggle={handleToggle} />
-            <View style={styles.divider} />
             <SwitchRow label={tn.prefCooldown} subtitle={tn.prefCooldownSub} value={current.cooldown} field="cooldown" onToggle={handleToggle} />
             <View style={styles.divider} />
             <SwitchRow label={tn.prefLevelUp} subtitle={tn.prefLevelUpSub} value={current.levelUp} field="levelUp" onToggle={handleToggle} />

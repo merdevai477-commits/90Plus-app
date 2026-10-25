@@ -222,7 +222,8 @@ export function usePushNotifications(): PushNotificationState {
             } else if (type === 'AI_CHECKIN') {
                 r.push('/(tabs)/chat' as any);
             } else if (type === 'DAILY_QUIZ_RENEWED' || type === 'QUIZ_REWARD') {
-                r.push('/(tabs)/quiz' as any);
+                // Quiz removed — send users to Rank (sponsors live on the former quiz card).
+                r.push('/(tabs)/rank' as any);
             } else if (type === 'LUCKY_WHEEL_RENEWED') {
                 r.push('/(tabs)/profile');
             } else if (type === 'COOLDOWN_EXPIRED') {

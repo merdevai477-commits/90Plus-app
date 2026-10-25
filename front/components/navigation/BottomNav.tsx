@@ -50,11 +50,12 @@ function resolveActiveIndex(pathname: string | null): number {
   ) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'profile');
   }
-  if (p.includes('/rank') || p.includes('king-of-predictions')) {
+  if (
+    p.includes('/rank') ||
+    p.includes('king-of-predictions') ||
+    p.includes('predict-and-win')
+  ) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'rank');
-  }
-  if (p.includes('predict-and-win')) {
-    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'sponsors');
   }
 
   const found = LIQUID_TAB_ITEMS.findIndex((tab) => {
@@ -73,10 +74,9 @@ const BottomNav = memo(function BottomNav() {
   const profileAvatarUrl = useProfileTabAvatar(pathname);
 
   const isChat = pathname?.includes('chat');
-  const isQuiz = pathname?.includes('quiz');
   const isPredictAndWinStack = /predict-and-win\/.+/.test(pathname ?? '');
   const isMatchDetails = pathname?.includes('match-details');
-  const hidden = isChat || isQuiz || isPredictAndWinStack || isMatchDetails;
+  const hidden = isChat || isPredictAndWinStack || isMatchDetails;
 
   const activeIndex = useMemo(
     () => resolveActiveIndex(pathname),
