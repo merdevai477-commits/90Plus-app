@@ -3928,6 +3928,7 @@ export const en = {
     seeMore: 'See more',
     seeLess: 'See less',
     profanity: 'Your text contains language that breaks the community guidelines.',
+    imageRejected: 'This photo breaks the community guidelines.',
     spam: 'This looks like spam. Remove extra links or repeated characters.',
     postCooldown: 'Wait {seconds}s before posting again.',
     commentCooldown: 'Wait {seconds}s before your next comment.',

@@ -38,6 +38,8 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
   switch (err.code) {
     case 'PROFANITY_DETECTED':
       return s.profanity;
+    case 'IMAGE_REJECTED':
+      return s.imageRejected;
     case 'SPAM_DETECTED':
       return s.spam;
     case 'POST_COOLDOWN':
@@ -70,6 +72,6 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
 export function isContentRejection(err: unknown): boolean {
   return (
     err instanceof CommunityApiError &&
-    ['PROFANITY_DETECTED', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
+    ['PROFANITY_DETECTED', 'IMAGE_REJECTED', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
   );
 }

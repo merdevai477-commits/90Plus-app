@@ -22,6 +22,7 @@ import {
     registerCommunityHideHandler,
     type CommunityContentKind,
 } from './community-moderation.service';
+import { classifyCommunityImage } from './community-image-safety';
 import {
     consumeCommunityRate,
     MAX_COMMENTS_PER_USER_PER_POST,
@@ -427,6 +428,23 @@ export async function uploadMedia(actor: CommunityActor, file: { buffer: Buffer;
         placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
     } catch (err: any) {
         throw new CommunityError(400, 'INVALID_IMAGE', 'Image is corrupted or unsupported', { detail: err?.message });
+    }
+
+    const imageSafety = await classifyCommunityImage(output.data);
+    if (!imageSafety.safe) {
+        void prisma.moderationLog
+            .create({
+                data: {
+                    userId: actor.id,
+                    contentType: 'community_media',
+                    action: 'BLOCKED',
+                    reason: 'IMAGE_REJECTED',
+                    detectedWords: imageSafety.categories.slice(0, 10),
+                    severity: 'high',
+                },
+            })
+            .catch(() => undefined);
+        throw new CommunityError(422, 'IMAGE_REJECTED', 'Image violates community guidelines');
     }
 
     const baseName = (file.originalname || 'image').replace(/\.[^.]+$/, '').slice(0, 40) || 'image';
