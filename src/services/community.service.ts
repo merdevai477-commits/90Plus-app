@@ -22,7 +22,7 @@ import {
     registerCommunityHideHandler,
     type CommunityContentKind,
 } from './community-moderation.service';
-import { classifyCommunityImage } from './community-image-safety';
+import { classifyCommunityImage, type CommunityImageVerdict } from './community-image-safety';
 import {
     consumeCommunityRate,
     MAX_COMMENTS_PER_USER_PER_POST,
@@ -113,6 +113,41 @@ async function moderateOrThrow(userId: string, kind: CommunityContentKind, text:
     if (verdict.ok) return;
     void recordBlockedAttempt(userId, kind, verdict);
     throw new CommunityError(422, verdict.code, verdict.code === 'PROFANITY_DETECTED' ? 'Content violates community guidelines' : 'Content looks like spam');
+}
+
+function rejectUnsafeImage(userId: string, imageSafety: Extract<CommunityImageVerdict, { safe: false }>): never {
+    const scanFailed = imageSafety.categories.some((c) => c === 'SCAN_FAILED' || c === 'SCAN_UNAVAILABLE');
+    void prisma.moderationLog
+        .create({
+            data: {
+                userId,
+                contentType: 'community_media',
+                action: 'BLOCKED',
+                reason: scanFailed ? 'IMAGE_SCAN_FAILED' : 'IMAGE_REJECTED',
+                detectedWords: imageSafety.categories.slice(0, 10),
+                severity: 'high',
+            },
+        })
+        .catch(() => undefined);
+    if (scanFailed) throw new CommunityError(503, 'IMAGE_SCAN_FAILED', 'Could not verify the image');
+    throw new CommunityError(422, 'IMAGE_REJECTED', 'Image violates community guidelines');
+}
+
+async function assertImageBufferSafe(userId: string, buffer: Buffer): Promise<void> {
+    const imageSafety = await classifyCommunityImage(buffer);
+    if (!imageSafety.safe) rejectUnsafeImage(userId, imageSafety);
+}
+
+async function assertRemoteImageSafe(userId: string, url: string): Promise<void> {
+    let buffer: Buffer;
+    try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+        if (!res.ok) throw new Error(`http ${res.status}`);
+        buffer = Buffer.from(await res.arrayBuffer());
+    } catch {
+        throw new CommunityError(503, 'IMAGE_SCAN_FAILED', 'Could not verify the image');
+    }
+    await assertImageBufferSafe(userId, buffer);
 }
 
 // ─── Blocks ───────────────────────────────────────────────────────────────
@@ -430,22 +465,7 @@ export async function uploadMedia(actor: CommunityActor, file: { buffer: Buffer;
         throw new CommunityError(400, 'INVALID_IMAGE', 'Image is corrupted or unsupported', { detail: err?.message });
     }
 
-    const imageSafety = await classifyCommunityImage(output.data);
-    if (!imageSafety.safe) {
-        void prisma.moderationLog
-            .create({
-                data: {
-                    userId: actor.id,
-                    contentType: 'community_media',
-                    action: 'BLOCKED',
-                    reason: 'IMAGE_REJECTED',
-                    detectedWords: imageSafety.categories.slice(0, 10),
-                    severity: 'high',
-                },
-            })
-            .catch(() => undefined);
-        throw new CommunityError(422, 'IMAGE_REJECTED', 'Image violates community guidelines');
-    }
+    await assertImageBufferSafe(actor.id, output.data);
 
     const baseName = (file.originalname || 'image').replace(/\.[^.]+$/, '').slice(0, 40) || 'image';
     const result = await r2MediaStorage.uploadPublic('community', actor.id, output.data, `${baseName}.webp`, 'image/webp');
@@ -646,6 +666,7 @@ export async function createPost(
           })
         : null;
     if (mediaId && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    if (media) await assertRemoteImageSafe(actor.id, media.url);
 
     await claimRate('post', actor.id);
 
@@ -772,6 +793,7 @@ export async function updatePost(
           })
         : null;
     if (mediaId && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    if (media) await assertRemoteImageSafe(actor.id, media.url);
 
     const clearImage = removeImage && !media;
     if (!content && !media && (clearImage || !existing.imageUrl)) {

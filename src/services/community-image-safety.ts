@@ -3,8 +3,8 @@
  * nudity / porn / gore never gets a public URL.
  *
  * Uses Gemini's native safety ratings + a short classifier prompt.
- * Fail-open if the key is missing or the call errors (upload still works;
- * the async Nemotron job remains a second net).
+ * Fail-closed if the key is missing or the call errors — a photo that was
+ * never scanned must not reach the feed.
  */
 
 import sharp from 'sharp';
@@ -177,15 +177,15 @@ async function callModel(model: string, jpeg: Buffer, apiKey: string): Promise<u
 export async function classifyCommunityImage(buffer: Buffer): Promise<CommunityImageVerdict> {
     const apiKey = geminiKey();
     if (!apiKey) {
-        logger.warn('[community-image-safety] no Gemini key — skipping image scan');
-        return { safe: true, skipped: true };
+        logger.warn('[community-image-safety] no Gemini key — blocking upload');
+        return { safe: false, categories: ['SCAN_UNAVAILABLE'], raw: 'no-key' };
     }
     let jpeg: Buffer;
     try {
         jpeg = await toScanJpeg(buffer);
     } catch (err: any) {
         logger.warn('[community-image-safety] resize failed:', err?.message);
-        return { safe: true, skipped: true };
+        return { safe: false, categories: ['SCAN_FAILED'], raw: err?.message || 'resize' };
     }
 
     const list = models();
@@ -199,6 +199,6 @@ export async function classifyCommunityImage(buffer: Buffer): Promise<CommunityI
             if (i < list.length - 1) continue;
         }
     }
-    logger.warn('[community-image-safety] scan failed — allowing upload', { err: lastErr });
-    return { safe: true, skipped: true };
+    logger.warn('[community-image-safety] scan failed — blocking upload', { err: lastErr });
+    return { safe: false, categories: ['SCAN_FAILED'], raw: lastErr || 'scan-failed' };
 }
