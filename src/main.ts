@@ -350,6 +350,12 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
             timestamp,
             database: 'Connected',
             environment,
+            git: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) || null,
+            communityImageScan: !!(
+                process.env.GEMINI_API_KEY?.trim() ||
+                process.env.GEMINI_QUIZ_API_KEY?.trim() ||
+                process.env.GOOGLE_API_KEY?.trim()
+            ),
             server: 'Running',
             uptime: {
                 seconds: Math.floor(uptime),

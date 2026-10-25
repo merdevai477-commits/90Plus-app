@@ -1,9 +1,14 @@
 import { parseGeminiImageSafety } from '../community-image-safety';
 
 describe('parseGeminiImageSafety', () => {
-    it('treats an empty payload as skip/safe', () => {
-        expect(parseGeminiImageSafety(null)).toMatchObject({ safe: true });
-        expect(parseGeminiImageSafety({})).toMatchObject({ safe: true });
+    it('rejects an empty or unparsed payload', () => {
+        expect(parseGeminiImageSafety(null).safe).toBe(false);
+        expect(parseGeminiImageSafety({}).safe).toBe(false);
+        expect(
+            parseGeminiImageSafety({
+                candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'looks fine' }] } }],
+            }).safe,
+        ).toBe(false);
     });
 
     it('blocks when promptFeedback.blockReason is set', () => {

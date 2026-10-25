@@ -26,12 +26,16 @@ const SAFETY_SETTINGS = [
 ] as const;
 
 const PROMPT =
-    'You are a content-safety classifier for a public football community (all ages). ' +
-    'UNSAFE: pornography, sexual acts, visible genitals, female nipples, full nudity, ' +
-    'sexualized close-ups, or graphic gore. Classical art and statues that show nudity are still UNSAFE here. ' +
-    'SAFE: football matches, stadiums, kits, crowds, and shirtless male athletes celebrating. ' +
-    'Reply with exactly:\nUser Safety: safe\n' +
-    'or:\nUser Safety: unsafe\nSafety Categories: ...';
+    'Classify this image for a public all-ages football app. ' +
+    'If you see ANY nudity, bare breasts, nipples, genitals, sex, pornography, or erotic posing, reply exactly:\n' +
+    'User Safety: unsafe\nSafety Categories: Sexual\n' +
+    'If it is a normal photo (match, stadium, kit, crowd, shirtless male athlete celebrating) reply exactly:\n' +
+    'User Safety: safe\n' +
+    'If unsure, reply: User Safety: unsafe';
+
+export function isCommunityImageSafetyConfigured(): boolean {
+    return !!geminiKey();
+}
 
 function geminiKey(): string | null {
     return (
@@ -95,10 +99,10 @@ function extractText(payload: unknown): string {
     return out.trim();
 }
 
-/** Pure — used by unit tests. */
+/** Pure — used by unit tests. Allow only an explicit "User Safety: safe". */
 export function parseGeminiImageSafety(payload: unknown): CommunityImageVerdict {
     if (!payload || typeof payload !== 'object') {
-        return { safe: true, skipped: true };
+        return { safe: false, categories: ['UNPARSED'], raw: 'empty' };
     }
     const obj = payload as Record<string, unknown>;
     const prompt = obj.promptFeedback as { blockReason?: string } | undefined;
@@ -134,7 +138,10 @@ export function parseGeminiImageSafety(payload: unknown): CommunityImageVerdict 
             : ['UNSAFE'];
         return { safe: false, categories, raw: text.slice(0, 300) };
     }
-    return { safe: true, raw: text.slice(0, 300) || undefined };
+    if (userLine && userLine[1].toLowerCase() === 'safe') {
+        return { safe: true, raw: text.slice(0, 300) };
+    }
+    return { safe: false, categories: ['UNPARSED'], raw: text.slice(0, 300) || 'no-verdict' };
 }
 
 async function toScanJpeg(buffer: Buffer): Promise<Buffer> {
@@ -193,7 +200,17 @@ export async function classifyCommunityImage(buffer: Buffer): Promise<CommunityI
     for (let i = 0; i < list.length; i++) {
         try {
             const payload = await callModel(list[i], jpeg, apiKey);
-            return parseGeminiImageSafety(payload);
+            const verdict = parseGeminiImageSafety(payload);
+            if (verdict.safe) {
+                logger.info('[community-image-safety] allowed', { model: list[i], raw: verdict.raw });
+            } else {
+                logger.warn('[community-image-safety] blocked', {
+                    model: list[i],
+                    categories: verdict.categories,
+                    raw: verdict.raw,
+                });
+            }
+            return verdict;
         } catch (err: any) {
             lastErr = err?.message || String(err);
             if (i < list.length - 1) continue;
