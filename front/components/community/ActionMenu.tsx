@@ -3,7 +3,6 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
-import { Tap } from './Tap';
 import { C } from './theme';
 
 export interface ActionMenuItem {
@@ -39,24 +38,23 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily }:
             <View style={styles.grabber} />
             <View style={styles.group}>
               {items.map((item, i) => (
-                <Tap
+                <Pressable
                   key={item.key}
                   onPress={() => {
                     onClose();
                     setTimeout(item.onPress, 180);
                   }}
                   style={[styles.row, i > 0 && styles.rowDivider]}
-                  pressedStyle={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
                   accessibilityRole="button"
                 >
                   {item.icon}
                   <Text style={[styles.label, { fontFamily }, item.destructive && { color: C.danger }]}>{item.label}</Text>
-                </Tap>
+                </Pressable>
               ))}
             </View>
-            <Tap onPress={onClose} style={[styles.group, styles.cancel]} accessibilityRole="button">
+            <Pressable onPress={onClose} style={[styles.group, styles.cancel]} accessibilityRole="button">
               <Text style={[styles.label, styles.cancelLabel, { fontFamily }]}>{cancelLabel}</Text>
-            </Tap>
+            </Pressable>
           </Animated.View>
         </View>
       )}

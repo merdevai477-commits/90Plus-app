@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { CommunityAvatar } from './CommunityAvatar';
-import { Tap } from './Tap';
 import { C, CI } from './theme';
 
 interface Props {
@@ -35,17 +34,16 @@ export const ComposerCard = memo(function ComposerCard({
     <View style={styles.card}>
       <View style={[styles.top, { flexDirection: row }]}>
         <CommunityAvatar uri={avatar} name={name} size={41} ring={false} />
-        <Tap
+        <Pressable
           onPress={onWrite}
           style={[styles.input, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
-          pressedStyle={styles.pressed}
           accessibilityRole="button"
           accessibilityLabel={placeholder}
         >
           <Text style={[styles.placeholder, { fontFamily: fonts.regular }]} numberOfLines={1}>
             {placeholder}
           </Text>
-        </Tap>
+        </Pressable>
       </View>
       <View style={[styles.bottom, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
         <Pressable onPress={onWrite} hitSlop={8} accessibilityRole="button" accessibilityLabel={writeLabel}>
@@ -96,9 +94,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.input,
     borderWidth: 1,
     borderColor: C.inputBorder,
-  },
-  pressed: {
-    opacity: 0.75,
   },
   placeholder: {
     color: C.placeholder,

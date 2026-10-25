@@ -9,7 +9,6 @@ import { CommunityApiError } from '../../services/community.api';
 import { useMentionSearch } from '../../hooks/community/useMentionSearch';
 import { MentionSuggestions } from './MentionSuggestions';
 import { activeMentionQuery } from './richTextParse';
-import { Tap } from './Tap';
 import { C, CI } from './theme';
 import { fillTemplate } from './format';
 
@@ -127,14 +126,9 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
       {showEmoji && (
         <Animated.View entering={FadeIn.duration(140)} style={[styles.emojiRow, { flexDirection: row }]}>
           {QUICK_EMOJI.map((e) => (
-            <Tap
-              key={e}
-              onPress={() => setText((t) => (t + e).slice(0, MAX_LEN))}
-              style={styles.emojiBtn}
-              pressedStyle={{ transform: [{ scale: 0.88 }] }}
-            >
+            <Pressable key={e} onPress={() => setText((t) => (t + e).slice(0, MAX_LEN))} style={styles.emojiBtn}>
               <Text style={styles.emoji}>{e}</Text>
-            </Tap>
+            </Pressable>
           ))}
         </Animated.View>
       )}

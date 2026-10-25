@@ -1,11 +1,10 @@
 import React, { memo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import type { CommunityAuthor } from '../../services/community.api';
 import { CommunityAvatar } from './CommunityAvatar';
-import { Tap } from './Tap';
 import { C, CI } from './theme';
 
 interface Props {
@@ -28,12 +27,7 @@ export const MentionSuggestions = memo(function MentionSuggestions({ users, load
       ) : (
         <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 220 }}>
           {users.map((u) => (
-            <Tap
-              key={u.id}
-              onPress={() => onPick(u)}
-              style={styles.row}
-              pressedStyle={{ backgroundColor: 'rgba(139,92,246,0.12)' }}
-            >
+            <Pressable key={u.id} onPress={() => onPick(u)} style={styles.row}>
               <CommunityAvatar uri={u.avatar} name={u.displayName || u.username} size={32} ring={false} />
               <View style={{ flex: 1 }}>
                 <View style={styles.nameRow}>
@@ -46,7 +40,7 @@ export const MentionSuggestions = memo(function MentionSuggestions({ users, load
                   @{u.username}
                 </Text>
               </View>
-            </Tap>
+            </Pressable>
           ))}
         </ScrollView>
       )}

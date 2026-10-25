@@ -22,7 +22,6 @@ import { RotateCcw, X } from 'lucide-react-native';
 import { CommunityAvatar } from '../../components/community/CommunityAvatar';
 import { KeyboardDock } from '../../components/community/KeyboardDock';
 import { MentionSuggestions } from '../../components/community/MentionSuggestions';
-import { Tap } from '../../components/community/Tap';
 import { activeMentionQuery, isArabicText } from '../../components/community/richTextParse';
 import { communityErrorMessage, fillTemplate } from '../../components/community/format';
 import { C, CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
@@ -176,15 +175,14 @@ export default function ComposeScreen() {
           <X size={24} color={C.textStrong} />
         </Pressable>
         <Text style={[styles.title, { fontFamily: fonts.semibold }]}>{s.composerTitle}</Text>
-        <Tap
+        <Pressable
           onPress={post}
           disabled={!canPost}
           style={[styles.postBtn, !canPost && styles.postBtnDisabled]}
-          pressedStyle={{ opacity: 0.85 }}
           accessibilityRole="button"
         >
           <Text style={[styles.postText, { fontFamily: fonts.semibold }]}>{s.post}</Text>
-        </Tap>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -259,14 +257,14 @@ export default function ComposeScreen() {
           </View>
         )}
         <View style={[styles.toolbar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Tap
+          <Pressable
             onPress={() => void pickImage()}
             style={[styles.tool, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
             accessibilityRole="button"
           >
             <Image source={CI.image} style={{ width: 24, height: 24 }} contentFit="contain" />
             <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
-          </Tap>
+          </Pressable>
           {left <= WARN_AT && (
             <Text style={[styles.counter, { fontFamily: fonts.semibold }, left < 0 && { color: C.danger }]}>
               {fillTemplate(s.charsLeft, { n: left })}

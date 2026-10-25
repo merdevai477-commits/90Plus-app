@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrendingUp } from 'lucide-react-native';
@@ -7,7 +7,6 @@ import { TrendingUp } from 'lucide-react-native';
 import { CommunityFeedList } from '../../components/community/CommunityFeedList';
 import { CommunityHeader } from '../../components/community/CommunityHeader';
 import { ComposerCard } from '../../components/community/ComposerCard';
-import { Tap } from '../../components/community/Tap';
 import { C } from '../../components/community/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
@@ -34,13 +33,13 @@ function TrendingChips({ isAr, fontFamily, label }: { isAr: boolean; fontFamily:
         style={isAr ? { transform: [{ scaleX: -1 }] } : undefined}
       >
         {data.map((h) => (
-          <Tap
+          <Pressable
             key={h.tag}
             onPress={() => router.push({ pathname: '/community/tag/[tag]', params: { tag: h.tag } })}
             style={[styles.chip, isAr && { transform: [{ scaleX: -1 }] }]}
           >
             <Text style={[styles.chipText, { fontFamily }]}>#{h.tag}</Text>
-          </Tap>
+          </Pressable>
         ))}
       </ScrollView>
     </View>
