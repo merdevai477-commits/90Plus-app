@@ -3,7 +3,6 @@ import {
   COACH_KING_SLOTS,
   coachKingMatchResult,
   coachKingNextBalanceMilli,
-  coachKingPriceMilli,
   coachKingRemainingMilli,
   coachKingResultPoints,
   computeCoachKingPoints,
@@ -13,26 +12,17 @@ import {
   type CkDraftSlot,
 } from '../coach-king-scoring';
 
-function fullSquad(price = 40, teamId = 1): CkDraftSlot[] {
+function fullSquad(price = 40): CkDraftSlot[] {
   return COACH_KING_SLOTS.map((slot, index) => ({
     slotKey: slot.key,
     playerId: `p${index}`,
     line: slot.line,
-    teamId,
+    teamId: index + 1,
     priceMilli: price,
   }));
 }
 
-describe('coach king prices and budget', () => {
-  it('keeps a price inside the line band and pins stars to the ceiling', () => {
-    expect(coachKingPriceMilli('FWD', 10, true)).toBe(150);
-    expect(coachKingPriceMilli('GK', 10, true)).toBe(65);
-    const cheap = coachKingPriceMilli('DEF', 99, false);
-    expect(cheap).toBeGreaterThanOrEqual(40);
-    expect(cheap).toBeLessThanOrEqual(40 + Math.floor(40 * 0.7));
-    expect(coachKingPriceMilli('MID', 99, false)).toBe(coachKingPriceMilli('MID', 99, false));
-  });
-
+describe('coach king budget', () => {
   it('formats tenths of a million and grows the bank by 0.1M per point', () => {
     expect(formatCoachKingMoney(275)).toBe('27.5M');
     expect(formatCoachKingMoney(CK_START_BALANCE_MILLI)).toBe('100M');
@@ -99,6 +89,16 @@ describe('coach king prices and budget', () => {
       startedTeamIds: new Set([1]),
       requireComplete: true,
     })).toMatchObject({ code: 'MATCH_STARTED' });
+
+    const oneClub = fullSquad(40).map((slot, index) => ({ ...slot, teamId: index < 4 ? 7 : slot.teamId }));
+    expect(inspectCoachKingSquad({
+      slots: oneClub,
+      coachPriceMilli: 30,
+      coachTeamId: 9,
+      balanceMilli: 1000,
+      startedTeamIds: new Set(),
+      requireComplete: true,
+    })).toMatchObject({ code: 'CLUB_LIMIT' });
   });
 });
 

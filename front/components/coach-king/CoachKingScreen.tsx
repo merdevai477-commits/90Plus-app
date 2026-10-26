@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,24 +17,24 @@ import {
   type CkHome,
   type CkLine,
   type CkPlayer,
+  type CkPoolKind,
 } from '../../services/coachKing.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 import type { KingPeriod } from '../../services/predictions.service';
+import { CoachKingCardGrid, type CkPick } from './CoachKingCardGrid';
+import { CoachKingMoney } from './CoachKingCoin';
+import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
-import { CoachKingPicker } from './CoachKingPicker';
 import { CoachKingPitch } from './CoachKingPitch';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
+const CLUB_LIMIT = 3;
 const EMPTY_HOME: CkHome = {
   user: { displayName: '—', avatar: null, level: 1, rank: null },
-  wallet: {
-    balanceMilli: 1000,
-    remainingMilli: 1000,
-    balanceLabel: '100M',
-    remainingLabel: '100M',
-  },
+  wallet: { balanceMilli: 1000, remainingMilli: 1000, balanceLabel: '100M', remainingLabel: '100M' },
   gameweek: { id: '', status: 'OPEN', locked: false },
   squad: { confirmed: false, spentMilli: 0, points: 0, coach: null, slots: [] },
 };
@@ -46,12 +46,50 @@ const LINE_OF: Record<string, CkLine> = {
   gk: 'GK',
 };
 
-function reasonKey(reason: string | null): 'budget' | 'started' | 'incomplete' | 'locked' | 'generic' {
+type ErrorKey = 'budget' | 'clubLimit' | 'started' | 'slotLocked' | 'duplicate' | 'weekClosed' | 'generic';
+
+function errorKey(reason: string | null): ErrorKey {
   if (reason === 'BUDGET') return 'budget';
+  if (reason === 'CLUB_LIMIT') return 'clubLimit';
   if (reason === 'MATCH_STARTED') return 'started';
-  if (reason === 'INCOMPLETE' || reason === 'MISSING_COACH') return 'incomplete';
-  if (reason === 'SQUAD_LOCKED') return 'locked';
+  if (reason === 'SLOT_LOCKED') return 'slotLocked';
+  if (reason === 'DUPLICATE_PLAYER') return 'duplicate';
+  if (reason === 'SQUAD_LOCKED') return 'weekClosed';
   return 'generic';
+}
+
+function withPick(home: CkHome, pick: CkPick, slotKey: string | null): CkHome {
+  const price = pick.priceMilli;
+  if (pick.kind === 'COACH') {
+    const refund = home.squad.coach?.pricePaidMilli ?? 0;
+    const delta = price - refund;
+    return {
+      ...home,
+      wallet: { ...home.wallet, remainingMilli: home.wallet.remainingMilli - delta },
+      squad: {
+        ...home.squad,
+        confirmed: true,
+        spentMilli: home.squad.spentMilli + delta,
+        coach: { ...(pick as CkCoach), locked: true, pricePaidMilli: price, points: 0 },
+      },
+    };
+  }
+  const current = home.squad.slots.find((slot) => slot.slotKey === slotKey);
+  const delta = price - (current?.pricePaidMilli ?? 0);
+  const others = home.squad.slots.filter((slot) => slot.slotKey !== slotKey);
+  return {
+    ...home,
+    wallet: { ...home.wallet, remainingMilli: home.wallet.remainingMilli - delta },
+    squad: {
+      ...home.squad,
+      confirmed: true,
+      spentMilli: home.squad.spentMilli + delta,
+      slots: [
+        ...others,
+        { slotKey: slotKey!, label: slotKey!, locked: true, pricePaidMilli: price, points: 0, player: pick as CkPlayer },
+      ],
+    },
+  };
 }
 
 export default function CoachKingScreen() {
@@ -70,13 +108,15 @@ export default function CoachKingScreen() {
   const [tab, setTab] = useState<CkTab>('pitch');
   const [home, setHome] = useState<CkHome | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [picker, setPicker] = useState<CkLine | 'COACH' | null>(null);
+  const [picker, setPicker] = useState<CkPoolKind | null>(null);
   const [slotKey, setSlotKey] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [locked, setLocked] = useState<(CkLockedNotice & { player: CkPlayer | null }) | null>(null);
   const [period, setPeriod] = useState<KingPeriod>('week');
   const [board, setBoard] = useState<CkBoardRow[]>([]);
   const [fixtures, setFixtures] = useState<CkFixture[]>([]);
+  const prefetched = useRef<string | null>(null);
 
   const tokenOf = useCallback(async () => {
     if (!isSignedIn) return null;
@@ -84,13 +124,17 @@ export default function CoachKingScreen() {
   }, [isSignedIn]);
 
   const loadHome = useCallback(async () => {
-    const nextToken = await tokenOf();
-    if (!nextToken) {
+    const token = await tokenOf();
+    if (!token) {
       setLoading(false);
       return;
     }
+    if (prefetched.current !== language) {
+      prefetched.current = language;
+      coachKingService.prefetchPools(token, language);
+    }
     try {
-      setHome(await coachKingService.getHome(nextToken, language));
+      setHome(await coachKingService.getHome(token, language));
       setError(null);
     } catch (err) {
       const detail = err instanceof CkApiError ? `${err.code} ${err.reason ?? ''} ${err.message}` : String(err);
@@ -121,74 +165,135 @@ export default function CoachKingScreen() {
     void loadSide(next);
   };
 
-  const explain = (err: unknown) => {
-    const reason = err instanceof CkApiError ? err.reason : null;
-    const key = reasonKey(reason);
-    setError(copy[key]);
-  };
+  const shown = home ?? (!loading ? EMPTY_HOME : null);
+  const closed = shown?.gameweek.locked === true;
+  const lockedUntil = shown?.squad.lockedUntil ?? shown?.gameweek.endAt ?? null;
 
-  const persist = async (coachId: string | null, slots: Array<{ slotKey: string; playerId: string }>) => {
-    const token = await tokenOf();
-    if (!token) return;
-    setBusy(true);
-    try {
-      setHome(await coachKingService.saveSquad(token, language, { coachId, slots }));
-      setError(null);
-    } catch (err) {
-      explain(err);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const takenIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const slot of shown?.squad.slots ?? []) if (slot.slotKey !== slotKey) ids.add(slot.player.id);
+    if (picker === 'COACH' && shown?.squad.coach) ids.add(shown.squad.coach.id);
+    return ids;
+  }, [shown, slotKey, picker]);
 
-  const slotsOf = (current: CkHome) => current.squad.slots.map((slot) => ({
-    slotKey: slot.slotKey,
-    playerId: slot.player.id,
-  }));
+  const refundMilli = useMemo(() => {
+    if (!shown) return 0;
+    if (picker === 'COACH') return shown.squad.coach?.pricePaidMilli ?? 0;
+    return shown.squad.slots.find((slot) => slot.slotKey === slotKey)?.pricePaidMilli ?? 0;
+  }, [shown, picker, slotKey]);
 
-  const onPickPlayer = (player: CkPlayer) => {
-    if (!home || !slotKey || home.squad.confirmed) return;
-    const slots = slotsOf(home).filter((slot) => slot.slotKey !== slotKey && slot.playerId !== player.id);
-    slots.push({ slotKey, playerId: player.id });
-    setPicker(null);
-    void persist(home.squad.coach?.id ?? null, slots);
-  };
-
-  const onPickCoach = (coach: CkCoach) => {
-    if (!home || home.squad.confirmed) return;
-    setPicker(null);
-    void persist(coach.id, slotsOf(home));
-  };
-
-  const onClear = (key: string) => {
-    if (!home || home.squad.confirmed) return;
-    void persist(home.squad.coach?.id ?? null, slotsOf(home).filter((slot) => slot.slotKey !== key));
-  };
-
-  const onConfirm = async () => {
-    const token = await tokenOf();
-    if (!token || !home || home.squad.confirmed) return;
-    if (home.squad.slots.length < 11 || !home.squad.coach) {
-      setError(copy.incomplete);
+  const onSlot = (key: string) => {
+    if (!shown) return;
+    const slot = shown.squad.slots.find((row) => row.slotKey === key);
+    if (slot?.locked) {
+      setLocked({
+        name: slot.player.name,
+        club: slot.player.club,
+        photo: slot.player.photo,
+        teamLogo: slot.player.teamLogo,
+        pricePaidMilli: slot.pricePaidMilli,
+        points: slot.points,
+        lockedUntil,
+        canViewProfile: slot.player.externalPlayerId != null,
+        player: slot.player,
+      });
       return;
     }
-    setBusy(true);
+    if (closed) {
+      setError(copy.errors.weekClosed);
+      return;
+    }
+    setError(null);
+    setSheetError(null);
+    setSlotKey(key);
+    setPicker(LINE_OF[key] ?? 'FWD');
+  };
+
+  const onCoach = () => {
+    const coach = shown?.squad.coach;
+    if (coach?.locked) {
+      setLocked({
+        name: coach.name,
+        club: coach.club,
+        photo: coach.photo,
+        teamLogo: coach.teamLogo ?? null,
+        pricePaidMilli: coach.pricePaidMilli,
+        points: coach.points,
+        lockedUntil,
+        canViewProfile: false,
+        player: null,
+      });
+      return;
+    }
+    if (closed) {
+      setError(copy.errors.weekClosed);
+      return;
+    }
+    setError(null);
+    setSheetError(null);
+    setSlotKey(null);
+    setPicker('COACH');
+  };
+
+  const onConfirm = async (pick: CkPick) => {
+    if (!home) return;
+    if (pick.kind !== 'COACH') {
+      if (takenIds.has(pick.id)) {
+        setSheetError(copy.errors.duplicate);
+        return;
+      }
+      const sameClub = home.squad.slots.filter((slot) => slot.slotKey !== slotKey && slot.player.teamId === pick.teamId).length;
+      if (sameClub >= CLUB_LIMIT) {
+        setSheetError(copy.errors.clubLimit);
+        return;
+      }
+    }
+    const token = await tokenOf();
+    if (!token) return;
+    const before = home;
+    const key = slotKey;
+    setHome(withPick(home, pick, key));
+    setPicker(null);
+    setSheetError(null);
     try {
-      setHome(await coachKingService.confirm(token, language));
+      const next = pick.kind === 'COACH'
+        ? await coachKingService.pickCoach(token, language, pick.id)
+        : await coachKingService.pickSlot(token, language, key!, pick.id);
+      setHome(next);
       setError(null);
     } catch (err) {
-      explain(err);
-    } finally {
-      setBusy(false);
+      setHome(before);
+      setError(copy.errors[errorKey(err instanceof CkApiError ? err.reason : null)]);
     }
+  };
+
+  const viewPlayer = (player: CkPlayer) => {
+    if (player.externalPlayerId == null) return;
+    setPicker(null);
+    setLocked(null);
+    pushPlayerCareer(router, {
+      athleteId: player.externalPlayerId,
+      name: player.name,
+      photo: player.photo,
+      teamName: player.club,
+      teamLogo: player.teamLogo,
+      teamId: player.teamId,
+    });
+  };
+
+  const openOpponent = (row: CkBoardRow) => {
+    router.push({
+      pathname: '/coach-king/opponent/[userId]',
+      params: { userId: row.userId, name: row.name, avatar: row.avatar ?? '', username: row.username },
+    } as never);
   };
 
   const bottomPad = ckNavBottom(insets.bottom) + 92;
-  const shown = home ?? (!loading ? EMPTY_HOME : null);
+  const row = isAr ? 'row-reverse' : 'row';
 
   return (
     <View style={styles.root} testID="coach-king-screen">
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8, flexDirection: row }]}>
         <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" testID="ck-back">
           <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={26} color="#fff" />
         </Pressable>
@@ -201,41 +306,59 @@ export default function CoachKingScreen() {
 
       {tab === 'pitch' && shown ? (
         <ScrollView contentContainerStyle={{ paddingBottom: bottomPad }} showsVerticalScrollIndicator={false}>
+          <LinearGradient
+            colors={['#1A0B3A', '#0A001C']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.profile, { flexDirection: row }]}
+          >
+            <View style={[styles.identity, { flexDirection: row }]}>
+              <Image source={shown.user.avatar ? { uri: shown.user.avatar } : PLACEHOLDER} style={styles.avatar} cachePolicy="memory-disk" />
+              <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
+                <Text style={[styles.userName, { fontFamily: fontSemi }]} numberOfLines={1}>{shown.user.displayName}</Text>
+                <View style={[styles.metaRow, { flexDirection: row }]}>
+                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{`${copy.level} ${shown.user.level}`}</Text>
+                  <View style={styles.metaDot} />
+                  <Ionicons name="trophy" size={12} color="#F8C94A" />
+                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{shown.user.rank ? `#${shown.user.rank}` : '—'}</Text>
+                  <View style={styles.metaDot} />
+                  <Ionicons name="flash" size={12} color="#C2ABFC" />
+                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{shown.squad.points}</Text>
+                </View>
+              </View>
+            </View>
+            <View style={[styles.budget, { alignItems: isAr ? 'flex-start' : 'flex-end' }]}>
+              <Text style={[styles.budgetHint, { fontFamily: fontMed }]}>{copy.budgetLabel}</Text>
+              <CoachKingMoney
+                milli={shown.wallet.remainingMilli}
+                lang={language}
+                size="lg"
+                color={shown.wallet.remainingMilli < 0 ? '#F87171' : '#FFFFFF'}
+                testID="ck-remaining"
+              />
+              <View style={[styles.ofRow, { flexDirection: row }]}>
+                <Text style={[styles.budgetHint, { fontFamily: fontMed }]}>{copy.budgetOf.replace('{bank}', '')}</Text>
+                <CoachKingMoney milli={shown.wallet.balanceMilli} lang={language} size="sm" color="#C2ABFC" />
+              </View>
+            </View>
+          </LinearGradient>
+
+          <View style={[styles.hint, { flexDirection: row }]}>
+            <Ionicons name="lock-closed-outline" size={14} color="#C2ABFC" />
+            <Text style={[styles.hintTxt, { fontFamily: fontMed, textAlign: isAr ? 'right' : 'left' }]}>{copy.tapHint}</Text>
+          </View>
+          {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}
+
           <CoachKingPitch
             slots={shown.squad.slots}
             coach={shown.squad.coach}
-            confirmed={shown.squad.confirmed || shown.gameweek.locked}
-            userName={shown.user.displayName}
-            avatar={shown.user.avatar}
-            levelLabel={`${copy.level} ${shown.user.level}`}
-            rankLabel={shown.user.rank ? `#${shown.user.rank}` : '—'}
-            budgetLabel={copy.budgetLabel}
-            remainingLabel={shown.wallet.remainingLabel}
-            ofLabel={copy.budgetOf.replace('{bank}', shown.wallet.balanceLabel)}
             coachLabel={copy.coach}
             formation={copy.formation}
-            remainingNegative={shown.wallet.remainingMilli < 0}
-            onSlot={(key) => {
-              setSlotKey(key);
-              setPicker(LINE_OF[key] ?? 'FWD');
-            }}
-            onCoach={() => setPicker('COACH')}
-            onClear={onClear}
+            isAr={isAr}
+            closed={closed}
+            onSlot={onSlot}
+            onCoach={onCoach}
           />
-          {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]}>{error}</Text> : null}
-          <Pressable
-            onPress={onConfirm}
-            disabled={busy || !home || shown.squad.confirmed || shown.gameweek.locked}
-            testID="ck-confirm"
-            style={({ pressed }) => [styles.ctaHit, pressed && { opacity: 0.9 }]}
-          >
-            <LinearGradient colors={['#8B5CF6', '#2E146A']} style={styles.cta}>
-              <Ionicons name="checkmark" size={20} color="#fff" />
-              <Text style={[styles.ctaTxt, { fontFamily: fontSemi }]}>
-                {shown.squad.confirmed ? copy.confirmed : copy.confirm}
-              </Text>
-            </LinearGradient>
-          </Pressable>
         </ScrollView>
       ) : null}
 
@@ -252,13 +375,27 @@ export default function CoachKingScreen() {
           />
           {board.length === 0 ? (
             <KingEmptyState title={copy.noRanking} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
-          ) : board.map((row) => (
-            <View key={`${row.rank}-${row.name}`} style={[styles.boardRow, row.isMe && styles.boardMe]}>
-              <Text style={[styles.rank, { fontFamily: fontBold }]}>{row.rank}</Text>
-              <Image source={row.avatar ? { uri: row.avatar } : PLACEHOLDER} style={styles.boardAvatar} />
-              <Text style={[styles.boardName, { fontFamily: fontSemi }]} numberOfLines={1}>{row.name}</Text>
-              <Text style={[styles.boardPts, { fontFamily: fontBold }]}>{row.points}</Text>
-            </View>
+          ) : board.map((entry) => (
+            <Pressable
+              key={entry.userId}
+              onPress={() => openOpponent(entry)}
+              testID={`ck-board-${entry.rank}`}
+              style={({ pressed }) => [styles.boardRow, { flexDirection: row }, entry.isMe && styles.boardMe, pressed && { opacity: 0.85 }]}
+            >
+              <View style={[styles.rankBadge, entry.rank <= 3 && { backgroundColor: MEDAL[entry.rank - 1] }]}>
+                <Text style={[styles.rank, { fontFamily: fontBold, color: entry.rank <= 3 ? '#1A0B00' : '#fff' }]}>{entry.rank}</Text>
+              </View>
+              <Image source={entry.avatar ? { uri: entry.avatar } : PLACEHOLDER} style={styles.boardAvatar} cachePolicy="memory-disk" />
+              <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
+                <Text style={[styles.boardName, { fontFamily: fontSemi }]} numberOfLines={1}>{entry.name}</Text>
+                <Text style={[styles.boardUser, { fontFamily: fontMed }]} numberOfLines={1}>@{entry.username}</Text>
+              </View>
+              <View style={[styles.boardPtsWrap, { flexDirection: row }]}>
+                <Ionicons name="flash" size={14} color="#C2ABFC" />
+                <Text style={[styles.boardPts, { fontFamily: fontBold }]}>{entry.points}</Text>
+              </View>
+              <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={16} color="rgba(255,255,255,0.4)" />
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
@@ -273,30 +410,45 @@ export default function CoachKingScreen() {
                 {new Date(fixture.kickoffAt).toLocaleString(isAr ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
               <View style={styles.matchTeams}>
+                <Image source={{ uri: fixture.homeLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
                 <Text style={[styles.team, { fontFamily: fontSemi }]} numberOfLines={1}>{fixture.homeName}</Text>
                 <Text style={[styles.score, { fontFamily: fontBold }]}>
                   {fixture.homeScore == null ? fixture.status : `${fixture.homeScore} - ${fixture.awayScore}`}
                 </Text>
                 <Text style={[styles.team, { fontFamily: fontSemi, textAlign: 'right' }]} numberOfLines={1}>{fixture.awayName}</Text>
+                <Image source={{ uri: fixture.awayLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
               </View>
             </View>
           ))}
         </ScrollView>
       ) : null}
 
-      <CoachKingPicker
+      <CoachKingCardGrid
+        kind={picker}
         resolveToken={tokenOf}
-        lang={language}
-        line={picker}
+        remainingMilli={shown?.wallet.remainingMilli ?? 0}
+        refundMilli={refundMilli}
+        takenIds={takenIds}
+        confirming={false}
+        error={sheetError}
         onClose={() => setPicker(null)}
-        onPickPlayer={onPickPlayer}
-        onPickCoach={onPickCoach}
+        onConfirm={(pick) => void onConfirm(pick)}
+        onClearError={() => setSheetError(null)}
+        onViewProfile={viewPlayer}
       />
       <CoachKingNav active={tab} onChange={onTab} />
-      {busy ? <ActivityIndicator color="#8C5CF6" style={styles.busy} /> : null}
+      <CoachKingLockedSheet
+        notice={locked}
+        onClose={() => setLocked(null)}
+        onViewProfile={() => {
+          if (locked?.player) viewPlayer(locked.player);
+        }}
+      />
     </View>
   );
 }
+
+const MEDAL = ['#F8C94A', '#D4D4D8', '#D08A4A'];
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#030303' },
@@ -304,38 +456,69 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 10,
     backgroundColor: '#0D051A',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: { color: '#fff', fontSize: 20 },
   error: { color: '#F87171', textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
-  ctaHit: { marginHorizontal: 22, marginTop: 16 },
-  cta: {
-    height: 58,
-    borderRadius: 16,
-    flexDirection: 'row',
+  profile: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    columnGap: 12,
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 0.5,
+    borderColor: '#3A1D7A',
   },
-  ctaTxt: { color: '#fff', fontSize: 19 },
+  identity: { alignItems: 'center', columnGap: 10, flex: 1 },
+  avatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 1, borderColor: '#8C5CF5' },
+  userName: { color: '#fff', fontSize: 16 },
+  metaRow: { alignItems: 'center', columnGap: 5, marginTop: 4 },
+  meta: { color: '#C9C9C9', fontSize: 12 },
+  metaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
+  budget: { rowGap: 4 },
+  budgetHint: { color: '#9E9E9E', fontSize: 10 },
+  ofRow: { alignItems: 'center', columnGap: 4 },
+  hint: {
+    alignItems: 'center',
+    columnGap: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: 'rgba(140,92,245,0.1)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(184,150,252,0.3)',
+  },
+  hintTxt: { color: '#D8C7FD', fontSize: 12, flex: 1 },
   boardRow: {
     marginTop: 8,
-    height: 58,
+    height: 64,
     borderRadius: 16,
     backgroundColor: '#0A001C',
     borderWidth: 0.5,
     borderColor: '#241152',
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 10,
+    paddingHorizontal: 12,
+    columnGap: 10,
   },
-  boardMe: { borderColor: 'rgba(140,92,245,0.7)' },
-  rank: { color: '#fff', width: 28, textAlign: 'center' },
-  boardAvatar: { width: 36, height: 36, borderRadius: 18 },
-  boardName: { color: '#fff', flex: 1, fontSize: 15 },
+  boardMe: { borderColor: 'rgba(140,92,245,0.8)', backgroundColor: '#140533' },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  rank: { fontSize: 13 },
+  boardAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(140,92,245,0.6)' },
+  boardName: { color: '#fff', fontSize: 15 },
+  boardUser: { color: '#9E8BC9', fontSize: 11, marginTop: 1 },
+  boardPtsWrap: { alignItems: 'center', columnGap: 4 },
   boardPts: { color: '#E9D5FF', fontSize: 16 },
   match: {
     marginTop: 10,
@@ -347,7 +530,7 @@ const styles = StyleSheet.create({
   },
   matchDate: { color: '#E6CEFD', fontSize: 12, marginBottom: 8 },
   matchTeams: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  matchLogo: { width: 22, height: 22 },
   team: { color: '#fff', flex: 1, fontSize: 14 },
   score: { color: '#fff', fontSize: 16 },
-  busy: { position: 'absolute', top: 120, alignSelf: 'center' },
 });

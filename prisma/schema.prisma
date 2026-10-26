@@ -3238,6 +3238,8 @@ model CoachKingSquad {
   userId      String
   gameweekId  String
   coachId     String?
+  coachLockedAt   DateTime?
+  coachPriceMilli Int           @default(0)
   confirmedAt DateTime?
   spentMilli  Int               @default(0)
   payoutMilli Int               @default(0)
@@ -3259,6 +3261,8 @@ model CoachKingSquadSlot {
   squadId  String
   slotKey  String
   playerId String
+  priceMilli Int           @default(0)
+  lockedAt DateTime?
   squad    CoachKingSquad  @relation(fields: [squadId], references: [id], onDelete: Cascade)
   player   CoachKingPlayer @relation(fields: [playerId], references: [id], onDelete: Restrict)
 

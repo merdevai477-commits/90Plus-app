@@ -390,6 +390,7 @@ function RootLayoutNav() {
       <Stack.Screen name="top-scorers-five/egypt" options={{ headerShown: false, contentStyle: { backgroundColor: '#030303' } }} />
       <Stack.Screen name="top-scorers-five/pick" options={{ headerShown: false, contentStyle: { backgroundColor: '#030303' } }} />
       <Stack.Screen name="coach-king/index" options={{ headerShown: false, contentStyle: { backgroundColor: '#030303' } }} />
+      <Stack.Screen name="coach-king/opponent/[userId]" options={{ headerShown: false, contentStyle: { backgroundColor: '#030303' } }} />
       <Stack.Screen name="predict-and-win/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="predict-and-win/create" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />

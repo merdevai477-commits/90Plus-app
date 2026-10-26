@@ -25,25 +25,11 @@ export const COACH_KING_SLOTS = [
 
 export type CkSlotKey = (typeof COACH_KING_SLOTS)[number]['key'];
 
-const PRICE_BANDS: Record<CkPriceKind, readonly [number, number]> = {
-  GK: [40, 65],
-  DEF: [40, 80],
-  MID: [45, 125],
-  FWD: [55, 150],
-  COACH: [30, 75],
-};
+/** At most this many players from one club in a lineup. */
+export const CK_CLUB_LIMIT = 3;
 
 export function coachKingSlot(slotKey: string) {
   return COACH_KING_SLOTS.find((slot) => slot.key === slotKey) ?? null;
-}
-
-/** Tenths of a million. 125 = 12.5M. Stars sit on the ceiling of their line. */
-export function coachKingPriceMilli(kind: CkPriceKind, athleteId: number, star: boolean): number {
-  const [lo, hi] = PRICE_BANDS[kind];
-  if (star) return hi;
-  const top = lo + Math.floor((hi - lo) * 0.7);
-  const span = Math.max(0, top - lo);
-  return lo + (Math.abs(athleteId) % (span + 1));
 }
 
 export function formatCoachKingMoney(milli: number): string {
@@ -68,6 +54,7 @@ export type CkSquadIssue =
   | 'BAD_SLOT'
   | 'WRONG_LINE'
   | 'BUDGET'
+  | 'CLUB_LIMIT'
   | 'MISSING_COACH'
   | 'MATCH_STARTED';
 
@@ -97,6 +84,7 @@ export function inspectCoachKingSquad(input: {
 
   const seenSlots = new Set<string>();
   const seenPlayers = new Set<string>();
+  const perClub = new Map<number, number>();
   let spent = input.coachPriceMilli ?? 0;
 
   for (const slot of input.slots) {
@@ -106,6 +94,9 @@ export function inspectCoachKingSquad(input: {
     if (slot.line !== spec.line) return { ok: false, code: 'WRONG_LINE' };
     if (seenPlayers.has(slot.playerId)) return { ok: false, code: 'DUPLICATE_PLAYER' };
     seenPlayers.add(slot.playerId);
+    const fromClub = (perClub.get(slot.teamId) ?? 0) + 1;
+    if (fromClub > CK_CLUB_LIMIT) return { ok: false, code: 'CLUB_LIMIT' };
+    perClub.set(slot.teamId, fromClub);
     if (input.startedTeamIds.has(slot.teamId)) return { ok: false, code: 'MATCH_STARTED' };
     spent += slot.priceMilli;
   }

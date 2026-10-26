@@ -11,12 +11,13 @@ import prisma from '../lib/prisma';
 import { CoachKingError, type CkErrorCode, type CkLanguage } from '../services/coach-king.service';
 import {
   coachKingLeaderboard,
-  confirmCoachKingSquad,
   getCoachKingHome,
+  getCoachKingUserSquad,
   listCoachKingCoaches,
   listCoachKingFixtures,
   listCoachKingPlayers,
-  saveCoachKingDraft,
+  pickCoachKingCoach,
+  pickCoachKingSlot,
 } from '../services/coach-king.service';
 import { syncCoachKingPool } from '../services/coach-king-pool.service';
 import { processCoachKing } from '../services/coach-king-processing.service';
@@ -28,11 +29,13 @@ const ERROR_MAP: Record<CkErrorCode, ErrorCodeValue> = {
   PLAYER_NOT_FOUND: ErrorCode.NOT_FOUND,
   COACH_NOT_FOUND: ErrorCode.NOT_FOUND,
   SQUAD_LOCKED: ErrorCode.CONFLICT,
+  SLOT_LOCKED: ErrorCode.CONFLICT,
   INCOMPLETE: ErrorCode.VALIDATION,
   DUPLICATE_PLAYER: ErrorCode.VALIDATION,
   BAD_SLOT: ErrorCode.VALIDATION,
   WRONG_LINE: ErrorCode.VALIDATION,
   BUDGET: ErrorCode.VALIDATION,
+  CLUB_LIMIT: ErrorCode.VALIDATION,
   MISSING_COACH: ErrorCode.VALIDATION,
   MATCH_STARTED: ErrorCode.CONFLICT,
 };
@@ -87,23 +90,33 @@ router.get('/me', requireAuth, handle('home', async (req, res) => {
   res.json({ success: true, data: await getCoachKingHome(id, language(req)) });
 }));
 
-router.put('/me/squad', requireAuth, handle('save squad', async (req, res) => {
+router.post('/me/slot', requireAuth, handle('pick slot', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
-  const slots = Array.isArray(req.body?.slots) ? req.body.slots : null;
-  const coachId = typeof req.body?.coachId === 'string' ? req.body.coachId : null;
-  if (!slots || slots.some((slot: { slotKey?: unknown; playerId?: unknown }) => typeof slot?.slotKey !== 'string' || typeof slot?.playerId !== 'string')) {
-    sendError(req, res, ErrorCode.VALIDATION, 'slots are required');
+  const slotKey = req.body?.slotKey;
+  const playerId = req.body?.playerId;
+  if (typeof slotKey !== 'string' || typeof playerId !== 'string') {
+    sendError(req, res, ErrorCode.VALIDATION, 'slotKey and playerId are required');
     return;
   }
-  const data = await saveCoachKingDraft(id, { coachId, slots }, language(req));
-  res.json({ success: true, data });
+  res.json({ success: true, data: await pickCoachKingSlot(id, { slotKey, playerId }, language(req)) });
 }));
 
-router.post('/me/squad/confirm', requireAuth, handle('confirm squad', async (req, res) => {
+router.post('/me/coach', requireAuth, handle('pick coach', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
-  res.json({ success: true, data: await confirmCoachKingSquad(id, language(req)) });
+  const coachId = req.body?.coachId;
+  if (typeof coachId !== 'string') {
+    sendError(req, res, ErrorCode.VALIDATION, 'coachId is required');
+    return;
+  }
+  res.json({ success: true, data: await pickCoachKingCoach(id, coachId, language(req)) });
+}));
+
+router.get('/users/:userId/squad', requireAuth, handle('user squad', async (req, res) => {
+  const id = clerkId(req, res);
+  if (!id) return;
+  res.json({ success: true, data: await getCoachKingUserSquad(String(req.params.userId), language(req)) });
 }));
 
 router.get('/me/fixtures', requireAuth, handle('fixtures', async (req, res) => {
@@ -121,7 +134,18 @@ router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) =
   const rows = await coachKingLeaderboard(period, limit);
   res.json({
     success: true,
-    data: rows.map((row) => ({ rank: row.rank, name: row.name, avatar: row.avatar, points: row.points, isMe: row.userId === user?.id })),
+    data: rows.map((row) => ({
+      rank: row.rank,
+      userId: row.userId,
+      username: row.username,
+      name: row.name,
+      avatar: row.avatar,
+      level: row.level,
+      points: period === 'week' ? row.weekPoints : row.points,
+      weekPoints: row.weekPoints,
+      totalPoints: row.points,
+      isMe: row.userId === user?.id,
+    })),
   });
 }));
 

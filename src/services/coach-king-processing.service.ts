@@ -9,7 +9,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { classifyScores365MatchStatus, fetchScores365GameById } from './scores365-experiment.service';
-import { ensureCoachKingPool } from './coach-king-pool.service';
+import { ensureCoachKingPool, refreshCoachKingPoolIfStale } from './coach-king-pool.service';
 import {
   coachKingMatchResult,
   coachKingResultPoints,
@@ -18,7 +18,12 @@ import {
   type CkLine,
   type CkScorableGame,
 } from './coach-king-scoring';
-import { ensureCoachKingGameweek, ensureCoachKingSchema, settleCoachKingGameweek } from './coach-king.service';
+import {
+  carryOverCoachKingSquads,
+  ensureCoachKingGameweek,
+  ensureCoachKingSchema,
+  settleCoachKingGameweek,
+} from './coach-king.service';
 import {
   TSF_EUROPE_LEAGUE_KEYS,
   TSF_LEAGUES,
@@ -212,11 +217,15 @@ export async function processCoachKing(now: Date = new Date()): Promise<void> {
   try {
     await ensureCoachKingSchema();
     await ensureCoachKingPool();
+    await refreshCoachKingPoolIfStale(now);
   } catch (error) {
     logger.warn(`[CoachKing] pool sync failed: ${(error as Error)?.message}`);
   }
 
   const current = await ensureCoachKingGameweek(now);
+  await carryOverCoachKingSquads(current, now).catch((error) => {
+    logger.warn(`[CoachKing] carry-over failed: ${(error as Error)?.message}`);
+  });
   const pending = await prisma.coachKingGameweek.findMany({
     where: { status: { not: 'COMPLETED' }, startAt: { lte: current.startAt } },
     orderBy: { startAt: 'asc' },
