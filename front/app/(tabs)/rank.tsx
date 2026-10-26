@@ -81,7 +81,7 @@ export default function RankScreen() {
       if (id === '3') {
         router.push('/(tabs)/predict-and-win' as never);
       } else if (id === '4') {
-        router.push('/top-scorers-five' as never);
+        router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
       } else if (id === '2') {
         router.push('/share-win' as never);
       } else if (id === '1') {
@@ -124,7 +124,7 @@ export default function RankScreen() {
         title: t.rank.competitionNames.engagementHero.title,
         sub: t.rank.competitionNames.engagementHero.sub,
         actionText: t.rank.competitionNames.engagementHero.action,
-        img: require('../../assets/images/top-scorers-five/hero.jpg') as ImageSourcePropType,
+        img: require('../../assets/images/top-scorers-five/hero-egypt.jpg') as ImageSourcePropType,
         photoScrim: true,
         titleIcon: Zap,
         ctaIcon: Zap,

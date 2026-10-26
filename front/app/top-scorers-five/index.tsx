@@ -1,7 +1,7 @@
 /**
  * Top Scorers Five hub — /top-scorers-five
  *
- * Rank opens here into two interlocking competitions: Europe and Egypt.
+ * Rank opens the Egyptian Top Five. Europe moved to King of Coaches.
  */
 
 import TopScorersFiveHubScreen from '../../components/TopScorersFive/TopScorersFiveHubScreen';

@@ -1,5 +1,5 @@
 /**
- * Top Scorers Five hub — entered from Rank.
+ * Egyptian Top Five hub — entered from Rank. Europe lives in King of Coaches.
  *
  * Card structure (keeps images painting on Android):
  *   View[height] → Image absolute + gradients absolute → Pressable flex:1
@@ -28,7 +28,6 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 import { TSF_ART, TSF_DESIGN_WIDTH, TSF_HUB_LOGO } from './assets';
 
 const BG = '#030303';
-const EUROPE_TITLE = '#E8D6FF';
 const EGYPT_TITLE = '#FFF8EC';
 const CTA_PURPLE = '#A78BFA';
 const GOLD = '#D4AF69';
@@ -252,18 +251,14 @@ export default function TopScorersFiveHubScreen() {
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
 
-  const europeImage = TSF_ART.hero ?? 0;
   const egyptImage = TSF_ART.egyptHub ?? TSF_ART.hero ?? 0;
 
   const layout = useMemo(() => {
     const padX = s(12);
     const headerH = insets.top + s(48);
     const bottomPad = Math.max(insets.bottom, 10) + s(8);
-    const bodyH = Math.max(height - headerH - bottomPad - CARD_GAP, CARD_MIN_READABLE * 2);
-    const half = bodyH / 2;
-    const needsScroll = half < CARD_MIN_READABLE;
-    const cardH = needsScroll ? CARD_MIN_READABLE : half;
-    return { padX, headerH, bottomPad, needsScroll, cardH };
+    const cardH = Math.max(height - headerH - bottomPad, CARD_MIN_READABLE);
+    return { padX, headerH, bottomPad, needsScroll: false, cardH };
   }, [height, insets.bottom, insets.top, s]);
 
   const handleBack = useCallback(() => {
@@ -271,57 +266,31 @@ export default function TopScorersFiveHubScreen() {
     else router.replace('/(tabs)/rank' as never);
   }, [router]);
 
-  const openEurope = useCallback(() => {
-    router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'europe' } } as never);
-  }, [router]);
-
   const openEgypt = useCallback(() => {
     router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
   }, [router]);
 
   const cards = (
-    <>
-      <ChallengeCard
-        testID="top-scorers-five-hub-europe"
-        title={hub.europeTitle}
-        subtitle={hub.europeSubtitle}
-        titleColor={EUROPE_TITLE}
-        image={europeImage}
-        logo={TSF_HUB_LOGO.europe}
-        logoTint="#FFFFFF"
-        accent="europe"
-        badgeGoal={hub.badgeGoal}
-        badgePlayers={hub.badgePlayers}
-        exploreCta={hub.exploreCta}
-        isAr={isAr}
-        s={s}
-        height={layout.cardH}
-        fontHeavy={fontHeavy}
-        fontSemi={fontSemi}
-        fontMedium={fontMedium}
-        onPress={openEurope}
-      />
-      <ChallengeCard
-        testID="top-scorers-five-hub-egypt"
-        title={hub.egyptTitle}
-        subtitle={hub.egyptSubtitle}
-        titleColor={EGYPT_TITLE}
-        image={egyptImage}
-        logo={TSF_HUB_LOGO.egypt}
-        logoTint="#FFFFFF"
-        accent="egypt"
-        badgeGoal={hub.badgeGoal}
-        badgePlayers={hub.badgePlayers}
-        exploreCta={hub.exploreCta}
-        isAr={isAr}
-        s={s}
-        height={layout.cardH}
-        fontHeavy={fontHeavy}
-        fontSemi={fontSemi}
-        fontMedium={fontMedium}
-        onPress={openEgypt}
-      />
-    </>
+    <ChallengeCard
+      testID="top-scorers-five-hub-egypt"
+      title={hub.egyptTitle}
+      subtitle={hub.egyptSubtitle}
+      titleColor={EGYPT_TITLE}
+      image={egyptImage}
+      logo={TSF_HUB_LOGO.egypt}
+      logoTint="#FFFFFF"
+      accent="egypt"
+      badgeGoal={hub.badgeGoal}
+      badgePlayers={hub.badgePlayers}
+      exploreCta={hub.exploreCta}
+      isAr={isAr}
+      s={s}
+      height={layout.cardH}
+      fontHeavy={fontHeavy}
+      fontSemi={fontSemi}
+      fontMedium={fontMedium}
+      onPress={openEgypt}
+    />
   );
 
   return (

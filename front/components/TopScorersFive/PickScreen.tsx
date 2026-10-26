@@ -44,9 +44,8 @@ import { TsfNav, type TsfTabKey } from './TsfNav';
 
 const BG = '#030303';
 
-function parseMode(raw: string | string[] | undefined): TsfTournamentMode {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value === 'egypt' ? 'egypt' : 'europe';
+function parseMode(_raw: string | string[] | undefined): TsfTournamentMode {
+  return 'egypt';
 }
 
 export default function TopScorersFivePickScreen() {

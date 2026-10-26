@@ -1,9 +1,9 @@
 /**
- * Top Scorers Five — Europe intro — /top-scorers-five/europe
+ * Europe Top Five was replaced by King of Coaches. Old links open the Egyptian five.
  */
 
-import TopScorersFiveScreen from '../../components/TopScorersFive/TopScorersFiveScreen';
+import { Redirect } from 'expo-router';
 
 export default function TopScorersFiveEuropeRoute() {
-  return <TopScorersFiveScreen />;
+  return <Redirect href={{ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } }} />;
 }
