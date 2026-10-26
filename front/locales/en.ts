@@ -3978,6 +3978,35 @@ export const en = {
     writePost: 'Write a post',
     loadMore: 'Load more',
   },
+
+  coachKingGame: {
+    title: 'The Match',
+    budgetLabel: 'Budget left',
+    budgetOf: 'out of {bank}',
+    coach: 'Coach',
+    formation: '4-3-3',
+    confirm: 'Confirm lineup',
+    confirmed: 'Lineup confirmed',
+    pickPlayer: 'Pick a player',
+    pickCoach: 'Pick a coach',
+    search: 'Search',
+    poolEmpty: 'No players yet. The squad list is still loading.',
+    level: 'Lv.',
+    week: 'This week',
+    all: 'Overall',
+    noRanking: 'No ranking yet',
+    noMatches: 'No matches for this lineup this week',
+    budget: 'That lineup costs more than your budget',
+    started: 'That club has already kicked off',
+    incomplete: 'Pick all 11 players and a coach',
+    locked: 'This week’s lineup is locked',
+    generic: 'Something went wrong. Try again.',
+    tabs: {
+      matches: 'Matches',
+      pitch: 'Lineup',
+      ranking: 'Ranking',
+    },
+  },
 };
 
 export default en;

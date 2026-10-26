@@ -164,6 +164,8 @@ model User {
   matchChatMessages             MatchChatMessage[]
   matchChatReportsFiled         MatchChatReport[]         @relation("MatchChatReporter")
   topScorersFiveSelections      TopScorersFiveSelection[]
+  coachKingWallet               CoachKingWallet?
+  coachKingSquads               CoachKingSquad[]
   communityPosts                CommunityPost[]
   communityComments             CommunityComment[]
   communityPostLikes            CommunityPostLike[]
@@ -3113,4 +3115,194 @@ model TopScorersFivePerformance {
   @@unique([gameweekId, playerId, fixtureId])
   @@index([playerId])
   @@map("top_scorers_five_performances")
+}
+
+// ─── King of Coaches ("ملك المدربين") — 11 + coach, 100M budget ─────────────
+
+enum CoachKingLine {
+  GK
+  DEF
+  MID
+  FWD
+}
+
+enum CoachKingGameweekStatus {
+  OPEN
+  LOCKED
+  LIVE
+  CALCULATING
+  COMPLETED
+}
+
+model CoachKingPlayer {
+  id               String        @id @default(uuid())
+  leagueKey        String
+  teamId           Int
+  clubNameAr       String
+  clubNameEn       String?
+  externalPlayerId Int           @unique
+  nameAr           String
+  nameEn           String?
+  photoUrl         String?
+  position         String?
+  line             CoachKingLine
+  shirtNumber      Int?
+  priceMilli       Int
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  slots            CoachKingSquadSlot[]
+  performances     CoachKingPerformance[]
+
+  @@index([line, active, priceMilli])
+  @@index([teamId])
+  @@map("coach_king_players")
+}
+
+model CoachKingCoach {
+  id              String   @id @default(uuid())
+  leagueKey       String
+  teamId          Int
+  clubNameAr      String
+  clubNameEn      String?
+  externalCoachId Int      @unique
+  nameAr          String
+  nameEn          String?
+  photoUrl        String?
+  priceMilli      Int
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  squads          CoachKingSquad[]
+  scores          CoachKingCoachScore[]
+
+  @@index([teamId])
+  @@map("coach_king_coaches")
+}
+
+model CoachKingWallet {
+  userId       String   @id
+  balanceMilli Int      @default(1000)
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("coach_king_wallets")
+}
+
+model CoachKingGameweek {
+  id          String                   @id @default(uuid())
+  weekKey     String                   @unique
+  startAt     DateTime
+  endAt       DateTime
+  lockAt      DateTime
+  status      CoachKingGameweekStatus  @default(OPEN)
+  completedAt DateTime?
+  settledAt   DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  squads      CoachKingSquad[]
+  fixtures    CoachKingFixture[]
+  performances CoachKingPerformance[]
+  coachScores CoachKingCoachScore[]
+
+  @@index([status, endAt])
+  @@map("coach_king_gameweeks")
+}
+
+model CoachKingFixture {
+  id           String            @id @default(uuid())
+  gameweekId   String
+  fixtureId    Int
+  homeTeamId   Int
+  awayTeamId   Int
+  homeTeamName String?
+  awayTeamName String?
+  homeScore    Int?
+  awayScore    Int?
+  kickoffAt    DateTime
+  status       String            @default("NS")
+  processedAt  DateTime?
+  failureCount Int               @default(0)
+  lastError    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  gameweek     CoachKingGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+
+  @@unique([gameweekId, fixtureId])
+  @@index([gameweekId, processedAt])
+  @@map("coach_king_fixtures")
+}
+
+model CoachKingSquad {
+  id          String            @id @default(uuid())
+  userId      String
+  gameweekId  String
+  coachId     String?
+  confirmedAt DateTime?
+  spentMilli  Int               @default(0)
+  payoutMilli Int               @default(0)
+  refundedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameweek    CoachKingGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  coach       CoachKingCoach?   @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  slots       CoachKingSquadSlot[]
+
+  @@unique([userId, gameweekId])
+  @@index([gameweekId])
+  @@map("coach_king_squads")
+}
+
+model CoachKingSquadSlot {
+  id       String          @id @default(uuid())
+  squadId  String
+  slotKey  String
+  playerId String
+  squad    CoachKingSquad  @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  player   CoachKingPlayer @relation(fields: [playerId], references: [id], onDelete: Restrict)
+
+  @@unique([squadId, slotKey])
+  @@index([playerId])
+  @@map("coach_king_squad_slots")
+}
+
+model CoachKingPerformance {
+  id          String            @id @default(uuid())
+  gameweekId  String
+  playerId    String
+  fixtureId   Int
+  minutes     Int               @default(0)
+  goals       Int               @default(0)
+  assists     Int               @default(0)
+  yellows     Int               @default(0)
+  reds        Int               @default(0)
+  ownGoals    Int               @default(0)
+  cleanSheet  Boolean           @default(false)
+  points      Int               @default(0)
+  fixtureDate DateTime
+  createdAt   DateTime          @default(now())
+  gameweek    CoachKingGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  player      CoachKingPlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameweekId, playerId, fixtureId])
+  @@index([playerId])
+  @@map("coach_king_performances")
+}
+
+model CoachKingCoachScore {
+  id         String            @id @default(uuid())
+  gameweekId String
+  coachId    String
+  fixtureId  Int
+  result     String
+  points     Int               @default(0)
+  fixtureDate DateTime
+  createdAt  DateTime          @default(now())
+  gameweek   CoachKingGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  coach      CoachKingCoach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([gameweekId, coachId, fixtureId])
+  @@index([coachId])
+  @@map("coach_king_coach_scores")
 }

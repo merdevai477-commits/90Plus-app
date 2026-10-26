@@ -248,6 +248,7 @@ import liveActivityRoutes from './routes/live-activity.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import topScorersFiveRoutes from './routes/top-scorers-five.routes';
+import coachKingRoutes from './routes/coach-king.routes';
 import competitionsRoutes from './routes/competitions.routes';
 import assRoutes from './routes/ass.routes';
 import coinsRoutes from './routes/coins.routes';
@@ -470,6 +471,7 @@ app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/top-scorers-five`, topScorersFiveRoutes);
+app.use(`${API_PREFIX}/coach-king`, coachKingRoutes);
 app.use(`${API_PREFIX}/competitions`, competitionsRoutes);
 app.use(`${API_PREFIX}/ass`, assRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
@@ -966,6 +968,11 @@ async function startServer() {
                         './services/top-scorers-five-processing.service'
                     );
                     startTopScorersFiveProcessor();
+
+                    const { startCoachKingProcessor } = await import(
+                        './services/coach-king-processing.service'
+                    );
+                    startCoachKingProcessor();
 
                     const { startWinnerReminderCron } = await import(
                         './services/competition-award.service'

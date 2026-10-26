@@ -223,7 +223,7 @@ export default function RankScreen() {
           isAr={isAr}
           fonts={fonts}
           copy={t.rank.coachKing}
-          onStart={() => router.push('/top-scorers-five' as never)}
+          onStart={() => router.push('/coach-king' as never)}
         />
       </ScrollView>
     </View>

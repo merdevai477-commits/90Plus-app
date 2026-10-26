@@ -3884,6 +3884,35 @@ export const ar = {
     writePost: 'اكتب منشور',
     loadMore: 'عرض المزيد',
   },
+
+  coachKingGame: {
+    title: 'المباراة',
+    budgetLabel: 'الميزانية المتبقية',
+    budgetOf: 'من أصل {bank}',
+    coach: 'المدرب',
+    formation: '4-3-3',
+    confirm: 'تأكيد التشكيلة',
+    confirmed: 'تم تأكيد التشكيلة',
+    pickPlayer: 'اختر لاعب',
+    pickCoach: 'اختر المدرب',
+    search: 'ابحث',
+    poolEmpty: 'لسه بنجهز قائمة اللاعبين',
+    level: 'المستوى',
+    week: 'أسبوعي',
+    all: 'عام',
+    noRanking: 'لسه مفيش ترتيب',
+    noMatches: 'مفيش مباريات للأندية دي الأسبوع ده',
+    budget: 'التشكيلة أغلى من الميزانية',
+    started: 'مباراة النادي بدأت',
+    incomplete: 'كمّل الـ11 لاعب والمدرب',
+    locked: 'التشكيلة اتأكدت للأسبوع ده',
+    generic: 'حصلت مشكلة. حاول تاني.',
+    tabs: {
+      matches: 'المباريات',
+      pitch: 'التشكيلة',
+      ranking: 'الترتيب',
+    },
+  },
 };
 
 export type TranslationKeys = typeof ar;
