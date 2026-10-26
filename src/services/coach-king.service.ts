@@ -4,8 +4,11 @@
  * next to this file.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { Prisma, type CoachKingGameweek } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { logger } from '../utils/logger';
 import {
   CK_START_BALANCE_MILLI,
   coachKingRemainingMilli,
@@ -22,6 +25,7 @@ import {
   tsfGameweekWindow,
   tsfPortraitUrl,
 } from './top-scorers-five-scoring';
+import { ensureCoachKingPool } from './coach-king-pool.service';
 
 export type CkErrorCode = CkSquadIssue | 'USER_NOT_FOUND' | 'SQUAD_LOCKED' | 'PLAYER_NOT_FOUND' | 'COACH_NOT_FOUND';
 
@@ -36,6 +40,66 @@ export type CkLanguage = 'ar' | 'en';
 
 const LOGO = (teamId: number) =>
   `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v3/Competitors/${teamId}`;
+
+const MIGRATION_FILE = path.join(process.cwd(), 'prisma/migrations/20261026030000_coach_king/migration.sql');
+
+function migrationStatements(sql: string): string[] {
+  const body = sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+  return body
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((statement) => {
+      if (statement.startsWith('CREATE TYPE ')) {
+        return `DO $$ BEGIN ${statement}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`;
+      }
+      if (statement.startsWith('CREATE TABLE ')) {
+        return statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ');
+      }
+      if (statement.startsWith('CREATE UNIQUE INDEX ')) {
+        return statement.replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ');
+      }
+      if (statement.startsWith('CREATE INDEX ')) {
+        return statement.replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ');
+      }
+      if (statement.startsWith('ALTER TABLE ')) {
+        return `DO $$ BEGIN ${statement}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`;
+      }
+      return statement;
+    });
+}
+
+let schemaReady: Promise<void> | null = null;
+
+/** Create the fantasy tables when this deploy's migration did not land. */
+export function ensureCoachKingSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ reg: string | null }>>(
+        `SELECT to_regclass('public.coach_king_players')::text AS reg`,
+      );
+      if (rows[0]?.reg) return;
+      const sql = fs.readFileSync(MIGRATION_FILE, 'utf8');
+      for (const statement of migrationStatements(sql)) {
+        await prisma.$executeRawUnsafe(statement);
+      }
+      logger.info('[CoachKing] created missing fantasy tables');
+    })().catch((error) => {
+      schemaReady = null;
+      throw error;
+    });
+  }
+  return schemaReady;
+}
+
+function warmCoachKingPool(): void {
+  void ensureCoachKingPool().catch((error) => {
+    logger.warn(`[CoachKing] pool sync failed: ${(error as Error)?.message}`);
+  });
+}
 
 function europeLeagueIds(): number[] {
   return TSF_EUROPE_LEAGUE_KEYS.map((key) => TSF_LEAGUES[key]!.competitionLeagueId);
@@ -194,9 +258,15 @@ async function pointsFor(gameweekId: string, playerIds: string[], coachId: strin
 }
 
 export async function listCoachKingPlayers(line: string, lang: CkLanguage, query: string) {
+  await ensureCoachKingSchema();
   const wanted = line.toUpperCase();
   if (!['GK', 'DEF', 'MID', 'FWD'].includes(wanted)) {
     throw new CoachKingError('BAD_SLOT', 'Line is not available');
+  }
+  if (await prisma.coachKingPlayer.count({ where: { line: wanted as CkLine, active: true } }) === 0) {
+    await ensureCoachKingPool().catch((error) => {
+      logger.warn(`[CoachKing] pool sync failed: ${(error as Error)?.message}`);
+    });
   }
   const q = query.trim();
   const rows = await prisma.coachKingPlayer.findMany({
@@ -214,6 +284,12 @@ export async function listCoachKingPlayers(line: string, lang: CkLanguage, query
 }
 
 export async function listCoachKingCoaches(lang: CkLanguage, query: string) {
+  await ensureCoachKingSchema();
+  if (await prisma.coachKingCoach.count({ where: { active: true } }) === 0) {
+    await ensureCoachKingPool().catch((error) => {
+      logger.warn(`[CoachKing] pool sync failed: ${(error as Error)?.message}`);
+    });
+  }
   const q = query.trim();
   const rows = await prisma.coachKingCoach.findMany({
     where: {
@@ -236,6 +312,8 @@ async function loadSquad(userId: string, gameweekId: string) {
 }
 
 export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, now: Date = new Date()) {
+  await ensureCoachKingSchema();
+  warmCoachKingPool();
   const user = await requireUser(clerkUserId);
   const [wallet, gameweek] = await Promise.all([
     ensureWallet(user.id),
@@ -247,15 +325,20 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
   const reserved = squad?.confirmedAt ? squad.spentMilli : spent + coachCost;
   const playerIds = squad?.slots.map((slot) => slot.playerId) ?? [];
   const points = squad?.confirmedAt ? await pointsFor(gameweek.id, playerIds, squad.coachId) : 0;
-  const board = await coachKingLeaderboard('all', 200);
-  const mine = board.find((row) => row.userId === user.id);
+  let rank: number | null = null;
+  try {
+    const board = await coachKingLeaderboard('all', 200);
+    rank = board.find((row) => row.userId === user.id)?.rank ?? null;
+  } catch (error) {
+    logger.warn(`[CoachKing] rank skipped: ${(error as Error)?.message}`);
+  }
 
   return {
     user: {
       displayName: user.displayName || user.username,
       avatar: user.avatar,
       level: user.level,
-      rank: mine?.rank ?? null,
+      rank,
     },
     wallet: {
       balanceMilli: wallet.balanceMilli,

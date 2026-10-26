@@ -51,8 +51,9 @@ function handle(label: string, fn: (req: Request, res: Response) => Promise<void
         sendError(req, res, ERROR_MAP[error.code], error.message, { reason: error.code });
         return;
       }
+      const detail = error instanceof Error ? error.message.replace(/\s+/g, ' ').slice(0, 180) : 'Internal server error';
       logger.error(`[CoachKing] ${label} failed:`, error);
-      sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+      sendError(req, res, ErrorCode.INTERNAL, 'Internal server error', { reason: detail });
     }
   };
 }

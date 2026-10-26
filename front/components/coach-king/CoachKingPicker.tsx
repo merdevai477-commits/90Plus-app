@@ -13,14 +13,14 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { coachKingService, type CkCoach, type CkLine, type CkPlayer } from '../../services/coachKing.service';
+import { CkApiError, coachKingService, type CkCoach, type CkLine, type CkPlayer } from '../../services/coachKing.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 type Props = {
-  token: string;
+  resolveToken: () => Promise<string | null>;
   lang: string;
   line: CkLine | 'COACH' | null;
   onClose: () => void;
@@ -28,7 +28,7 @@ type Props = {
   onPickCoach: (coach: CkCoach) => void;
 };
 
-export function CoachKingPicker({ token, lang, line, onClose, onPickPlayer, onPickCoach }: Props) {
+export function CoachKingPicker({ resolveToken, lang, line, onClose, onPickPlayer, onPickCoach }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const copy = t.coachKingGame;
@@ -44,14 +44,21 @@ export function CoachKingPicker({ token, lang, line, onClose, onPickPlayer, onPi
     let alive = true;
     const handle = setTimeout(() => {
       setLoading(true);
-      const run = line === 'COACH'
-        ? coachKingService.getCoaches(token, lang, query).then((rows) => {
-          if (alive) setCoaches(rows);
-        })
-        : coachKingService.getPlayers(token, line, lang, query).then((rows) => {
-          if (alive) setPlayers(rows);
-        });
-      run.catch(() => {
+      const run = resolveToken().then((token) => {
+        if (!token) throw new CkApiError('E003', null, 'Unauthorized - Invalid token');
+        return line === 'COACH'
+          ? coachKingService.getCoaches(token, lang, query).then((rows) => {
+            if (alive) setCoaches(rows);
+          })
+          : coachKingService.getPlayers(token, line, lang, query).then((rows) => {
+            if (alive) setPlayers(rows);
+          });
+      });
+      run.catch((err) => {
+        const detail = err instanceof CkApiError
+          ? `${err.code} ${err.reason ?? ''} ${err.message}`
+          : err instanceof Error ? err.message : String(err);
+        console.warn('[CoachKing] list failed', detail);
         if (alive) {
           setPlayers([]);
           setCoaches([]);
@@ -64,7 +71,7 @@ export function CoachKingPicker({ token, lang, line, onClose, onPickPlayer, onPi
       alive = false;
       clearTimeout(handle);
     };
-  }, [line, query, token, lang]);
+  }, [line, query, resolveToken, lang]);
 
   const rows = line === 'COACH' ? coaches : players;
 

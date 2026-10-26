@@ -67,7 +67,6 @@ export default function CoachKingScreen() {
   const fontMed = useAppFont(500);
   const fontBold = useAppFont(700);
 
-  const [token, setToken] = useState('');
   const [tab, setTab] = useState<CkTab>('pitch');
   const [home, setHome] = useState<CkHome | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,11 +89,12 @@ export default function CoachKingScreen() {
       setLoading(false);
       return;
     }
-    setToken(nextToken);
     try {
       setHome(await coachKingService.getHome(nextToken, language));
       setError(null);
-    } catch {
+    } catch (err) {
+      const detail = err instanceof CkApiError ? `${err.code} ${err.reason ?? ''} ${err.message}` : String(err);
+      console.warn('[CoachKing] home failed', detail);
       setError(copy.generic);
     } finally {
       setLoading(false);
@@ -285,7 +285,7 @@ export default function CoachKingScreen() {
       ) : null}
 
       <CoachKingPicker
-        token={token}
+        resolveToken={tokenOf}
         lang={language}
         line={picker}
         onClose={() => setPicker(null)}

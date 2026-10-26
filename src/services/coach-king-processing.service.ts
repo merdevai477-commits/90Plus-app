@@ -18,7 +18,7 @@ import {
   type CkLine,
   type CkScorableGame,
 } from './coach-king-scoring';
-import { ensureCoachKingGameweek, settleCoachKingGameweek } from './coach-king.service';
+import { ensureCoachKingGameweek, ensureCoachKingSchema, settleCoachKingGameweek } from './coach-king.service';
 import {
   TSF_EUROPE_LEAGUE_KEYS,
   TSF_LEAGUES,
@@ -210,6 +210,7 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
 
 export async function processCoachKing(now: Date = new Date()): Promise<void> {
   try {
+    await ensureCoachKingSchema();
     await ensureCoachKingPool();
   } catch (error) {
     logger.warn(`[CoachKing] pool sync failed: ${(error as Error)?.message}`);
