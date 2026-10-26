@@ -2,6 +2,7 @@
  * King of Coaches ("ملك المدربين") API client.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../config/api.config';
 
 const API_URL = getApiUrl();
@@ -151,30 +152,61 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
   return (body?.data ?? null) as T;
 }
 
-const POOL_TTL_MS = 5 * 60_000;
-type PoolEntry = { at: number; rows: Promise<Array<CkPlayer | CkCoach>> };
-const pools = new Map<string, PoolEntry>();
+type PoolRows = Array<CkPlayer | CkCoach>;
 
-function loadPool(token: string, kind: CkPoolKind, lang: string): Promise<Array<CkPlayer | CkCoach>> {
+const POOL_TTL_MS = 5 * 60_000;
+const DISK_TTL_MS = 12 * 60 * 60_000;
+type PoolEntry = { at: number; rows: Promise<PoolRows> };
+const pools = new Map<string, PoolEntry>();
+const diskKey = (key: string) => `ck:pool:v1:${key}`;
+
+function loadPool(token: string, kind: CkPoolKind, lang: string): Promise<PoolRows> {
   return kind === 'COACH'
     ? request<CkCoach[]>(`/coaches?lang=${lang}`, token)
     : request<CkPlayer[]>(`/players?line=${kind}&lang=${lang}`, token);
 }
 
+async function readDiskPool(key: string): Promise<PoolRows | null> {
+  try {
+    const raw = await AsyncStorage.getItem(diskKey(key));
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { at: number; rows: PoolRows };
+    return Date.now() - saved.at < DISK_TTL_MS && saved.rows?.length ? saved.rows : null;
+  } catch {
+    return null;
+  }
+}
+
 export const coachKingService = {
   getHome: (token: string, lang: string) => request<CkHome>(`/me?lang=${lang}`, token),
 
-  /** Whole line, cached in memory so the picker opens without a round trip. */
-  getPool(token: string, kind: CkPoolKind, lang: string): Promise<Array<CkPlayer | CkCoach>> {
+  /**
+   * Whole line, cached in memory and on disk so the picker opens without a
+   * round trip; a disk copy is served at once while the network refreshes it.
+   */
+  getPool(token: string, kind: CkPoolKind, lang: string): Promise<PoolRows> {
     const key = `${kind}:${lang}`;
     const hit = pools.get(key);
     if (hit && Date.now() - hit.at < POOL_TTL_MS) return hit.rows;
-    const rows = loadPool(token, kind, lang);
-    pools.set(key, { at: Date.now(), rows });
-    rows.catch(() => {
-      if (pools.get(key)?.rows === rows) pools.delete(key);
+    const network = loadPool(token, kind, lang).then((rows) => {
+      if (rows.length) {
+        void AsyncStorage.setItem(diskKey(key), JSON.stringify({ at: Date.now(), rows })).catch(() => undefined);
+      }
+      return rows;
     });
-    return rows;
+    const entry: PoolEntry = {
+      at: Date.now(),
+      rows: hit ? network : readDiskPool(key).then((saved) => saved ?? network),
+    };
+    pools.set(key, entry);
+    network
+      .then((rows) => {
+        if (pools.get(key) === entry) pools.set(key, { at: Date.now(), rows: Promise.resolve(rows) });
+      })
+      .catch(() => {
+        if (pools.get(key) === entry) pools.delete(key);
+      });
+    return entry.rows;
   },
 
   prefetchPools(token: string, lang: string): void {

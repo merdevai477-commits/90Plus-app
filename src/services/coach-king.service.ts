@@ -255,7 +255,7 @@ function coachDto(row: {
 }
 
 const LIST_TTL_MS = 10 * 60_000;
-const LIST_LIMIT = 600;
+const LIST_LIMIT = 1000;
 
 function searchWhere(q: string) {
   return q

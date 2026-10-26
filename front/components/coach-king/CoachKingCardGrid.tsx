@@ -96,11 +96,16 @@ export function CoachKingCardGrid({
   useEffect(() => {
     setQuery('');
     setPending(null);
+    setRows([]);
     if (!kind) {
       setShown(false);
       return;
     }
     let alive = true;
+    // Android can fire Modal onShow late; never hold the list back past the slide-in.
+    const reveal = setTimeout(() => {
+      if (alive) setShown(true);
+    }, 280);
     setLoading(true);
     resolveToken()
       .then((token) => {
@@ -120,6 +125,7 @@ export function CoachKingCardGrid({
       });
     return () => {
       alive = false;
+      clearTimeout(reveal);
     };
   }, [kind, language, resolveToken]);
 
@@ -224,7 +230,7 @@ export function CoachKingCardGrid({
           ) : null}
         </View>
 
-        {loading && rows.length === 0 ? <ActivityIndicator color={ACTIVE} style={{ marginTop: s(32) }} /> : null}
+        {(loading || !shown) && rows.length === 0 ? <ActivityIndicator color={ACTIVE} style={{ marginTop: s(32) }} /> : null}
 
         <FlatList
           key={kind ?? 'none'}
@@ -241,7 +247,7 @@ export function CoachKingCardGrid({
           removeClippedSubviews
           columnWrapperStyle={[styles.row, { width: s(GRID_WIDTH), columnGap: s(GRID.columnGap), marginBottom: s(GRID.rowGap) }]}
           contentContainerStyle={{ paddingTop: s(GRID.top + 7), paddingBottom: Math.max(insets.bottom, 12) + s(12) }}
-          ListEmptyComponent={loading ? null : (
+          ListEmptyComponent={loading || !shown ? null : (
             <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32) }]}>
               {query ? copy.searchEmpty : copy.poolEmpty}
             </Text>
