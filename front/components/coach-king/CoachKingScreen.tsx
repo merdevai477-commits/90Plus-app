@@ -382,27 +382,33 @@ export default function CoachKingScreen() {
 
       {tab === 'ranking' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
-          <KingPeriodTabs
-            period={period}
-            weekLabel={copy.week}
-            allLabel={copy.all}
-            onChange={(next) => {
-              setPeriod(next);
-              void loadSide('ranking', next);
+          <CoachKingBoard
+            entries={board}
+            isAr={isAr}
+            copy={{
+              title: copy.rankingTitle,
+              prizeLabel: copy.prizeLabel,
+              prizeName: copy.prizeName,
+              prizeSubtitle: copy.prizeSubtitle,
+              you: copy.you,
+              xp: copy.xp,
             }}
+            periodTabs={(
+              <KingPeriodTabs
+                period={period}
+                weekLabel={copy.week}
+                allLabel={copy.all}
+                onChange={(next) => {
+                  setPeriod(next);
+                  void loadSide('ranking', next);
+                }}
+              />
+            )}
+            empty={(
+              <KingEmptyState title={copy.noRanking} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
+            )}
+            onOpen={openOpponent}
           />
-          {board.length === 0 ? (
-            <KingEmptyState title={copy.noRanking} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
-          ) : (
-            <CoachKingBoard
-              entries={board}
-              isAr={isAr}
-              pointsLabel={copy.boardPoints}
-              youLabel={copy.you}
-              playerLabel={copy.boardPlayer}
-              onOpen={openOpponent}
-            />
-          )}
         </ScrollView>
       ) : null}
 
