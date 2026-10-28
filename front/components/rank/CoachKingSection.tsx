@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import {
@@ -13,6 +14,8 @@ const PAGE_BG = '#030303';
 const CARD_HINT = '#BBA1F6';
 const CARD_BG = '#09001D';
 const CARD_BORDER = '#241152';
+const PROMO = require('../../assets/images/coach-king/banner/promo.png');
+const PROMO_RATIO = 404 / 161;
 
 export type CoachKingCopy = {
   title: string;
@@ -45,6 +48,8 @@ interface Props {
 }
 
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
+  const { width } = useWindowDimensions();
+  const bannerWidth = width - 44;
   const dir = isAr ? 'rtl' : 'ltr';
 
   const pillars: Pillar[] = [
@@ -79,6 +84,20 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
             </View>
           </View>
         ))}
+      </View>
+
+      <View
+        style={[s.banner, { borderRadius: Math.round(20 * (bannerWidth / 404)) }]}
+        accessibilityRole="image"
+        accessibilityLabel={copy.title}
+      >
+        <Image
+          source={PROMO}
+          style={{ width: '100%', aspectRatio: PROMO_RATIO }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          accessibilityLabel={copy.title}
+        />
       </View>
 
       <Pressable
@@ -153,6 +172,10 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  banner: {
+    width: '100%',
+    overflow: 'hidden',
   },
   ctaHit: {
     width: '100%',
