@@ -10,8 +10,37 @@ const API_URL = getApiUrl();
 export type CkLine = 'GK' | 'DEF' | 'MID' | 'FWD';
 export type CkPoolKind = CkLine | 'COACH';
 
+/** Same order as the picker chips: England, Spain, Italy, Germany, France. */
+export const CK_LEAGUE_KEYS = ['pl', 'laliga', 'seriea', 'bundesliga', 'ligue1'] as const;
+export type CkLeagueKey = (typeof CK_LEAGUE_KEYS)[number];
+
+/**
+ * Keep in step with CK_SLOT_POSITIONS in src/services/coach-king-scoring.ts.
+ * The pitch slot, not the whole line, decides who can be picked.
+ */
+export const CK_SLOT_POSITIONS: Record<string, readonly string[]> = {
+  lw: ['LW'],
+  st: ['CF', 'ST', 'SS'],
+  rw: ['RW'],
+  cm1: ['CM', 'AM', 'DM'],
+  cm2: ['CM', 'AM', 'DM'],
+  cm3: ['CM', 'AM', 'DM'],
+  lb: ['LB'],
+  cb1: ['CB'],
+  cb2: ['CB'],
+  rb: ['RB'],
+  gk: ['GK'],
+};
+
+export function coachKingSlotAccepts(slotKey: string, position: string | null | undefined): boolean {
+  const allowed = CK_SLOT_POSITIONS[slotKey];
+  if (!allowed) return false;
+  return allowed.includes((position ?? '').trim().toUpperCase());
+}
+
 export interface CkPlayer {
   id: string;
+  leagueKey?: string | null;
   name: string;
   nameAr?: string;
   nameEn?: string | null;
@@ -29,6 +58,7 @@ export interface CkPlayer {
 
 export interface CkCoach {
   id: string;
+  leagueKey?: string | null;
   name: string;
   club: string;
   teamId: number;
@@ -106,6 +136,7 @@ export interface CkFixture {
   awayLogo: string;
   homeScore: number | null;
   awayScore: number | null;
+  leagueKey?: string | null;
 }
 
 export interface CkBoardRow {
@@ -158,7 +189,7 @@ const POOL_TTL_MS = 5 * 60_000;
 const DISK_TTL_MS = 12 * 60 * 60_000;
 type PoolEntry = { at: number; rows: Promise<PoolRows> };
 const pools = new Map<string, PoolEntry>();
-const diskKey = (key: string) => `ck:pool:v1:${key}`;
+const diskKey = (key: string) => `ck:pool:v2:${key}`;
 
 function loadPool(token: string, kind: CkPoolKind, lang: string): Promise<PoolRows> {
   return kind === 'COACH'

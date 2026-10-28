@@ -7,12 +7,18 @@
 
 import type { CkLine, CkPriceKind } from './coach-king-scoring';
 
+/** 12M. The best player of a line sits on this cap; that player is the super. */
+export const CK_PLAYER_CAP_MILLI = 120;
+
+/** Every head coach costs 5M, independent of table position. */
+export const CK_COACH_PRICE_MILLI = 50;
+
 export const CK_PRICE_BANDS: Record<CkPriceKind, readonly [number, number]> = {
-  FWD: [45, 200],
-  MID: [45, 180],
-  DEF: [40, 120],
+  FWD: [45, CK_PLAYER_CAP_MILLI],
+  MID: [45, CK_PLAYER_CAP_MILLI],
+  DEF: [40, CK_PLAYER_CAP_MILLI],
   GK: [40, 100],
-  COACH: [30, 120],
+  COACH: [CK_COACH_PRICE_MILLI, CK_COACH_PRICE_MILLI],
 };
 
 export type CkSeasonStats = {
@@ -125,8 +131,8 @@ export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
   return prices;
 }
 
-export function ckCoachPrice(clubTier: number): number {
-  return ckPriceFromScore('COACH', clamp01(clubTier));
+export function ckCoachPrice(_clubTier?: number): number {
+  return CK_COACH_PRICE_MILLI;
 }
 
 /** 1 for first place, 0 for last; mid-table when the table is unknown. */

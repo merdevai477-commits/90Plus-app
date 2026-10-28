@@ -25,11 +25,37 @@ export const COACH_KING_SLOTS = [
 
 export type CkSlotKey = (typeof COACH_KING_SLOTS)[number]['key'];
 
+/**
+ * Positions that may fill each pitch slot. Strikers are stored as CF or ST
+ * (SS stays with the 9 so a second striker is still pickable). The three
+ * midfield slots share the whole midfield, because the pitch does not split them.
+ */
+export const CK_SLOT_POSITIONS: Record<CkSlotKey, readonly string[]> = {
+  lw: ['LW'],
+  st: ['CF', 'ST', 'SS'],
+  rw: ['RW'],
+  cm1: ['CM', 'AM', 'DM'],
+  cm2: ['CM', 'AM', 'DM'],
+  cm3: ['CM', 'AM', 'DM'],
+  lb: ['LB'],
+  cb1: ['CB'],
+  cb2: ['CB'],
+  rb: ['RB'],
+  gk: ['GK'],
+};
+
 /** At most this many players from one club in a lineup. */
 export const CK_CLUB_LIMIT = 3;
 
 export function coachKingSlot(slotKey: string) {
   return COACH_KING_SLOTS.find((slot) => slot.key === slotKey) ?? null;
+}
+
+export function coachKingSlotAccepts(slotKey: string, position: string | null | undefined): boolean {
+  const slot = coachKingSlot(slotKey);
+  if (!slot) return false;
+  const code = (position ?? '').trim().toUpperCase();
+  return CK_SLOT_POSITIONS[slot.key].includes(code);
 }
 
 export function formatCoachKingMoney(milli: number): string {

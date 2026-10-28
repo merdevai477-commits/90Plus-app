@@ -15,7 +15,9 @@ import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
 import type { TopScorersFiveSeedClub } from '../data/top-scorers-five-laliga';
 import type { CkLine } from './coach-king-scoring';
 import {
+  CK_COACH_PRICE_MILLI,
   CK_EMPTY_STATS,
+  CK_PLAYER_CAP_MILLI,
   ckClubTier,
   ckCoachPrice,
   ckParseStatValue,
@@ -44,7 +46,7 @@ const SEEDS: Array<[TsfLeagueKey, TopScorersFiveSeedClub[]]> = [
 ];
 
 const CONCURRENCY = 6;
-export const CK_LIST_CACHE_PREFIX = 'ck:list:';
+export const CK_LIST_CACHE_PREFIX = 'ck:list:v2:';
 
 function norm(value: string | null | undefined): string {
   return (value ?? '')
@@ -180,12 +182,17 @@ export async function ensureCoachKingPool(): Promise<void> {
   await runSync();
 }
 
-/** Reprice once per gameweek: a sync older than this Tuesday triggers a new one. */
+/** Reprice once per gameweek, and again immediately when stored prices still use an old cap. */
 export async function refreshCoachKingPoolIfStale(now: Date = new Date()): Promise<void> {
   if (Date.now() - lastStaleCheck < 10 * 60_000) return;
   lastStaleCheck = Date.now();
-  const latest = await prisma.coachKingPlayer.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } });
-  if (latest && latest.updatedAt >= tsfGameweekWindow(now).startAt) return;
+  const [latest, overCap, coachOff] = await Promise.all([
+    prisma.coachKingPlayer.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+    prisma.coachKingPlayer.count({ where: { active: true, priceMilli: { gt: CK_PLAYER_CAP_MILLI } } }),
+    prisma.coachKingCoach.count({ where: { active: true, priceMilli: { not: CK_COACH_PRICE_MILLI } } }),
+  ]);
+  const weekFresh = latest != null && latest.updatedAt >= tsfGameweekWindow(now).startAt;
+  if (weekFresh && overCap === 0 && coachOff === 0) return;
   await runSync();
 }
 

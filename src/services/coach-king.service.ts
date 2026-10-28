@@ -9,10 +9,12 @@ import path from 'path';
 import { Prisma, type CoachKingGameweek } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { CK_COACH_PRICE_MILLI } from './coach-king-pricing';
 import {
   CK_START_BALANCE_MILLI,
   coachKingRemainingMilli,
   coachKingSlot,
+  coachKingSlotAccepts,
   formatCoachKingMoney,
   inspectCoachKingSquad,
   type CkLine,
@@ -118,6 +120,17 @@ function europeLeagueIds(): number[] {
   return TSF_EUROPE_LEAGUE_KEYS.map((key) => TSF_LEAGUES[key]!.competitionLeagueId);
 }
 
+const EUROPE_LEAGUE_KEY_BY_ID = new Map<number, string>(
+  TSF_EUROPE_LEAGUE_KEYS.flatMap((key) => {
+    const id = TSF_LEAGUES[key]?.competitionLeagueId;
+    return id == null ? [] : [[id, key] as const];
+  }),
+);
+
+function europeLeagueKey(leagueId: number): string | null {
+  return EUROPE_LEAGUE_KEY_BY_ID.get(leagueId) ?? null;
+}
+
 const USER_SELECT = { id: true, displayName: true, username: true, avatar: true, level: true } as const;
 
 async function requireUser(clerkUserId: string) {
@@ -200,6 +213,7 @@ function clubName(row: { clubNameAr: string; clubNameEn: string | null }, lang: 
 
 type PlayerRow = {
   id: string;
+  leagueKey: string;
   nameAr: string;
   nameEn: string | null;
   clubNameAr: string;
@@ -216,6 +230,7 @@ type PlayerRow = {
 function playerDto(row: PlayerRow, lang: CkLanguage) {
   return {
     id: row.id,
+    leagueKey: row.leagueKey,
     name: displayName(row, lang),
     nameAr: row.nameAr,
     nameEn: row.nameEn,
@@ -234,6 +249,7 @@ function playerDto(row: PlayerRow, lang: CkLanguage) {
 
 function coachDto(row: {
   id: string;
+  leagueKey: string;
   nameAr: string;
   nameEn: string | null;
   clubNameAr: string;
@@ -244,6 +260,7 @@ function coachDto(row: {
 }, lang: CkLanguage) {
   return {
     id: row.id,
+    leagueKey: row.leagueKey,
     name: displayName(row, lang),
     club: clubName(row, lang),
     teamId: row.teamId,
@@ -301,8 +318,24 @@ export async function listCoachKingPlayers(line: string, lang: CkLanguage, query
   });
 }
 
+let coachPricesFlat = false;
+
+/** Head coaches are a flat 5M. Rewrite stored prices once so the picker does not wait for a full pool sync. */
+async function flattenCoachKingCoachPrices(): Promise<void> {
+  if (coachPricesFlat) return;
+  const changed = await prisma.coachKingCoach.updateMany({
+    where: { priceMilli: { not: CK_COACH_PRICE_MILLI } },
+    data: { priceMilli: CK_COACH_PRICE_MILLI },
+  });
+  if (changed.count > 0) {
+    await redisCacheService.delPattern(`${CK_LIST_CACHE_PREFIX}*`).catch(() => undefined);
+  }
+  coachPricesFlat = true;
+}
+
 export async function listCoachKingCoaches(lang: CkLanguage, query: string) {
   await ensureCoachKingSchema();
+  await flattenCoachKingCoachPrices();
   const q = query.trim();
   return cachedList(q ? null : `${CK_LIST_CACHE_PREFIX}coaches:${lang}`, async () => {
     if (await prisma.coachKingCoach.count({ where: { active: true } }) === 0) {
@@ -533,7 +566,9 @@ export async function pickCoachKingSlot(
 
   const player = await prisma.coachKingPlayer.findFirst({ where: { id: input.playerId, active: true } });
   if (!player) throw new CoachKingError('PLAYER_NOT_FOUND', 'Player is not in the pool');
-  if (player.line !== spec.line) throw new CoachKingError('WRONG_LINE', 'Player does not fit this slot');
+  if (player.line !== spec.line || !coachKingSlotAccepts(spec.key, player.position)) {
+    throw new CoachKingError('WRONG_LINE', 'Player does not fit this slot');
+  }
 
   const squad = await openSquad(user.id, gameweek, now);
   const current = squad.slots.find((slot) => slot.slotKey === spec.key) ?? null;
@@ -682,6 +717,7 @@ export async function listCoachKingFixtures(clerkUserId: string, _lang: CkLangua
       awayLogo: LOGO(row.awayTeamId),
       homeScore: done?.homeScore ?? null,
       awayScore: done?.awayScore ?? null,
+      leagueKey: europeLeagueKey(row.leagueId),
     };
   });
 }

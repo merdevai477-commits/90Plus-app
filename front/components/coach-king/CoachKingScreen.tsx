@@ -9,12 +9,14 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  CK_LEAGUE_KEYS,
   CkApiError,
   coachKingService,
   type CkBoardRow,
   type CkCoach,
   type CkFixture,
   type CkHome,
+  type CkLeagueKey,
   type CkLine,
   type CkPlayer,
   type CkPoolKind,
@@ -25,6 +27,7 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 import type { KingPeriod } from '../../services/predictions.service';
 import { CoachKingCardGrid, type CkPick } from './CoachKingCardGrid';
+import { CoachKingLeagueChips } from './CoachKingLeagueChips';
 import { CoachKingMoney } from './CoachKingCoin';
 import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
@@ -116,6 +119,7 @@ export default function CoachKingScreen() {
   const [period, setPeriod] = useState<KingPeriod>('week');
   const [board, setBoard] = useState<CkBoardRow[]>([]);
   const [fixtures, setFixtures] = useState<CkFixture[]>([]);
+  const [matchLeague, setMatchLeague] = useState<CkLeagueKey | null>(null);
   const prefetched = useRef<string | null>(null);
 
   const tokenOf = useCallback(async () => {
@@ -166,6 +170,19 @@ export default function CoachKingScreen() {
   };
 
   const shown = home ?? (!loading ? EMPTY_HOME : null);
+  const squadLeagues = useMemo(() => {
+    const present = new Set<string>();
+    for (const slot of shown?.squad.slots ?? []) {
+      if (slot.player.leagueKey) present.add(slot.player.leagueKey);
+    }
+    if (shown?.squad.coach?.leagueKey) present.add(shown.squad.coach.leagueKey);
+    return CK_LEAGUE_KEYS.filter((key) => present.has(key));
+  }, [shown]);
+  const activeMatchLeague = matchLeague && squadLeagues.includes(matchLeague) ? matchLeague : squadLeagues[0] ?? null;
+  const visibleFixtures = useMemo(() => {
+    if (squadLeagues.length === 0) return fixtures;
+    return fixtures.filter((fixture) => fixture.leagueKey === activeMatchLeague);
+  }, [fixtures, squadLeagues.length, activeMatchLeague]);
   const closed = shown?.gameweek.locked === true;
   const lockedUntil = shown?.squad.lockedUntil ?? shown?.gameweek.endAt ?? null;
 
@@ -401,30 +418,42 @@ export default function CoachKingScreen() {
       ) : null}
 
       {tab === 'matches' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
-          {fixtures.length === 0 ? (
-            <KingEmptyState title={copy.noMatches} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
-          ) : fixtures.map((fixture) => (
-            <View key={fixture.fixtureId} style={styles.match}>
-              <Text style={[styles.matchDate, { fontFamily: fontMed }]}>
-                {new Date(fixture.kickoffAt).toLocaleString(isAr ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </Text>
-              <View style={styles.matchTeams}>
-                <Image source={{ uri: fixture.homeLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
-                <Text style={[styles.team, { fontFamily: fontSemi }]} numberOfLines={1}>{fixture.homeName}</Text>
-                <Text style={[styles.score, { fontFamily: fontBold }]}>
-                  {fixture.homeScore == null ? fixture.status : `${fixture.homeScore} - ${fixture.awayScore}`}
+        <View style={{ flex: 1 }}>
+          {squadLeagues.length > 0 ? (
+            <CoachKingLeagueChips
+              options={squadLeagues}
+              active={activeMatchLeague}
+              isAr={isAr}
+              label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
+              onChange={(key) => setMatchLeague(key as CkLeagueKey)}
+            />
+          ) : null}
+          <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+            {visibleFixtures.length === 0 ? (
+              <KingEmptyState title={copy.noMatches} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
+            ) : visibleFixtures.map((fixture) => (
+              <View key={fixture.fixtureId} style={styles.match}>
+                <Text style={[styles.matchDate, { fontFamily: fontMed }]}>
+                  {new Date(fixture.kickoffAt).toLocaleString(isAr ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </Text>
-                <Text style={[styles.team, { fontFamily: fontSemi, textAlign: 'right' }]} numberOfLines={1}>{fixture.awayName}</Text>
-                <Image source={{ uri: fixture.awayLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
+                <View style={styles.matchTeams}>
+                  <Image source={{ uri: fixture.homeLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
+                  <Text style={[styles.team, { fontFamily: fontSemi }]} numberOfLines={1}>{fixture.homeName}</Text>
+                  <Text style={[styles.score, { fontFamily: fontBold }]}>
+                    {fixture.homeScore == null ? fixture.status : `${fixture.homeScore} - ${fixture.awayScore}`}
+                  </Text>
+                  <Text style={[styles.team, { fontFamily: fontSemi, textAlign: 'right' }]} numberOfLines={1}>{fixture.awayName}</Text>
+                  <Image source={{ uri: fixture.awayLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
+                </View>
               </View>
-            </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        </View>
       ) : null}
 
       <CoachKingCardGrid
         kind={picker}
+        slotKey={picker === 'COACH' ? null : slotKey}
         resolveToken={tokenOf}
         remainingMilli={shown?.wallet.remainingMilli ?? 0}
         refundMilli={refundMilli}

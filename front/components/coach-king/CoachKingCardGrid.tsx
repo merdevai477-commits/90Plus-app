@@ -23,12 +23,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  CK_LEAGUE_KEYS,
   CkApiError,
   coachKingService,
+  coachKingSlotAccepts,
   type CkCoach,
+  type CkLeagueKey,
   type CkPlayer,
   type CkPoolKind,
 } from '../../services/coachKing.service';
+import { CoachKingLeagueChips } from './CoachKingLeagueChips';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_DESIGN_WIDTH } from '../TopScorersFive/assets';
@@ -48,8 +52,12 @@ const CONFIRM_CARD_SCALE = 1.35;
 
 type Box = { left: number; top: number; width: number; height: number };
 
+const LEAGUE_OPTIONS = ['all', ...CK_LEAGUE_KEYS] as const;
+
 type Props = {
   kind: CkPoolKind | null;
+  /** Pitch slot being filled. Coaches pass null. */
+  slotKey: string | null;
   resolveToken: () => Promise<string | null>;
   remainingMilli: number;
   /** What the slot being replaced cost; it comes back to the budget on a swap. */
@@ -65,6 +73,7 @@ type Props = {
 
 export function CoachKingCardGrid({
   kind,
+  slotKey,
   resolveToken,
   remainingMilli,
   refundMilli,
@@ -88,6 +97,7 @@ export function CoachKingCardGrid({
   const s = useCallback((value: number) => value * scale, [scale]);
 
   const [query, setQuery] = useState('');
+  const [league, setLeague] = useState<CkLeagueKey | 'all'>('all');
   const [rows, setRows] = useState<Array<CkPlayer | CkCoach>>([]);
   const [loading, setLoading] = useState(false);
   const [shown, setShown] = useState(false);
@@ -129,15 +139,25 @@ export function CoachKingCardGrid({
     };
   }, [kind, language, resolveToken]);
 
+  useEffect(() => {
+    setQuery('');
+    setLeague('all');
+    setPending(null);
+  }, [kind, slotKey]);
+
   const index = useMemo(
     () => rows.map((row) => ({ row, haystack: searchKey(`${row.name} ${row.club} ${(row as CkPlayer).nameEn ?? ''} ${(row as CkPlayer).nameAr ?? ''}`) })),
     [rows],
   );
   const matches = useMemo(() => {
     const tokens = searchKey(query).split(' ').filter(Boolean);
-    if (!tokens.length) return rows;
-    return index.filter(({ haystack }) => tokens.every((token) => haystack.includes(token))).map(({ row }) => row);
-  }, [rows, index, query]);
+    return index.filter(({ row, haystack }) => {
+      if (league !== 'all' && row.leagueKey !== league) return false;
+      if (kind !== 'COACH' && slotKey && !coachKingSlotAccepts(slotKey, (row as CkPlayer).position)) return false;
+      if (tokens.length > 0 && !tokens.every((token) => haystack.includes(token))) return false;
+      return true;
+    }).map(({ row }) => row);
+  }, [index, query, league, kind, slotKey]);
 
   const budget = remainingMilli + refundMilli;
 
@@ -192,10 +212,18 @@ export function CoachKingCardGrid({
             <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20) }]} numberOfLines={1}>
-            {kind === 'COACH' ? copy.pickCoach : copy.pickPlayer}
+            {kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
           </Text>
           <CoachKingMoney milli={budget} lang={language} size="sm" />
         </View>
+
+        <CoachKingLeagueChips
+          options={LEAGUE_OPTIONS}
+          active={league}
+          isAr={isAr}
+          label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
+          onChange={(key) => setLeague(key as CkLeagueKey | 'all')}
+        />
 
         <View
           style={[
@@ -249,7 +277,13 @@ export function CoachKingCardGrid({
           contentContainerStyle={{ paddingTop: s(GRID.top + 7), paddingBottom: Math.max(insets.bottom, 12) + s(12) }}
           ListEmptyComponent={loading || !shown ? null : (
             <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32) }]}>
-              {query ? copy.searchEmpty : copy.poolEmpty}
+              {query
+                ? copy.searchEmpty
+                : league !== 'all'
+                  ? copy.leagueEmpty
+                  : rows.length > 0
+                    ? copy.searchEmpty
+                    : copy.poolEmpty}
             </Text>
           )}
         />

@@ -5,6 +5,7 @@ import {
   coachKingNextBalanceMilli,
   coachKingRemainingMilli,
   coachKingResultPoints,
+  coachKingSlotAccepts,
   computeCoachKingPoints,
   extractCoachKingStats,
   formatCoachKingMoney,
@@ -21,6 +22,25 @@ function fullSquad(price = 40): CkDraftSlot[] {
     priceMilli: price,
   }));
 }
+
+describe('coach king slots', () => {
+  it('keeps a striker slot to strikers and a wing slot to that wing', () => {
+    expect(coachKingSlotAccepts('st', 'CF')).toBe(true);
+    expect(coachKingSlotAccepts('st', 'ST')).toBe(true);
+    expect(coachKingSlotAccepts('st', 'SS')).toBe(true);
+    expect(coachKingSlotAccepts('st', 'LW')).toBe(false);
+    expect(coachKingSlotAccepts('lw', 'LW')).toBe(true);
+    expect(coachKingSlotAccepts('rw', 'RW')).toBe(true);
+    expect(coachKingSlotAccepts('rw', 'LW')).toBe(false);
+    expect(coachKingSlotAccepts('cm2', 'AM')).toBe(true);
+    expect(coachKingSlotAccepts('cm2', 'DM')).toBe(true);
+    expect(coachKingSlotAccepts('lb', 'LB')).toBe(true);
+    expect(coachKingSlotAccepts('lb', 'CB')).toBe(false);
+    expect(coachKingSlotAccepts('cb1', 'CB')).toBe(true);
+    expect(coachKingSlotAccepts('gk', 'gk')).toBe(true);
+    expect(coachKingSlotAccepts('nope', 'GK')).toBe(false);
+  });
+});
 
 describe('coach king budget', () => {
   it('formats tenths of a million and grows the bank by 0.1M per point', () => {
