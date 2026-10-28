@@ -26,6 +26,7 @@ import { useAppFont } from '../../utils/fontSetup';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 import type { KingPeriod } from '../../services/predictions.service';
+import { CoachKingBoard } from './CoachKingBoard';
 import { CoachKingCardGrid, type CkPick } from './CoachKingCardGrid';
 import { CoachKingLeagueChips } from './CoachKingLeagueChips';
 import { CoachKingMoney } from './CoachKingCoin';
@@ -392,28 +393,16 @@ export default function CoachKingScreen() {
           />
           {board.length === 0 ? (
             <KingEmptyState title={copy.noRanking} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
-          ) : board.map((entry) => (
-            <Pressable
-              key={entry.userId}
-              onPress={() => openOpponent(entry)}
-              testID={`ck-board-${entry.rank}`}
-              style={({ pressed }) => [styles.boardRow, { flexDirection: row }, entry.isMe && styles.boardMe, pressed && { opacity: 0.85 }]}
-            >
-              <View style={[styles.rankBadge, entry.rank <= 3 && { backgroundColor: MEDAL[entry.rank - 1] }]}>
-                <Text style={[styles.rank, { fontFamily: fontBold, color: entry.rank <= 3 ? '#1A0B00' : '#fff' }]}>{entry.rank}</Text>
-              </View>
-              <Image source={entry.avatar ? { uri: entry.avatar } : PLACEHOLDER} style={styles.boardAvatar} cachePolicy="memory-disk" />
-              <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
-                <Text style={[styles.boardName, { fontFamily: fontSemi }]} numberOfLines={1}>{entry.name}</Text>
-                <Text style={[styles.boardUser, { fontFamily: fontMed }]} numberOfLines={1}>@{entry.username}</Text>
-              </View>
-              <View style={[styles.boardPtsWrap, { flexDirection: row }]}>
-                <Ionicons name="flash" size={14} color="#C2ABFC" />
-                <Text style={[styles.boardPts, { fontFamily: fontBold }]}>{entry.points}</Text>
-              </View>
-              <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={16} color="rgba(255,255,255,0.4)" />
-            </Pressable>
-          ))}
+          ) : (
+            <CoachKingBoard
+              entries={board}
+              isAr={isAr}
+              pointsLabel={copy.boardPoints}
+              youLabel={copy.you}
+              playerLabel={copy.boardPlayer}
+              onOpen={openOpponent}
+            />
+          )}
         </ScrollView>
       ) : null}
 
@@ -477,8 +466,6 @@ export default function CoachKingScreen() {
   );
 }
 
-const MEDAL = ['#F8C94A', '#D4D4D8', '#D08A4A'];
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#030303' },
   header: {
@@ -523,32 +510,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(184,150,252,0.3)',
   },
   hintTxt: { color: '#D8C7FD', fontSize: 12, flex: 1 },
-  boardRow: {
-    marginTop: 8,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: '#0A001C',
-    borderWidth: 0.5,
-    borderColor: '#241152',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    columnGap: 10,
-  },
-  boardMe: { borderColor: 'rgba(140,92,245,0.8)', backgroundColor: '#140533' },
-  rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  rank: { fontSize: 13 },
-  boardAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(140,92,245,0.6)' },
-  boardName: { color: '#fff', fontSize: 15 },
-  boardUser: { color: '#9E8BC9', fontSize: 11, marginTop: 1 },
-  boardPtsWrap: { alignItems: 'center', columnGap: 4 },
-  boardPts: { color: '#E9D5FF', fontSize: 16 },
   match: {
     marginTop: 10,
     borderRadius: 16,
