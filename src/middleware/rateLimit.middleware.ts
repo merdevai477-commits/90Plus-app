@@ -224,6 +224,23 @@ export const writeLimiter = rateLimit({
     },
 });
 
+/** King prediction writes: 30 per minute per user (B6). */
+export const predictionWriteLimiter = rateLimit({
+    store: getRedisRateLimitStore('rl:prediction-writes:'),
+    windowMs: 60 * 1000,
+    max: 30,
+    message: {
+        status: 'ERROR',
+        message: 'Too many prediction updates, please slow down',
+        retryAfter: '1 minute',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    passOnStoreError: true,
+    skip: (req: Request, res: Response) => skipRateLimitForTrusted(req, res),
+    keyGenerator: (req: Request) => rateLimitKey(req),
+});
+
 /**
  * Auth endpoints rate limiter
  * 5 requests per minute (stricter for auth)

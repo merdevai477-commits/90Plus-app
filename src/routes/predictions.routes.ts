@@ -13,7 +13,9 @@ import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import { getSchemaStatus, isSchemaOk } from '../services/schema-guard.service';
+import { predictionWriteLimiter } from '../middleware/rateLimit.middleware';
 import {
+    getDailyPredictionsUsed,
     getKingDailyMatches,
     getKingHistory,
     getKingLeaderboard,
@@ -48,6 +50,53 @@ const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات ا�
 const PREDICTION_COST = 0; // Deprecated — predictions now cost only 1 daily ticket, not coins.
 const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع الصحيح
 const MAX_MATCH_IDS_QUERY = 100;
+
+/** Public shape of a saved prediction — no settlement audit fields (E6). */
+function toPredictionDto(p: Prediction) {
+    return {
+        id: p.id,
+        apiMatchId: p.apiMatchId,
+        predictionType: p.predictionType,
+        predictedHomeScore: p.predictedHomeScore,
+        predictedAwayScore: p.predictedAwayScore,
+        homeTeam: p.homeTeam,
+        awayTeam: p.awayTeam,
+        homeTeamLogo: p.homeTeamLogo,
+        awayTeamLogo: p.awayTeamLogo,
+        leagueName: p.leagueName,
+        matchDate: p.matchDate,
+        isCorrect: p.isCorrect,
+        coinsSpent: p.coinsSpent,
+        coinsWon: p.coinsWon,
+        createdAt: p.createdAt,
+    };
+}
+
+function sendKingPredictionError(
+    req: Request,
+    res: Response,
+    err: KingPredictionError,
+    matchId: string,
+    messages: { notFound: string; limit: string; closed: string; notEligible: string },
+): void {
+    switch (err.reason) {
+        case 'USER_NOT_FOUND':
+            sendError(req, res, ErrorCode.NOT_FOUND, messages.notFound);
+            return;
+        case 'DAILY_LIMIT_REACHED':
+            sendError(req, res, ErrorCode.RATE_LIMIT, messages.limit, {
+                reason: 'DAILY_LIMIT_REACHED',
+                limit: DAILY_PREDICTION_LIMIT,
+            });
+            return;
+        case 'MATCH_NOT_ELIGIBLE':
+            sendError(req, res, ErrorCode.VALIDATION, messages.notEligible, { reason: err.reason, matchId });
+            return;
+        default:
+            // MATCH_STARTED, ALREADY_RESOLVED, KICKOFF_UNKNOWN, DUPLICATE_FIXTURE
+            sendError(req, res, ErrorCode.CONFLICT, messages.closed, { reason: err.reason, matchId });
+    }
+}
 
 /** `?matchIds=1,2,3` → ids; null when the param is absent. */
 function parseMatchIdsQuery(raw: unknown): number[] | null {
@@ -84,21 +133,8 @@ router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }
             return;
         }
 
-        // Get today's predictions count
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const todayPredictions = await prisma.prediction.count({
-            where: {
-                userId: user.id,
-                createdAt: {
-                    gte: today,
-                    lt: tomorrow
-                }
-            }
-        });
+        // Today = Africa/Cairo calendar day, same counter the write path enforces (C1).
+        const todayPredictions = await getDailyPredictionsUsed(user.id);
 
         const remaining = Math.max(0, DAILY_PREDICTION_LIMIT - todayPredictions);
 
@@ -122,7 +158,7 @@ router.get('/remaining', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }
  * POST /api/predictions
  * Submit a new prediction
  */
-router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, predictionWriteLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         // ✅ استخدام req.auth.userId من الـ middleware
         const clerkUserId = req.auth?.userId;
@@ -204,19 +240,12 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             });
         } catch (txError: unknown) {
             if (txError instanceof KingPredictionError) {
-                if (txError.reason === 'USER_NOT_FOUND') {
-                    sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
-                } else if (txError.reason === 'DAILY_LIMIT_REACHED') {
-                    sendError(req, res, ErrorCode.RATE_LIMIT, 'Daily prediction limit reached', {
-                        reason: 'DAILY_LIMIT_REACHED',
-                        limit: DAILY_PREDICTION_LIMIT,
-                    });
-                } else if (txError.reason === 'MATCH_STARTED' || txError.reason === 'ALREADY_RESOLVED') {
-                    sendError(req, res, ErrorCode.CONFLICT, 'Predictions are closed for this match', {
-                        reason: txError.reason,
-                        matchId: String(apiMatchId),
-                    });
-                }
+                sendKingPredictionError(req, res, txError, String(apiMatchId), {
+                    notFound: 'User not found',
+                    limit: 'Daily prediction limit reached',
+                    closed: 'Predictions are closed for this match',
+                    notEligible: 'This match is not open for predictions',
+                });
                 return;
             }
             throw txError;
@@ -231,7 +260,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         res.json({
             success: true,
             data: {
-                prediction: saved.prediction,
+                prediction: toPredictionDto(saved.prediction),
                 newBalance: saved.coins,
                 remaining: saved.remaining,
                 updated: saved.updated,
@@ -710,7 +739,7 @@ router.get('/unresolved', requireAuth, requireAdmin, async (req: Request, res: R
  * Submit a score prediction (for rank page)
  * Used for predicting exact match scores
  */
-router.post('/submit', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/submit', requireAuth, predictionWriteLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
         // ✅ استخدام req.auth.userId من الـ middleware
         const clerkUserId = req.auth?.userId;
@@ -770,19 +799,12 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
             });
         } catch (txError: unknown) {
             if (txError instanceof KingPredictionError) {
-                if (txError.reason === 'USER_NOT_FOUND') {
-                    sendError(req, res, ErrorCode.NOT_FOUND, 'المستخدم غير موجود');
-                } else if (txError.reason === 'DAILY_LIMIT_REACHED') {
-                    sendError(req, res, ErrorCode.RATE_LIMIT, `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`, {
-                        reason: 'DAILY_LIMIT_REACHED',
-                        limit: DAILY_PREDICTION_LIMIT,
-                    });
-                } else {
-                    sendError(req, res, ErrorCode.CONFLICT, 'لا يمكن تعديل التوقع بعد بداية المباراة', {
-                        reason: txError.reason,
-                        matchId: String(matchId),
-                    });
-                }
+                sendKingPredictionError(req, res, txError, String(matchId), {
+                    notFound: 'المستخدم غير موجود',
+                    limit: `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`,
+                    closed: 'لا يمكن تعديل التوقع بعد بداية المباراة',
+                    notEligible: 'هذه المباراة غير متاحة للتوقع',
+                });
                 return;
             }
             throw txError;

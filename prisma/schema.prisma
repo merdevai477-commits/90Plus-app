@@ -125,6 +125,7 @@ model User {
   notifications                 Notification[]
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
+  predictionDailyCounters       PredictionDailyCounter[]
   ownedSponsors                 Sponsor[]                 @relation("OwnedSponsors")
   sponsorFollows                SponsorFollow[]
   competitionEntries            CompetitionEntry[]
@@ -633,6 +634,8 @@ model CoinTransaction {
   amount      Int
   type        CoinTransactionType
   description String?
+  /// Unique business reference (e.g. "prediction:<id>:coins") so a credit is written at most once.
+  idempotencyKey String?          @unique
   createdAt   DateTime            @default(now())
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1550,9 +1553,12 @@ model Prediction {
   settledStatus      String?
   settledWinner      String?
   settledAt          DateTime?
+  /// Provider-independent fixture identity ("365:<gameId>" or "af:<fixtureId>"); null on legacy rows.
+  canonicalFixtureKey String?
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiMatchId])
+  @@unique([userId, canonicalFixtureKey])
   @@index([userId])
   @@index([apiMatchId])
   @@index([createdAt])
@@ -1560,6 +1566,18 @@ model Prediction {
   @@index([isCorrect])
   @@index([userId, isCorrect])
   @@map("predictions")
+}
+
+/// King daily prediction quota per Africa/Cairo calendar day.
+model PredictionDailyCounter {
+  userId    String
+  cairoDay  DateTime @db.Date
+  count     Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cairoDay])
+  @@map("prediction_daily_counters")
 }
 
 model PredictionGroup {

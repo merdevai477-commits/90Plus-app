@@ -12,6 +12,7 @@ import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
 import { pickTopFixtures } from '../utils/fixture-importance';
 import { projectMatchesForListView } from '../utils/matches-list-projection.util';
 import { XP_VALUES } from './xp.service';
+import { cairoDayKey, cairoDayRange, lockVerdict, resolveServerFixture } from './king-prediction-rules';
 
 export type KingMode = 'winner' | 'exact';
 export type KingPeriod = 'week' | 'all';
@@ -20,10 +21,17 @@ export type WinnerPick = 'home' | 'draw' | 'away';
 const WINNER_XP = XP_VALUES.PREDICTION_WINNER;
 const EXACT_XP = XP_VALUES.PREDICTION_EXACT;
 
+export type KingPredictionErrorReason =
+  | 'USER_NOT_FOUND'
+  | 'DAILY_LIMIT_REACHED'
+  | 'MATCH_STARTED'
+  | 'ALREADY_RESOLVED'
+  | 'KICKOFF_UNKNOWN'
+  | 'MATCH_NOT_ELIGIBLE'
+  | 'DUPLICATE_FIXTURE';
+
 export class KingPredictionError extends Error {
-  constructor(
-    public readonly reason: 'USER_NOT_FOUND' | 'DAILY_LIMIT_REACHED' | 'MATCH_STARTED' | 'ALREADY_RESOLVED',
-  ) {
+  constructor(public readonly reason: KingPredictionErrorReason) {
     super(reason);
     this.name = 'KingPredictionError';
   }
@@ -137,94 +145,133 @@ export async function upsertKingPrediction(
       ? deriveWinner(input.homeScore ?? 0, input.awayScore ?? 0)
       : (input.predictionType as WinnerPick);
 
-  const parsedMatchDate = input.matchDate ? new Date(input.matchDate) : null;
-  const safeMatchDate =
-    parsedMatchDate && !Number.isNaN(parsedMatchDate.getTime()) ? parsedMatchDate : null;
+  // Kickoff, eligibility and identity are server truth; the client matchDate is ignored (B1, B2).
+  const fixture = await resolveServerFixture(input.apiMatchId);
+  const dayKey = cairoDayKey();
+  const now = new Date();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.prediction.findUnique({
-      where: {
-        userId_apiMatchId: { userId: user.id, apiMatchId: input.apiMatchId },
-      },
-    });
-
-    if (existing) {
-      if (existing.isCorrect !== null) {
-        throw new KingPredictionError('ALREADY_RESOLVED');
-      }
-      const kickoff = existing.matchDate ?? safeMatchDate;
-      if (kickoffHasPassed(kickoff)) {
-        throw new KingPredictionError('MATCH_STARTED');
-      }
-
-      const prediction = await tx.prediction.update({
-        where: { id: existing.id },
-        data: {
-          predictionType,
-          predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
-          predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
-          homeTeam: input.homeTeam ?? existing.homeTeam,
-          awayTeam: input.awayTeam ?? existing.awayTeam,
-          homeTeamLogo: input.homeTeamLogo ?? existing.homeTeamLogo,
-          awayTeamLogo: input.awayTeamLogo ?? existing.awayTeamLogo,
-          matchDate: existing.matchDate ?? safeMatchDate,
-          leagueName: input.leagueName ?? existing.leagueName,
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.prediction.findUnique({
+        where: {
+          userId_apiMatchId: { userId: user.id, apiMatchId: input.apiMatchId },
         },
       });
 
-      const used = await tx.prediction.count({
-        where: { userId: user.id, createdAt: { gte: today, lt: tomorrow } },
+      if (existing) {
+        if (existing.isCorrect !== null) {
+          throw new KingPredictionError('ALREADY_RESOLVED');
+        }
+        // Any change after kickoff is refused, including switching mode (B4, Q4, Q6).
+        const verdict = lockVerdict(fixture, { isNew: false }, now);
+        if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
+
+        const prediction = await tx.prediction.update({
+          where: { id: existing.id },
+          data: {
+            predictionType,
+            predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
+            predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
+            homeTeam: input.homeTeam ?? existing.homeTeam,
+            awayTeam: input.awayTeam ?? existing.awayTeam,
+            homeTeamLogo: input.homeTeamLogo ?? existing.homeTeamLogo,
+            awayTeamLogo: input.awayTeamLogo ?? existing.awayTeamLogo,
+            matchDate: fixture!.kickoff,
+            leagueName: input.leagueName ?? existing.leagueName,
+            canonicalFixtureKey: existing.canonicalFixtureKey ?? fixture!.canonicalKey,
+          },
+        });
+
+        const used = await readDailyCount(tx, user.id, dayKey);
+        return {
+          prediction,
+          remaining: Math.max(0, input.dailyLimit - used),
+          updated: true,
+          coins: user.coins,
+        };
+      }
+
+      const verdict = lockVerdict(fixture, { isNew: true }, now);
+      if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
+
+      const used = await claimDailySlot(tx, user.id, dayKey, input.dailyLimit);
+      if (used == null) throw new KingPredictionError('DAILY_LIMIT_REACHED');
+
+      const prediction = await tx.prediction.create({
+        data: {
+          userId: user.id,
+          apiMatchId: input.apiMatchId,
+          predictionType,
+          coinsSpent: input.coinsSpent,
+          isCorrect: null,
+          predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
+          predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
+          homeTeam: input.homeTeam ?? null,
+          awayTeam: input.awayTeam ?? null,
+          homeTeamLogo: input.homeTeamLogo ?? null,
+          awayTeamLogo: input.awayTeamLogo ?? null,
+          matchDate: fixture!.kickoff,
+          leagueName: input.leagueName ?? null,
+          canonicalFixtureKey: fixture!.canonicalKey,
+        },
       });
 
       return {
         prediction,
         remaining: Math.max(0, input.dailyLimit - used),
-        updated: true,
+        updated: false,
         coins: user.coins,
       };
-    }
-
-    if (kickoffHasPassed(safeMatchDate)) {
-      throw new KingPredictionError('MATCH_STARTED');
-    }
-
-    const used = await tx.prediction.count({
-      where: { userId: user.id, createdAt: { gte: today, lt: tomorrow } },
     });
-    if (used >= input.dailyLimit) {
-      throw new KingPredictionError('DAILY_LIMIT_REACHED');
+  } catch (err: any) {
+    if (err?.code === 'P2002' && String(err?.meta?.target ?? '').includes('canonicalFixtureKey')) {
+      throw new KingPredictionError('DUPLICATE_FIXTURE');
     }
+    throw err;
+  }
+}
 
-    const prediction = await tx.prediction.create({
-      data: {
-        userId: user.id,
-        apiMatchId: input.apiMatchId,
-        predictionType,
-        coinsSpent: input.coinsSpent,
-        isCorrect: null,
-        predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
-        predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
-        homeTeam: input.homeTeam ?? null,
-        awayTeam: input.awayTeam ?? null,
-        homeTeamLogo: input.homeTeamLogo ?? null,
-        awayTeamLogo: input.awayTeamLogo ?? null,
-        matchDate: safeMatchDate,
-        leagueName: input.leagueName ?? null,
-      },
-    });
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
-    return {
-      prediction,
-      remaining: Math.max(0, input.dailyLimit - used - 1),
-      updated: false,
-      coins: user.coins,
-    };
-  });
+/**
+ * Seeds today's counter from rows created before the counter existed, then
+ * takes one slot atomically. Returns the new count, or null when full (B3).
+ */
+export async function claimDailySlot(
+  tx: Tx,
+  userId: string,
+  dayKey: string,
+  limit: number,
+): Promise<number | null> {
+  const { start, end } = cairoDayRange(dayKey);
+  await tx.$executeRaw`
+    INSERT INTO "prediction_daily_counters" ("userId", "cairoDay", "count", "updatedAt")
+    VALUES (
+      ${userId}, ${dayKey}::date,
+      (SELECT count(*)::int FROM "predictions" WHERE "userId" = ${userId} AND "createdAt" >= ${start} AND "createdAt" < ${end}),
+      now()
+    )
+    ON CONFLICT ("userId", "cairoDay") DO NOTHING`;
+  const rows = await tx.$queryRaw<Array<{ count: number }>>`
+    UPDATE "prediction_daily_counters"
+    SET "count" = "count" + 1, "updatedAt" = now()
+    WHERE "userId" = ${userId} AND "cairoDay" = ${dayKey}::date AND "count" < ${limit}
+    RETURNING "count"`;
+  return rows.length ? Number(rows[0].count) : null;
+}
+
+async function readDailyCount(tx: Tx, userId: string, dayKey: string): Promise<number> {
+  const rows = await tx.$queryRaw<Array<{ count: number }>>`
+    SELECT "count" FROM "prediction_daily_counters"
+    WHERE "userId" = ${userId} AND "cairoDay" = ${dayKey}::date`;
+  if (rows.length) return Number(rows[0].count);
+  const { start, end } = cairoDayRange(dayKey);
+  return tx.prediction.count({ where: { userId, createdAt: { gte: start, lt: end } } });
+}
+
+/** Today's used King slots (Africa/Cairo day) for the /remaining endpoint (C1). */
+export async function getDailyPredictionsUsed(userId: string, now: Date = new Date()): Promise<number> {
+  return readDailyCount(prisma as unknown as Tx, userId, cairoDayKey(now));
 }
 
 export interface KingLeaderboardEntry {
