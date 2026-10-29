@@ -1,11 +1,24 @@
+import { ANDROID_PACKAGE_NAME } from '../config/androidAppLinks';
 import { SHARE_BASE_URL, shareUrl } from '../config/shareLinks';
+import { isValidReferralCode, normalizeReferralCode } from '../services/share-win.service';
+
+/** Canonical package from androidAppLinks (same id as front/app.json). */
+const ANDROID_PACKAGE = ANDROID_PACKAGE_NAME;
 
 export const PLAY_STORE_URL =
-  'https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp';
+  `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
 
 export const APP_STORE_URL = 'https://apps.apple.com/us/app/90plus/id6758296989';
 
-const ANDROID_PACKAGE = 'com.mhmdsh1892.ninetyplusapp';
+/**
+ * Play Store listing with an Install Referrer payload for Share & Win.
+ * Invalid / unknown codes get the plain store URL (no referrer).
+ */
+export function buildPlayStoreInviteUrl(code: string): string {
+  const normalized = normalizeReferralCode(code);
+  if (!isValidReferralCode(normalized)) return PLAY_STORE_URL;
+  return `${PLAY_STORE_URL}&referrer=${encodeURIComponent(`invite_${normalized}`)}`;
+}
 
 /** How long we wait before assuming the app did not open, then go to the store. */
 const STORE_FALLBACK_MS_IOS = 900;
@@ -61,12 +74,16 @@ function buildAndroidIntentUrl(deepPath: string, storeFallbackUrl: string = PLAY
  * Inline opener: try the app once, then send the user straight to their
  * platform store. Desktop keeps both store buttons.
  */
-function buildStoreRedirectScript(intentUrl: string, customSchemeUrl: string): string {
+function buildStoreRedirectScript(
+  intentUrl: string,
+  customSchemeUrl: string,
+  playStoreUrl: string = PLAY_STORE_URL,
+): string {
   return `
     (function() {
       var customScheme = ${JSON.stringify(customSchemeUrl)};
       var intentUrl = ${JSON.stringify(intentUrl)};
-      var playStoreUrl = ${JSON.stringify(PLAY_STORE_URL)};
+      var playStoreUrl = ${JSON.stringify(playStoreUrl)};
       var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
@@ -126,11 +143,15 @@ function buildStoreRedirectScript(intentUrl: string, customSchemeUrl: string): s
   `;
 }
 
-function storeButtonsHtml(openAppHref: string): string {
+function storeButtonsHtml(
+  openAppHref: string,
+  androidStoreHref: string = PLAY_STORE_URL,
+): string {
   const safeHref = openAppHref.replace(/"/g, '&quot;');
+  const safeAndroid = androidStoreHref.replace(/"/g, '&quot;');
   return `
       <a class="btn primary" id="open-app" href="${safeHref}">افتح في التطبيق</a>
-      <a class="btn secondary store-btn" id="store-android" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
+      <a class="btn secondary store-btn" id="store-android" href="${safeAndroid}">حمّل من Google Play</a>
       <a class="btn secondary store-btn" id="store-ios" href="${APP_STORE_URL}">حمّل من App Store</a>
   `;
 }
@@ -144,11 +165,18 @@ type ContentLandingOptions = {
   downloadText: string;
   deepPath: string;
   customSchemeUrl: string;
+  /**
+   * Android Play Store URL used for the intent browser_fallback, the JS store
+   * redirect, and the visible Play button. Referral landings pass a URL with
+   * `referrer=invite_CODE` so a cold install can recover attribution.
+   */
+  androidStoreUrl?: string;
 };
 
 function buildSmartLandingPage(options: ContentLandingOptions): string {
   // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
-  const intentUrl = buildAndroidIntentUrl(options.deepPath);
+  const androidStoreUrl = options.androidStoreUrl ?? PLAY_STORE_URL;
+  const intentUrl = buildAndroidIntentUrl(options.deepPath, androidStoreUrl);
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -169,7 +197,7 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
     </div>
     <div class="download">
       <p>${options.downloadText}</p>
-      ${storeButtonsHtml(options.customSchemeUrl)}
+      ${storeButtonsHtml(options.customSchemeUrl, androidStoreUrl)}
     </div>
   </div>
   <script>
@@ -178,7 +206,7 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
      * app itself. Try the app once (keeps the referral / deep path), then send
      * the user to their platform store immediately — never leave them on the site.
      */
-    ${buildStoreRedirectScript(intentUrl, options.customSchemeUrl)}
+    ${buildStoreRedirectScript(intentUrl, options.customSchemeUrl, androidStoreUrl)}
   </script>
 </body>
 </html>`;
@@ -249,7 +277,7 @@ export function buildProfileLandingPage(username: string): string {
 
 /** Share & Win referral invite — carries the code into the app on first open. */
 export function buildReferralLandingPage(code: string): string {
-  const normalized = code.trim().toUpperCase();
+  const normalized = normalizeReferralCode(code);
   return buildSmartLandingPage({
     title: '90Plus — دعوة صديق',
     ogTitle: '90Plus — شارك واربح',
@@ -259,5 +287,8 @@ export function buildReferralLandingPage(code: string): string {
     downloadText: 'حمّل 90Plus وانضم عبر دعوة صديقك',
     deepPath: `invite/${normalized}`,
     customSchemeUrl: `ninetyplus://invite/${normalized}`,
+    // Android cold-install: Play Install Referrer carries invite_CODE into the app.
+    // iOS store button / redirect still use APP_STORE_URL with no referrer.
+    androidStoreUrl: buildPlayStoreInviteUrl(normalized),
   });
 }

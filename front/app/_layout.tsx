@@ -514,6 +514,20 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async () => {
+      // Android deferred invite: park Install Referrer code before any claim.
+      // 2s cap so Play Store API stalls never block first paint / auth.
+      try {
+        const { checkDeferredReferral } = await import('../utils/deferredReferral');
+        await Promise.race([
+          checkDeferredReferral(),
+          new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+        ]);
+      } catch (err) {
+        logger.debug('[PreloadInitializer] Deferred referral check skipped:', err);
+      }
+
+      if (cancelled) return;
+
       // Fix 4: fire-and-forget — don't block on server wakeup
       try {
         const { serverWakeupService } = await import('../services/serverWakeup.service');

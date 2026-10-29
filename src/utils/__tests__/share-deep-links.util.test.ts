@@ -30,6 +30,7 @@ import {
   buildReferralLandingPage,
   buildReelLandingPage,
   buildProfileLandingPage,
+  buildPlayStoreInviteUrl,
   PLAY_STORE_URL,
   APP_STORE_URL,
 } from '../share-landing-pages';
@@ -143,18 +144,27 @@ describe('referral landing page — the app-is-not-installed path', () => {
     expect(html).toContain('90plus.pro/invite/AB23CD');
   });
 
-  it('falls back to the Play Store, not back to itself', () => {
+  it('falls back to the Play Store with an invite referrer, not back to itself', () => {
     const fallback = /browser_fallback_url=([^;]+);/.exec(html)?.[1] ?? '';
-    expect(decodeURIComponent(fallback)).toBe(PLAY_STORE_URL);
+    const decoded = decodeURIComponent(fallback);
+    expect(decoded).toBe(buildPlayStoreInviteUrl('AB23CD'));
+    expect(decoded).toContain('referrer=invite_AB23CD');
     // The bounce that used to happen: fallback pointing at this same page.
-    expect(decodeURIComponent(fallback)).not.toContain('/invite/');
+    expect(decoded).not.toContain('/invite/');
   });
 
   it('sends phones without the app to their platform store', () => {
     expect(html).toContain(`var appStoreUrl = ${JSON.stringify(APP_STORE_URL)}`);
-    expect(html).toContain(`var playStoreUrl = ${JSON.stringify(PLAY_STORE_URL)}`);
+    expect(html).toContain(
+      `var playStoreUrl = ${JSON.stringify(buildPlayStoreInviteUrl('AB23CD'))}`,
+    );
     expect(html).toContain('window.location.replace(storeUrl)');
     expect(html).toContain('function goToStore()');
+  });
+
+  it('omits the referrer when the code is invalid', () => {
+    expect(buildPlayStoreInviteUrl('BAD!!!')).toBe(PLAY_STORE_URL);
+    expect(buildPlayStoreInviteUrl('AB0O1D')).toBe(PLAY_STORE_URL);
   });
 
   it('detects iPadOS, which reports itself as a Mac', () => {
@@ -170,7 +180,6 @@ describe('the other share landing pages keep the same store fallback', () => {
   const pages: Array<[string, string]> = [
     ['reel', buildReelLandingPage('11111111-2222-3333-4444-555555555555')],
     ['profile', buildProfileLandingPage('omar')],
-    ['referral', buildReferralLandingPage('AB23CD')],
   ];
 
   it.each(pages)('%s page never loops back to itself', (_name, html) => {
@@ -180,6 +189,13 @@ describe('the other share landing pages keep the same store fallback', () => {
 
   it.each(pages)('%s page offers both stores as a last resort', (_name, html) => {
     expect(html).toContain(PLAY_STORE_URL);
+    expect(html).toContain(APP_STORE_URL);
+  });
+
+  it('referral page still offers Play + App Store (Play carries referrer)', () => {
+    const html = buildReferralLandingPage('AB23CD');
+    expect(html).toContain(PLAY_STORE_URL);
+    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
     expect(html).toContain(APP_STORE_URL);
   });
 });

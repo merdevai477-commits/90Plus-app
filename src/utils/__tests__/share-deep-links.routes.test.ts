@@ -27,7 +27,11 @@ import {
   ANDROID_PACKAGE_NAME,
   ANDROID_RELEASE_SHA256,
 } from '../../config/androidAppLinks';
-import { PLAY_STORE_URL, APP_STORE_URL } from '../share-landing-pages';
+import {
+  PLAY_STORE_URL,
+  APP_STORE_URL,
+  buildPlayStoreInviteUrl,
+} from '../share-landing-pages';
 
 /**
  * The same mounting ORDER src/main.ts uses. Order is the thing under test as
@@ -173,7 +177,8 @@ describe('GET /invite/:code — the web fallback', () => {
     const html = await (await get('/invite/AB23CD')).text();
     const fallback = decodeURIComponent(/browser_fallback_url=([^;]+);/.exec(html)?.[1] ?? '');
 
-    expect(fallback).toBe(PLAY_STORE_URL);
+    expect(fallback).toBe(buildPlayStoreInviteUrl('AB23CD'));
+    expect(fallback.startsWith(PLAY_STORE_URL)).toBe(true);
     expect(html).toContain(APP_STORE_URL);
   });
 
