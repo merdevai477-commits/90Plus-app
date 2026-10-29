@@ -18,6 +18,8 @@ import {
   CK_COACH_PRICE_MILLI,
   CK_EMPTY_STATS,
   CK_PLAYER_CAP_MILLI,
+  CK_PLAYER_FLOOR_MILLI,
+  CK_PRICE_TIERS_MILLI,
   ckClubTier,
   ckCoachPrice,
   ckParseStatValue,
@@ -182,17 +184,25 @@ export async function ensureCoachKingPool(): Promise<void> {
   await runSync();
 }
 
-/** Reprice once per gameweek, and again immediately when stored prices still use an old cap. */
+/** Reprice once per gameweek, and again immediately when stored prices still use an old ladder. */
 export async function refreshCoachKingPoolIfStale(now: Date = new Date()): Promise<void> {
   if (Date.now() - lastStaleCheck < 10 * 60_000) return;
   lastStaleCheck = Date.now();
-  const [latest, overCap, coachOff] = await Promise.all([
+  const [latest, overCap, offTier, coachOff, topPrice] = await Promise.all([
     prisma.coachKingPlayer.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
     prisma.coachKingPlayer.count({ where: { active: true, priceMilli: { gt: CK_PLAYER_CAP_MILLI } } }),
+    prisma.coachKingPlayer.count({
+      where: { active: true, priceMilli: { notIn: [...CK_PRICE_TIERS_MILLI] } },
+    }),
     prisma.coachKingCoach.count({ where: { active: true, priceMilli: { not: CK_COACH_PRICE_MILLI } } }),
+    prisma.coachKingPlayer.aggregate({
+      where: { active: true },
+      _max: { priceMilli: true },
+    }),
   ]);
   const weekFresh = latest != null && latest.updatedAt >= tsfGameweekWindow(now).startAt;
-  if (weekFresh && overCap === 0 && coachOff === 0) return;
+  const capMissing = (topPrice._max.priceMilli ?? 0) < CK_PLAYER_CAP_MILLI;
+  if (weekFresh && overCap === 0 && offTier === 0 && coachOff === 0 && !capMissing) return;
   await runSync();
 }
 
@@ -248,7 +258,7 @@ export async function syncCoachKingPool(): Promise<{ players: number; coaches: n
       position,
       line,
       shirtNumber: player.jerseyNumber ?? twin?.jerseyNumber ?? null,
-      priceMilli: prices.get(player.athleteId) ?? 45,
+      priceMilli: prices.get(player.athleteId) ?? CK_PLAYER_FLOOR_MILLI,
       active: true,
     };
     try {

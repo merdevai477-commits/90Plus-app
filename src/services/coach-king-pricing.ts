@@ -1,23 +1,36 @@
 /**
  * King of Coaches prices from real season numbers. Output (goals, assists,
  * expected stats, defensive work) is ranked inside each line, mixed with the
- * 365 rating and the club's table position, then scaled so the best player of
- * a line sits on that line's ceiling. Prices are tenths of a million.
+ * 365 rating and the club's table position, then snapped to the public tiers:
+ * 5M / 8M / 13M. Prices are tenths of a million.
  */
 
 import type { CkLine, CkPriceKind } from './coach-king-scoring';
 
-/** 12M. The best player of a line sits on this cap; that player is the super. */
-export const CK_PLAYER_CAP_MILLI = 120;
+/** 13M. The best player of a line sits on this cap; that player is the super. */
+export const CK_PLAYER_CAP_MILLI = 130;
+
+/** Budget floor shared with head coaches. */
+export const CK_PLAYER_FLOOR_MILLI = 50;
+
+/** Mid tier — solid starters between the floor and the ceiling. */
+export const CK_PLAYER_MID_MILLI = 80;
+
+/** Public player price ladder: 5M / 8M / 13M. */
+export const CK_PRICE_TIERS_MILLI = [
+  CK_PLAYER_FLOOR_MILLI,
+  CK_PLAYER_MID_MILLI,
+  CK_PLAYER_CAP_MILLI,
+] as const;
 
 /** Every head coach costs 5M, independent of table position. */
-export const CK_COACH_PRICE_MILLI = 50;
+export const CK_COACH_PRICE_MILLI = CK_PLAYER_FLOOR_MILLI;
 
 export const CK_PRICE_BANDS: Record<CkPriceKind, readonly [number, number]> = {
-  FWD: [45, CK_PLAYER_CAP_MILLI],
-  MID: [45, CK_PLAYER_CAP_MILLI],
-  DEF: [40, CK_PLAYER_CAP_MILLI],
-  GK: [40, 100],
+  FWD: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
+  MID: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
+  DEF: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
+  GK: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
   COACH: [CK_COACH_PRICE_MILLI, CK_COACH_PRICE_MILLI],
 };
 
@@ -104,9 +117,25 @@ function percentiles(values: number[]): number[] {
   });
 }
 
+/**
+ * Map a 0–1 line score onto 5 / 8 / 13 (kept for tests / callers that score one pick).
+ * Pool pricing uses rank bands inside each line instead.
+ */
 export function ckPriceFromScore(kind: CkPriceKind, score: number): number {
-  const [lo, hi] = CK_PRICE_BANDS[kind];
-  return Math.round(lo + (hi - lo) * Math.pow(clamp01(score), 1.4));
+  if (kind === 'COACH') return CK_COACH_PRICE_MILLI;
+  const t = clamp01(score);
+  if (t >= 0.7) return CK_PLAYER_CAP_MILLI;
+  if (t >= 0.32) return CK_PLAYER_MID_MILLI;
+  return CK_PLAYER_FLOOR_MILLI;
+}
+
+function ckTierForRank(index: number, size: number): number {
+  if (size <= 0) return CK_PLAYER_FLOOR_MILLI;
+  const elite = Math.max(1, Math.round(size * 0.012));
+  const mid = Math.max(elite, Math.round(size * 0.18));
+  if (index < elite) return CK_PLAYER_CAP_MILLI;
+  if (index < mid) return CK_PLAYER_MID_MILLI;
+  return CK_PLAYER_FLOOR_MILLI;
 }
 
 /** Price every player of the pool in one pass so lines rank against themselves. */
@@ -117,15 +146,18 @@ export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
     const group = inputs.filter((input) => input.line === line);
     if (group.length === 0) continue;
     const output = percentiles(group.map((input) => ckOutput(line, input.stats)));
-    const raw = group.map((input, index) =>
-      0.4 * output[index]! +
-      0.3 * ratingScore(input.stats.rating) +
-      0.2 * clamp01(input.clubTier) +
-      0.1 * (input.star ? 1 : 0),
-    );
-    const best = Math.max(...raw);
-    group.forEach((input, index) => {
-      prices.set(input.key, ckPriceFromScore(line, best > 0 ? raw[index]! / best : 0));
+    const ranked = group
+      .map((input, index) => ({
+        key: input.key,
+        score:
+          0.4 * output[index]! +
+          0.3 * ratingScore(input.stats.rating) +
+          0.2 * clamp01(input.clubTier) +
+          0.1 * (input.star ? 1 : 0),
+      }))
+      .sort((a, b) => b.score - a.score || a.key - b.key);
+    ranked.forEach((row, index) => {
+      prices.set(row.key, ckTierForRank(index, ranked.length));
     });
   }
   return prices;

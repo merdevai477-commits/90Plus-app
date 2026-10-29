@@ -1,9 +1,14 @@
 import {
   CK_EMPTY_STATS,
+  CK_PLAYER_CAP_MILLI,
+  CK_PLAYER_FLOOR_MILLI,
+  CK_PLAYER_MID_MILLI,
   CK_PRICE_BANDS,
+  CK_PRICE_TIERS_MILLI,
   ckClubTier,
   ckCoachPrice,
   ckParseStatValue,
+  ckPriceFromScore,
   ckPricePool,
   type CkPriceInput,
 } from '../coach-king-pricing';
@@ -13,21 +18,28 @@ function fwd(key: number, goals: number, rating: number | null, clubTier = 0.5, 
 }
 
 describe('coach king pricing', () => {
-  it('puts only the best forward on the 12M ceiling and ranks the rest by output', () => {
-    const prices = ckPricePool([
-      fwd(1, 14, 8.1, 1, true),
-      fwd(2, 6, 7.2, 0.8),
-      fwd(3, 2, 6.6, 0.3),
-      fwd(4, 0, null, 0.1),
-    ]);
-    expect(prices.get(1)).toBe(120);
-    expect(prices.get(2)!).toBeLessThan(120);
-    expect(prices.get(2)!).toBeGreaterThan(prices.get(3)!);
-    expect(prices.get(3)!).toBeGreaterThan(prices.get(4)!);
-    expect(prices.get(4)!).toBeGreaterThanOrEqual(CK_PRICE_BANDS.FWD[0]);
+  it('puts the best forward on 13M and fills the 5/8/13 ladder by rank', () => {
+    const inputs = Array.from({ length: 100 }, (_, index) =>
+      fwd(index + 1, Math.max(0, 20 - index), 8 - index * 0.02, 1 - index / 100, index < 3),
+    );
+    const prices = ckPricePool(inputs);
+    expect(prices.get(1)).toBe(CK_PLAYER_CAP_MILLI);
+    expect(prices.get(2)).toBe(CK_PLAYER_MID_MILLI);
+    expect(prices.get(18)).toBe(CK_PLAYER_MID_MILLI);
+    expect(prices.get(19)).toBe(CK_PLAYER_FLOOR_MILLI);
+    expect(prices.get(100)).toBe(CK_PLAYER_FLOOR_MILLI);
+    for (const price of prices.values()) {
+      expect(CK_PRICE_TIERS_MILLI).toContain(price);
+    }
+    const elite = [...prices.values()].filter((price) => price === CK_PLAYER_CAP_MILLI).length;
+    const mid = [...prices.values()].filter((price) => price === CK_PLAYER_MID_MILLI).length;
+    const budget = [...prices.values()].filter((price) => price === CK_PLAYER_FLOOR_MILLI).length;
+    expect(elite).toBe(1);
+    expect(mid).toBe(17);
+    expect(budget).toBe(82);
   });
 
-  it('keeps each line inside its own band', () => {
+  it('keeps each line inside the 5/8/13 ladder', () => {
     const prices = ckPricePool([
       { key: 1, line: 'GK', stats: { ...CK_EMPTY_STATS, cleanSheets: 5, saves: 3, rating: 7.4 }, clubTier: 1, star: true },
       { key: 2, line: 'DEF', stats: { ...CK_EMPTY_STATS, tackles: 2, interceptions: 2, rating: 7.5 }, clubTier: 1, star: true },
@@ -36,12 +48,24 @@ describe('coach king pricing', () => {
     expect(prices.get(1)).toBe(CK_PRICE_BANDS.GK[1]);
     expect(prices.get(2)).toBe(CK_PRICE_BANDS.DEF[1]);
     expect(prices.get(3)).toBe(CK_PRICE_BANDS.MID[1]);
-    for (const price of prices.values()) expect(price).toBeLessThanOrEqual(120);
+    for (const price of prices.values()) {
+      expect(price).toBeLessThanOrEqual(CK_PLAYER_CAP_MILLI);
+      expect(CK_PRICE_TIERS_MILLI).toContain(price);
+    }
+  });
+
+  it('maps score bands onto 5M / 8M / 13M', () => {
+    expect(ckPriceFromScore('FWD', 1)).toBe(CK_PLAYER_CAP_MILLI);
+    expect(ckPriceFromScore('FWD', 0.7)).toBe(CK_PLAYER_CAP_MILLI);
+    expect(ckPriceFromScore('FWD', 0.5)).toBe(CK_PLAYER_MID_MILLI);
+    expect(ckPriceFromScore('FWD', 0.32)).toBe(CK_PLAYER_MID_MILLI);
+    expect(ckPriceFromScore('FWD', 0.1)).toBe(CK_PLAYER_FLOOR_MILLI);
+    expect(ckPriceFromScore('COACH', 1)).toBe(CK_PLAYER_FLOOR_MILLI);
   });
 
   it('prices every coach at 5M and reads 365 stat strings', () => {
-    expect(ckCoachPrice(ckClubTier(1, 20))).toBe(50);
-    expect(ckCoachPrice(ckClubTier(20, 20))).toBe(50);
+    expect(ckCoachPrice(ckClubTier(1, 20))).toBe(CK_PLAYER_FLOOR_MILLI);
+    expect(ckCoachPrice(ckClubTier(20, 20))).toBe(CK_PLAYER_FLOOR_MILLI);
     expect(ckCoachPrice()).toBe(CK_PRICE_BANDS.COACH[0]);
     expect(ckClubTier(null, 20)).toBe(0.5);
     expect(ckParseStatValue('7.7')).toBe(7.7);

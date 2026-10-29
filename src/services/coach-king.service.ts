@@ -27,7 +27,12 @@ import {
   tsfGameweekWindow,
   tsfPortraitUrl,
 } from './top-scorers-five-scoring';
-import { CK_LIST_CACHE_PREFIX, ensureCoachKingPool, refreshCoachKingPoolIfStale } from './coach-king-pool.service';
+import {
+  CK_LIST_CACHE_PREFIX,
+  ensureCoachKingPool,
+  refreshCoachKingPoolIfStale,
+  syncCoachKingPool,
+} from './coach-king-pool.service';
 import { redisCacheService } from './redis-cache.service';
 
 export type CkErrorCode =
@@ -823,6 +828,57 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
   return {
     all: ranked([...rows], (row) => row.points),
     week: ranked(rows.filter((row) => row.inWeek), (row) => row.weekPoints),
+  };
+}
+
+/**
+ * Full competition restart: wipe squads / scores / weeks, reset wallets to 100M,
+ * reprice the pool on the 5/8/13 ladder, and open a fresh gameweek.
+ */
+export async function resetCoachKingCompetition(now: Date = new Date()): Promise<{
+  gameweekId: string;
+  weekKey: string;
+  wallets: number;
+  pool: { players: number; coaches: number };
+}> {
+  await ensureCoachKingSchema();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.coachKingPerformance.deleteMany();
+    await tx.coachKingCoachScore.deleteMany();
+    await tx.coachKingSquadSlot.deleteMany();
+    await tx.coachKingSquad.deleteMany();
+    await tx.coachKingFixture.deleteMany();
+    await tx.coachKingGameweek.deleteMany();
+    await tx.coachKingWallet.updateMany({ data: { balanceMilli: CK_START_BALANCE_MILLI } });
+  });
+
+  invalidateBoard();
+  await redisCacheService.delPattern(`${CK_LIST_CACHE_PREFIX}*`).catch(() => undefined);
+
+  const pool = await syncCoachKingPool();
+  const gameweek = await ensureCoachKingGameweek(now);
+  // Keep the fresh season OPEN for building squads; clubs that already played
+  // this window are still blocked per pick via MATCH_STARTED.
+  await prisma.coachKingGameweek.update({
+    where: { id: gameweek.id },
+    data: {
+      status: 'OPEN',
+      settledAt: null,
+      completedAt: null,
+      lockAt: gameweek.endAt,
+    },
+  });
+
+  const wallets = await prisma.coachKingWallet.count();
+  logger.info(
+    `[CoachKing] competition reset week=${gameweek.weekKey} wallets=${wallets} players=${pool.players} coaches=${pool.coaches}`,
+  );
+  return {
+    gameweekId: gameweek.id,
+    weekKey: gameweek.weekKey,
+    wallets,
+    pool,
   };
 }
 

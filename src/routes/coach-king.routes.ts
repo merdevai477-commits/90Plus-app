@@ -18,6 +18,7 @@ import {
   listCoachKingPlayers,
   pickCoachKingCoach,
   pickCoachKingSlot,
+  resetCoachKingCompetition,
 } from '../services/coach-king.service';
 import { syncCoachKingPool } from '../services/coach-king-pool.service';
 import { processCoachKing } from '../services/coach-king-processing.service';
@@ -151,6 +152,10 @@ router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) =
 
 router.post('/admin/sync', requireAuth, requireAdmin, handle('sync', async (_req, res) => {
   res.json({ success: true, data: await syncCoachKingPool() });
+}));
+
+router.post('/admin/reset', requireAuth, requireAdmin, handle('reset', async (_req, res) => {
+  res.json({ success: true, data: await resetCoachKingCompetition() });
 }));
 
 router.post('/admin/process', requireAuth, requireAdmin, handle('process', async (_req, res) => {

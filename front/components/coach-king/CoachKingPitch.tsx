@@ -121,7 +121,10 @@ const SlotCard = memo(function SlotCard({ slotKey, slot, s, readOnly, closed, fo
   const face = s(52);
   return (
     <Pressable
-      style={{ width: cardW, height: s(80) + face / 2, alignItems: 'center' }}
+      style={({ pressed }) => [
+        { width: cardW, height: s(80) + face / 2, alignItems: 'center' },
+        pressed && !readOnly ? { opacity: 0.88, transform: [{ scale: 0.97 }] } : null,
+      ]}
       onPress={() => onPress?.(slotKey)}
       disabled={readOnly || !onPress || (closed && !locked)}
       testID={`ck-slot-${slotKey}`}
