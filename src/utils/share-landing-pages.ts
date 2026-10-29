@@ -196,13 +196,20 @@ function buildStoreRedirectScript(
 function storeButtonsHtml(
   openAppHref: string,
   androidStoreHref: string = PLAY_STORE_URL,
+  /**
+   * When set (valid iOS invite clipboard flow), the App Store control must not
+   * navigate via a real store href before JS wires copy-then-navigate.
+   */
+  iosStoreHref: string = APP_STORE_URL,
 ): string {
   const safeHref = openAppHref.replace(/"/g, '&quot;');
   const safeAndroid = androidStoreHref.replace(/"/g, '&quot;');
+  const safeIos = iosStoreHref.replace(/"/g, '&quot;');
+  const iosLabel = iosStoreHref === '#' ? 'تحميل التطبيق' : 'حمّل من App Store';
   return `
       <a class="btn primary" id="open-app" href="${safeHref}">افتح في التطبيق</a>
       <a class="btn secondary store-btn" id="store-android" href="${safeAndroid}">حمّل من Google Play</a>
-      <a class="btn secondary store-btn" id="store-ios" href="${APP_STORE_URL}">حمّل من App Store</a>
+      <a class="btn secondary store-btn" id="store-ios" href="${safeIos}">${iosLabel}</a>
   `;
 }
 
@@ -234,6 +241,11 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
   const androidStoreUrl = options.androidStoreUrl ?? PLAY_STORE_URL;
   const intentUrl = buildAndroidIntentUrl(options.deepPath, androidStoreUrl);
   const iosInviteClipboardPayload = options.iosInviteClipboardPayload ?? null;
+  // Valid invite on iOS: href="#" so a pre-JS tap cannot skip clipboard copy.
+  const iosStoreHref = iosInviteClipboardPayload ? '#' : APP_STORE_URL;
+  const noscriptAppStore = iosInviteClipboardPayload
+    ? `<noscript><p><a class="btn primary" href="${APP_STORE_URL}">حمّل من App Store</a></p></noscript>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -254,7 +266,8 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
     </div>
     <div class="download">
       <p>${options.downloadText}</p>
-      ${storeButtonsHtml(options.customSchemeUrl, androidStoreUrl)}
+      ${storeButtonsHtml(options.customSchemeUrl, androidStoreUrl, iosStoreHref)}
+      ${noscriptAppStore}
     </div>
   </div>
   <script>

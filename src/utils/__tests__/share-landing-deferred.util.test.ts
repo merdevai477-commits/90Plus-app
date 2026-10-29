@@ -48,6 +48,15 @@ describe('buildReferralLandingPage — deferred payloads', () => {
     expect(html).toContain('تحميل التطبيق');
   });
 
+  it('iOS valid code: store button has href="#" before JS; noscript has plain App Store URL', () => {
+    expect(html).toMatch(/id="store-ios" href="#"/);
+    expect(html).toContain(`<noscript><p><a class="btn primary" href="${APP_STORE_URL}">`);
+    // Must not expose a real App Store href on #store-ios before JS
+    expect(html).not.toMatch(
+      new RegExp(`id="store-ios" href="${APP_STORE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`),
+    );
+  });
+
   it('keeps platform guards (Android intent path vs iOS clipboard path)', () => {
     expect(html).toContain('if (isAndroid)');
     expect(html).toContain('if (isIOS)');
@@ -71,5 +80,9 @@ describe('buildReferralLandingPage — deferred payloads', () => {
     expect(bad).toContain('var iosInvitePayload = null');
     expect(bad).toContain(`var playStoreUrl = ${JSON.stringify(PLAY_STORE_URL)}`);
     expect(bad).not.toContain('90plus-invite:AB0O1D');
+    expect(bad).toMatch(
+      new RegExp(`id="store-ios" href="${APP_STORE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`),
+    );
+    expect(bad).not.toContain('<noscript>');
   });
 });

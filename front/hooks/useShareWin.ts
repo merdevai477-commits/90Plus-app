@@ -26,6 +26,7 @@ import { useTranslation } from '../src/i18n';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { logger } from '../utils/logger';
 import { confirmExternalShare, isCopyShareActivity, watchShareHandoff } from '../utils/confirmExternalShare';
+import { ensureDeferredReferralSettled } from '../utils/deferredReferral';
 import {
   clearPendingReferral,
   getPendingReferral,
@@ -184,6 +185,9 @@ export async function redeemPendingReferral(
   getTokenFn: Parameters<typeof getClerkBearerToken>[0],
 ): Promise<boolean> {
   try {
+    // Wait for Android Install Referrer / iOS clipboard park before reading.
+    await ensureDeferredReferralSettled();
+
     if (await hasClaimedReferral()) return false;
 
     const code = await getPendingReferral();

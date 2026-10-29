@@ -507,6 +507,16 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     getTokenRef.current = getToken;
   }, [getToken]);
 
+  // Start deferred invite capture immediately — do NOT wait for InteractionManager
+  // or the 1500ms preload delay (those still apply to other boot work below).
+  useEffect(() => {
+    void import('../utils/deferredReferral')
+      .then(({ ensureDeferredReferralSettled }) => ensureDeferredReferralSettled())
+      .catch((err) =>
+        logger.debug('[PreloadInitializer] Deferred referral boot skipped:', err),
+      );
+  }, []);
+
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -514,21 +524,19 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async () => {
-      // Deferred invite (Android Install Referrer / iOS clipboard) before any claim.
-      // Time-box Android only — iOS may wait on the paste permission prompt.
+      // Soft-wait Android Install Referrer up to 2s so other preload can proceed;
+      // redeem still awaits the full shared settle (hard cap 5s / 30s iOS).
       try {
         const { Platform } = await import('react-native');
-        const { checkDeferredReferral } = await import('../utils/deferredReferral');
+        const { ensureDeferredReferralSettled } = await import('../utils/deferredReferral');
         if (Platform.OS === 'android') {
           await Promise.race([
-            checkDeferredReferral(),
+            ensureDeferredReferralSettled(),
             new Promise<void>((resolve) => setTimeout(resolve, 2000)),
           ]);
-        } else {
-          await checkDeferredReferral();
         }
       } catch (err) {
-        logger.debug('[PreloadInitializer] Deferred referral check skipped:', err);
+        logger.debug('[PreloadInitializer] Deferred referral soft-wait skipped:', err);
       }
 
       if (cancelled) return;
@@ -588,6 +596,8 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
          */
         if (!cancelled) {
           try {
+            const { ensureDeferredReferralSettled } = await import('../utils/deferredReferral');
+            await ensureDeferredReferralSettled();
             const { redeemPendingReferral } = await import('../hooks/useShareWin');
             await redeemPendingReferral(getTokenRef.current);
           } catch (e) {

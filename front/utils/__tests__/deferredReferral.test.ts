@@ -8,15 +8,32 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
 
-import { checkDeferredReferral } from '../deferredReferral';
+import {
+  ANDROID_DEFERRED_HARD_MS,
+  __resetDeferredReferralForTests,
+  checkDeferredReferral,
+  ensureDeferredReferralSettled,
+} from '../deferredReferral';
 import {
   capturePendingReferral,
   getPendingReferral,
   clearPendingReferral,
 } from '../pendingReferral';
+import { redeemPendingReferral } from '../../hooks/useShareWin';
+import { claimReferralCode } from '../../services/shareWin.service';
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
+  Share: { share: jest.fn(), sharedAction: 'sharedAction' },
+}));
+
+jest.mock('@clerk/clerk-expo', () => ({
+  useAuth: () => ({ getToken: jest.fn(), isSignedIn: false, isLoaded: true }),
+}));
+
+jest.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: null, isLoading: false, isError: false, isRefetching: false, refetch: jest.fn() }),
+  useQueryClient: () => ({ invalidateQueries: jest.fn() }),
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -48,8 +65,40 @@ jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn(async () => true),
 }));
 
+jest.mock('../../services/shareWin.service', () => ({
+  claimReferralCode: jest.fn(),
+  fetchShareWinOverview: jest.fn(),
+  recordShareEvent: jest.fn(),
+}));
+
+jest.mock('../../services/appShare.service', () => ({
+  claimAppShareReward: jest.fn(),
+}));
+
+jest.mock('../../contexts/XpContext', () => ({
+  useXp: () => ({ handleXpEvents: jest.fn(), refresh: jest.fn() }),
+}));
+
+jest.mock('../../src/i18n', () => ({
+  useTranslation: () => ({ t: {}, language: 'ar' }),
+}));
+
+jest.mock('../../utils/clerkAuthToken', () => ({
+  getClerkBearerToken: jest.fn(async (fn: () => Promise<string | null>) => fn()),
+}));
+
 jest.mock('../logger', () => ({
   logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
+}));
+
+jest.mock('../../services/toastManager', () => ({
+  toastManager: { showSuccess: jest.fn(), showError: jest.fn() },
+}));
+
+jest.mock('../confirmExternalShare', () => ({
+  confirmExternalShare: jest.fn(),
+  isCopyShareActivity: jest.fn(),
+  watchShareHandoff: () => ({ didLeave: () => false, stop: jest.fn() }),
 }));
 
 const storage = AsyncStorage as unknown as { __reset: () => void };
@@ -57,11 +106,18 @@ const getReferrer = Application.getInstallReferrerAsync as jest.Mock;
 const hasString = Clipboard.hasStringAsync as jest.Mock;
 const getString = Clipboard.getStringAsync as jest.Mock;
 const setString = Clipboard.setStringAsync as jest.Mock;
+const claim = claimReferralCode as jest.Mock;
 
 beforeEach(() => {
   storage.__reset();
+  __resetDeferredReferralForTests();
   jest.clearAllMocks();
+  jest.useRealTimers();
   (Platform as { OS: string }).OS = 'android';
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('checkDeferredReferral — Android', () => {
@@ -165,7 +221,6 @@ describe('checkDeferredReferral — iOS', () => {
     getString.mockResolvedValue('90plus-invite:AB23CD');
     await checkDeferredReferral();
     await expect(getPendingReferral()).resolves.toBe('ZZ99YY');
-    // Matched pattern still clears clipboard after capture attempt
     expect(setString).toHaveBeenCalledWith('');
   });
 
@@ -175,5 +230,79 @@ describe('checkDeferredReferral — iOS', () => {
     getString.mockResolvedValue('90plus-invite:AB23CD');
     await checkDeferredReferral();
     await expect(getPendingReferral()).resolves.toBeNull();
+  });
+});
+
+describe('ensureDeferredReferralSettled + redeemPendingReferral races', () => {
+  const getToken = async () => 'test-token';
+
+  it('Android: redeem waits for a slow Install Referrer before claiming', async () => {
+    let resolveReferrer!: (v: string) => void;
+    getReferrer.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveReferrer = resolve;
+        }),
+    );
+    claim.mockResolvedValue({ attributed: true, reason: 'attributed' });
+
+    // Kick settle + redeem before referrer resolves
+    const redeemPromise = redeemPendingReferral(getToken);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(claim).not.toHaveBeenCalled();
+
+    resolveReferrer('invite_AB23CD');
+    await expect(redeemPromise).resolves.toBe(true);
+    expect(claim).toHaveBeenCalledWith('test-token', 'AB23CD');
+  });
+
+  it('iOS: redeem waits for a slow clipboard read before claiming', async () => {
+    (Platform as { OS: string }).OS = 'ios';
+    hasString.mockResolvedValue(true);
+    let resolveClip!: (v: string) => void;
+    getString.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveClip = resolve;
+        }),
+    );
+    claim.mockResolvedValue({ attributed: true, reason: 'attributed' });
+
+    const redeemPromise = redeemPendingReferral(getToken);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(claim).not.toHaveBeenCalled();
+
+    resolveClip('90plus-invite:AB23CD');
+    await expect(redeemPromise).resolves.toBe(true);
+    expect(claim).toHaveBeenCalledWith('test-token', 'AB23CD');
+  });
+
+  it('Android: referrer throw does not hang redeem and does not set the flag', async () => {
+    getReferrer.mockRejectedValue(new Error('Play unavailable'));
+    claim.mockResolvedValue({ attributed: true, reason: 'attributed' });
+
+    await expect(redeemPendingReferral(getToken)).resolves.toBe(false);
+    expect(claim).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getItem('@90plus:deferred_referral_checked')).toBeNull();
+  });
+
+  it('Android: never-resolving referrer proceeds after the hard cap (fake timers)', async () => {
+    jest.useFakeTimers();
+    getReferrer.mockImplementation(() => new Promise(() => undefined));
+    claim.mockResolvedValue({ attributed: true, reason: 'attributed' });
+
+    const redeemPromise = redeemPendingReferral(getToken);
+    await jest.advanceTimersByTimeAsync(ANDROID_DEFERRED_HARD_MS);
+    await expect(redeemPromise).resolves.toBe(false);
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it('ensureDeferredReferralSettled is idempotent', async () => {
+    getReferrer.mockResolvedValue('invite_AB23CD');
+    const a = ensureDeferredReferralSettled();
+    const b = ensureDeferredReferralSettled();
+    expect(a).toBe(b);
+    await a;
+    await expect(getPendingReferral()).resolves.toBe('AB23CD');
   });
 });
