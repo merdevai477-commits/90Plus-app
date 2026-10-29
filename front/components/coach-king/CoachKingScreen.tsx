@@ -385,14 +385,8 @@ export default function CoachKingScreen() {
           <CoachKingBoard
             entries={board}
             isAr={isAr}
-            copy={{
-              title: copy.rankingTitle,
-              prizeLabel: copy.prizeLabel,
-              prizeName: copy.prizeName,
-              prizeSubtitle: copy.prizeSubtitle,
-              you: copy.you,
-              xp: copy.xp,
-            }}
+            youLabel={copy.you}
+            xpLabel={copy.xp}
             periodTabs={(
               <KingPeriodTabs
                 period={period}

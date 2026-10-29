@@ -4014,7 +4014,7 @@ export const en = {
     },
     level: 'Lv.',
     week: 'This week',
-    all: 'Overall',
+    all: 'All',
     noRanking: 'No ranking yet',
     noMatches: 'No matches for this lineup this week',
     boardPlayer: 'Coach',
