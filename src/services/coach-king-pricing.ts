@@ -129,35 +129,66 @@ export function ckPriceFromScore(kind: CkPriceKind, score: number): number {
   return CK_PLAYER_FLOOR_MILLI;
 }
 
-function ckTierForRank(index: number, size: number): number {
-  if (size <= 0) return CK_PLAYER_FLOOR_MILLI;
-  const elite = Math.max(1, Math.round(size * 0.012));
-  const mid = Math.max(elite, Math.round(size * 0.18));
-  if (index < elite) return CK_PLAYER_CAP_MILLI;
-  if (index < mid) return CK_PLAYER_MID_MILLI;
-  return CK_PLAYER_FLOOR_MILLI;
-}
-
-/** Price every player of the pool in one pass so lines rank against themselves. */
+/**
+ * Price every player of the pool in one pass so lines rank against themselves.
+ * Season output (goals/assists/defence) dominates — no empty-stat fringe player
+ * can sit above Haaland/Mbappé on club tier alone.
+ */
 export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
   const prices = new Map<number, number>();
   const lines: CkLine[] = ['FWD', 'MID', 'DEF', 'GK'];
   for (const line of lines) {
     const group = inputs.filter((input) => input.line === line);
     if (group.length === 0) continue;
-    const output = percentiles(group.map((input) => ckOutput(line, input.stats)));
+    const rawOutput = group.map((input) => ckOutput(line, input.stats));
+    const outputPct = percentiles(rawOutput);
     const ranked = group
       .map((input, index) => ({
         key: input.key,
+        star: input.star,
+        clubTier: clamp01(input.clubTier),
+        output: rawOutput[index]!,
+        outputPct: outputPct[index]!,
         score:
-          0.4 * output[index]! +
-          0.3 * ratingScore(input.stats.rating) +
-          0.2 * clamp01(input.clubTier) +
-          0.1 * (input.star ? 1 : 0),
+          0.62 * outputPct[index]! +
+          0.2 * ratingScore(input.stats.rating) +
+          0.1 * clamp01(input.clubTier) +
+          0.08 * (input.star ? 1 : 0),
       }))
-      .sort((a, b) => b.score - a.score || a.key - b.key);
-    ranked.forEach((row, index) => {
-      prices.set(row.key, ckTierForRank(index, ranked.length));
+      .sort((a, b) => b.score - a.score || b.output - a.output || a.key - b.key);
+
+    const eliteSlots = Math.max(1, Math.round(group.length * 0.02));
+    const midSlots = Math.max(eliteSlots, Math.round(group.length * 0.2));
+    let elites = 0;
+    let mids = 0;
+
+    ranked.forEach((row) => {
+      // Curated big-club stars (Haaland, Mbappé, …) always sit on the ceiling.
+      if (row.star && row.clubTier >= 0.8) {
+        prices.set(row.key, CK_PLAYER_CAP_MILLI);
+        return;
+      }
+      // Other 13M spots: real producers from respectable clubs only.
+      if (
+        elites < eliteSlots
+        && row.output > 0
+        && row.outputPct >= 0.85
+        && row.clubTier >= 0.45
+      ) {
+        elites += 1;
+        prices.set(row.key, CK_PLAYER_CAP_MILLI);
+        return;
+      }
+      // 8M for solid output, curated stars, or strong rating/club mix.
+      if (
+        row.star
+        || (mids < midSlots && (row.output > 0 || row.score >= 0.45))
+      ) {
+        mids += 1;
+        prices.set(row.key, CK_PLAYER_MID_MILLI);
+        return;
+      }
+      prices.set(row.key, CK_PLAYER_FLOOR_MILLI);
     });
   }
   return prices;

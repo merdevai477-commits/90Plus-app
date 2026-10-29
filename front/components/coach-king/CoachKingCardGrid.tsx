@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -151,13 +152,16 @@ export function CoachKingCardGrid({
   );
   const matches = useMemo(() => {
     const tokens = searchKey(query).split(' ').filter(Boolean);
-    return index.filter(({ row, haystack }) => {
-      if (league !== 'all' && row.leagueKey !== league) return false;
-      if (kind !== 'COACH' && slotKey && !coachKingSlotAccepts(slotKey, (row as CkPlayer).position)) return false;
-      if (tokens.length > 0 && !tokens.every((token) => haystack.includes(token))) return false;
-      return true;
-    }).map(({ row }) => row);
-  }, [index, query, league, kind, slotKey]);
+    return index
+      .filter(({ row, haystack }) => {
+        if (league !== 'all' && row.leagueKey !== league) return false;
+        if (kind !== 'COACH' && slotKey && !coachKingSlotAccepts(slotKey, (row as CkPlayer).position)) return false;
+        if (tokens.length > 0 && !tokens.every((token) => haystack.includes(token))) return false;
+        return true;
+      })
+      .map(({ row }) => row)
+      .sort((a, b) => b.priceMilli - a.priceMilli || a.name.localeCompare(b.name, language === 'ar' ? 'ar' : 'en'));
+  }, [index, query, league, kind, slotKey, language]);
 
   const budget = remainingMilli + refundMilli;
 
@@ -261,7 +265,7 @@ export function CoachKingCardGrid({
         {(loading || !shown) && rows.length === 0 ? <ActivityIndicator color={ACTIVE} style={{ marginTop: s(32) }} /> : null}
 
         <FlatList
-          key={kind ?? 'none'}
+          key={`${kind ?? 'none'}-${slotKey ?? 'x'}-${league}`}
           data={shown ? matches : EMPTY}
           keyExtractor={keyOf}
           renderItem={renderItem}
@@ -269,12 +273,18 @@ export function CoachKingCardGrid({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          initialNumToRender={9}
-          maxToRenderPerBatch={9}
-          windowSize={7}
-          removeClippedSubviews
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={9}
+          // Android blanks multi-column grids when this is true on large pools.
+          removeClippedSubviews={Platform.OS === 'ios'}
           columnWrapperStyle={[styles.row, { width: s(GRID_WIDTH), columnGap: s(GRID.columnGap), marginBottom: s(GRID.rowGap) }]}
-          contentContainerStyle={{ paddingTop: s(GRID.top + 7), paddingBottom: Math.max(insets.bottom, 12) + s(12) }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            alignItems: 'center',
+            paddingTop: s(GRID.top + 7),
+            paddingBottom: Math.max(insets.bottom, 12) + s(12),
+          }}
           ListEmptyComponent={loading || !shown ? null : (
             <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32) }]}>
               {query

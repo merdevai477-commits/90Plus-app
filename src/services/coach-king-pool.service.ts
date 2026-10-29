@@ -108,6 +108,23 @@ async function clubTiers(): Promise<Map<number, number>> {
   return tiers;
 }
 
+function applyBoardStats(
+  out: Map<number, CkSeasonStats>,
+  boards: Array<{ typeId?: number | null; rows: Array<{ athleteId: number; value: string | number | null }> }> | undefined,
+): void {
+  for (const board of boards ?? []) {
+    const key = ckStatKey(board.typeId);
+    if (!key) continue;
+    for (const row of board.rows) {
+      const stats = out.get(row.athleteId) ?? { ...CK_EMPTY_STATS };
+      const next = ckParseStatValue(row.value);
+      const current = stats[key];
+      stats[key] = (typeof current === 'number' ? Math.max(current, next) : next) as never;
+      out.set(row.athleteId, stats);
+    }
+  }
+}
+
 async function seasonStats(club: Club): Promise<Map<number, CkSeasonStats>> {
   const out = new Map<number, CkSeasonStats>();
   const cfg = TSF_LEAGUES[club.leagueKey];
@@ -115,16 +132,40 @@ async function seasonStats(club: Club): Promise<Map<number, CkSeasonStats>> {
   const res = await threeSixFiveScoresService
     .getCompetitorStats(club.teamId, cfg.scores365CompetitionId, 'en', { roster: true })
     .catch(() => null);
-  for (const board of res?.data?.leaderboards ?? []) {
-    const key = ckStatKey(board.typeId);
-    if (!key) continue;
-    for (const row of board.rows) {
-      const stats = out.get(row.athleteId) ?? { ...CK_EMPTY_STATS };
-      stats[key] = ckParseStatValue(row.value) as never;
-      out.set(row.athleteId, stats);
-    }
-  }
+  applyBoardStats(out, res?.data?.leaderboards);
   return out;
+}
+
+/** League-wide boards catch stars that club roster stats miss or time out on. */
+async function leagueSeasonStats(): Promise<Map<string, Map<number, CkSeasonStats>>> {
+  const out = new Map<string, Map<number, CkSeasonStats>>();
+  const keys = [...new Set(SEEDS.map(([key]) => key))];
+  await Promise.all(keys.map(async (key) => {
+    const cfg = TSF_LEAGUES[key];
+    if (!cfg) return;
+    const res = await threeSixFiveScoresService
+      .getCompetitionStats(cfg.scores365CompetitionId, 'en')
+      .catch(() => null);
+    const board = new Map<number, CkSeasonStats>();
+    applyBoardStats(board, res?.data?.leaderboards);
+    out.set(key, board);
+  }));
+  return out;
+}
+
+function mergeSeasonStats(base: CkSeasonStats, extra: CkSeasonStats | undefined): CkSeasonStats {
+  if (!extra) return base;
+  return {
+    goals: Math.max(base.goals, extra.goals),
+    assists: Math.max(base.assists, extra.assists),
+    xg: Math.max(base.xg, extra.xg),
+    xa: Math.max(base.xa, extra.xa),
+    rating: base.rating == null ? extra.rating : extra.rating == null ? base.rating : Math.max(base.rating, extra.rating),
+    cleanSheets: Math.max(base.cleanSheets, extra.cleanSheets),
+    saves: Math.max(base.saves, extra.saves),
+    tackles: Math.max(base.tackles, extra.tackles),
+    interceptions: Math.max(base.interceptions, extra.interceptions),
+  };
 }
 
 type Fetched = {
@@ -208,7 +249,11 @@ export async function refreshCoachKingPoolIfStale(now: Date = new Date()): Promi
 
 export async function syncCoachKingPool(): Promise<{ players: number; coaches: number }> {
   const { clubs, stars } = europeClubs();
-  const [tiers, fetched] = await Promise.all([clubTiers(), mapPool(clubs, CONCURRENCY, fetchClub)]);
+  const [tiers, fetched, leagueStats] = await Promise.all([
+    clubTiers(),
+    mapPool(clubs, CONCURRENCY, fetchClub),
+    leagueSeasonStats(),
+  ]);
 
   type Row = {
     club: Club;
@@ -220,6 +265,7 @@ export async function syncCoachKingPool(): Promise<{ players: number; coaches: n
   };
   const rows: Row[] = [];
   for (const item of fetched) {
+    const leagueBoard = leagueStats.get(item.club.leagueKey);
     for (const player of item.ar) {
       const twin = item.en.get(player.athleteId);
       const line = lineOf(player.positionGroup !== 'other' ? player.positionGroup : twin?.positionGroup ?? 'other');
@@ -229,7 +275,10 @@ export async function syncCoachKingPool(): Promise<{ players: number; coaches: n
         player,
         twin,
         line,
-        stats: item.stats.get(player.athleteId) ?? CK_EMPTY_STATS,
+        stats: mergeSeasonStats(
+          item.stats.get(player.athleteId) ?? { ...CK_EMPTY_STATS },
+          leagueBoard?.get(player.athleteId),
+        ),
         star: isStar(player, stars) || isStar(twin, stars),
       });
     }
