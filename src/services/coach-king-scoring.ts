@@ -3,8 +3,11 @@
  * No I/O, so the budget and the scoring table stay unit-testable.
  */
 
+/** Fresh weekly squad budget. Caps at 100M every gameweek — never grows. */
 export const CK_START_BALANCE_MILLI = 1000;
-export const CK_POINT_CASH_MILLI = 1;
+export const CK_WEEKLY_BUDGET_MILLI = CK_START_BALANCE_MILLI;
+/** @deprecated Points no longer buy budget; kept so old imports compile. */
+export const CK_POINT_CASH_MILLI = 0;
 
 export type CkLine = 'GK' | 'DEF' | 'MID' | 'FWD';
 export type CkPriceKind = CkLine | 'COACH';
@@ -69,9 +72,12 @@ export function coachKingRemainingMilli(balanceMilli: number, spentMilli: number
   return balanceMilli - spentMilli;
 }
 
-/** Squad price is never deducted. A finished week only adds 0.1M per point. */
-export function coachKingNextBalanceMilli(balanceMilli: number, points: number): number {
-  return balanceMilli + points * CK_POINT_CASH_MILLI;
+/**
+ * Each new week the bank resets to 100M. Fantasy points are ranking only —
+ * they never raise the budget above the weekly cap.
+ */
+export function coachKingNextBalanceMilli(_balanceMilli?: number, _points?: number): number {
+  return CK_WEEKLY_BUDGET_MILLI;
 }
 
 export type CkSquadIssue =

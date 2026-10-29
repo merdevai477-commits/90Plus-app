@@ -3982,7 +3982,7 @@ export const en = {
   coachKingGame: {
     title: 'The Match',
     budgetLabel: 'Budget left',
-    budgetOf: 'out of {bank}',
+    budgetOf: 'out of {bank} each week',
     coach: 'Coach',
     formation: '4-3-3',
     pickPlayer: 'Pick a player',

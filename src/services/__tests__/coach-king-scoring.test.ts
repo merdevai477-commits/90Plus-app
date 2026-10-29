@@ -43,11 +43,12 @@ describe('coach king slots', () => {
 });
 
 describe('coach king budget', () => {
-  it('formats tenths of a million and grows the bank by 0.1M per point', () => {
+  it('formats tenths of a million and renews the weekly bank to 100M', () => {
     expect(formatCoachKingMoney(275)).toBe('27.5M');
     expect(formatCoachKingMoney(CK_START_BALANCE_MILLI)).toBe('100M');
     expect(coachKingRemainingMilli(1000, 725)).toBe(275);
-    expect(coachKingNextBalanceMilli(1000, 30)).toBe(1030);
+    expect(coachKingNextBalanceMilli(1000, 30)).toBe(1000);
+    expect(coachKingNextBalanceMilli(850, 99)).toBe(1000);
   });
 
   it('rejects an unfinished squad, a duplicate, the wrong line, a short budget, and a started club', () => {

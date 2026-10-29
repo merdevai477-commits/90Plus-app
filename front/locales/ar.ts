@@ -3888,7 +3888,7 @@ export const ar = {
   coachKingGame: {
     title: 'المباراة',
     budgetLabel: 'الميزانية المتبقية',
-    budgetOf: 'من أصل {bank}',
+    budgetOf: 'من أصل {bank} كل أسبوع',
     coach: 'المدرب',
     formation: '4-3-3',
     pickPlayer: 'اختر لاعب',

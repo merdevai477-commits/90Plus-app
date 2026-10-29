@@ -11,7 +11,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { CK_COACH_PRICE_MILLI } from './coach-king-pricing';
 import {
-  CK_START_BALANCE_MILLI,
+  CK_WEEKLY_BUDGET_MILLI,
   coachKingRemainingMilli,
   coachKingSlot,
   coachKingSlotAccepts,
@@ -147,11 +147,12 @@ async function requireUser(clerkUserId: string) {
   return user;
 }
 
+/** Every week the squad budget is a fresh 100M (max). Keeping a lineup still spends against that cap. */
 async function ensureWallet(userId: string) {
   return prisma.coachKingWallet.upsert({
     where: { userId },
-    create: { userId, balanceMilli: CK_START_BALANCE_MILLI },
-    update: {},
+    create: { userId, balanceMilli: CK_WEEKLY_BUDGET_MILLI },
+    update: { balanceMilli: CK_WEEKLY_BUDGET_MILLI },
   });
 }
 
@@ -850,7 +851,7 @@ export async function resetCoachKingCompetition(now: Date = new Date()): Promise
     await tx.coachKingSquad.deleteMany();
     await tx.coachKingFixture.deleteMany();
     await tx.coachKingGameweek.deleteMany();
-    await tx.coachKingWallet.updateMany({ data: { balanceMilli: CK_START_BALANCE_MILLI } });
+    await tx.coachKingWallet.updateMany({ data: { balanceMilli: CK_WEEKLY_BUDGET_MILLI } });
   });
 
   invalidateBoard();
@@ -882,7 +883,10 @@ export async function resetCoachKingCompetition(now: Date = new Date()): Promise
   };
 }
 
-/** Credit 0.1M per fantasy point once, after the week is completed. */
+/**
+ * Close the week: record fantasy points for the board, then renew every wallet
+ * to a fresh 100M for the next gameweek (points never raise the budget).
+ */
 export async function settleCoachKingGameweek(gameweekId: string, now: Date = new Date()): Promise<number> {
   return prisma.$transaction(async (tx) => {
     const gameweek = await tx.coachKingGameweek.findUnique({ where: { id: gameweekId } });
@@ -918,8 +922,8 @@ export async function settleCoachKingGameweek(gameweekId: string, now: Date = ne
       for (const slot of squad.slots) points += playerPoints.get(slot.playerId) ?? 0;
       await tx.coachKingWallet.upsert({
         where: { userId: squad.userId },
-        create: { userId: squad.userId, balanceMilli: CK_START_BALANCE_MILLI + points },
-        update: { balanceMilli: { increment: points } },
+        create: { userId: squad.userId, balanceMilli: CK_WEEKLY_BUDGET_MILLI },
+        update: { balanceMilli: CK_WEEKLY_BUDGET_MILLI },
       });
       await tx.coachKingSquad.update({
         where: { id: squad.id },

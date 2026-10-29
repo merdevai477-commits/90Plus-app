@@ -1,6 +1,6 @@
 /**
  * King of Coaches scoring job. One pass stores the selected clubs' fixtures,
- * writes insert-only player and coach points, then pays the wallet when the
+ * writes insert-only player and coach points, then renews the weekly 100M budget when the
  * Tuesday window is complete.
  */
 
