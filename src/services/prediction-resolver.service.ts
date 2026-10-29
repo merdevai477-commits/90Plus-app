@@ -208,18 +208,26 @@ export class PredictionResolverService {
           if (resolved.count === 0) return false;
 
           if (isCorrect) {
-            await tx.user.update({
-              where: { id: prediction.userId },
-              data: { coins: { increment: CORRECT_PREDICTION_REWARD } },
+            const coinKey = `prediction:${prediction.id}:coins`;
+            const alreadyCredited = await (tx as any).coinTransaction.findUnique({
+              where: { idempotencyKey: coinKey },
+              select: { id: true },
             });
-            await tx.coinTransaction.create({
-              data: {
-                userId: prediction.userId,
-                amount: CORRECT_PREDICTION_REWARD,
-                type: 'PREDICTION' as any,
-                description: `Correct prediction reward — match ${apiMatchId}`,
-              },
-            });
+            if (!alreadyCredited) {
+              await tx.user.update({
+                where: { id: prediction.userId },
+                data: { coins: { increment: CORRECT_PREDICTION_REWARD } },
+              });
+              await (tx as any).coinTransaction.create({
+                data: {
+                  userId: prediction.userId,
+                  amount: CORRECT_PREDICTION_REWARD,
+                  type: 'PREDICTION' as any,
+                  description: `Correct prediction reward — match ${apiMatchId}`,
+                  idempotencyKey: coinKey,
+                },
+              });
+            }
 
             // XP in the same transaction (idempotent on prediction:{id}).
             const idempotencyKey = `prediction:${prediction.id}`;

@@ -75,7 +75,7 @@ function txRecorder(outcomes: Array<{ id: string; isCorrect: boolean }>) {
         update: jest.fn(),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ xp: 0, level: 1 }),
       },
-      coinTransaction: { create: jest.fn() },
+      coinTransaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
       xpTransaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
     });
 }
@@ -132,6 +132,33 @@ describe('PredictionResolverService schema + push policy (U1)', () => {
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify.mock.calls[0][5]).toEqual({ skipPush: false });
     expect(r.staleOnly).toBe(false);
+  });
+
+  it('double settle writes one coin row (B7)', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue([row('p7', null)]);
+    const credited = new Set<string>();
+    const coinCreate = jest.fn(async ({ data }: any) => credited.add(data.idempotencyKey));
+    const userUpdate = jest.fn();
+    mockTransaction.mockImplementation(async (fn: (tx: any) => Promise<boolean>) =>
+      fn({
+        prediction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        user: { update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ xp: 0, level: 1 }) },
+        coinTransaction: {
+          findUnique: jest.fn(async ({ where }: any) =>
+            credited.has(where.idempotencyKey) ? { id: 'c1' } : null,
+          ),
+          create: coinCreate,
+        },
+        xpTransaction: { findUnique: jest.fn().mockResolvedValue({ id: 'x' }), create: jest.fn() },
+      }),
+    );
+
+    await PredictionResolverService.resolveMatchPredictions(21, { source: 'prediction-watcher' });
+    await PredictionResolverService.resolveMatchPredictions(21, { source: 'live-fixture-sync' });
+    expect(coinCreate).toHaveBeenCalledTimes(1);
+    expect(coinCreate.mock.calls[0][0].data.idempotencyKey).toBe('prediction:p7:coins');
+    expect(userUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('inbox_only mode writes inbox with skipPush', async () => {
@@ -238,7 +265,7 @@ describe('PredictionResolverService.resolveMatchPredictions', () => {
           update: jest.fn(),
           findUniqueOrThrow: jest.fn().mockResolvedValue({ xp: 0, level: 1 }),
         },
-        coinTransaction: { create: jest.fn() },
+        coinTransaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
         xpTransaction: {
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn(),
@@ -293,7 +320,7 @@ describe('PredictionResolverService.resolveMatchPredictions', () => {
           updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
         user: { update: jest.fn(), findUniqueOrThrow: jest.fn() },
-        coinTransaction: { create: jest.fn() },
+        coinTransaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
         xpTransaction: { findUnique: jest.fn(), create: jest.fn() },
       };
       return fn(tx);
