@@ -29,6 +29,7 @@ import type { KingPeriod } from '../../services/predictions.service';
 import { CoachKingBoard } from './CoachKingBoard';
 import { CoachKingCardGrid, type CkPick } from './CoachKingCardGrid';
 import { CoachKingLeagueChips } from './CoachKingLeagueChips';
+import { CoachKingMatches } from './CoachKingMatches';
 import { CoachKingMoney } from './CoachKingCoin';
 import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
@@ -382,6 +383,9 @@ export default function CoachKingScreen() {
 
       {tab === 'ranking' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.sectionTitle, { fontFamily: fontBold, textAlign: isAr ? 'right' : 'left' }]}>
+            {copy.rankingTitle}
+          </Text>
           <CoachKingBoard
             entries={board}
             isAr={isAr}
@@ -417,25 +421,24 @@ export default function CoachKingScreen() {
               onChange={(key) => setMatchLeague(key as CkLeagueKey)}
             />
           ) : null}
-          <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: 4 }}
+            showsVerticalScrollIndicator={false}
+          >
             {visibleFixtures.length === 0 ? (
               <KingEmptyState title={copy.noMatches} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
-            ) : visibleFixtures.map((fixture) => (
-              <View key={fixture.fixtureId} style={styles.match}>
-                <Text style={[styles.matchDate, { fontFamily: fontMed }]}>
-                  {new Date(fixture.kickoffAt).toLocaleString(isAr ? 'ar' : 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </Text>
-                <View style={styles.matchTeams}>
-                  <Image source={{ uri: fixture.homeLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
-                  <Text style={[styles.team, { fontFamily: fontSemi }]} numberOfLines={1}>{fixture.homeName}</Text>
-                  <Text style={[styles.score, { fontFamily: fontBold }]}>
-                    {fixture.homeScore == null ? fixture.status : `${fixture.homeScore} - ${fixture.awayScore}`}
-                  </Text>
-                  <Text style={[styles.team, { fontFamily: fontSemi, textAlign: 'right' }]} numberOfLines={1}>{fixture.awayName}</Text>
-                  <Image source={{ uri: fixture.awayLogo }} style={styles.matchLogo} contentFit="contain" cachePolicy="memory-disk" />
-                </View>
-              </View>
-            ))}
+            ) : (
+              <CoachKingMatches
+                fixtures={visibleFixtures}
+                isAr={isAr}
+                language={language}
+                vsLabel={copy.vs}
+                statusLabel={(status) => {
+                  const key = status.trim().toUpperCase() as keyof typeof copy.matchStatus;
+                  return copy.matchStatus[key] ?? status;
+                }}
+              />
+            )}
           </ScrollView>
         </View>
       ) : null}
@@ -510,17 +513,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(184,150,252,0.3)',
   },
   hintTxt: { color: '#D8C7FD', fontSize: 12, flex: 1 },
-  match: {
-    marginTop: 10,
-    borderRadius: 16,
-    backgroundColor: '#08050E',
-    borderWidth: 0.5,
-    borderColor: '#1B1B1B',
-    padding: 14,
+  sectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    marginTop: 8,
+    marginBottom: 14,
   },
-  matchDate: { color: '#E6CEFD', fontSize: 12, marginBottom: 8 },
-  matchTeams: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  matchLogo: { width: 22, height: 22 },
-  team: { color: '#fff', flex: 1, fontSize: 14 },
-  score: { color: '#fff', fontSize: 16 },
 });

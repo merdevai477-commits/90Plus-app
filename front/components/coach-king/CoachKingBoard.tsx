@@ -15,7 +15,7 @@ const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 const AVATAR_STROKE = 'rgba(194,194,194,0.92)';
 const YOU_RIM = 'rgba(140,92,245,0.69)';
-const ROW = { height: 58, radius: 16, gap: 8 };
+const ROW = { height: 62, radius: 16, gap: 10 };
 const RANK_SLOT = { width: 18, gap: 30 };
 
 type Weight = 'bold' | 'semi' | 'medium' | 'regular';
@@ -71,9 +71,10 @@ const PODIUM: readonly {
 ];
 
 const PLAIN = {
-  bg: '#0D0D0D',
+  bg: '#0A001C',
+  border: 'rgba(140,92,245,0.28)',
   xp: '#EBDCFA',
-  xpUnit: '#831DE5',
+  xpUnit: '#8C5CF5',
   xpSize: 18,
   xpWeight: 'medium' as const,
   nameSize: 16,
@@ -183,7 +184,11 @@ function BoardRow({
           backgroundColor: look.bg,
           opacity: pressed ? 0.88 : podium?.opacity ?? 1,
         },
-        entry.isMe ? { borderWidth: 0.5, borderColor: YOU_RIM } : null,
+        entry.isMe
+          ? { borderWidth: 1, borderColor: YOU_RIM }
+          : podium
+            ? null
+            : { borderWidth: 0.5, borderColor: PLAIN.border },
         podium?.shadow ? styles.rowLift : null,
       ]}
     >
