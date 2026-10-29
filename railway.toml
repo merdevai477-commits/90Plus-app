@@ -1,13 +1,14 @@
 [build]
-builder = "NIXPACKS"
-nixpacksConfigPath = "nixpacks.toml"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
+# Runs between build and start; a failed migration fails the deploy and the
+# previous deployment keeps serving. Also set on the service itself because
+# config-as-code is deprecated by Railway.
+preDeployCommand = ["npx prisma migrate deploy"]
 startCommand = "npm run start:prod"
 healthcheckPath = "/health"
 healthcheckTimeout = 180
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[env]
-NIXPACKS_NODE_VERSION = "20"

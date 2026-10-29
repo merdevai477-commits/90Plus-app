@@ -38,12 +38,7 @@ RUN test -f dist/src/main.js || (echo "FATAL: dist/src/main.js missing after bui
 # Expose port (Railway uses 3000)
 EXPOSE 3000
 
-# Create startup script
-RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'npx prisma migrate deploy' >> /app/start.sh && \
-    echo 'exec node dist/src/main.js' >> /app/start.sh && \
-    chmod +x /app/start.sh
-
-# Start command
-CMD ["/app/start.sh"]
+# Migrations run as the Railway pre-deploy command (railway.toml), never at boot:
+# boot-time migrate raced during deploy overlap and its failures went unnoticed.
+CMD ["node", "dist/src/main.js"]
 
