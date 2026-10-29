@@ -1544,6 +1544,12 @@ model Prediction {
   leagueName         String?
   predictedHomeScore Int?
   predictedAwayScore Int?
+  /// Audit: goals line used when this row was settled (nullable, additive P0).
+  settledHomeScore   Int?
+  settledAwayScore   Int?
+  settledStatus      String?
+  settledWinner      String?
+  settledAt          DateTime?
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiMatchId])

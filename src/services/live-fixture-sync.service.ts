@@ -170,7 +170,10 @@ class LiveFixtureSyncService {
             LiveMatchIngestorService.triggerFixtureIngest(fixtureId);
 
             await matchCacheService.handleMatchFinished(fixtureId);
-            await PredictionResolverService.resolveMatchPredictions(fixtureId, homeScore, awayScore);
+            // Settlement gate+lock re-reads the fixture; only FT/AET/PEN settle.
+            await PredictionResolverService.resolveMatchPredictions(fixtureId, {
+                source: 'live-fixture-sync',
+            });
             logger.info(`✅ Match ${fixtureId} archived and predictions resolved (${homeScore}-${awayScore}, ${status})`);
         } catch (err) {
             logger.warn(`Failed to finalize match ${fixtureId}:`, err);
@@ -207,8 +210,11 @@ class LiveFixtureSyncService {
 
                     await matchCacheService.upsertFixtures([fixture as FixtureFromAPI]);
 
-                    const homeScore = fixture.goals?.home ?? 0;
-                    const awayScore = fixture.goals?.away ?? 0;
+                    const homeScore = fixture.goals?.home;
+                    const awayScore = fixture.goals?.away;
+                    if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
+                        continue;
+                    }
                     const elapsed = fixture.fixture?.status?.elapsed ?? null;
                     await this.onMatchFinished(
                         fixtureId,
@@ -400,8 +406,11 @@ class LiveFixtureSyncService {
                 }
             }
             if (FINISHED_STATUSES_SET.has(status)) {
-                const homeScore = fixture.goals.home ?? 0;
-                const awayScore = fixture.goals.away ?? 0;
+                const homeScore = fixture.goals?.home;
+                const awayScore = fixture.goals?.away;
+                if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
+                    continue;
+                }
                 const elapsed = fixture.fixture.status.elapsed ?? null;
                 await this.onMatchFinished(id, homeScore, awayScore, status, elapsed, fixture);
             }

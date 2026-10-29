@@ -159,10 +159,15 @@ export class PredictionWatcherService {
             );
             if (data?.length) {
                 const match = data[0];
+                const homeScore = match.goals?.home;
+                const awayScore = match.goals?.away;
+                if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
+                    return null;
+                }
                 return {
                     status: match.fixture.status.short,
-                    homeScore: match.goals.home ?? 0,
-                    awayScore: match.goals.away ?? 0,
+                    homeScore,
+                    awayScore,
                 };
             }
         } catch {
@@ -174,12 +179,13 @@ export class PredictionWatcherService {
             select: { status: true, fullData: true, homeScore: true, awayScore: true },
         });
         if (cached?.status) {
-            const fullData = cached.fullData as { goals?: { home?: number; away?: number } } | null;
-            return {
-                status: cached.status,
-                homeScore: cached.homeScore ?? fullData?.goals?.home ?? 0,
-                awayScore: cached.awayScore ?? fullData?.goals?.away ?? 0,
-            };
+            const fullData = cached.fullData as { goals?: { home?: number | null; away?: number | null } } | null;
+            const homeScore =
+                cached.homeScore != null ? cached.homeScore : fullData?.goals?.home ?? null;
+            const awayScore =
+                cached.awayScore != null ? cached.awayScore : fullData?.goals?.away ?? null;
+            if (homeScore == null || awayScore == null) return null;
+            return { status: cached.status, homeScore, awayScore };
         }
 
         return this.resolve365Snapshot(matchId);
@@ -193,12 +199,15 @@ export class PredictionWatcherService {
             select: { status: true, fullData: true, homeScore: true, awayScore: true },
         });
         if (cached?.status) {
-            const fullData = cached.fullData as { goals?: { home?: number; away?: number } } | null;
-            return {
-                status: cached.status,
-                homeScore: cached.homeScore ?? fullData?.goals?.home ?? 0,
-                awayScore: cached.awayScore ?? fullData?.goals?.away ?? 0,
-            };
+            const fullData = cached.fullData as { goals?: { home?: number | null; away?: number | null } } | null;
+            const homeScore =
+                cached.homeScore != null ? cached.homeScore : fullData?.goals?.home ?? null;
+            const awayScore =
+                cached.awayScore != null ? cached.awayScore : fullData?.goals?.away ?? null;
+            if (homeScore == null || awayScore == null || homeScore < 0 || awayScore < 0) {
+                return null;
+            }
+            return { status: cached.status, homeScore, awayScore };
         }
 
         try {
@@ -206,13 +215,20 @@ export class PredictionWatcherService {
             const game = await fetchScores365GameById(matchId, { language: 'en' });
             if (game) {
                 const statusGroup = game.statusGroup;
+                // statusGroup=4 with score=-1 is upstream lag — do not invent FT 0-0.
+                const homeScore = game.homeCompetitor?.score;
+                const awayScore = game.awayCompetitor?.score;
+                if (
+                    typeof homeScore !== 'number' ||
+                    typeof awayScore !== 'number' ||
+                    homeScore < 0 ||
+                    awayScore < 0
+                ) {
+                    return null;
+                }
                 const status =
                     statusGroup === 4 ? 'FT' : statusGroup === 3 ? 'LIVE' : 'NS';
-                return {
-                    status,
-                    homeScore: game.homeCompetitor?.score ?? 0,
-                    awayScore: game.awayCompetitor?.score ?? 0,
-                };
+                return { status, homeScore, awayScore };
             }
         } catch {
             // ignore
@@ -239,9 +255,11 @@ export class PredictionWatcherService {
             // Check if match is finished (FT, AET, PEN)
             if (['FT', 'AET', 'PEN'].includes(status)) {
                 logger.info(`🏁 Match ${matchId} is finished (${homeScore}-${awayScore}), resolving predictions...`);
-                
-                // Resolve all predictions for this match
-                await PredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
+
+                // King settlement re-loads the fixture under its own lock+gate.
+                await PredictionResolverService.resolveMatchPredictions(matchId, {
+                    source: 'prediction-watcher',
+                });
                 await CompetitionResolverService.resolveMatchCompetitions(matchId, homeScore, awayScore, status);
                 return true;
             } else {
@@ -279,7 +297,7 @@ export class PredictionWatcherService {
             }
 
             const oldBoard = await this.getTopUserIds(10);
-            await PredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
+            await PredictionResolverService.resolveMatchPredictions(matchId, { source: 'manual' });
             const newBoard = await this.getTopUserIds(10);
             await this.notifyLeaderboardEntries(oldBoard, newBoard);
 

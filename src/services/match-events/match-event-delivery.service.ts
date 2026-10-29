@@ -90,9 +90,10 @@ export async function updateSubscriptionFlags(
     if (event.eventType === 'kickoff') data.notifiedStart = true;
     if (event.eventType === 'fulltime') {
         data.notifiedEnd = true;
-        const homeScore = Number(event.payload.homeScore ?? event.templateVars.homeScore ?? 0);
-        const awayScore = Number(event.payload.awayScore ?? event.templateVars.awayScore ?? 0);
-        await PredictionResolverService.resolveMatchPredictions(sub.apiMatchId, homeScore, awayScore);
+        // Scores from the push payload are not trusted — resolver re-reads + gates.
+        await PredictionResolverService.resolveMatchPredictions(sub.apiMatchId, {
+            source: 'match-event-delivery',
+        });
     }
 
     if (
