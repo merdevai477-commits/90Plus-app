@@ -2094,7 +2094,7 @@ export const en = {
       sponsors: {
         title: 'Sponsors',
         sub: 'Predict match outcomes and win prizes from our partners!',
-        action: 'Enter Now',
+        action: 'Predict now',
       },
       shareAndEarn: {
         title: 'Share & Earn',

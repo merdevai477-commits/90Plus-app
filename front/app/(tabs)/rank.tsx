@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Crown, Gift, Share2, Trophy, Zap } from 'lucide-react-native';
+import { Crown, Gift, Handshake, Share2, Target, Trophy, Zap } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ImageSourcePropType,
@@ -144,9 +144,9 @@ export default function RankScreen() {
         title: t.rank.competitionNames.sponsors.title,
         sub: t.rank.competitionNames.sponsors.sub,
         actionText: t.rank.competitionNames.sponsors.action,
-        img: require('../../assets/images/rank/comp-quiz.webp') as ImageSourcePropType,
-        titleIcon: Gift,
-        ctaIcon: Gift,
+        img: require('../../assets/images/rank/comp-sponsors.png') as ImageSourcePropType,
+        titleIcon: Handshake,
+        ctaIcon: Target,
       },
     ],
     [t, shareRewardHint],

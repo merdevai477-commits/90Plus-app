@@ -2049,7 +2049,7 @@ export const ar = {
       sponsors: {
         title: 'الرعاة',
         sub: 'توقع نتائج المباريات واربح جوائز من شركائنا!',
-        action: 'ادخل الآن',
+        action: 'توقع الان',
       },
       shareAndEarn: {
         title: 'شارك واربح',
