@@ -73,11 +73,17 @@ function buildAndroidIntentUrl(deepPath: string, storeFallbackUrl: string = PLAY
 /**
  * Inline opener: try the app once, then send the user straight to their
  * platform store. Desktop keeps both store buttons.
+ *
+ * When `iosInviteClipboardPayload` is set (Share & Win referral on a valid
+ * code), iOS does NOT auto-redirect to the App Store — browsers only allow
+ * clipboard writes on a real tap, so the primary "تحميل التطبيق" button
+ * copies `90plus-invite:CODE` then navigates. Android is unchanged.
  */
 function buildStoreRedirectScript(
   intentUrl: string,
   customSchemeUrl: string,
   playStoreUrl: string = PLAY_STORE_URL,
+  iosInviteClipboardPayload: string | null = null,
 ): string {
   return `
     (function() {
@@ -85,6 +91,7 @@ function buildStoreRedirectScript(
       var intentUrl = ${JSON.stringify(intentUrl)};
       var playStoreUrl = ${JSON.stringify(playStoreUrl)};
       var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
+      var iosInvitePayload = ${JSON.stringify(iosInviteClipboardPayload)};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
       var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
@@ -101,6 +108,43 @@ function buildStoreRedirectScript(
         window.location.replace(storeUrl);
       }
 
+      function copyInviteThenAppStore() {
+        var done = function() { window.location.replace(appStoreUrl); };
+        if (!iosInvitePayload) { done(); return; }
+        function fallbackCopy() {
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = iosInvitePayload;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch (e) {}
+          done();
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(iosInvitePayload).then(done).catch(fallbackCopy);
+            return;
+          }
+        } catch (e) {}
+        fallbackCopy();
+      }
+
+      function wireIosInviteDownload(iosBtn) {
+        if (!iosBtn || !iosInvitePayload) return;
+        iosBtn.textContent = 'تحميل التطبيق';
+        iosBtn.className = 'btn primary store-btn';
+        iosBtn.setAttribute('href', '#');
+        iosBtn.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          copyInviteThenAppStore();
+        });
+      }
+
       function preferPlatformStore() {
         var androidBtn = document.getElementById('store-android');
         var iosBtn = document.getElementById('store-ios');
@@ -114,7 +158,11 @@ function buildStoreRedirectScript(
         } else if (isIOS) {
           if (androidBtn) androidBtn.style.display = 'none';
           if (iosBtn) {
-            iosBtn.className = 'btn primary store-btn';
+            if (iosInvitePayload) {
+              wireIosInviteDownload(iosBtn);
+            } else {
+              iosBtn.className = 'btn primary store-btn';
+            }
           }
         }
       }
@@ -136,6 +184,8 @@ function buildStoreRedirectScript(
         window.location.href = customScheme;
         setTimeout(function() {
           if (appLikelyOpened()) return;
+          // Invite clipboard needs a user tap — do not auto-jump to the store.
+          if (iosInvitePayload) return;
           goToStore();
         }, fallbackMs);
       }
@@ -171,12 +221,19 @@ type ContentLandingOptions = {
    * `referrer=invite_CODE` so a cold install can recover attribution.
    */
   androidStoreUrl?: string;
+  /**
+   * When set, iOS referral landings copy this exact string on the download
+   * tap (`90plus-invite:CODE`) before opening the App Store. Null/omitted =
+   * plain App Store redirect (no clipboard).
+   */
+  iosInviteClipboardPayload?: string | null;
 };
 
 function buildSmartLandingPage(options: ContentLandingOptions): string {
   // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
   const androidStoreUrl = options.androidStoreUrl ?? PLAY_STORE_URL;
   const intentUrl = buildAndroidIntentUrl(options.deepPath, androidStoreUrl);
+  const iosInviteClipboardPayload = options.iosInviteClipboardPayload ?? null;
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -206,7 +263,12 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
      * app itself. Try the app once (keeps the referral / deep path), then send
      * the user to their platform store immediately — never leave them on the site.
      */
-    ${buildStoreRedirectScript(intentUrl, options.customSchemeUrl, androidStoreUrl)}
+    ${buildStoreRedirectScript(
+      intentUrl,
+      options.customSchemeUrl,
+      androidStoreUrl,
+      iosInviteClipboardPayload,
+    )}
   </script>
 </body>
 </html>`;
@@ -278,6 +340,7 @@ export function buildProfileLandingPage(username: string): string {
 /** Share & Win referral invite — carries the code into the app on first open. */
 export function buildReferralLandingPage(code: string): string {
   const normalized = normalizeReferralCode(code);
+  const codeOk = isValidReferralCode(normalized);
   return buildSmartLandingPage({
     title: '90Plus — دعوة صديق',
     ogTitle: '90Plus — شارك واربح',
@@ -288,7 +351,9 @@ export function buildReferralLandingPage(code: string): string {
     deepPath: `invite/${normalized}`,
     customSchemeUrl: `ninetyplus://invite/${normalized}`,
     // Android cold-install: Play Install Referrer carries invite_CODE into the app.
-    // iOS store button / redirect still use APP_STORE_URL with no referrer.
     androidStoreUrl: buildPlayStoreInviteUrl(normalized),
+    // iOS cold-install safety net: tap "تحميل التطبيق" copies then opens App Store.
+    // Invalid codes get a plain store link with no clipboard write.
+    iosInviteClipboardPayload: codeOk ? `90plus-invite:${normalized}` : null,
   });
 }

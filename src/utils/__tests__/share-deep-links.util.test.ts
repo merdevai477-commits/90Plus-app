@@ -174,6 +174,20 @@ describe('referral landing page — the app-is-not-installed path', () => {
   it('uppercases the code so the link is case-insensitive', () => {
     expect(buildReferralLandingPage('ab23cd')).toContain('ninetyplus://invite/AB23CD');
   });
+
+  it('embeds an iOS clipboard invite payload for cold-install recovery', () => {
+    expect(html).toContain('var iosInvitePayload = "90plus-invite:AB23CD"');
+    expect(html).toContain('copyInviteThenAppStore');
+    expect(html).toContain('تحميل التطبيق');
+    // Valid invite: do not auto-jump to the store (clipboard needs a tap).
+    expect(html).toContain('if (iosInvitePayload) return;');
+  });
+
+  it('omits the iOS clipboard payload when the code is invalid', () => {
+    const bad = buildReferralLandingPage('AB0O1D');
+    expect(bad).toContain('var iosInvitePayload = null');
+    expect(bad).not.toContain('90plus-invite:AB0O1D');
+  });
 });
 
 describe('the other share landing pages keep the same store fallback', () => {

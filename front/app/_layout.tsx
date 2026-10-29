@@ -514,14 +514,19 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async () => {
-      // Android deferred invite: park Install Referrer code before any claim.
-      // 2s cap so Play Store API stalls never block first paint / auth.
+      // Deferred invite (Android Install Referrer / iOS clipboard) before any claim.
+      // Time-box Android only — iOS may wait on the paste permission prompt.
       try {
+        const { Platform } = await import('react-native');
         const { checkDeferredReferral } = await import('../utils/deferredReferral');
-        await Promise.race([
-          checkDeferredReferral(),
-          new Promise<void>((resolve) => setTimeout(resolve, 2000)),
-        ]);
+        if (Platform.OS === 'android') {
+          await Promise.race([
+            checkDeferredReferral(),
+            new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } else {
+          await checkDeferredReferral();
+        }
       } catch (err) {
         logger.debug('[PreloadInitializer] Deferred referral check skipped:', err);
       }
