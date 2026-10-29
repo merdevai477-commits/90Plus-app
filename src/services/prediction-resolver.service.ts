@@ -19,8 +19,27 @@ import {
   type SettlementOk,
 } from './prediction-settlement-gate';
 import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snapshot';
+import { isSchemaOk } from './schema-guard.service';
+import { decideResultPush, isStaleKickoff } from './prediction-settle-push-policy';
 
 const CORRECT_PREDICTION_REWARD = 10;
+
+export type SettleOutcome =
+  | 'SETTLE_COMPLETE'
+  | 'SETTLE_SKIPPED_SCHEMA'
+  | 'SETTLE_SKIPPED_LOCKED'
+  | 'SETTLE_SKIPPED_NO_LOCK'
+  | 'SETTLE_SKIPPED_NO_FIXTURE'
+  | 'SETTLE_GATE_REJECTED'
+  | 'SETTLE_ERROR';
+
+export type SettleResult = {
+  outcome: SettleOutcome;
+  /** Rows transitioned from pending to settled by this call. */
+  settled: number;
+  /** True when every settled row had a stale kickoff (no live pushes went out). */
+  staleOnly: boolean;
+};
 
 export type SettleSource =
   | 'prediction-watcher'
@@ -74,11 +93,17 @@ export class PredictionResolverService {
     _homeScoreOrOpts?: number | { source?: SettleSource },
     _awayScore?: number,
     opts?: { source?: SettleSource },
-  ): Promise<void> {
+  ): Promise<SettleResult> {
     const source: SettleSource =
       (typeof _homeScoreOrOpts === 'object' && _homeScoreOrOpts?.source) ||
       opts?.source ||
       'unknown';
+    const skipped = (outcome: SettleOutcome): SettleResult => ({ outcome, settled: 0, staleOnly: false });
+
+    if (!isSchemaOk()) {
+      logger.warn(JSON.stringify({ event: 'SETTLE_SKIPPED_SCHEMA', apiMatchId, source }));
+      return skipped('SETTLE_SKIPPED_SCHEMA');
+    }
 
     const lock = await acquireSettleLock(apiMatchId);
     if (!lock.ok) {
@@ -90,7 +115,7 @@ export class PredictionResolverService {
           lockWaitMs: lock.waitMs,
         }),
       );
-      return;
+      return skipped(lock.reason);
     }
 
     try {
@@ -104,7 +129,7 @@ export class PredictionResolverService {
             lockWaitMs: lock.waitMs,
           }),
         );
-        return;
+        return skipped('SETTLE_SKIPPED_NO_FIXTURE');
       }
 
       const gated = resolveSettlementInput(snapshot);
@@ -123,12 +148,13 @@ export class PredictionResolverService {
             lockWaitMs: lock.waitMs,
           }),
         );
-        return;
+        return skipped('SETTLE_GATE_REJECTED');
       }
 
-      await this.settleUnlocked(apiMatchId, gated, source, lock.waitMs);
+      return await this.settleUnlocked(apiMatchId, gated, source, lock.waitMs);
     } catch (error) {
       logger.error(`❌ Error resolving predictions for match ${apiMatchId}:`, error);
+      return skipped('SETTLE_ERROR');
     } finally {
       await lock.handle.release();
     }
@@ -139,7 +165,7 @@ export class PredictionResolverService {
     settled: SettlementOk,
     source: SettleSource,
     lockWaitMs: number,
-  ): Promise<void> {
+  ): Promise<SettleResult> {
     const { homeScore, awayScore, winner, status } = settled;
 
     logger.info(`🎯 Resolving predictions for match ${apiMatchId} (${homeScore}-${awayScore}, ${status}, winner=${winner})`);
@@ -150,11 +176,13 @@ export class PredictionResolverService {
 
     if (predictions.length === 0) {
       logger.debug(`📭 No predictions to resolve for match ${apiMatchId}`);
-      return;
+      return { outcome: 'SETTLE_COMPLETE', settled: 0, staleOnly: false };
     }
 
     let correctCount = 0;
     let wrongCount = 0;
+    let freshSettled = 0;
+    let pushSuppressed = 0;
     const settledAt = new Date();
 
     for (const prediction of predictions) {
@@ -237,6 +265,7 @@ export class PredictionResolverService {
         if (!applied) continue;
         if (isCorrect) correctCount += 1;
         else wrongCount += 1;
+        if (!isStaleKickoff(prediction.matchDate, settledAt)) freshSettled += 1;
 
         // Side effects outside the settle transaction (notifications / SSE).
         // awardXp is still called so SSE/level-up pushes fire; idempotency
@@ -260,6 +289,10 @@ export class PredictionResolverService {
           }
         }
 
+        const push = decideResultPush(prediction.matchDate, settledAt);
+        if (!push.notify || push.skipPush) pushSuppressed += 1;
+        if (!push.notify) continue;
+
         try {
           const matchInfo = `${prediction.homeTeam || 'Home'} ${homeScore}-${awayScore} ${prediction.awayTeam || 'Away'}`;
           await NotificationService.sendPredictionResultNotification(
@@ -278,6 +311,7 @@ export class PredictionResolverService {
               homeScore,
               awayScore,
             },
+            { skipPush: push.skipPush },
           );
         } catch (notifError) {
           logger.warn(`⚠️ Failed to send notification to user ${prediction.userId}:`, notifError);
@@ -303,8 +337,17 @@ export class PredictionResolverService {
         lockWaitMs,
       }),
     );
+    if (pushSuppressed > 0) {
+      logger.info(JSON.stringify({ event: 'SETTLE_PUSH_SUPPRESSED', apiMatchId, count: pushSuppressed }));
+    }
 
     clearResponseCache('/predictions/stats').catch(() => {});
+    const settledCount = correctCount + wrongCount;
+    return {
+      outcome: 'SETTLE_COMPLETE',
+      settled: settledCount,
+      staleOnly: settledCount > 0 && freshSettled === 0,
+    };
   }
 
   static async getMatchPredictionStats(apiMatchId: number) {

@@ -15,6 +15,8 @@ import { CompetitionResolverService } from './competition-resolver.service';
 import { notifyUser } from './notify.service';
 import { NotificationType } from './notification.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
+import { allowLeaderboardPush, getMaxMatchesPerTick } from './prediction-settle-push-policy';
+import { isSchemaOk } from './schema-guard.service';
 
 /**
  * Stable bucket for idempotency on leaderboard notifications. We use UTC
@@ -37,6 +39,10 @@ export class PredictionWatcherService {
     static start() {
         if (this.intervalId) {
             logger.info('⚠️ Prediction watcher already running');
+            return;
+        }
+        if (!isSchemaOk()) {
+            logger.error(JSON.stringify({ event: 'PREDICTION_WATCHER_DISABLED', reason: 'SCHEMA_MISMATCH' }));
             return;
         }
 
@@ -106,29 +112,34 @@ export class PredictionWatcherService {
                 ...unresolvedPredictions.map((p: any) => p.apiMatchId),
                 ...unresolvedCompetitions.map((p) => p.apiMatchId),
             ]);
-            const matchIds = Array.from(matchIdSet);
-            if (matchIds.length === 0) {
+            const allMatchIds = Array.from(matchIdSet);
+            if (allMatchIds.length === 0) {
                 logger.debug('📭 No unresolved predictions to check');
                 this.isRunning = false;
                 return;
             }
-            logger.info(`📊 Checking ${matchIds.length} matches with unresolved predictions...`);
+            const matchIds = this.nextTickWindow(allMatchIds);
+            logger.info(
+                `📊 Checking ${matchIds.length}/${allMatchIds.length} matches with unresolved predictions...`,
+            );
 
             const oldBoard = await this.getTopUserIds(10);
             let resolvedAny = false;
+            let freshResolved = false;
 
             // Check each match
             for (const matchId of matchIds) {
                 try {
-                    const resolved = await this.checkAndResolveMatch(matchId);
-                    if (resolved) resolvedAny = true;
+                    const result = await this.checkAndResolveMatch(matchId);
+                    if (result.resolved) resolvedAny = true;
+                    if (result.resolved && !result.staleOnly) freshResolved = true;
                 } catch (error) {
                     logger.error(`Error checking match ${matchId}:`, error);
                 }
             }
 
-            // If predictions were resolved, check leaderboard changes
-            if (resolvedAny) {
+            // Leaderboard-entry pushes only for fresh results; a stale backlog settles silently.
+            if (resolvedAny && freshResolved && allowLeaderboardPush()) {
                 const newBoard = await this.getTopUserIds(10);
                 await this.notifyLeaderboardEntries(oldBoard, newBoard);
             }
@@ -241,13 +252,16 @@ export class PredictionWatcherService {
      * Check a single match and resolve predictions if finished
      * Returns true if predictions were resolved
      */
-    private static async checkAndResolveMatch(matchId: number): Promise<boolean> {
+    private static async checkAndResolveMatch(
+        matchId: number,
+    ): Promise<{ resolved: boolean; staleOnly: boolean }> {
+        const notResolved = { resolved: false, staleOnly: false };
         try {
             const snapshot = await this.resolveMatchSnapshot(matchId);
 
             if (!snapshot) {
                 logger.debug(`Prediction watcher: no fixture data for match ${matchId}`);
-                return false;
+                return notResolved;
             }
 
             const { status, homeScore, awayScore } = snapshot;
@@ -257,11 +271,11 @@ export class PredictionWatcherService {
                 logger.info(`🏁 Match ${matchId} is finished (${homeScore}-${awayScore}), resolving predictions...`);
 
                 // King settlement re-loads the fixture under its own lock+gate.
-                await PredictionResolverService.resolveMatchPredictions(matchId, {
+                const settle = await PredictionResolverService.resolveMatchPredictions(matchId, {
                     source: 'prediction-watcher',
                 });
                 await CompetitionResolverService.resolveMatchCompetitions(matchId, homeScore, awayScore, status);
-                return true;
+                return { resolved: true, staleOnly: settle.staleOnly };
             } else {
                 // A postponed/abandoned match will never produce a result, so any
                 // Predict & Win competition riding on it is closed out instead of
@@ -272,7 +286,26 @@ export class PredictionWatcherService {
         } catch (error) {
             logger.error(`Error fetching match ${matchId}:`, error);
         }
-        return false;
+        return notResolved;
+    }
+
+    private static tickCursor = 0;
+
+    /**
+     * Cap matches per tick and rotate the window so permanently-stuck old
+     * matches cannot starve fresh ones.
+     */
+    static nextTickWindow(matchIds: number[]): number[] {
+        const cap = getMaxMatchesPerTick();
+        if (matchIds.length <= cap) {
+            this.tickCursor = 0;
+            return matchIds;
+        }
+        const start = this.tickCursor % matchIds.length;
+        const window: number[] = [];
+        for (let i = 0; i < cap; i += 1) window.push(matchIds[(start + i) % matchIds.length]);
+        this.tickCursor = (start + cap) % matchIds.length;
+        return window;
     }
 
     /**

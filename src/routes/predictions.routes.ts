@@ -12,6 +12,7 @@ import { responseCacheMiddleware, clearResponseCache } from '../middleware/respo
 import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import { getSchemaStatus, isSchemaOk } from '../services/schema-guard.service';
 import {
     getKingDailyMatches,
     getKingHistory,
@@ -595,7 +596,14 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
  * Manually resolve predictions for a match (admin only)
  * Fix SEC-1: requireAuth + requireAdmin
  */
+function rejectIfSchemaMismatch(req: Request, res: Response): boolean {
+    if (isSchemaOk()) return false;
+    sendError(req, res, ErrorCode.DATABASE, 'Settlement disabled: schema mismatch', getSchemaStatus() as any, 503);
+    return true;
+}
+
 router.post('/resolve/:matchId', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    if (rejectIfSchemaMismatch(req, res)) return;
     try {
         // Ensure matchId is a string (handle array case)
         const matchIdParam = Array.isArray(req.params.matchId) ? req.params.matchId[0] : req.params.matchId;
@@ -622,6 +630,7 @@ router.post('/resolve/:matchId', requireAuth, requireAdmin, async (req: Request,
  * Fix SEC-1: requireAuth + requireAdmin
  */
 router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    if (rejectIfSchemaMismatch(req, res)) return;
     try {
         // Import the service dynamically to avoid circular dependency
         const { PredictionWatcherService } = await import('../services/prediction-watcher.service');

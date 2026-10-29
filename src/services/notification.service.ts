@@ -693,7 +693,8 @@ export class NotificationService {
             matchDate?: Date | string | null;
             homeScore?: number | null;
             awayScore?: number | null;
-        }
+        },
+        opts?: { skipPush?: boolean }
     ) {
         try {
             const [user, prefs] = await Promise.all([
@@ -726,6 +727,7 @@ export class NotificationService {
                 title,
                 message,
                 type: NotificationType.PREDICTION_RESULT,
+                skipPush: opts?.skipPush ?? false,
                 data: {
                     type: 'PREDICTION_RESULT',
                     isCorrect,

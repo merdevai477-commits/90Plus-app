@@ -344,9 +344,12 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
 
         const tokenStats = TokenRevocationService.getStats();
         const abuseStats = AbuseDetectionService.getStats();
+        const { getSchemaStatus } = await import('./services/schema-guard.service');
+        const schema = getSchemaStatus();
 
         res.status(200).json({
-            status: 'OK',
+            status: schema.ok ? 'OK' : 'DEGRADED',
+            schema,
             message: '90Plus API is running',
             timestamp,
             database: 'Connected',
@@ -858,6 +861,13 @@ async function startServer() {
             } 
 
             void startResponseCacheInvalidationBus();
+
+            try {
+                const { checkSchemaAtBoot } = await import('./services/schema-guard.service');
+                await checkSchemaAtBoot();
+            } catch (schemaErr) {
+                logger.warn('Schema guard failed to run (non-fatal):', schemaErr);
+            }
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {

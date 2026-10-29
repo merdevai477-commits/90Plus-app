@@ -15,6 +15,7 @@
 import { Request, Response } from 'express';
 import { checkDatabaseConnection, getConnectionPoolStatus } from '../lib/prisma-lazy';
 import { logger } from '../utils/logger';
+import { getSchemaStatus } from '../services/schema-guard.service';
 
 // ============================================================================
 // TYPES
@@ -80,11 +81,18 @@ export function markServicesStarted() {
 // ============================================================================
 
 export async function basicHealthCheck(req: Request, res: Response) {
+  const schema = getSchemaStatus();
   res.status(200).json({
-    status: 'OK',
+    status: schema.ok ? 'OK' : 'DEGRADED',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
     message: '90Plus API is running',
+    schema: {
+      ok: schema.ok,
+      checked: schema.checked,
+      pendingMigrations: schema.pendingMigrations,
+      missingColumns: schema.missingColumns,
+    },
   });
 }
 

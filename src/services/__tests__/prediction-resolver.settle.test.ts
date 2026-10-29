@@ -42,6 +42,9 @@ jest.mock('../../middleware/responseCache.middleware', () => ({
   clearResponseCache: jest.fn().mockResolvedValue(undefined),
 }));
 
+const mockSchemaOk = jest.fn(() => true);
+jest.mock('../schema-guard.service', () => ({ isSchemaOk: () => mockSchemaOk() }));
+
 import { PredictionResolverService } from '../prediction-resolver.service';
 
 function releaseOk() {
@@ -57,6 +60,89 @@ beforeEach(() => {
   mockAcquire.mockResolvedValue(releaseOk());
   mockAwardXp.mockResolvedValue({ awarded: 1 });
   mockNotify.mockResolvedValue(undefined);
+});
+
+function txRecorder(outcomes: Array<{ id: string; isCorrect: boolean }>) {
+  return async (fn: (tx: any) => Promise<boolean>) =>
+    fn({
+      prediction: {
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          outcomes.push({ id: where.id, isCorrect: data.isCorrect });
+          return { count: 1 };
+        }),
+      },
+      user: {
+        update: jest.fn(),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ xp: 0, level: 1 }),
+      },
+      coinTransaction: { create: jest.fn() },
+      xpTransaction: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
+    });
+}
+
+function row(id: string, matchDate: Date | null, predictionType = 'home') {
+  return {
+    id,
+    userId: `u-${id}`,
+    predictionType,
+    predictedHomeScore: null,
+    predictedAwayScore: null,
+    homeTeam: 'H',
+    awayTeam: 'A',
+    homeTeamLogo: null,
+    awayTeamLogo: null,
+    leagueName: null,
+    matchDate,
+  };
+}
+
+describe('PredictionResolverService schema + push policy (U1)', () => {
+  afterEach(() => {
+    mockSchemaOk.mockReturnValue(true);
+    delete process.env.PREDICTION_SETTLE_PUSH_MODE;
+  });
+
+  it('returns SETTLE_SKIPPED_SCHEMA and writes nothing', async () => {
+    mockSchemaOk.mockReturnValue(false);
+    const r = await PredictionResolverService.resolveMatchPredictions(5, { source: 'prediction-watcher' });
+    expect(r).toEqual({ outcome: 'SETTLE_SKIPPED_SCHEMA', settled: 0, staleOnly: false });
+    expect(mockAcquire).not.toHaveBeenCalled();
+    expect(mockLoad).not.toHaveBeenCalled();
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it('stale kickoff settles silently and reports staleOnly', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue([row('old', new Date('2026-06-01T15:00:00Z'))]);
+    const outcomes: Array<{ id: string; isCorrect: boolean }> = [];
+    mockTransaction.mockImplementation(txRecorder(outcomes));
+
+    const r = await PredictionResolverService.resolveMatchPredictions(11, { source: 'prediction-watcher' });
+    expect(outcomes).toEqual([{ id: 'old', isCorrect: true }]);
+    expect(mockNotify).not.toHaveBeenCalled();
+    expect(r).toEqual({ outcome: 'SETTLE_COMPLETE', settled: 1, staleOnly: true });
+  });
+
+  it('fresh kickoff pushes live', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 0, awayScore: 0 });
+    mockFindMany.mockResolvedValue([row('fresh', new Date(Date.now() - 2 * 3600_000), 'draw')]);
+    mockTransaction.mockImplementation(txRecorder([]));
+
+    const r = await PredictionResolverService.resolveMatchPredictions(12, { source: 'prediction-watcher' });
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify.mock.calls[0][5]).toEqual({ skipPush: false });
+    expect(r.staleOnly).toBe(false);
+  });
+
+  it('inbox_only mode writes inbox with skipPush', async () => {
+    process.env.PREDICTION_SETTLE_PUSH_MODE = 'inbox_only';
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 0, awayScore: 0 });
+    mockFindMany.mockResolvedValue([row('fresh', new Date(Date.now() - 3600_000), 'draw')]);
+    mockTransaction.mockImplementation(txRecorder([]));
+
+    await PredictionResolverService.resolveMatchPredictions(13, { source: 'prediction-watcher' });
+    expect(mockNotify.mock.calls[0][5]).toEqual({ skipPush: true });
+  });
 });
 
 describe('PredictionResolverService.resolveMatchPredictions', () => {
