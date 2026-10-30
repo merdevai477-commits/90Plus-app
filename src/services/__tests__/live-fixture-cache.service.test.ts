@@ -253,7 +253,7 @@ describe('provider-owned live fixture snapshots', () => {
     expect(redis.values.has(`${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${id}`)).toBe(false);
   });
 
-  it('REPLACE drops a stuck 90+15 clock instead of remapping it to LIVE', async () => {
+  it('REPLACE drops a stuck 90+20 clock instead of remapping it to LIVE', async () => {
     const id = 4_633_359;
     const redis = redisHarness({
       [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([
@@ -271,7 +271,7 @@ describe('provider-owned live fixture snapshots', () => {
         ...fixture(id, '2H', '365'),
         fixture: {
           id,
-          status: { short: '2H', long: 'Second Half', elapsed: 90, extra: 15 },
+          status: { short: '2H', long: 'Second Half', elapsed: 90, extra: 20 },
           date: new Date(Date.now() - 130 * 60 * 1000).toISOString(),
         },
       } as any,
@@ -762,12 +762,12 @@ describe('365 live absence grace', () => {
     expect(redis.values.has(tombKey(4_800_803))).toBe(false);
   });
 
-  it('still drops an incoming 90+15, elapsed 105, or 125-minute kickoff immediately', async () => {
+  it('still drops an incoming 90+20, elapsed 110, or 170-minute kickoff immediately', async () => {
     const kickoff = new Date(T0 - 100 * 60_000).toISOString();
     const cases = [
-      clocked(4_800_811, 90, 15, kickoff),
-      clocked(4_800_812, 105, null),
-      clocked(4_800_813, 90, null, new Date(T0 - 125 * 60_000).toISOString()),
+      clocked(4_800_811, 90, 20, kickoff),
+      clocked(4_800_812, 110, null),
+      clocked(4_800_813, 90, null, new Date(T0 - 170 * 60_000).toISOString()),
     ];
 
     for (const row of cases) {
@@ -792,9 +792,9 @@ describe('365 live absence grace', () => {
     const redis = redisHarness({
       [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([
         live,
-        clocked(staleId, 90, 15, kickoff),
-        clocked(agedId, 90, null, new Date(T0 - 125 * 60_000).toISOString()),
-        clocked(4_800_825, 105, null, kickoff),
+        clocked(staleId, 90, 20, kickoff),
+        clocked(agedId, 90, null, new Date(T0 - 170 * 60_000).toISOString()),
+        clocked(4_800_825, 110, null, kickoff),
       ]),
     });
     mockedGetRedisClient.mockReturnValue(redis.client as any);

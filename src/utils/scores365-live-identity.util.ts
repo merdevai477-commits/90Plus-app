@@ -58,12 +58,21 @@ export function isHotAllScoresPersistItem(
   return nowMs - start <= 8 * 60 * 60 * 1000;
 }
 
-const REGULAR_MAX_STOPPAGE = 15;
-const STALE_2H_AGE_MIN = 125;
+/** Longest stoppage still treated as real play (45+14 / 90+13 happen in top football). */
+export const MAX_PLAUSIBLE_STOPPAGE = 20;
+/**
+ * Wall-clock net for a feed stuck "in play" at 90'+. Worst real case is about
+ * 15 late + 45+20 + 20 HT + 45+20 = 165 min after the listed kickoff; anything
+ * sooner can still be stoppage time with goals to come.
+ */
+export const STALE_2H_AGE_MIN = 170;
+/** 45 + 15 HT is the earliest a second half can start after the listed kickoff. */
+const EARLIEST_2H_AGE_MIN = 55;
+const REGULAR_MAX_STOPPAGE = MAX_PLAUSIBLE_STOPPAGE;
 const LIVE_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 const FINISHED_SHORTS = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
 
-function parseStoppageFromDisplay(display?: string | null, minute?: number | null): number | null {
+export function parseStoppageFromDisplay(display?: string | null, minute?: number | null): number | null {
   const raw = (display ?? '').trim();
   if (!raw) return null;
   const plusMatch = raw.match(/(\d+)\s*\+\s*(\d+)/);
@@ -77,6 +86,55 @@ function parseStoppageFromDisplay(display?: string | null, minute?: number | nul
     return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), REGULAR_MAX_STOPPAGE) : null;
   }
   return null;
+}
+
+/**
+ * First vs second half from 365 hints. Period text and a `45+N` / `90+N`
+ * display win over the raw clock: during first-half stoppage 365 can report
+ * gameTime 46–50 while the match is still in the first half.
+ */
+export function resolve365InPlayHalf(hints: {
+  text: string;
+  display?: string | null;
+  minute: number | null;
+  startTime?: string | null;
+  allowClock?: boolean;
+  nowMs?: number;
+}): '1H' | '2H' | null {
+  const text = hints.text.toLowerCase();
+  const tokens = text.split(/\s+/);
+  if (
+    text.includes('2nd') ||
+    text.includes('second') ||
+    text.includes('الثاني') ||
+    tokens.includes('2') ||
+    tokens.includes('2h')
+  ) {
+    return '2H';
+  }
+  if (
+    text.includes('1st') ||
+    text.includes('first') ||
+    text.includes('الأول') ||
+    tokens.includes('1') ||
+    tokens.includes('1h')
+  ) {
+    return '1H';
+  }
+  const display = (hints.display ?? '').trim();
+  if (/^45\s*\+/.test(display)) return '1H';
+  if (/^90\s*\+/.test(display)) return '2H';
+
+  if (hints.allowClock === false || hints.minute == null || hints.minute <= 0) return null;
+  if (hints.minute <= 45) return '1H';
+  const kick = hints.startTime ? Date.parse(hints.startTime) : Number.NaN;
+  if (
+    Number.isFinite(kick) &&
+    (hints.nowMs ?? Date.now()) - kick < EARLIEST_2H_AGE_MIN * 60_000
+  ) {
+    return '1H';
+  }
+  return '2H';
 }
 
 export type Stale365ClockRaw = {
@@ -128,7 +186,7 @@ export function isStaleMappedInPlayClock(opts: {
   if (s !== '1H' && s !== '2H' && s !== 'LIVE' && s !== 'FT') return false;
   const elapsed = opts.elapsed;
   const extra = opts.extra;
-  if (s === '1H' && elapsed != null && elapsed > 60) return true;
+  if (s === '1H' && elapsed != null && elapsed > 45 + REGULAR_MAX_STOPPAGE) return true;
   if (s === '2H' || s === 'LIVE' || s === 'FT') {
     if (elapsed != null && elapsed >= 90 + REGULAR_MAX_STOPPAGE) return true;
     if (elapsed != null && elapsed >= 90 && extra != null && extra >= REGULAR_MAX_STOPPAGE) {
@@ -196,14 +254,20 @@ export function coerceAllScoresLiveStatus<
   let coerced = 'LIVE';
   let long = 'In Progress';
   let elapsed = minute;
+  const half = resolve365InPlayHalf({
+    text,
+    display: raw.gameTimeDisplay,
+    minute,
+    startTime: raw.startTime,
+  });
   if (text.includes('halftime') || text.includes('half time') || text === 'ht' || short === 'HT') {
     coerced = 'HT';
     long = 'Halftime';
     elapsed = 45;
-  } else if (text.includes('2nd') || text.includes('second') || (minute != null && minute > 45)) {
+  } else if (half === '2H') {
     coerced = '2H';
     long = 'Second Half';
-  } else if (text.includes('1st') || text.includes('first') || (minute != null && minute > 0)) {
+  } else if (half === '1H') {
     coerced = '1H';
     long = 'First Half';
   }

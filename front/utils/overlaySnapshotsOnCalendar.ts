@@ -18,6 +18,7 @@ import {
   matchLiveFingerprint,
   withAuthoritativeLiveMinute,
 } from './liveFixtureFreshness';
+import { LIVE_FEED_GAP_GRACE_MS } from './mergeTodayCalendarWithLiveFeed';
 
 export { matchLiveFingerprint } from './liveFixtureFreshness';
 
@@ -41,6 +42,16 @@ export function overlaySnapshotsOnCalendarDetailed(
     if (Number.isNaN(id)) return row;
     const snap = snapshots[id];
     if (!snap) return row;
+    // FT inferred from a live-feed gap yields to a fresh per-fixture live poll.
+    if (
+      row.finishedByFeedGap &&
+      snap.phase === 'live' &&
+      Date.now() - snap.updatedAt < LIVE_FEED_GAP_GRACE_MS
+    ) {
+      anyChanged = true;
+      changedIds.add(row.id);
+      return { ...applyLiveClockToMatch(row, snapshotToMatchRow(snap)), finishedByFeedGap: undefined };
+    }
     // Details/calendar FT must not be revived by a leftover live snapshot.
     if (row.status === 'finished' && snap.phase !== 'finished') {
       return row;

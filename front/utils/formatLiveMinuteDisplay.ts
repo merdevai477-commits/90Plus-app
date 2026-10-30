@@ -3,8 +3,11 @@
  * Pure helpers — no React Native / fetch imports (safe for unit tests).
  */
 
+import { MAX_PLAUSIBLE_STOPPAGE } from './staleMatchClock';
+
 /** Cap announced / running stoppage minutes for display. */
-const clampStoppage = (n: number): number => Math.min(Math.max(Math.floor(n), 1), 15);
+const clampStoppage = (n: number): number =>
+  Math.min(Math.max(Math.floor(n), 1), MAX_PLAUSIBLE_STOPPAGE);
 
 /**
  * Build `45+2'` / `90+4'` / `120+3'` from period base, elapsed, and optional API `extra`.

@@ -31,7 +31,13 @@ import {
   pick365BroadcastNames,
 } from '../utils/scores365-match-info.util';
 import { resolveVenueImage } from './stadium-image.service';
-import { coerceAllScoresLiveStatus } from '../utils/scores365-live-identity.util';
+import {
+  MAX_PLAUSIBLE_STOPPAGE,
+  STALE_2H_AGE_MIN,
+  coerceAllScoresLiveStatus,
+  parseStoppageFromDisplay as parse365StoppageExtra,
+  resolve365InPlayHalf,
+} from '../utils/scores365-live-identity.util';
 import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
@@ -1251,26 +1257,6 @@ async function map365GameToFixture(
   );
 }
 
-/** Parse injury/stoppage from 365 `gameTimeDisplay` like `90+4`, `45+2`, `+3'`. */
-function parse365StoppageExtra(
-  displayRaw: string,
-  minute: number | null,
-): number | null {
-  const display = displayRaw.trim();
-  if (!display) return null;
-  const plusMatch = display.match(/(\d+)\s*\+\s*(\d+)/);
-  if (plusMatch) {
-    const n = Number(plusMatch[2]);
-    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 15) : null;
-  }
-  const barePlus = display.match(/^\+?\s*(\d+)\s*'?$/);
-  if (barePlus && minute != null && (minute === 45 || minute === 90 || minute === 105 || minute === 120)) {
-    const n = Number(barePlus[1]);
-    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 15) : null;
-  }
-  return null;
-}
-
 /** Status rules validated against 365Scores feed (statusGroup, score -1, statusText). */
 export function classifyScores365MatchStatus(
   game: Scores365Game,
@@ -1419,14 +1405,16 @@ export function classifyScores365MatchStatus(
   }
 
   // 365 may keep statusGroup=3 with a stuck `90+N` / `2nd Half` after full time.
-  // Display clamps stoppage at 15, so 90+15 (or gameTime >= 105) is FT unless ET.
+  // Only clocks past any real stoppage (90+20) count as FT — a 90+12 can still
+  // produce goals.
+  const maxSecondHalfMinute = 90 + MAX_PLAUSIBLE_STOPPAGE;
   if (
     statusGroup === 3 &&
-    ((minute != null && minute >= 105) ||
+    ((minute != null && minute >= maxSecondHalfMinute) ||
       (minute != null &&
         minute >= 90 &&
         stoppageFromDisplay != null &&
-        stoppageFromDisplay >= 15))
+        stoppageFromDisplay >= MAX_PLAUSIBLE_STOPPAGE))
   ) {
     return withExtra('FT', 'Match Finished', 90, null);
   }
@@ -1435,7 +1423,7 @@ export function classifyScores365MatchStatus(
   if (
     statusGroup === 3 &&
     Number.isFinite(kickoffMs) &&
-    Date.now() - kickoffMs >= 125 * 60 * 1000 &&
+    Date.now() - kickoffMs >= STALE_2H_AGE_MIN * 60 * 1000 &&
     minute != null &&
     minute >= 90
   ) {
@@ -1449,7 +1437,7 @@ export function classifyScores365MatchStatus(
   if (statusGroup !== 3 && minute != null && minute >= 90) {
     return withExtra('FT', 'Match Finished', 90);
   }
-  if (minute != null && minute >= 105) {
+  if (minute != null && minute >= maxSecondHalfMinute) {
     return withExtra('FT', 'Match Finished', 90);
   }
 
@@ -1463,17 +1451,20 @@ export function classifyScores365MatchStatus(
     return withExtra('HT', 'Halftime', 45);
   }
 
-  // 2nd half — require live statusGroup OR explicit 2nd-half text (not minute > 45 alone).
-  if (
-    text.includes('second') ||
-    text.includes('2nd') ||
-    text.includes('الثاني') ||
-    shortCode === '2' ||
-    shortCode === '2h' ||
-    (statusGroup === 3 && minute != null && minute > 45)
-  ) {
+  // Period text / `45+N` display decide the half before the raw clock, so
+  // first-half stoppage (gameTime 46–50) is not mistaken for the second half.
+  // The clock alone only counts for live statusGroup.
+  const half = resolve365InPlayHalf({
+    text: `${text} ${shortCode}`,
+    display: displayRaw,
+    minute,
+    startTime: game.startTime,
+    allowClock: statusGroup === 3,
+  });
+
+  if (half === '2H') {
     const elapsed =
-      minute != null ? Math.min(Math.max(minute, 46), 105) : 46;
+      minute != null ? Math.min(Math.max(minute, 46), maxSecondHalfMinute) : 46;
     // When clock is still at 90 but display is `90+4`, keep elapsed at 90 and set extra.
     const pinnedExtra =
       elapsed === 90 && stoppageFromDisplay != null
@@ -1486,14 +1477,7 @@ export function classifyScores365MatchStatus(
     return withExtra('2H', 'Second Half', displayElapsed, pinnedExtra);
   }
 
-  if (
-    text.includes('first') ||
-    text.includes('1st') ||
-    text.includes('الأول') ||
-    shortCode === '1' ||
-    shortCode === '1h' ||
-    (statusGroup === 3 && minute != null && minute > 0 && minute <= 45)
-  ) {
+  if (half === '1H') {
     const elapsed = minute;
     const pinnedExtra =
       elapsed === 45 && stoppageFromDisplay != null
@@ -1508,7 +1492,7 @@ export function classifyScores365MatchStatus(
     return withExtra(
       'LIVE',
       'In Progress',
-      minute != null ? Math.min(minute, 105) : null,
+      minute != null ? Math.min(minute, maxSecondHalfMinute) : null,
       stoppageFromDisplay,
     );
   }

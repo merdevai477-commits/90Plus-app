@@ -86,7 +86,7 @@ describe('isAllScoresLiveItem', () => {
     expect(isAllScoresLiveItem({ phase: 'upcoming', raw: { statusGroup: 2 } })).toBe(false);
   });
 
-  it('does not treat a stuck 90+15 statusGroup-3 clock as live', () => {
+  it('does not treat a stuck 90+20 statusGroup-3 clock as live', () => {
     expect(
       isAllScoresLiveItem({
         phase: 'finished',
@@ -95,10 +95,26 @@ describe('isAllScoresLiveItem', () => {
           statusText: '2nd Half',
           shortStatusText: '2nd Half',
           gameTime: 90,
-          gameTimeDisplay: '90+15',
+          gameTimeDisplay: '90+20',
         },
       }),
     ).toBe(false);
+  });
+
+  it('keeps a long but real 90+12 stoppage live', () => {
+    expect(
+      isAllScoresLiveItem({
+        phase: 'live',
+        raw: {
+          statusGroup: 3,
+          statusText: '2nd Half',
+          shortStatusText: '2nd Half',
+          gameTime: 90,
+          gameTimeDisplay: '90+12',
+          startTime: new Date(Date.now() - 135 * 60_000).toISOString(),
+        },
+      }),
+    ).toBe(true);
   });
 });
 
@@ -116,18 +132,32 @@ describe('coerceAllScoresLiveStatus', () => {
     expect(coerced.fixture.status.short).toBe('2H');
   });
 
-  it('does not coerce a stuck 90+15 FT classification back to 2H', () => {
+  it('does not coerce a stuck 90+20 FT classification back to 2H', () => {
     const fixture = {
-      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 90, extra: 15 } },
+      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 90, extra: 20 } },
     };
     const coerced = coerceAllScoresLiveStatus(fixture, {
       statusGroup: 3,
       statusText: '2nd Half',
       shortStatusText: '2nd Half',
       gameTime: 90,
-      gameTimeDisplay: '90+15',
+      gameTimeDisplay: '90+20',
     });
     expect(coerced.fixture.status.short).toBe('FT');
     expect(coerced.fixture.status.extra).toBeNull();
+  });
+
+  it('coerces first-half stoppage (gameTime past 45) to 1H, not 2H', () => {
+    const fixture = {
+      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 47, extra: null } },
+    };
+    const coerced = coerceAllScoresLiveStatus(fixture, {
+      statusGroup: 3,
+      statusText: '1st Half',
+      shortStatusText: '1st Half',
+      gameTime: 47,
+      gameTimeDisplay: '45+2',
+    });
+    expect(coerced.fixture.status.short).toBe('1H');
   });
 });

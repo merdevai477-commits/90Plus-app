@@ -48,6 +48,8 @@ export interface Match {
   time?: string; // Match kickoff time (e.g., "20:00")
   league: LeagueInfo;
   fixtureDate?: string; // ISO date string for filtering
+  /** FT inferred only because the row left the live feed — the feed may revive it. */
+  finishedByFeedGap?: boolean;
   isFavorited?: boolean; // ✅ Added isFavorited
   /** 365 community Who Will Win? percentages (fan votes). */
   crowdPrediction?: {

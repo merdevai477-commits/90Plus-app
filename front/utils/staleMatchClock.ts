@@ -1,11 +1,14 @@
 /**
  * Detect 365/API clocks that stay "in play" after the match is over.
- * Display clamps stoppage at 15, so a stuck `90+15'` is almost always FT.
+ * Thresholds sit past any real stoppage so a live 90+12 is never cut short —
+ * stoppage-time goals must still reach the list. Keep in sync with the
+ * backend `scores365-live-identity.util.ts`.
  */
 
-const REGULAR_MAX_STOPPAGE = 15;
-/** 45 + ~15 HT + 45 + 20 stoppage — beyond this at 90'+, treat as finished. */
-export const STALE_2H_AGE_MIN = 125;
+/** Longest stoppage still treated as real play (45+14 / 90+13 happen). */
+export const MAX_PLAUSIBLE_STOPPAGE = 20;
+/** 15 late + 45+20 + 20 HT + 45+20 ≈ 165 — only beyond this is a 90'+ clock stuck. */
+export const STALE_2H_AGE_MIN = 170;
 
 export function isStaleInPlayClock(opts: {
   statusShort: string | null | undefined;
@@ -20,11 +23,11 @@ export function isStaleInPlayClock(opts: {
   const elapsed = opts.elapsed;
   const extra = opts.extra;
 
-  if (s === '1H' && elapsed != null && elapsed > 60) return true;
+  if (s === '1H' && elapsed != null && elapsed > 45 + MAX_PLAUSIBLE_STOPPAGE) return true;
 
   if (s === '2H' || s === 'LIVE') {
-    if (elapsed != null && elapsed >= 90 + REGULAR_MAX_STOPPAGE) return true;
-    if (elapsed != null && elapsed >= 90 && extra != null && extra >= REGULAR_MAX_STOPPAGE) {
+    if (elapsed != null && elapsed >= 90 + MAX_PLAUSIBLE_STOPPAGE) return true;
+    if (elapsed != null && elapsed >= 90 && extra != null && extra >= MAX_PLAUSIBLE_STOPPAGE) {
       return true;
     }
   }

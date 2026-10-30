@@ -1,4 +1,8 @@
-import { mergeTodayCalendarWithLiveFeed } from '../mergeTodayCalendarWithLiveFeed';
+import {
+  LIVE_FEED_GAP_GRACE_MS,
+  __resetLiveFeedGapTrackerForTests,
+  mergeTodayCalendarWithLiveFeed,
+} from '../mergeTodayCalendarWithLiveFeed';
 import type { Match } from '../../components/Matches/matchCardUtils';
 
 function makeMatch(overrides: Partial<Match> & { id: string }): Match {
@@ -15,22 +19,82 @@ function makeMatch(overrides: Partial<Match> & { id: string }): Match {
 }
 
 describe('mergeTodayCalendarWithLiveFeed', () => {
-  it('demotes calendar live rows that are missing from the live feed', () => {
+  const T0 = Date.now();
+  const sibling = makeMatch({ id: '4732168', status: 'live', statusShort: '2H', elapsed: 60 });
+
+  beforeEach(() => {
+    __resetLiveFeedGapTrackerForTests();
+  });
+
+  it('demotes a played-out live row only after it stays missing past the grace window', () => {
     const calendar = [
-      makeMatch({ id: '4751186', status: 'live', statusShort: '1H', score: { home: 0, away: 0 } }),
-      makeMatch({ id: '4732168', status: 'live', statusShort: '2H', score: { home: 1, away: 0 } }),
+      makeMatch({ id: '4751186', status: 'live', statusShort: '2H', elapsed: 90, extra: 5 }),
+      sibling,
     ];
-    const liveFeed = [
-      makeMatch({ id: '4732168', status: 'live', statusShort: '2H', score: { home: 1, away: 0 } }),
-    ];
+    const liveFeed = [sibling];
 
-    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
-    const ghost = merged.find((row) => row.id === '4751186');
-    const live = merged.find((row) => row.id === '4732168');
+    const first = mergeTodayCalendarWithLiveFeed(calendar, liveFeed, T0);
+    expect(first.find((row) => row.id === '4751186')?.status).toBe('live');
 
+    const later = mergeTodayCalendarWithLiveFeed(calendar, liveFeed, T0 + LIVE_FEED_GAP_GRACE_MS);
+    const ghost = later.find((row) => row.id === '4751186');
     expect(ghost?.status).toBe('finished');
     expect(ghost?.statusShort).toBe('FT');
-    expect(live?.status).toBe('live');
+    expect(ghost?.finishedByFeedGap).toBe(true);
+    expect(later.find((row) => row.id === '4732168')?.status).toBe('live');
+  });
+
+  it('never ends a mid-match row (1H / 2H before 90) just because it left the feed', () => {
+    const calendar = [
+      makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 45, extra: 3 }),
+      makeMatch({ id: '2', status: 'live', statusShort: '2H', elapsed: 70 }),
+      sibling,
+    ];
+    mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0);
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0 + 10 * 60_000);
+    expect(merged.find((row) => row.id === '1')?.status).toBe('live');
+    expect(merged.find((row) => row.id === '2')?.status).toBe('live');
+  });
+
+  it('ends a ghost live row whose kickoff is long past once the grace window passes', () => {
+    const calendar = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '1H',
+        elapsed: 30,
+        fixtureDate: new Date(T0 - 4 * 60 * 60_000).toISOString(),
+      }),
+      sibling,
+    ];
+    mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0);
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0 + LIVE_FEED_GAP_GRACE_MS);
+    expect(merged.find((row) => row.id === '1')?.status).toBe('finished');
+  });
+
+  it('revives a feed-gap FT when the match comes back to the live feed', () => {
+    const calendar = [
+      makeMatch({ id: '1', status: 'live', statusShort: '2H', elapsed: 90, extra: 3 }),
+      sibling,
+    ];
+    mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0);
+    const ended = mergeTodayCalendarWithLiveFeed(calendar, [sibling], T0 + LIVE_FEED_GAP_GRACE_MS);
+    expect(ended.find((row) => row.id === '1')?.status).toBe('finished');
+
+    const back = makeMatch({
+      id: '1',
+      status: 'live',
+      statusShort: '2H',
+      elapsed: 90,
+      extra: 6,
+      score: { home: 1, away: 0 },
+    });
+    const revived = mergeTodayCalendarWithLiveFeed(ended, [sibling, back], T0 + 60_000);
+    const row = revived.find((r) => r.id === '1');
+    expect(row?.status).toBe('live');
+    expect(row?.extra).toBe(6);
+    expect(row?.score.home).toBe(1);
+    expect(row?.finishedByFeedGap).toBeUndefined();
   });
 
   it('does not demote calendar live rows when the live feed is empty', () => {
@@ -48,14 +112,14 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     expect(merged.find((row) => row.id === '1')?.statusShort).toBe('FT');
   });
 
-  it('finishes a stuck 90+15 live row even when it is the only live match', () => {
+  it('finishes a stuck 90+20 live row even when it is the only live match', () => {
     const calendar = [
       makeMatch({
         id: '1',
         status: 'live',
         statusShort: '2H',
         elapsed: 90,
-        extra: 15,
+        extra: 20,
         score: { home: 2, away: 4 },
       }),
     ];
@@ -65,7 +129,7 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
         status: 'live',
         statusShort: '2H',
         elapsed: 90,
-        extra: 15,
+        extra: 20,
         score: { home: 2, away: 4 },
       }),
     ];

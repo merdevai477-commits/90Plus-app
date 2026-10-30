@@ -152,7 +152,37 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.extra).toBe(2);
   });
 
-  it('maps stuck 90+15 second half to FT even when text still says 2nd Half', () => {
+  it('keeps a long first-half stoppage in 1H when gameTime runs past 45', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '1st Half',
+        shortStatusText: '1st Half',
+        gameTime: 48,
+        gameTimeDisplay: '45+3',
+      }),
+    );
+    expect(result.short).toBe('1H');
+    expect(result.elapsed).toBe(48);
+    expect(result.extra).toBeNull();
+  });
+
+  it('keeps first-half stoppage in 1H from a 45+N display without period text', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: '', shortStatusText: '', gameTime: 47, gameTimeDisplay: '45+2' }),
+    );
+    expect(result.short).toBe('1H');
+  });
+
+  it('does not start the second half before kickoff + 55 minutes', () => {
+    const startTime = new Date(Date.now() - 50 * 60 * 1000).toISOString();
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: '', shortStatusText: '', gameTime: 47, startTime }),
+    );
+    expect(result.short).toBe('1H');
+  });
+
+  it('keeps a 90+15 second half live', () => {
     const result = classifyScores365MatchStatus(
       game({
         statusGroup: 3,
@@ -162,24 +192,51 @@ describe('classifyScores365MatchStatus', () => {
         gameTimeDisplay: '90+15',
       }),
     );
-    expect(result.short).toBe('FT');
-    expect(result.extra).toBeNull();
+    expect(result.short).toBe('2H');
+    expect(result.extra).toBe(15);
   });
 
-  it('maps second-half gameTime 105 to FT', () => {
+  it('maps stuck 90+20 second half to FT even when text still says 2nd Half', () => {
     const result = classifyScores365MatchStatus(
       game({
         statusGroup: 3,
         statusText: '2nd Half',
         shortStatusText: '2nd Half',
-        gameTime: 105,
+        gameTime: 90,
+        gameTimeDisplay: '90+20',
       }),
     );
     expect(result.short).toBe('FT');
+    expect(result.extra).toBeNull();
   });
 
-  it('maps 2H still live 125+ minutes after kickoff to FT', () => {
-    const startTime = new Date(Date.now() - 130 * 60 * 1000).toISOString();
+  it('keeps second-half gameTime 105 live and maps 110 to FT', () => {
+    const at = (gameTime: number) =>
+      classifyScores365MatchStatus(
+        game({ statusGroup: 3, statusText: '2nd Half', shortStatusText: '2nd Half', gameTime }),
+      ).short;
+    expect(at(105)).toBe('2H');
+    expect(at(110)).toBe('FT');
+  });
+
+  it('keeps 90+8 live 135 minutes after a delayed kickoff', () => {
+    const startTime = new Date(Date.now() - 135 * 60 * 1000).toISOString();
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: '90+8',
+        startTime,
+      }),
+    );
+    expect(result.short).toBe('2H');
+    expect(result.extra).toBe(8);
+  });
+
+  it('maps 2H still at 90+ 170 minutes after kickoff to FT', () => {
+    const startTime = new Date(Date.now() - 175 * 60 * 1000).toISOString();
     const result = classifyScores365MatchStatus(
       game({
         statusGroup: 3,
