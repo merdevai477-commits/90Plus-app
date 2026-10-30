@@ -188,13 +188,13 @@ export default function RankScreen() {
             contentPosition="left center"
             cachePolicy="memory-disk"
           />
-          {/* Figma: linear-gradient(71deg, transparent 6.8%, black 0.64 at 56.9%) */}
+          {/* Figma: linear-gradient(71deg, transparent 6.8%, black 0.64 at 56.9%) — a touch stronger for title legibility */}
           <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.64)']}
-            locations={[0.068, 0.569]}
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.78)']}
+            locations={[0.05, 0.42, 0.78]}
             style={s.heroBgGradDiag}
-            start={{ x: 0.1, y: 1 }}
-            end={{ x: 0.9, y: 0 }}
+            start={{ x: 0.05, y: 0.95 }}
+            end={{ x: 0.95, y: 0.05 }}
           />
           <LinearGradient
             colors={['transparent', 'rgba(3,3,3,0.55)', APP_BG]}
@@ -205,14 +205,24 @@ export default function RankScreen() {
 
           <View style={s.heroText}>
             <View style={s.titleRow}>
-              {/* Icon first so RTL row renders [title][icon] on the trailing edge like Figma. */}
+              <Text
+                style={[s.pageTitle, { fontFamily: fonts.extrabold }]}
+                numberOfLines={1}
+              >
+                {t.rank.competitions.title}
+              </Text>
               <View style={s.trophyIconBox}>
-                <Trophy size={20} color="#fff" />
+                <Trophy size={22} color="#fff" />
               </View>
-              <Text style={[s.pageTitle, { fontFamily: fonts.extrabold }]}>{t.rank.competitions.title}</Text>
             </View>
-            <Text style={s.pageSub1}>{t.rank.competitions.tagline}</Text>
-            <Text style={s.pageSub2}>{t.rank.competitions.subtitle}</Text>
+            <View style={s.heroSubs}>
+              <Text style={[s.pageSub1, { fontFamily: fonts.semibold }]}>
+                {t.rank.competitions.tagline}
+              </Text>
+              <Text style={[s.pageSub2, { fontFamily: fonts.medium }]}>
+                {t.rank.competitions.subtitle}
+              </Text>
+            </View>
           </View>
 
           <ProfileCard />
@@ -272,18 +282,22 @@ const s = StyleSheet.create({
     right: 0,
     height: 110,
   },
-  // Figma title sits ~185/415 down the hero art.
+  // Figma: title block at ~top 185 / 415, trailing edge, items-end.
   heroText: {
-    paddingHorizontal: 16,
-    paddingTop: Math.round(HERO_IMG_H * 0.30),
-    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: Math.round(HERO_IMG_H * 0.22),
+    paddingBottom: 10,
     zIndex: 1,
+    alignItems: 'flex-end',
+    maxWidth: '72%',
+    alignSelf: 'flex-end',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 15,
   },
   trophyIconBox: {
     width: 46,
@@ -300,14 +314,27 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  pageTitle: { color: '#fff', fontSize: 34, fontWeight: '900', textAlign: 'right' },
+  pageTitle: {
+    color: '#fff',
+    fontSize: 34,
+    fontWeight: '800',
+    textAlign: 'right',
+    lineHeight: 42,
+    includeFontPadding: false,
+  },
+  heroSubs: {
+    width: '100%',
+    gap: 8,
+    alignItems: 'flex-end',
+  },
   pageSub1: {
     color: '#d4d4d4',
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 6,
     textAlign: 'right',
     width: '100%',
+    lineHeight: 24,
+    includeFontPadding: false,
   },
   pageSub2: {
     color: '#a49bad',
@@ -315,6 +342,8 @@ const s = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'right',
     width: '100%',
+    lineHeight: 18,
+    includeFontPadding: false,
   },
 
   compGrid: {
