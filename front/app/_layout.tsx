@@ -68,6 +68,7 @@ import {
   resumeDeviceSession,
 } from "../utils/deviceSession";
 import * as Sentry from '@sentry/react-native';
+import { AppMetrics, AppMetricsRoot } from 'expo-observe';
 import { captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
@@ -152,6 +153,7 @@ function ClerkKeyMissingScreen() {
       Sentry.captureMessage('CRITICAL: clerkPublishableKey missing in build', 'fatal');
     } catch { /* Sentry may not be initialized yet */ }
     SplashScreen.hideAsync().catch(() => {});
+    AppMetrics.markInteractive();
   }, []);
   return (
     <View style={layoutStyles.errorContainer}>
@@ -242,6 +244,8 @@ function HideSplashWhenReady({ fontsReady }: { fontsReady: boolean }) {
     if (!fullyReady) return;
     const id = requestAnimationFrame(() => {
       SplashScreen.hideAsync().catch(() => {});
+      // First call wins. Fonts, Clerk, and the first navigation are ready.
+      AppMetrics.markInteractive();
     });
     return () => cancelAnimationFrame(id);
   }, [fullyReady]);
@@ -900,4 +904,4 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+export default Sentry.wrap(AppMetricsRoot.wrap(RootLayout));
