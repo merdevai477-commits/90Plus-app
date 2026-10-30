@@ -39,12 +39,12 @@ interface Props {
 /**
  * Rank landing for King of Coaches:
  *  1. Coach of the Week card — Figma 1550:6500 (badge 1552:6543, CTA 1551:6521)
- *  2. Jersey / ملك المدربين promo banner
- *  3. Full-width start CTA
+ *  2. Jersey / ملك المدربين promo card with the full-width start CTA inside
  */
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
   const { width } = useWindowDimensions();
   const bannerWidth = width - 44;
+  const bannerRadius = Math.round(20 * (bannerWidth / 404));
   const dir = isAr ? 'rtl' : 'ltr';
   /**
    * Figma lays the header LTR as [badge][copy] with Arabic copy right-aligned —
@@ -131,42 +131,42 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
       </View>
 
       <View
-        style={[s.banner, { borderRadius: Math.round(20 * (bannerWidth / 404)) }]}
-        accessibilityRole="image"
+        style={[s.promoCard, { borderRadius: bannerRadius }]}
         accessibilityLabel={copy.title}
+        testID="coach-king-promo-card"
       >
         <Image
           source={PROMO}
-          style={{ width: '100%', aspectRatio: PROMO_RATIO }}
+          style={[s.promoArt, { aspectRatio: PROMO_RATIO }]}
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={120}
           accessibilityLabel={copy.title}
         />
-      </View>
 
-      <Pressable
-        onPress={onStart}
-        disabled={!onStart}
-        accessibilityRole="button"
-        accessibilityLabel={copy.start}
-        testID="coach-king-start"
-        style={({ pressed }) => [s.ctaHit, pressed && { opacity: 0.92 }]}
-      >
-        <View style={s.ctaClip}>
-          <LinearGradient
-            colors={['#8B5CF6', '#2E146A']}
-            locations={[0.12, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[s.ctaRow, { flexDirection: ctaRow }]}>
-            <CoachArrowIcon />
-            <Text style={[s.ctaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
+        <Pressable
+          onPress={onStart}
+          disabled={!onStart}
+          accessibilityRole="button"
+          accessibilityLabel={copy.start}
+          testID="coach-king-start"
+          style={({ pressed }) => [s.ctaHit, pressed && { opacity: 0.92 }]}
+        >
+          <View style={s.ctaClip}>
+            <LinearGradient
+              colors={['#8B5CF6', '#2E146A']}
+              locations={[0.12, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[s.ctaRow, { flexDirection: ctaRow }]}>
+              <CoachArrowIcon />
+              <Text style={[s.ctaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
+            </View>
           </View>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -257,13 +257,22 @@ const s = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  banner: {
+  promoCard: {
     width: '100%',
     overflow: 'hidden',
+    backgroundColor: 'rgba(46,6,165,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(139,92,246,0.35)',
+    paddingBottom: 14,
+    gap: 12,
+  },
+  promoArt: {
+    width: '100%',
   },
   ctaHit: {
     width: '100%',
     alignSelf: 'stretch',
+    paddingHorizontal: 14,
   },
   ctaClip: {
     width: '100%',
