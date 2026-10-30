@@ -19,7 +19,9 @@ import {
 import { publishCompetition, rejectCompetition } from '../services/competitions.service';
 import {
   AssCommunityError,
+  assDeleteCommunityComment,
   assDeleteCommunityPost,
+  listAssCommunityComments,
   listAssCommunityPosts,
 } from '../services/ass-community.service';
 
@@ -200,6 +202,38 @@ router.post('/community/posts/:id/delete', requireAssSession, async (req: Reques
     }
     logger.error('[AsS] delete community post failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to delete post' });
+  }
+});
+
+router.get('/community/comments', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const filterRaw = typeof req.query.filter === 'string' ? req.query.filter : 'all';
+    const orderRaw = typeof req.query.order === 'string' ? req.query.order : 'newest';
+    const filter = filterRaw === 'reported' || filterRaw === 'ai' ? filterRaw : 'all';
+    const order = orderRaw === 'oldest' ? 'oldest' : 'newest';
+    const limit = Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 80, 200);
+    const comments = await listAssCommunityComments({ filter, order, limit });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data: comments });
+  } catch (err) {
+    logger.error('[AsS] list community comments failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load comments' });
+  }
+});
+
+router.post('/community/comments/:id/delete', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+    const result = await assDeleteCommunityComment(id, reason);
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof AssCommunityError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] delete community comment failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to delete comment' });
   }
 });
 

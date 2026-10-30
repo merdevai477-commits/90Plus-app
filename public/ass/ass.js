@@ -12,11 +12,14 @@ const imagePreview = document.getElementById('image-preview');
 const imageCaption = document.getElementById('image-caption');
 const deleteModal = document.getElementById('delete-modal');
 const deleteReason = document.getElementById('delete-reason');
+const deleteTitle = document.getElementById('delete-title');
+const deleteHint = document.getElementById('delete-hint');
 
 const STATE = {
   tab: 'DRAFT',
   rejectId: null,
   deleteId: null,
+  deleteKind: 'post',
   previewPostId: null,
   postFilter: 'all',
   postOrder: 'newest',
@@ -142,7 +145,7 @@ function renderPosts(rows) {
         ${thumb}
         <div class="card-body">
           <div class="prize">${esc(name)} <span class="handle">${esc(handle)}</span></div>
-          <div class="badges">${postBadges(p)}</div>
+          <div class="badges"><span class="tag ok">منشور</span> ${postBadges(p)}</div>
           <div class="post-text">${esc(preview) || '<span class="muted">—</span>'}</div>
           <div class="meta">
             ❤️ ${p.likesCount || 0} · 💬 ${p.commentsCount || 0}<br/>
@@ -155,6 +158,44 @@ function renderPosts(rows) {
                 : ''
             }
             <button class="danger" data-act="delete-post" data-id="${esc(p.id)}">حذف</button>
+          </div>
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
+function renderComments(rows) {
+  if (!rows.length) {
+    cardsEl.innerHTML = '<div class="empty">لا توجد تعليقات مبلّغ عنها أو مشكوك فيها</div>';
+    return;
+  }
+  cardsEl.innerHTML = rows
+    .map((c) => {
+      const name = c.user?.displayName || c.user?.username || 'مستخدم';
+      const handle = c.user?.username ? `@${c.user.username}` : '';
+      const text = (c.content || '').trim();
+      const preview = text.length > 220 ? `${text.slice(0, 220)}…` : text;
+      const parent = (c.post?.content || '').trim();
+      const parentPreview = parent
+        ? parent.length > 100
+          ? `${parent.slice(0, 100)}…`
+          : parent
+        : c.post?.imageUrl
+          ? 'منشور بصورة'
+          : 'منشور';
+      return `<article class="card post-card comment-card">
+        <div class="card-body">
+          <div class="prize">${esc(name)} <span class="handle">${esc(handle)}</span></div>
+          <div class="badges"><span class="tag win">تعليق</span> ${postBadges(c)}</div>
+          <div class="post-text">${esc(preview) || '<span class="muted">—</span>'}</div>
+          <div class="parent-post">على منشور: ${esc(parentPreview)}</div>
+          <div class="meta">
+            ❤️ ${c.likesCount || 0}<br/>
+            ${fmtDate(c.createdAt)}
+          </div>
+          <div class="actions">
+            <button class="danger" data-act="delete-comment" data-id="${esc(c.id)}">حذف التعليق</button>
           </div>
         </div>
       </article>`;
@@ -203,10 +244,18 @@ function openImagePreview(postId) {
   imageModal.hidden = false;
 }
 
-function openDeleteModal(postId) {
-  STATE.deleteId = postId;
+function openDeleteModal(id, kind = 'post') {
+  STATE.deleteId = id;
+  STATE.deleteKind = kind;
   deleteReason.value = '';
   imageModal.hidden = true;
+  if (kind === 'comment') {
+    deleteTitle.textContent = 'حذف التعليق';
+    deleteHint.textContent = 'الحذف فوري، وهيترسل تحذير لصاحب التعليق. سبب الحذف اختياري.';
+  } else {
+    deleteTitle.textContent = 'حذف المنشور';
+    deleteHint.textContent = 'الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.';
+  }
   deleteModal.hidden = false;
 }
 
@@ -216,9 +265,11 @@ async function load() {
   STATE.inflight = (async () => {
     try {
       const isPosts = STATE.tab === 'posts';
+      const isComments = STATE.tab === 'comments';
       const isActivity = STATE.tab === 'activity';
-      postFiltersEl.hidden = !isPosts;
-      if (isPosts) syncPostFilterChips();
+      const showCommunityFilters = isPosts || isComments;
+      postFiltersEl.hidden = !showCommunityFilters;
+      if (showCommunityFilters) syncPostFilterChips();
 
       if (isActivity) {
         cardsEl.hidden = true;
@@ -231,14 +282,19 @@ async function load() {
       cardsEl.hidden = false;
       activityEl.hidden = true;
 
-      if (isPosts) {
+      if (isPosts || isComments) {
         const qs = new URLSearchParams({
           filter: STATE.postFilter,
           order: STATE.postOrder,
           limit: '100',
         });
-        const json = await api(`/community/posts?${qs}`);
-        renderPosts(json.data || []);
+        if (isComments) {
+          const json = await api(`/community/comments?${qs}`);
+          renderComments(json.data || []);
+        } else {
+          const json = await api(`/community/posts?${qs}`);
+          renderPosts(json.data || []);
+        }
         return;
       }
 
@@ -333,7 +389,11 @@ cardsEl.addEventListener('click', async (e) => {
     return;
   }
   if (act === 'delete-post') {
-    openDeleteModal(id);
+    openDeleteModal(id, 'post');
+    return;
+  }
+  if (act === 'delete-comment') {
+    openDeleteModal(id, 'comment');
     return;
   }
   if (act === 'reject') {
@@ -391,31 +451,38 @@ document.getElementById('image-close').addEventListener('click', () => {
 
 document.getElementById('image-delete').addEventListener('click', () => {
   if (!STATE.previewPostId) return;
-  openDeleteModal(STATE.previewPostId);
+  openDeleteModal(STATE.previewPostId, 'post');
 });
 
 document.getElementById('delete-cancel').addEventListener('click', () => {
   deleteModal.hidden = true;
   STATE.deleteId = null;
+  STATE.deleteKind = 'post';
 });
 
 document.getElementById('delete-confirm').addEventListener('click', async () => {
   if (!STATE.deleteId) return;
   const btn = document.getElementById('delete-confirm');
+  const kind = STATE.deleteKind === 'comment' ? 'comment' : 'post';
   btn.disabled = true;
   try {
-    await api(`/community/posts/${STATE.deleteId}/delete`, {
+    const path =
+      kind === 'comment'
+        ? `/community/comments/${STATE.deleteId}/delete`
+        : `/community/posts/${STATE.deleteId}/delete`;
+    await api(path, {
       method: 'POST',
       body: JSON.stringify({ reason: deleteReason.value }),
     });
     deleteModal.hidden = true;
     imageModal.hidden = true;
     STATE.deleteId = null;
+    STATE.deleteKind = 'post';
     STATE.previewPostId = null;
     await load();
   } catch (err) {
     deskError.hidden = false;
-    deskError.textContent = err.message || 'فشل حذف المنشور';
+    deskError.textContent = err.message || (kind === 'comment' ? 'فشل حذف التعليق' : 'فشل حذف المنشور');
   } finally {
     btn.disabled = false;
   }

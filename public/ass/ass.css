@@ -276,3 +276,15 @@ button:disabled { opacity: 0.55; cursor: default; }
   background: rgba(8, 4, 18, 0.75);
 }
 .image-caption { margin: 12px 0 0; }
+
+.comment-card .card-body { padding-top: 16px; }
+.parent-post {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(222, 191, 252, 0.16);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}

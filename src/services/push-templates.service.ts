@@ -141,6 +141,9 @@ export type PushTemplateKey =
     | 'communityPostDeletedTitle'
     | 'communityPostDeletedBody'
     | 'communityPostDeletedBodyWithReason'
+    | 'communityCommentDeletedTitle'
+    | 'communityCommentDeletedBody'
+    | 'communityCommentDeletedBodyWithReason'
     // Ranking achievements (top-3 medal + team-of-month diamond streak)
     | 'medalGoldName'
     | 'medalSilverName'
@@ -355,6 +358,11 @@ const en: TemplateMap = {
         'A moderator removed your community post for breaking the guidelines. Continued violations may lead to account suspension.',
     communityPostDeletedBodyWithReason:
         'A moderator removed your community post. Reason: {reason}. Continued violations may lead to account suspension.',
+    communityCommentDeletedTitle: 'Warning: your comment was removed',
+    communityCommentDeletedBody:
+        'A moderator removed your community comment for breaking the guidelines. Continued violations may lead to account suspension.',
+    communityCommentDeletedBodyWithReason:
+        'A moderator removed your community comment. Reason: {reason}. Continued violations may lead to account suspension.',
     // Ranking achievements
     medalGoldName: 'Gold 🥇',
     medalSilverName: 'Silver 🥈',
@@ -573,6 +581,11 @@ const ar: TemplateMap = {
         'المراقب حذف منشورك في المجتمع لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
     communityPostDeletedBodyWithReason:
         'المراقب حذف منشورك في المجتمع. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    communityCommentDeletedTitle: 'تحذير: تم حذف تعليقك',
+    communityCommentDeletedBody:
+        'المراقب حذف تعليقك في المجتمع لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    communityCommentDeletedBodyWithReason:
+        'المراقب حذف تعليقك في المجتمع. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
     // إنجازات الترتيب
     medalGoldName: 'ذهبية 🥇',
     medalSilverName: 'فضية 🥈',
