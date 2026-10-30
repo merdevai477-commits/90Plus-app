@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { I18nManager, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -24,6 +24,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useTranslation } from '../../src/i18n';
 import { C } from './theme';
 
 export interface ActionMenuItem {
@@ -87,7 +88,8 @@ function iconForKey(key: string, destructive?: boolean) {
  */
 export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, title }: Props) {
   const insets = useSafeAreaInsets();
-  const isRtl = I18nManager.isRTL;
+  const { language } = useTranslation();
+  const isRtl = language === 'ar';
   const [mounted, setMounted] = useState(false);
   const translateY = useSharedValue(SHEET_OFFSCREEN);
   const backdrop = useSharedValue(0);
