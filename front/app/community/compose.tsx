@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { AtSign, Hash, RotateCcw, ShieldAlert, X } from 'lucide-react-native';
+import { AtSign, BarChart3, Hash, RotateCcw, ShieldAlert, X } from 'lucide-react-native';
 
 import { CommunityAvatar } from '../../components/community/CommunityAvatar';
 import { ConfirmSheet } from '../../components/community/ConfirmSheet';
@@ -451,23 +451,62 @@ export default function ComposeScreen() {
           </View>
         )}
         <View style={[styles.toolbar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.tools, { flexDirection: isAr ? 'row-reverse' : 'row' }, isPollMode && styles.toolsDisabled]} pointerEvents={isPollMode ? 'none' : 'auto'}>
-            <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
-              <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
-              <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
-            </Pressable>
-            <Pressable onPress={() => applyInsert('#')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.hashtagTool}>
-              <View style={styles.toolGlyph}>
-                <Hash size={18} color={C.accentSoft} strokeWidth={2.4} />
-              </View>
-              <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.hashtagTool}</Text>
-            </Pressable>
-            <Pressable onPress={() => applyInsert('@')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.mentionTool}>
-              <View style={styles.toolGlyph}>
-                <AtSign size={18} color={C.accentSoft} strokeWidth={2.4} />
-              </View>
-              <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.mentionTool}</Text>
-            </Pressable>
+          <View style={[styles.tools, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View
+              style={[
+                styles.mediaTools,
+                { flexDirection: isAr ? 'row-reverse' : 'row' },
+                isPollMode && styles.toolsDisabled,
+              ]}
+              pointerEvents={isPollMode ? 'none' : 'auto'}
+            >
+              <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
+                <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
+                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
+              </Pressable>
+              <Pressable onPress={() => applyInsert('#')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.hashtagTool}>
+                <View style={styles.toolGlyph}>
+                  <Hash size={18} color={C.accentSoft} strokeWidth={2.4} />
+                </View>
+                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.hashtagTool}</Text>
+              </Pressable>
+              <Pressable onPress={() => applyInsert('@')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.mentionTool}>
+                <View style={styles.toolGlyph}>
+                  <AtSign size={18} color={C.accentSoft} strokeWidth={2.4} />
+                </View>
+                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.mentionTool}</Text>
+              </Pressable>
+            </View>
+            {!editing ? (
+              <Pressable
+                onPress={() => {
+                  if (isPollMode) {
+                    setPostKind('TEXT');
+                    return;
+                  }
+                  cancelImageUpload(clientId);
+                  setKeepRemoteImage(false);
+                  setPostKind('TEAM_POLL');
+                }}
+                style={styles.tool}
+                accessibilityRole="button"
+                accessibilityLabel={s.pollType}
+                accessibilityState={{ selected: isPollMode }}
+              >
+                <View style={[styles.toolGlyph, isPollMode && styles.toolGlyphActive]}>
+                  <BarChart3 size={18} color={isPollMode ? '#FFFFFF' : C.accentSoft} strokeWidth={2.4} />
+                </View>
+                <Text
+                  style={[
+                    styles.toolText,
+                    { fontFamily: fonts.medium },
+                    isPollMode && styles.toolTextActive,
+                  ]}
+                >
+                  {s.pollType}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           {left <= WARN_AT && (
             <Text style={[styles.counter, { fontFamily: fonts.semibold }, left < 0 && { color: C.danger }]}>
@@ -708,6 +747,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 18,
   },
+  mediaTools: {
+    alignItems: 'center',
+    gap: 18,
+  },
   tool: {
     alignItems: 'center',
     gap: 6,
@@ -723,11 +766,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(183,154,248,0.28)',
   },
+  toolGlyphActive: {
+    backgroundColor: C.accent,
+    borderColor: C.accent,
+  },
   toolIcon: { width: 24, height: 24 },
   toolText: {
     color: C.accentSoft,
     fontSize: 12,
     fontWeight: '600',
+  },
+  toolTextActive: {
+    color: '#FFFFFF',
   },
   counter: {
     color: C.counter,
