@@ -2089,8 +2089,8 @@ export const en = {
         action: 'Predict Now',
       },
       engagementHero: {
-        title: 'Egyptian Top Five',
-        sub: 'Pick five scorers from the Egyptian league and earn points from every goal!',
+        title: 'Top Scorers Five',
+        sub: 'Pick five scorers from Europe or the Egyptian league and earn points from every goal!',
         action: 'Challenge',
       },
       sponsors: {
@@ -2141,13 +2141,12 @@ export const en = {
     cta: 'Start picking',
     back: 'Back',
     hub: {
-      europeTitle: 'Top Five Europe',
-      europeSubtitle:
-        'Pick 5 players from 5 leagues, predict their goals and win a football shirt',
-      egyptTitle: 'Top Five Egyptian League',
-      egyptSubtitle:
-        'Pick 5 players from the Egyptian league, predict their goals and win a football shirt',
+      europeTitle: 'Europe Top Scorers Five',
+      europeSubtitle: 'Pick 5 players from 5 leagues and predict their goals',
+      egyptTitle: 'Egyptian League Top Scorers Five',
+      egyptSubtitle: 'Pick 5 players from the Egyptian league and predict their goals',
       enter: 'Enter',
+      startCta: 'Start now',
       badgeGoal: 'Goal prediction',
       badgePlayers: '5 players',
       exploreCta: 'Explore challenge',

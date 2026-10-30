@@ -26,7 +26,16 @@ export const TSF_ART: {
   egyptHub: require('../../assets/images/top-scorers-five/hero-egypt.jpg'),
 };
 
-/** Hub crests — tap targets instead of a CTA button. */
+/** Hub selection cards (Figma 1550:6492) — landscape art under the CTA. */
+export const TSF_HUB_CARD = {
+  europe: require('../../assets/images/top-scorers-five/hero.jpg') as number,
+  egypt: require('../../assets/images/top-scorers-five/hub-card-egypt.jpg') as number,
+};
+
+/** Hex soccer badge in the hub card header (Figma 1552:6565). */
+export const TSF_HUB_BADGE: number = require('../../assets/images/top-scorers-five/hub-badge-soccer.svg');
+
+/** Hub crests — used on pitch / intro surfaces. */
 export const TSF_HUB_LOGO = {
   europe: require('../../assets/images/top-scorers-five/league-ucl.png') as number,
   egypt: require('../../assets/images/top-scorers-five/league-egypt.png') as number,

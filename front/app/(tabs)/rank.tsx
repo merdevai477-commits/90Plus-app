@@ -81,7 +81,7 @@ export default function RankScreen() {
       if (id === '3') {
         router.push('/(tabs)/predict-and-win' as never);
       } else if (id === '4') {
-        router.push({ pathname: '/top-scorers-five/pick', params: { mode: 'egypt' } } as never);
+        router.push('/top-scorers-five' as never);
       } else if (id === '2') {
         router.push('/share-win' as never);
       } else if (id === '1') {
