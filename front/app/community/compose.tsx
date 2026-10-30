@@ -460,10 +460,12 @@ export default function ComposeScreen() {
               ]}
               pointerEvents={isPollMode ? 'none' : 'auto'}
             >
-              <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
-                <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
-                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
-              </Pressable>
+              {!hasImage && (
+                <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
+                  <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
+                  <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
+                </Pressable>
+              )}
               <Pressable onPress={() => applyInsert('#')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.hashtagTool}>
                 <View style={styles.toolGlyph}>
                   <Hash size={18} color={C.accentSoft} strokeWidth={2.4} />
