@@ -147,10 +147,12 @@ const styles = StyleSheet.create({
     height: 36,
   },
   shortcuts: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 19,
   },
   shortcut: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
