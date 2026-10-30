@@ -119,6 +119,13 @@ router.post('/posts/:id/like', requireAuth, handle((req, _res, actor) => communi
 router.delete('/posts/:id/like', requireAuth, handle((req, _res, actor) => community.unlikePost(actor, param(req, 'id'))));
 
 router.post(
+    '/posts/:id/vote',
+    requireAuth,
+    writeLimiter,
+    handle((req, _res, actor) => community.votePoll(actor, param(req, 'id'), req.body?.choice)),
+);
+
+router.post(
     '/posts/:id/share',
     requireAuth,
     writeLimiter,

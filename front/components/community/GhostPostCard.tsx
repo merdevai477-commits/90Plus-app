@@ -48,6 +48,7 @@ export const GhostPostCard = memo(function GhostPostCard({
 }: Props) {
   const progress = usePublishStore((s) => s.drafts[pending.clientId]?.progress ?? (pending.image ? 0 : 1));
   const failed = pending.status === 'failed';
+  const isPoll = pending.kind === 'TEAM_POLL';
   const pulse = useSharedValue(0.55);
   const bar = useSharedValue(0);
 
@@ -92,15 +93,32 @@ export const GhostPostCard = memo(function GhostPostCard({
         </View>
 
         {!!pending.content && (
-          <Text
-            style={[
-              styles.content,
-              { fontFamily: fonts.medium, textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' },
-            ]}
-            numberOfLines={6}
-          >
-            {pending.content}
-          </Text>
+          <View style={styles.contentBox}>
+            <Text
+              style={[
+                styles.content,
+                { fontFamily: fonts.medium, textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' },
+              ]}
+              numberOfLines={6}
+            >
+              {pending.content}
+            </Text>
+          </View>
+        )}
+
+        {isPoll && (
+          <View style={[styles.pollRow, { flexDirection: row }]}>
+            <View style={[styles.pollBox, { flex: 1 }]}>
+              <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
+                {pending.pollOptionA ?? '…'}
+              </Text>
+            </View>
+            <View style={[styles.pollBox, { flex: 1 }]}>
+              <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
+                {pending.pollOptionB ?? '…'}
+              </Text>
+            </View>
+          </View>
         )}
 
         {pending.image && (
@@ -194,8 +212,32 @@ const styles = StyleSheet.create({
   icon16: { width: 16, height: 16 },
   content: {
     color: C.text,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 20,
+    lineHeight: 28,
+  },
+  contentBox: {
+    backgroundColor: C.contentBox,
+    borderRadius: 12,
+    paddingHorizontal: 23,
+    paddingVertical: 10,
+  },
+  pollRow: {
+    gap: 10,
+  },
+  pollBox: {
+    backgroundColor: C.pollIdle,
+    borderRadius: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  pollText: {
+    color: C.textStrong,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   imageWrap: {
     borderRadius: POST_IMAGE_RADIUS,

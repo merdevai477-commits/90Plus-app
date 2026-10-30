@@ -66,6 +66,17 @@ export default function CommunityPostScreen() {
   const onComment = useCallback(() => ctx.composerRef.current?.focus(), [ctx.composerRef]);
   const onShare = useCallback((p: CommunityPost) => void actions.share(p), [actions]);
   const onMenu = useCallback(() => setMenuOpen(true), []);
+  const postCardLabels = useMemo(
+    () => ({
+      follow: s.follow,
+      following: s.following,
+      like: s.likeLabel,
+      comment: s.commentLabel,
+      share: s.shareLabel,
+      viewAllComments: s.viewAllComments,
+    }),
+    [s],
+  );
 
   const menuItems = useMemo<ActionMenuItem[]>(() => {
     if (!post) return [];
@@ -102,6 +113,7 @@ export default function CommunityPostScreen() {
         fonts={fonts}
         seeMore={s.seeMore}
         seeLess={s.seeLess}
+        labels={postCardLabels}
         onLike={actions.toggleLike}
         onDoubleTapLike={actions.likeOnce}
         onComment={onComment}
@@ -111,6 +123,8 @@ export default function CommunityPostScreen() {
         onProfile={actions.openProfile}
         onHashtag={actions.openHashtag}
         onMention={actions.openProfile}
+        onFollow={actions.toggleFollow}
+        onVote={actions.votePoll}
       />
       <Text style={[styles.section, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left' }]}>{s.comments}</Text>
     </View>

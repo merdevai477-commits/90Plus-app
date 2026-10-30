@@ -9,8 +9,10 @@ import { buildAppShareUrl } from '../../constants/shareLinks';
 import { communityApi, type CommunityPost, type ReportReason } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
+import { FollowService } from '../../src/services/authService';
+import { getClerkBearerToken } from '../../utils/clerkAuthToken';
 import { communityErrorMessage, fillTemplate } from '../../components/community/format';
-import { findPost, removePostEverywhere, updatePostEverywhere } from './communityCache';
+import { findPost, removePostEverywhere, updateAuthorFollowingEverywhere, updatePostEverywhere } from './communityCache';
 import { useCommunityToken } from './useCommunityFeed';
 
 /**
@@ -198,5 +200,65 @@ export function usePostActions() {
     [router],
   );
 
-  return { toggleLike, likeOnce, share, askReport, report, deletePost, performDelete, copyText, openProfile, openHashtag, openPost };
+  const toggleFollow = useCallback(
+    async (post: CommunityPost) => {
+      const current = findPost(qc, post.id) ?? post;
+      const next = !current.author.isFollowing;
+      updateAuthorFollowingEverywhere(qc, current.author.id, next);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        const token = await getClerkBearerToken(getToken);
+        if (!token) throw new Error('AUTH');
+        const res = next
+          ? await FollowService.followUser(token, current.author.username)
+          : await FollowService.unfollowUser(token, current.author.username);
+        if (!res.success) throw new Error(res.error ?? 'FAILED');
+      } catch {
+        updateAuthorFollowingEverywhere(qc, current.author.id, !next);
+        toastManager.showError(s.follow, s.followFailed);
+      }
+    },
+    [getToken, qc, s],
+  );
+
+  const votePoll = useCallback(
+    async (post: CommunityPost, choice: 'A' | 'B') => {
+      const current = findPost(qc, post.id) ?? post;
+      if (!current.poll || current.poll.votedByMe === choice) return;
+      const prev = current.poll;
+      const from = prev.votedByMe;
+      const optimistic = {
+        ...prev,
+        votedByMe: choice,
+        votesA: prev.votesA + (choice === 'A' ? 1 : 0) - (from === 'A' ? 1 : 0),
+        votesB: prev.votesB + (choice === 'B' ? 1 : 0) - (from === 'B' ? 1 : 0),
+      };
+      updatePostEverywhere(qc, post.id, (p) => (p.poll ? { ...p, poll: optimistic } : p));
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        const poll = await communityApi.votePoll(getToken, post.id, choice);
+        updatePostEverywhere(qc, post.id, (p) => ({ ...p, poll }));
+      } catch (err) {
+        updatePostEverywhere(qc, post.id, (p) => (p.poll ? { ...p, poll: prev } : p));
+        toastManager.showError(s.voteFailed, communityErrorMessage(err, s));
+      }
+    },
+    [getToken, qc, s],
+  );
+
+  return {
+    toggleLike,
+    likeOnce,
+    share,
+    askReport,
+    report,
+    deletePost,
+    performDelete,
+    copyText,
+    openProfile,
+    openHashtag,
+    openPost,
+    toggleFollow,
+    votePoll,
+  };
 }

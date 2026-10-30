@@ -73,9 +73,11 @@ export default function CommunityScreen() {
         placeholder={s.composerPlaceholder}
         writeLabel={s.writePost}
         photoLabel={s.addPhoto}
+        pollLabel={s.pollType}
         fonts={fonts}
         onWrite={() => router.push('/community/compose')}
         onPhoto={() => router.push({ pathname: '/community/compose', params: { photo: '1' } })}
+        onPoll={() => router.push({ pathname: '/community/compose', params: { poll: '1' } })}
       />
       <TrendingChips isAr={isAr} fontFamily={fonts.semibold} label={s.trending} />
     </View>

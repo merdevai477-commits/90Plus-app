@@ -12,9 +12,11 @@ interface Props {
   placeholder: string;
   writeLabel: string;
   photoLabel: string;
+  pollLabel?: string;
   fonts: { regular: string; semibold: string };
   onWrite: () => void;
   onPhoto: () => void;
+  onPoll?: () => void;
 }
 
 /** Feed-top "what's on your mind" card — Figma node 1474:3943. */
@@ -25,9 +27,11 @@ export const ComposerCard = memo(function ComposerCard({
   placeholder,
   writeLabel,
   photoLabel,
+  pollLabel,
   fonts,
   onWrite,
   onPhoto,
+  onPoll,
 }: Props) {
   const row = isAr ? 'row-reverse' : 'row';
   return (
@@ -54,6 +58,15 @@ export const ComposerCard = memo(function ComposerCard({
             <Image source={CI.image} style={styles.icon24} contentFit="contain" />
             <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{photoLabel}</Text>
           </Pressable>
+          {onPoll && pollLabel ? (
+            <>
+              <View style={styles.divider} />
+              <Pressable onPress={onPoll} hitSlop={8} style={[styles.shortcut, { flexDirection: row }]} accessibilityRole="button">
+                <Text style={[styles.pollGlyph, { fontFamily: fonts.semibold }]}>VS</Text>
+                <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{pollLabel}</Text>
+              </Pressable>
+            </>
+          ) : null}
           <View style={styles.divider} />
           <Pressable onPress={onWrite} hitSlop={8} style={[styles.shortcut, { flexDirection: row }]} accessibilityRole="button">
             <Image source={CI.smile} style={styles.icon24} contentFit="contain" />
@@ -116,6 +129,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   icon24: { width: 24, height: 24 },
+  pollGlyph: {
+    color: C.accentSoft,
+    fontSize: 13,
+    fontWeight: '700',
+    minWidth: 24,
+    textAlign: 'center',
+  },
   label: {
     color: C.textStrong,
     fontSize: 14,

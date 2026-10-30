@@ -33,6 +33,29 @@ function isPost(data: unknown): data is CommunityPost {
 const postQueryFilter = (key: readonly unknown[]) =>
   key[0] === 'community' && (key[1] === 'feed' || key[1] === 'tag' || key[1] === 'user' || key[1] === 'post');
 
+export function updateAuthorFollowingEverywhere(qc: QueryClient, authorId: string, isFollowing: boolean): void {
+  for (const query of qc.getQueryCache().findAll({ predicate: (q) => postQueryFilter(q.queryKey) })) {
+    const data = query.state.data;
+    if (isPostPages(data)) {
+      let changed = false;
+      const pages = data.pages.map((page) => {
+        let pageChanged = false;
+        const items = page.items.map((p) => {
+          if (p.author.id !== authorId) return p;
+          pageChanged = true;
+          return { ...p, author: { ...p.author, isFollowing } };
+        });
+        if (!pageChanged) return page;
+        changed = true;
+        return { ...page, items };
+      });
+      if (changed) qc.setQueryData(query.queryKey, { ...data, pages });
+    } else if (isPost(data) && data.author.id === authorId) {
+      qc.setQueryData(query.queryKey, { ...data, author: { ...data.author, isFollowing } });
+    }
+  }
+}
+
 export function updatePostEverywhere(
   qc: QueryClient,
   postId: string,

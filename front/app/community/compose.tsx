@@ -74,19 +74,35 @@ export default function ComposeScreen() {
   const isAr = language === 'ar';
   const getToken = useCommunityToken();
   const me = useCommunityMe();
-  const params = useLocalSearchParams<{ restore?: string; photo?: string; edit?: string }>();
+  const params = useLocalSearchParams<{ restore?: string; photo?: string; edit?: string; poll?: string }>();
   const editId = typeof params.edit === 'string' && params.edit ? params.edit : null;
   const editing = !!editId;
   const existing = editId ? findPost(qc, editId) : undefined;
+  const editingPoll = editing && existing?.kind === 'TEAM_POLL';
 
   const [clientId] = useState(() => {
     const restoring = params.restore && usePublishStore.getState().pending.find((p) => p.clientId === params.restore);
     return restoring ? restoring.clientId : newClientId();
   });
+  const [postKind, setPostKind] = useState<'TEXT' | 'TEAM_POLL'>(() => {
+    if (existing?.kind === 'TEAM_POLL') return 'TEAM_POLL';
+    const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
+    if (pending?.kind === 'TEAM_POLL') return 'TEAM_POLL';
+    if (params.poll === '1') return 'TEAM_POLL';
+    return 'TEXT';
+  });
   const [text, setText] = useState(() => {
     const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
     if (pending) return pending.content;
     return existing?.content ?? '';
+  });
+  const [teamA, setTeamA] = useState(() => {
+    const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
+    return pending?.pollOptionA ?? existing?.poll?.optionA ?? '';
+  });
+  const [teamB, setTeamB] = useState(() => {
+    const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
+    return pending?.pollOptionB ?? existing?.poll?.optionB ?? '';
   });
   const [caret, setCaret] = useState(0);
   const [keepRemoteImage, setKeepRemoteImage] = useState(() => !!existing?.image);
@@ -129,18 +145,22 @@ export default function ComposeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isPollMode = postKind === 'TEAM_POLL';
   const hasLocalImage = !!draft;
   const hasRemoteImage = editing && keepRemoteImage && !!existing?.image && !hasLocalImage;
-  const hasImage = hasLocalImage || hasRemoteImage;
+  const hasImage = !isPollMode && (hasLocalImage || hasRemoteImage);
   const trimmed = text.trim();
+  const teamsReady = teamA.trim().length > 0 && teamB.trim().length > 0;
   const dirty =
     !editing ||
     trimmed !== (existing?.content ?? '').trim() ||
-    hasLocalImage ||
-    keepRemoteImage !== !!existing?.image;
-  const hasContent = trimmed.length > 0 || hasImage;
+    (!editingPoll && hasLocalImage) ||
+    (keepRemoteImage !== !!existing?.image && !isPollMode);
+  const hasContent = isPollMode ? teamsReady || trimmed.length > 0 : trimmed.length > 0 || hasImage;
   const overLimit = text.length > MAX_LEN;
-  const canPost = hasContent && !overLimit && !saving && (!editing || dirty);
+  const canPost = isPollMode
+    ? teamsReady && !overLimit && !saving && (!editing || dirty)
+    : (trimmed.length > 0 || hasImage) && !overLimit && !saving && (!editing || dirty);
 
   const leave = useCallback(() => {
     if (!published.current) cancelImageUpload(clientId);
@@ -211,9 +231,22 @@ export default function ComposeScreen() {
       return;
     }
     published.current = true;
-    publishPost({ getToken, queryClient: qc, clientId, content: trimmed, author: me });
+    if (isPollMode) {
+      publishPost({
+        getToken,
+        queryClient: qc,
+        clientId,
+        content: trimmed,
+        kind: 'TEAM_POLL',
+        pollOptionA: teamA.trim(),
+        pollOptionB: teamB.trim(),
+        author: me,
+      });
+    } else {
+      publishPost({ getToken, queryClient: qc, clientId, content: trimmed, author: me });
+    }
     router.back();
-  }, [canPost, clientId, editing, getToken, me, qc, router, saveEdit, trimmed]);
+  }, [canPost, clientId, editing, getToken, isPollMode, me, qc, router, saveEdit, teamA, teamB, trimmed]);
 
   const mention = activeMentionQuery(text, caret);
   const { results, loading } = useMentionSearch(mention ? mention.query : null);
@@ -291,12 +324,41 @@ export default function ComposeScreen() {
           </Text>
         </View>
 
+        {!editing && (
+          <View style={[styles.kindToggle, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <Pressable
+              onPress={() => setPostKind('TEXT')}
+              style={[styles.kindBtn, postKind === 'TEXT' && styles.kindBtnActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: postKind === 'TEXT' }}
+            >
+              <Text style={[styles.kindBtnText, { fontFamily: fonts.semibold }, postKind === 'TEXT' && styles.kindBtnTextActive]}>
+                {s.textType}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                cancelImageUpload(clientId);
+                setKeepRemoteImage(false);
+                setPostKind('TEAM_POLL');
+              }}
+              style={[styles.kindBtn, postKind === 'TEAM_POLL' && styles.kindBtnActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: postKind === 'TEAM_POLL' }}
+            >
+              <Text style={[styles.kindBtnText, { fontFamily: fonts.semibold }, postKind === 'TEAM_POLL' && styles.kindBtnTextActive]}>
+                {s.pollType}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         <TextInput
           ref={inputRef}
           value={text}
           onChangeText={setText}
           onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
-          placeholder={s.composerPlaceholder}
+          placeholder={isPollMode ? s.pollQuestionPlaceholder : s.composerPlaceholder}
           placeholderTextColor={C.placeholder}
           multiline
           scrollEnabled={false}
@@ -305,7 +367,36 @@ export default function ComposeScreen() {
           style={[styles.input, { fontFamily: fonts.medium, textAlign }]}
         />
 
-        {previewSource && (
+        {isPollMode && (
+          <View style={styles.pollFields}>
+            <TextInput
+              value={teamA}
+              onChangeText={setTeamA}
+              placeholder={s.teamAPlaceholder}
+              placeholderTextColor={C.placeholder}
+              editable={!editingPoll}
+              style={[
+                styles.teamInput,
+                { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
+                editingPoll && styles.teamInputLocked,
+              ]}
+            />
+            <TextInput
+              value={teamB}
+              onChangeText={setTeamB}
+              placeholder={s.teamBPlaceholder}
+              placeholderTextColor={C.placeholder}
+              editable={!editingPoll}
+              style={[
+                styles.teamInput,
+                { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
+                editingPoll && styles.teamInputLocked,
+              ]}
+            />
+          </View>
+        )}
+
+        {!isPollMode && previewSource && (
           <Animated.View entering={FadeIn.duration(180)} style={[styles.preview, { width: previewW, height: previewH }]}>
             <Image source={{ uri: previewSource }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
             {draft?.status === 'uploading' && (
@@ -360,7 +451,7 @@ export default function ComposeScreen() {
           </View>
         )}
         <View style={[styles.toolbar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.tools, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          <View style={[styles.tools, { flexDirection: isAr ? 'row-reverse' : 'row' }, isPollMode && styles.toolsDisabled]} pointerEvents={isPollMode ? 'none' : 'auto'}>
             <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
               <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
               <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
@@ -478,6 +569,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
+  },
+  kindToggle: {
+    gap: 10,
+  },
+  kindBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: C.input,
+    borderWidth: 1,
+    borderColor: C.inputBorder,
+  },
+  kindBtnActive: {
+    backgroundColor: C.followBtn,
+    borderColor: C.cardBorder,
+  },
+  kindBtnText: {
+    color: C.muted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  kindBtnTextActive: {
+    color: C.followText,
+  },
+  pollFields: {
+    gap: 10,
+  },
+  teamInput: {
+    color: C.text,
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: C.contentBox,
+    borderWidth: 1,
+    borderColor: C.inputBorder,
+  },
+  teamInputLocked: {
+    opacity: 0.7,
+  },
+  toolsDisabled: {
+    opacity: 0.35,
   },
   input: {
     color: C.text,

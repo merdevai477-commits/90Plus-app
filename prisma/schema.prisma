@@ -174,6 +174,7 @@ model User {
   communityShares               CommunityShare[]
   communityMentions             CommunityMention[]        @relation("CommunityMentioned")
   communityMedia                CommunityMedia[]
+  communityPostPollVotes        CommunityPostPollVote[]
 
   @@index([email])
   @@index([username])
@@ -975,10 +976,27 @@ enum CommunityContentStatus {
   DELETED
 }
 
+enum CommunityPostKind {
+  TEXT
+  TEAM_POLL
+}
+
+enum CommunityPollChoice {
+  A
+  B
+}
+
 model CommunityPost {
   id               String                 @id @default(uuid())
   userId           String
   content          String
+  kind             CommunityPostKind      @default(TEXT)
+  /// Team A name for TEAM_POLL posts (no logos — names only).
+  pollOptionA      String?
+  /// Team B name for TEAM_POLL posts.
+  pollOptionB      String?
+  pollVotesA       Int                    @default(0)
+  pollVotesB       Int                    @default(0)
   imageUrl         String?
   imageStoragePath String?
   imageWidth       Int?
@@ -999,10 +1017,25 @@ model CommunityPost {
   mentions         CommunityMention[]
   hashtags         CommunityPostHashtag[]
   reports          Report[]
+  pollVotes        CommunityPostPollVote[]
 
   @@index([status, createdAt(sort: Desc), id])
   @@index([userId, createdAt(sort: Desc)])
   @@map("community_posts")
+}
+
+model CommunityPostPollVote {
+  id        String               @id @default(uuid())
+  userId    String
+  postId    String
+  choice    CommunityPollChoice
+  createdAt DateTime             @default(now())
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost        @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("community_post_poll_votes")
 }
 
 model CommunityComment {

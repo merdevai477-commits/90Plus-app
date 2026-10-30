@@ -13,6 +13,15 @@ export interface CommunityAuthor {
   displayName: string | null;
   avatar: string | null;
   isVerified: boolean;
+  isFollowing: boolean;
+}
+
+export interface CommunityPoll {
+  optionA: string;
+  optionB: string;
+  votesA: number;
+  votesB: number;
+  votedByMe: 'A' | 'B' | null;
 }
 
 export interface CommunityImage {
@@ -24,9 +33,11 @@ export interface CommunityImage {
 
 export interface CommunityPost {
   id: string;
+  kind: 'TEXT' | 'TEAM_POLL';
   content: string;
   createdAt: string;
   image: CommunityImage | null;
+  poll: CommunityPoll | null;
   author: CommunityAuthor;
   likesCount: number;
   commentsCount: number;
@@ -132,8 +143,20 @@ export const communityApi = {
 
   post: (getToken: GetTokenFn, id: string) => request<CommunityPost>(getToken, `/posts/${id}`),
 
-  createPost: (getToken: GetTokenFn, body: { content: string; mediaId?: string | null; clientId: string }) =>
-    request<CommunityPost>(getToken, '/posts', json(body)),
+  createPost: (
+    getToken: GetTokenFn,
+    body: {
+      content: string;
+      mediaId?: string | null;
+      clientId: string;
+      kind?: 'TEXT' | 'TEAM_POLL';
+      pollOptionA?: string;
+      pollOptionB?: string;
+    },
+  ) => request<CommunityPost>(getToken, '/posts', json(body)),
+
+  votePoll: (getToken: GetTokenFn, id: string, choice: 'A' | 'B') =>
+    request<CommunityPoll>(getToken, `/posts/${id}/vote`, json({ choice })),
 
   updatePost: (
     getToken: GetTokenFn,

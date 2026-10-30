@@ -42,6 +42,9 @@ export interface MediaDraft {
 export interface PendingPost {
   clientId: string;
   content: string;
+  kind?: 'TEXT' | 'TEAM_POLL';
+  pollOptionA?: string;
+  pollOptionB?: string;
   image: LocalImage | null;
   author: CommunityAuthor;
   createdAt: string;
@@ -149,6 +152,9 @@ interface PublishInput {
   /** Draft id; reused as the server idempotency key. */
   clientId: string;
   content: string;
+  kind?: 'TEXT' | 'TEAM_POLL';
+  pollOptionA?: string;
+  pollOptionB?: string;
   author: CommunityAuthor;
   onPublished?: (post: CommunityPost) => void;
 }
@@ -158,10 +164,15 @@ export function publishPost(input: PublishInput): void {
   const { clientId } = input;
   const draft = usePublishStore.getState().drafts[clientId];
   const store = usePublishStore.getState();
+  const kind = input.kind ?? 'TEXT';
+  const isPoll = kind === 'TEAM_POLL';
   store.upsertPending({
     clientId,
     content: input.content,
-    image: draft?.local ?? null,
+    kind,
+    pollOptionA: input.pollOptionA,
+    pollOptionB: input.pollOptionB,
+    image: isPoll ? null : (draft?.local ?? null),
     author: input.author,
     createdAt: new Date().toISOString(),
     status: 'publishing',
@@ -171,20 +182,26 @@ export function publishPost(input: PublishInput): void {
     usePublishStore.getState().patchPending(clientId, { status: 'publishing', error: undefined });
     try {
       let mediaId: string | null = null;
-      const current = usePublishStore.getState().drafts[clientId];
-      if (current) {
-        let handle = uploads.get(clientId);
-        if (!handle || current.status === 'failed') {
-          startImageUpload(input.getToken, clientId, current.local);
-          handle = uploads.get(clientId);
+      if (!isPoll) {
+        const current = usePublishStore.getState().drafts[clientId];
+        if (current) {
+          let handle = uploads.get(clientId);
+          if (!handle || current.status === 'failed') {
+            startImageUpload(input.getToken, clientId, current.local);
+            handle = uploads.get(clientId);
+          }
+          const media = current.media ?? (await handle!.promise);
+          mediaId = media.id;
         }
-        const media = current.media ?? (await handle!.promise);
-        mediaId = media.id;
       }
       const post = await communityApi.createPost(input.getToken, {
         content: input.content,
         mediaId,
         clientId,
+        kind,
+        ...(isPoll
+          ? { pollOptionA: input.pollOptionA?.trim(), pollOptionB: input.pollOptionB?.trim() }
+          : {}),
       });
       uploads.delete(clientId);
       retryJobs.delete(clientId);

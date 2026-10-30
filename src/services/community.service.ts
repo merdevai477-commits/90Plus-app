@@ -185,6 +185,11 @@ const postSelect = {
     id: true,
     userId: true,
     content: true,
+    kind: true,
+    pollOptionA: true,
+    pollOptionB: true,
+    pollVotesA: true,
+    pollVotesB: true,
     imageUrl: true,
     imageWidth: true,
     imageHeight: true,
@@ -204,13 +209,27 @@ export interface CommunityAuthorDto {
     displayName: string | null;
     avatar: string | null;
     isVerified: boolean;
+    isFollowing: boolean;
+}
+
+export type CommunityPostKindDto = 'TEXT' | 'TEAM_POLL';
+export type CommunityPollChoiceDto = 'A' | 'B';
+
+export interface CommunityTeamPollDto {
+    optionA: string;
+    optionB: string;
+    votesA: number;
+    votesB: number;
+    votedByMe: CommunityPollChoiceDto | null;
 }
 
 export interface CommunityPostDto {
     id: string;
     content: string;
+    kind: CommunityPostKindDto;
     createdAt: string;
     image: { url: string; width: number; height: number; placeholder: string | null } | null;
+    poll: CommunityTeamPollDto | null;
     author: CommunityAuthorDto;
     likesCount: number;
     commentsCount: number;
@@ -219,10 +238,18 @@ export interface CommunityPostDto {
     isMine: boolean;
 }
 
-function toPostDto(row: PostRow, viewerId: string, liked: Set<string>): CommunityPostDto {
+function toPostDto(
+    row: PostRow,
+    viewerId: string,
+    liked: Set<string>,
+    following: Set<string>,
+    myPollVotes: Map<string, CommunityPollChoiceDto>,
+): CommunityPostDto {
+    const kind: CommunityPostKindDto = row.kind === 'TEAM_POLL' ? 'TEAM_POLL' : 'TEXT';
     return {
         id: row.id,
         content: row.content,
+        kind,
         createdAt: row.createdAt.toISOString(),
         image: row.imageUrl
             ? {
@@ -232,7 +259,17 @@ function toPostDto(row: PostRow, viewerId: string, liked: Set<string>): Communit
                   placeholder: row.imagePlaceholder,
               }
             : null,
-        author: row.user,
+        poll:
+            kind === 'TEAM_POLL' && row.pollOptionA && row.pollOptionB
+                ? {
+                      optionA: row.pollOptionA,
+                      optionB: row.pollOptionB,
+                      votesA: row.pollVotesA,
+                      votesB: row.pollVotesB,
+                      votedByMe: myPollVotes.get(row.id) ?? null,
+                  }
+                : null,
+        author: { ...row.user, isFollowing: following.has(row.userId) },
         likesCount: row.likesCount,
         commentsCount: row.commentsCount,
         sharesCount: row.sharesCount,
@@ -276,7 +313,7 @@ function toCommentDto(row: CommentRow, viewerId: string, liked: Set<string>): Co
         parentId: row.parentId,
         content: row.content,
         createdAt: row.createdAt.toISOString(),
-        author: row.user,
+        author: { ...row.user, isFollowing: false },
         likesCount: row.likesCount,
         repliesCount: row.repliesCount,
         likedByMe: liked.has(row.id),
@@ -293,6 +330,25 @@ async function likedPostIds(viewerId: string, postIds: string[]): Promise<Set<st
     return new Set(rows.map((r) => r.postId));
 }
 
+async function followingAuthorIds(viewerId: string, authorIds: string[]): Promise<Set<string>> {
+    const ids = [...new Set(authorIds.filter((id) => id && id !== viewerId))];
+    if (!ids.length) return new Set();
+    const rows = await prisma.follow.findMany({
+        where: { followerId: viewerId, followingId: { in: ids } },
+        select: { followingId: true },
+    });
+    return new Set(rows.map((r) => r.followingId));
+}
+
+async function myPollVotes(viewerId: string, postIds: string[]): Promise<Map<string, CommunityPollChoiceDto>> {
+    if (!postIds.length) return new Map();
+    const rows = await prisma.communityPostPollVote.findMany({
+        where: { userId: viewerId, postId: { in: postIds } },
+        select: { postId: true, choice: true },
+    });
+    return new Map(rows.map((r) => [r.postId, r.choice as CommunityPollChoiceDto]));
+}
+
 async function likedCommentIds(viewerId: string, commentIds: string[]): Promise<Set<string>> {
     if (!commentIds.length) return new Set();
     const rows = await prisma.communityCommentLike.findMany({
@@ -305,8 +361,9 @@ async function likedCommentIds(viewerId: string, commentIds: string[]): Promise<
 // ─── Feed ─────────────────────────────────────────────────────────────────
 
 export const FEED_PAGE_SIZE = 15;
-const FIRST_PAGE_CACHE_KEY = 'community:feed:first:v1';
+const FIRST_PAGE_CACHE_KEY = 'community:feed:first:v2';
 const FIRST_PAGE_TTL_MS = 20_000;
+export const POLL_OPTION_MAX_LENGTH = 40;
 
 export interface FeedPage<T> {
     items: T[];
@@ -340,8 +397,16 @@ async function queryPosts(where: Prisma.CommunityPostWhereInput, limit: number):
 async function finishPostPage(rows: PostRow[], viewerId: string, nextCursor: string | null): Promise<FeedPage<CommunityPostDto>> {
     const blocked = await blockedPairIds(viewerId);
     const visible = blocked.size ? rows.filter((r) => !blocked.has(r.userId)) : rows;
-    const liked = await likedPostIds(viewerId, visible.map((r) => r.id));
-    return { items: visible.map((r) => toPostDto(r, viewerId, liked)), nextCursor };
+    const postIds = visible.map((r) => r.id);
+    const [liked, following, pollVotes] = await Promise.all([
+        likedPostIds(viewerId, postIds),
+        followingAuthorIds(
+            viewerId,
+            visible.map((r) => r.userId),
+        ),
+        myPollVotes(viewerId, postIds),
+    ]);
+    return { items: visible.map((r) => toPostDto(r, viewerId, liked, following, pollVotes)), nextCursor };
 }
 
 interface CachedFirstPage {
@@ -380,10 +445,12 @@ export async function getUserPosts(viewerId: string, username: string, cursor: u
     });
     if (!author) return { items: [], nextCursor: null, author: null };
     const blocked = await blockedPairIds(viewerId);
-    if (blocked.has(author.id)) return { items: [], nextCursor: null, author };
+    const following = await followingAuthorIds(viewerId, [author.id]);
+    const authorDto: CommunityAuthorDto = { ...author, isFollowing: following.has(author.id) };
+    if (blocked.has(author.id)) return { items: [], nextCursor: null, author: authorDto };
     const { rows, nextCursor } = await queryPosts({ userId: author.id, ...cursorWhere(cursor) }, FEED_PAGE_SIZE);
     const page = await finishPostPage(rows, viewerId, nextCursor);
-    return { ...page, author };
+    return { ...page, author: authorDto };
 }
 
 export async function getHashtagPosts(viewerId: string, tagRaw: string, cursor: unknown): Promise<FeedPage<CommunityPostDto> & { tag: string; postsCount: number }> {
@@ -432,8 +499,12 @@ export async function getPost(viewerId: string, postId: string): Promise<Communi
     if (!row) throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
     const blocked = await blockedPairIds(viewerId);
     if (blocked.has(row.userId)) throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
-    const liked = await likedPostIds(viewerId, [row.id]);
-    return toPostDto(row, viewerId, liked);
+    const [liked, following, pollVotes] = await Promise.all([
+        likedPostIds(viewerId, [row.id]),
+        followingAuthorIds(viewerId, [row.userId]),
+        myPollVotes(viewerId, [row.id]),
+    ]);
+    return toPostDto(row, viewerId, liked, following, pollVotes);
 }
 
 // ─── Media ────────────────────────────────────────────────────────────────
@@ -553,7 +624,10 @@ export async function searchMentionUsers(viewerId: string, qRaw: string): Promis
         orderBy: [{ isVerified: 'desc' }, { username: 'asc' }],
         take: 12,
     });
-    return users.filter((u) => u.id !== viewerId && !blocked.has(u.id)).slice(0, 8);
+    return users
+        .filter((u) => u.id !== viewerId && !blocked.has(u.id))
+        .slice(0, 8)
+        .map((u) => ({ ...u, isFollowing: false }));
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────
@@ -644,30 +718,71 @@ function cleanClientId(raw: unknown): string | undefined {
     return typeof raw === 'string' && /^[\w-]{6,64}$/.test(raw) ? raw : undefined;
 }
 
+function parsePostKind(raw: unknown): CommunityPostKindDto {
+    return raw === 'TEAM_POLL' ? 'TEAM_POLL' : 'TEXT';
+}
+
+function cleanPollOption(raw: unknown): string {
+    if (typeof raw !== 'string') return '';
+    return raw.replace(/\s+/g, ' ').trim().slice(0, POLL_OPTION_MAX_LENGTH);
+}
+
 export async function createPost(
     actor: CommunityActor,
-    input: { content?: unknown; mediaId?: unknown; clientId?: unknown },
+    input: {
+        content?: unknown;
+        mediaId?: unknown;
+        clientId?: unknown;
+        kind?: unknown;
+        pollOptionA?: unknown;
+        pollOptionB?: unknown;
+    },
 ): Promise<CommunityPostDto> {
     assertCanWrite(actor);
     const clientId = cleanClientId(input.clientId);
     const existingId = await rememberedClientPost(actor.id, clientId);
     if (existingId) return getPost(actor.id, existingId);
 
+    const kind = parsePostKind(input.kind);
     const content = normalizeCommunityText(input.content);
     const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
-    if (!content && !mediaId) throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
-    if (content.length > POST_MAX_LENGTH) {
-        throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, { max: POST_MAX_LENGTH });
-    }
-    if (content) await moderateOrThrow(actor.id, 'post', content);
+    const pollOptionA = kind === 'TEAM_POLL' ? cleanPollOption(input.pollOptionA) : '';
+    const pollOptionB = kind === 'TEAM_POLL' ? cleanPollOption(input.pollOptionB) : '';
 
-    const media = mediaId
-        ? await prisma.communityMedia.findFirst({
-              where: { id: mediaId, userId: actor.id, attachedAt: null },
-              select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
-          })
-        : null;
-    if (mediaId && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    if (kind === 'TEAM_POLL') {
+        if (!pollOptionA || !pollOptionB) {
+            throw new CommunityError(400, 'POLL_OPTIONS_REQUIRED', 'Enter both team names');
+        }
+        if (pollOptionA.toLowerCase() === pollOptionB.toLowerCase()) {
+            throw new CommunityError(400, 'POLL_OPTIONS_SAME', 'Team names must be different');
+        }
+        if (mediaId) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
+        if (content.length > POST_MAX_LENGTH) {
+            throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
+                max: POST_MAX_LENGTH,
+            });
+        }
+        if (content) await moderateOrThrow(actor.id, 'post', content);
+        await moderateOrThrow(actor.id, 'post', pollOptionA);
+        await moderateOrThrow(actor.id, 'post', pollOptionB);
+    } else {
+        if (!content && !mediaId) throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
+        if (content.length > POST_MAX_LENGTH) {
+            throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
+                max: POST_MAX_LENGTH,
+            });
+        }
+        if (content) await moderateOrThrow(actor.id, 'post', content);
+    }
+
+    const media =
+        kind === 'TEXT' && mediaId
+            ? await prisma.communityMedia.findFirst({
+                  where: { id: mediaId, userId: actor.id, attachedAt: null },
+                  select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
+              })
+            : null;
+    if (mediaId && kind === 'TEXT' && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
     if (media) await assertRemoteImageSafe(actor.id, media.url);
 
     await claimRate('post', actor.id);
@@ -680,6 +795,9 @@ export async function createPost(
             data: {
                 userId: actor.id,
                 content,
+                kind,
+                pollOptionA: kind === 'TEAM_POLL' ? pollOptionA : null,
+                pollOptionB: kind === 'TEAM_POLL' ? pollOptionB : null,
                 imageUrl: media?.url ?? null,
                 imageStoragePath: media?.storagePath ?? null,
                 imageWidth: media?.width ?? null,
@@ -712,7 +830,7 @@ export async function createPost(
         kind: 'post',
         id: post.id,
         userId: actor.id,
-        text: content,
+        text: kind === 'TEAM_POLL' ? [content, pollOptionA, pollOptionB].filter(Boolean).join('\n') : content,
         imageUrl: post.imageUrl,
     });
 
@@ -732,7 +850,74 @@ export async function createPost(
         );
     });
 
-    return toPostDto(post, actor.id, new Set());
+    return getPost(actor.id, post.id);
+}
+
+/** Cast or switch a vote on a TEAM_POLL post. */
+export async function votePoll(
+    actor: CommunityActor,
+    postId: string,
+    choiceRaw: unknown,
+): Promise<CommunityTeamPollDto> {
+    const choice: CommunityPollChoiceDto | null = choiceRaw === 'A' || choiceRaw === 'B' ? choiceRaw : null;
+    if (!choice) throw new CommunityError(400, 'INVALID_VOTE', 'Pick team A or B');
+
+    const post = await prisma.communityPost.findFirst({
+        where: { id: postId, status: 'ACTIVE', kind: 'TEAM_POLL' },
+        select: { id: true, pollOptionA: true, pollOptionB: true, pollVotesA: true, pollVotesB: true },
+    });
+    if (!post?.pollOptionA || !post.pollOptionB) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
+
+    const blocked = await blockedPairIds(actor.id);
+    const owner = await prisma.communityPost.findUnique({ where: { id: postId }, select: { userId: true } });
+    if (owner && blocked.has(owner.userId)) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
+
+    const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.communityPostPollVote.findUnique({
+            where: { userId_postId: { userId: actor.id, postId } },
+            select: { choice: true },
+        });
+        if (existing?.choice === choice) {
+            const current = await tx.communityPost.findUniqueOrThrow({
+                where: { id: postId },
+                select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+            });
+            return { current, votedByMe: choice };
+        }
+
+        if (!existing) {
+            await tx.communityPostPollVote.create({ data: { userId: actor.id, postId, choice } });
+            const current = await tx.communityPost.update({
+                where: { id: postId },
+                data: choice === 'A' ? { pollVotesA: { increment: 1 } } : { pollVotesB: { increment: 1 } },
+                select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+            });
+            return { current, votedByMe: choice };
+        }
+
+        await tx.communityPostPollVote.update({
+            where: { userId_postId: { userId: actor.id, postId } },
+            data: { choice },
+        });
+        const current = await tx.communityPost.update({
+            where: { id: postId },
+            data:
+                choice === 'A'
+                    ? { pollVotesA: { increment: 1 }, pollVotesB: { decrement: 1 } }
+                    : { pollVotesB: { increment: 1 }, pollVotesA: { decrement: 1 } },
+            select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+        });
+        return { current, votedByMe: choice };
+    });
+
+    void invalidateFeedCache();
+    return {
+        optionA: result.current.pollOptionA!,
+        optionB: result.current.pollOptionB!,
+        votesA: Math.max(0, result.current.pollVotesA),
+        votesB: Math.max(0, result.current.pollVotesB),
+        votedByMe: result.votedByMe,
+    };
 }
 
 export async function deletePost(actor: CommunityActor, postId: string): Promise<void> {
@@ -763,7 +948,10 @@ export async function updatePost(
             id: true,
             userId: true,
             status: true,
+            kind: true,
             content: true,
+            pollOptionA: true,
+            pollOptionB: true,
             imageUrl: true,
             imageStoragePath: true,
             imageWidth: true,
@@ -774,10 +962,12 @@ export async function updatePost(
     if (!existing || existing.status === 'DELETED') throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
     if (existing.userId !== actor.id) throw new CommunityError(403, 'FORBIDDEN', 'You can only edit your own posts');
 
+    const isPoll = existing.kind === 'TEAM_POLL';
     const hasContent = Object.prototype.hasOwnProperty.call(input, 'content');
     const content = hasContent ? normalizeCommunityText(input.content) : existing.content;
     const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
     const removeImage = input.removeImage === true || input.removeImage === 'true';
+    if (isPoll && mediaId) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
 
     if (hasContent) {
         if (content.length > POST_MAX_LENGTH) {
@@ -788,18 +978,22 @@ export async function updatePost(
         if (content) await moderateOrThrow(actor.id, 'post', content);
     }
 
-    const media = mediaId
-        ? await prisma.communityMedia.findFirst({
-              where: { id: mediaId, userId: actor.id, attachedAt: null },
-              select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
-          })
-        : null;
-    if (mediaId && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    const media =
+        !isPoll && mediaId
+            ? await prisma.communityMedia.findFirst({
+                  where: { id: mediaId, userId: actor.id, attachedAt: null },
+                  select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
+              })
+            : null;
+    if (mediaId && !isPoll && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
     if (media) await assertRemoteImageSafe(actor.id, media.url);
 
-    const clearImage = removeImage && !media;
-    if (!content && !media && (clearImage || !existing.imageUrl)) {
+    const clearImage = !isPoll && removeImage && !media;
+    if (!isPoll && !content && !media && (clearImage || !existing.imageUrl)) {
         throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
+    }
+    if (isPoll && !existing.pollOptionA) {
+        throw new CommunityError(400, 'POLL_OPTIONS_REQUIRED', 'Enter both team names');
     }
 
     const oldKey = media || clearImage ? existing.imageStoragePath : null;

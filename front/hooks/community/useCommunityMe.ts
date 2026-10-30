@@ -15,6 +15,7 @@ export function useCommunityMe(): CommunityAuthor {
       displayName: profile?.displayName ?? user?.fullName ?? null,
       avatar: globalState.localAvatar ?? profile?.avatar ?? user?.imageUrl ?? null,
       isVerified: Boolean((profile as { isVerified?: boolean } | null)?.isVerified),
+      isFollowing: false,
     }),
     [profile, user?.id, user?.username, user?.fullName, user?.imageUrl],
   );

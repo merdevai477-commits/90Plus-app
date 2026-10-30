@@ -27,7 +27,7 @@ type FeedSource = { kind: 'feed' } | { kind: 'tag'; tag: string } | { kind: 'use
 
 type Row = { type: 'ghost'; key: string; pending: PendingPost } | { type: 'post'; key: string; post: CommunityPost };
 
-const CARD_PADDING = 16;
+const CARD_PADDING = 24;
 const MAX_CARD_WIDTH = 600;
 
 /** Gutters scale with the screen and cards stop growing on tablets. */
@@ -146,6 +146,18 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
     [s],
   );
 
+  const postCardLabels = useMemo(
+    () => ({
+      follow: s.follow,
+      following: s.following,
+      like: s.likeLabel,
+      comment: s.commentLabel,
+      share: s.shareLabel,
+      viewAllComments: s.viewAllComments,
+    }),
+    [s],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Row }) => {
       if (item.type === 'ghost') {
@@ -177,6 +189,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
           fonts={fonts}
           seeMore={s.seeMore}
           seeLess={s.seeLess}
+          labels={postCardLabels}
           onLike={actions.toggleLike}
           onDoubleTapLike={actions.likeOnce}
           onComment={onComment}
@@ -186,10 +199,12 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
           onProfile={actions.openProfile}
           onHashtag={actions.openHashtag}
           onMention={actions.openProfile}
+          onFollow={actions.toggleFollow}
+          onVote={actions.votePoll}
         />
       );
     },
-    [actions, fonts, ghostLabels, isAr, metrics.contentWidth, onComment, onMenu, onOpenImage, onShare, router, s],
+    [actions, fonts, ghostLabels, isAr, metrics.contentWidth, onComment, onMenu, onOpenImage, onShare, postCardLabels, router, s],
   );
 
   const menuItems = useMemo<ActionMenuItem[]>(() => {
@@ -250,7 +265,9 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
         data={rows}
         renderItem={renderItem}
         keyExtractor={(r) => r.key}
-        getItemType={(r) => (r.type === 'ghost' ? 'ghost' : r.post.image ? 'post-image' : 'post-text')}
+        getItemType={(r) =>
+          r.type === 'ghost' ? 'ghost' : r.post.kind === 'TEAM_POLL' ? 'post-poll' : r.post.image ? 'post-image' : 'post-text'
+        }
         ListHeaderComponent={listHeader}
         ListEmptyComponent={empty}
         ListFooterComponent={

@@ -3,8 +3,9 @@
 export const C = {
   screen: '#090710',
   header: '#0C051A',
-  card: '#090710',
-  cardBorder: '#1A1A1A',
+  card: '#100d19',
+  cardBorder: '#38246B',
+  contentBox: '#191326',
   composer: '#09001D',
   composerGlow: 'rgba(139,92,246,0.25)',
   input: '#110923',
@@ -12,8 +13,11 @@ export const C = {
   placeholder: '#A1A1A1',
   text: '#E3E3E3',
   textStrong: '#FFFFFF',
-  counter: '#D8D8D8',
-  muted: '#A3A3A3',
+  counter: '#a49bad',
+  muted: '#a49bad',
+  followBtn: '#21153c',
+  followText: '#bdb6c3',
+  pollIdle: '#241b36',
   icon: '#CCCCCC',
   iconDim: '#7E7E7E',
   accent: '#8B5CF6',
@@ -28,8 +32,8 @@ export const C = {
 
 export const POST_IMAGE_HEIGHT = 216;
 export const POST_IMAGE_RADIUS = 16;
-export const CARD_RADIUS = 19;
-export const AVATAR_SIZE = 54;
+export const CARD_RADIUS = 17;
+export const AVATAR_SIZE = 42;
 export const COMMENT_AVATAR_SIZE = 36;
 
 export const CI = {
