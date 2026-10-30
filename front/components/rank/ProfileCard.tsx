@@ -15,23 +15,24 @@
  * had uploaded a new one to R2.
  */
 
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import { GlassWrapper, glassProps } from '../../constants/ui';
 import { useTranslation } from '../../src/i18n';
 import { useXp } from '../../contexts/XpContext';
 import { useMyProfileBasics } from '../../hooks/useMyProfileBasics';
 import { useUserRank } from '../../hooks/useUserRank';
+import { isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 const ACCENT = '#A855F7';
 const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
@@ -80,7 +81,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   // whenever it is loaded; this is only the pre-load default.
   const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 100);
 
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const resolvedName: string =
     (displayName && displayName.trim()) ||
     (profile?.displayName && profile.displayName.trim()) ||
@@ -117,16 +117,24 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={t.rank.a11yProfileCard}
-      style={({ pressed }) => [s.pressable, pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [s.pressable, pressed && { opacity: 0.88 }]}
     >
-      <GlassContainer
-        intensity={18}
-        tint="dark"
-        effect="clear"
-        interactive
-        style={s.profileCard}
-      >
-        <View style={s.profileCardOverlay} />
+      <View style={s.cardShell}>
+        <GlassWrapper
+          {...(glassProps.card as object)}
+          {...(!isLiquidGlassSupported
+            ? {
+                // Stronger frost so the hero art behind the card actually blurs.
+                intensity: Platform.OS === 'android' ? 110 : 48,
+                tint: 'dark' as const,
+                experimentalBlurMethod: 'dimezisBlurView' as const,
+              }
+            : { effect: 'clear' as const, interactive: true })}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Soft purple wash — keeps glass readable without killing the blur. */}
+        <View style={s.glassTint} pointerEvents="none" />
+        <View style={s.glassRim} pointerEvents="none" />
 
         <View style={s.profileRow}>
           <View style={s.avatarWrap}>
@@ -176,7 +184,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
             </View>
           </View>
         </View>
-      </GlassContainer>
+      </View>
     </Pressable>
   );
 };
@@ -185,27 +193,31 @@ export default ProfileCard;
 
 const s = StyleSheet.create({
   pressable: { marginHorizontal: 12, marginTop: 19 },
-  profileCard: {
+  cardShell: {
     borderRadius: 22,
     padding: 18,
-    backgroundColor: 'rgba(255,255,255,0.00)',
-    borderWidth: 1,
-    borderColor: 'rgba(69, 5, 128, 0.25)',
     overflow: 'hidden',
-    zIndex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.32)',
+    backgroundColor: 'transparent',
   },
-  profileCardOverlay: {
+  glassTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(80,20,160,0.00)',
-    borderRadius: 22,
+    backgroundColor: 'rgba(28, 10, 52, 0.42)',
   },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  glassRim: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14, zIndex: 1 },
   avatarWrap: { position: 'relative' },
   avatar: {
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(124,58,237,0.0)',
+    backgroundColor: 'rgba(124,58,237,0.15)',
   },
   avatarRing: {
     position: 'absolute',
@@ -237,7 +249,7 @@ const s = StyleSheet.create({
   xpBarBg: {
     flex: 1,
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 6,
     overflow: 'hidden',
   },
