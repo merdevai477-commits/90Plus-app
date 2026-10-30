@@ -164,6 +164,10 @@ export default function RankScreen() {
     [competitions],
   );
 
+  const dir = isAr ? ('rtl' as const) : ('ltr' as const);
+  const alignEnd = isAr ? ('flex-end' as const) : ('flex-start' as const);
+  const textAlign = isAr ? ('right' as const) : ('left' as const);
+
   return (
     <View style={s.root}>
       <RankHeader topInset={insets.top} />
@@ -185,16 +189,17 @@ export default function RankScreen() {
             source={require('../../assets/images/90Plus world cup.jpg')}
             style={s.heroBgTrophy}
             contentFit="cover"
-            contentPosition="left center"
+            // Keep trophy art opposite the copy so EN text sits on the dark side too.
+            contentPosition={isAr ? 'left center' : 'right center'}
             cachePolicy="memory-disk"
           />
-          {/* Figma: linear-gradient(71deg, transparent 6.8%, black 0.64 at 56.9%) — a touch stronger for title legibility */}
+          {/* Figma: linear-gradient(71deg, …) — mirrored for LTR so copy stays legible */}
           <LinearGradient
             colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.78)']}
             locations={[0.05, 0.42, 0.78]}
             style={s.heroBgGradDiag}
-            start={{ x: 0.05, y: 0.95 }}
-            end={{ x: 0.95, y: 0.05 }}
+            start={isAr ? { x: 0.05, y: 0.95 } : { x: 0.95, y: 0.95 }}
+            end={isAr ? { x: 0.95, y: 0.05 } : { x: 0.05, y: 0.05 }}
           />
           <LinearGradient
             colors={['transparent', 'rgba(3,3,3,0.55)', APP_BG]}
@@ -203,10 +208,16 @@ export default function RankScreen() {
             end={{ x: 0, y: 1 }}
           />
 
-          <View style={s.heroText}>
-            <View style={s.titleRow}>
+          <View style={[s.heroText, { alignItems: alignEnd, alignSelf: alignEnd }]}>
+            <View
+              style={[
+                s.titleRow,
+                // Children are [title, icon]. AR row → title|icon; EN row-reverse → icon|title.
+                { flexDirection: isAr ? 'row' : 'row-reverse' },
+              ]}
+            >
               <Text
-                style={[s.pageTitle, { fontFamily: fonts.extrabold }]}
+                style={[s.pageTitle, { fontFamily: fonts.extrabold, textAlign, writingDirection: dir }]}
                 numberOfLines={1}
               >
                 {t.rank.competitions.title}
@@ -215,11 +226,21 @@ export default function RankScreen() {
                 <Trophy size={22} color="#fff" />
               </View>
             </View>
-            <View style={s.heroSubs}>
-              <Text style={[s.pageSub1, { fontFamily: fonts.semibold }]}>
+            <View style={[s.heroSubs, { alignItems: alignEnd }]}>
+              <Text
+                style={[
+                  s.pageSub1,
+                  { fontFamily: fonts.semibold, textAlign, writingDirection: dir },
+                ]}
+              >
                 {t.rank.competitions.tagline}
               </Text>
-              <Text style={[s.pageSub2, { fontFamily: fonts.medium }]}>
+              <Text
+                style={[
+                  s.pageSub2,
+                  { fontFamily: fonts.medium, textAlign, writingDirection: dir },
+                ]}
+              >
                 {t.rank.competitions.subtitle}
               </Text>
             </View>
@@ -282,20 +303,17 @@ const s = StyleSheet.create({
     right: 0,
     height: 110,
   },
-  // Figma: title block at ~top 185 / 415, trailing edge, items-end.
+  // Figma: title block at ~top 185 / 415; side flips with language (AR end / EN start).
   heroText: {
     paddingHorizontal: 18,
     paddingTop: Math.round(HERO_IMG_H * 0.22),
     paddingBottom: 10,
     zIndex: 1,
-    alignItems: 'flex-end',
     maxWidth: '72%',
-    alignSelf: 'flex-end',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 12,
     marginBottom: 15,
   },
@@ -318,20 +336,17 @@ const s = StyleSheet.create({
     color: '#fff',
     fontSize: 34,
     fontWeight: '800',
-    textAlign: 'right',
     lineHeight: 42,
     includeFontPadding: false,
   },
   heroSubs: {
     width: '100%',
     gap: 8,
-    alignItems: 'flex-end',
   },
   pageSub1: {
     color: '#d4d4d4',
     fontSize: 18,
     fontWeight: '600',
-    textAlign: 'right',
     width: '100%',
     lineHeight: 24,
     includeFontPadding: false,
@@ -340,7 +355,6 @@ const s = StyleSheet.create({
     color: '#a49bad',
     fontSize: 13,
     fontWeight: '500',
-    textAlign: 'right',
     width: '100%',
     lineHeight: 18,
     includeFontPadding: false,
