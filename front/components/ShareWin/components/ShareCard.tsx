@@ -132,7 +132,7 @@ const ShareCard = memo(function ShareCard({
           accessibilityLabel={`${copy.shareCardSubtitle}: ${referralLink}`}
         >
           <Text style={sw.linkText} numberOfLines={1}>
-            {compactLink(referralLink)}
+            {compactLink(referralLink, 42)}
           </Text>
           <Image
             source={SW_ASSET.copy}

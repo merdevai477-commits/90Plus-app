@@ -1186,6 +1186,7 @@ export const en = {
     filterWrong: 'Wrong',
     filterPending: 'Pending',
     resultPending: 'Pending',
+    resultVoid: 'Cancelled',
     yourPick: 'Your pick',
     historyEmpty: "You haven't made any predictions yet",
     historyEmptyCorrect: 'No correct predictions yet',
@@ -1204,8 +1205,8 @@ export const en = {
     titleHighlight: 'Share',
     titleRest: ' & Win',
     subtitle: 'Share the app with your friends and win great prizes!',
-    perShareLead: 'Ranking is based on ',
-    perSharePoints: 'friends who joined',
+    perShareLead: 'Every share = ',
+    perSharePoints: 'XP points',
     perShareXp: 'XP',
 
     // Lucky wheel card
@@ -1216,8 +1217,8 @@ export const en = {
     wheelSpinningCta: 'Spinning...',
     wheelNote: 'One spin per day only',
 
-    // Weekly ranking
-    weeklyTitle: 'Weekly Ranking',
+    // Monthly ranking
+    weeklyTitle: 'Monthly Ranking',
     weeklyEndsIn: 'Ends in:',
     unitDays: 'Days',
     unitHours: 'Hours',
@@ -1225,16 +1226,17 @@ export const en = {
     unitSeconds: 'Seconds',
     viewFullRanking: 'View full ranking',
     leaderboardEmpty: 'No ranking yet — be the first to share!',
-    leaderboardCompetitors: '{count} competing this week',
+    leaderboardCompetitors: '{count} competing this month',
     leaderboardEnd: 'You have reached the end',
     boardUnit: 'friends',
     close: 'Close',
     backToRank: 'Back to Rank',
 
-    // Weekly prizes
-    prizesTitle: 'Weekly Prizes',
-    prizesSubtitleLine1: 'A new prize every week!',
+    // Monthly prizes
+    prizesTitle: 'Monthly Prizes',
+    prizesSubtitleLine1: 'A new prize every month!',
     prizesSubtitleLine2: ' Share now to be the winner',
+    remainingMonthsTitle: 'Remaining months',
 
     // Share card
     shareCardTitle: 'Share now & win',
@@ -1243,8 +1245,8 @@ export const en = {
     channelInstagram: 'Instagram',
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
-    referralHintLead: 'Your rank rises when a friend signs up via ',
-    referralHintXp: 'your link',
+    referralHintLead: 'Every friend who signs up via your link gives you ',
+    referralHintXp: 'XP',
     linkCopied: 'Link copied',
     linkCopiedDetail: 'Paste it in a chat — rank rises when they join',
     copyFailed: 'Could not copy the link',
@@ -1260,7 +1262,7 @@ export const en = {
     // Last winner
     lastWinnerTitle: 'Latest winner',
     lastWinnerViewStory: 'View story',
-    lastWinnerNone: 'No winner crowned yet — week one is still running',
+    lastWinnerNone: 'No winner crowned yet — month one is still running',
     timeAgoHours: '{count}h ago',
     timeAgoDays: '{count}d ago',
     timeAgoNow: 'Just now',

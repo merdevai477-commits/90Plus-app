@@ -1272,6 +1272,7 @@ export const ar = {
     filterWrong: 'الفاشلة',
     filterPending: 'المعلقة',
     resultPending: 'معلق',
+    resultVoid: 'ملغاة',
     yourPick: 'توقعك',
     historyEmpty: 'لم تقم بأي توقع بعد',
     historyEmptyCorrect: 'لا توجد توقعات ناجحة بعد',
@@ -1291,8 +1292,8 @@ export const ar = {
     titleHighlight: 'شارك',
     titleRest: ' واربح',
     subtitle: 'شارك التطبيق مع أصدقائك واربح جوائز رائعة!',
-    perShareLead: 'الترتيب حسب ',
-    perSharePoints: 'عدد الأصدقاء اللي انضموا',
+    perShareLead: 'كل مشاركة = ',
+    perSharePoints: 'نقاط XP',
     perShareXp: 'XP',
 
     // بطاقة عجلة الحظ
@@ -1303,8 +1304,8 @@ export const ar = {
     wheelSpinningCta: 'جاري اللف...',
     wheelNote: 'لفة واحدة يوميًا فقط',
 
-    // الترتيب الأسبوعي
-    weeklyTitle: 'الترتيب الأسبوعي',
+    // الترتيب الشهري
+    weeklyTitle: 'الترتيب الشهري',
     weeklyEndsIn: 'ينتهي بعد:',
     unitDays: 'أيام',
     unitHours: 'ساعات',
@@ -1312,16 +1313,17 @@ export const ar = {
     unitSeconds: 'ثواني',
     viewFullRanking: 'عرض الترتيب الكامل',
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
-    leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
+    leaderboardCompetitors: '{count} مشارك هذا الشهر',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
     boardUnit: 'صديق',
     close: 'إغلاق',
     backToRank: 'رجوع للرانك',
 
-    // الجوائز الأسبوعية
-    prizesTitle: 'الجوائز الأسبوعية',
-    prizesSubtitleLine1: 'جائزة جديدة كل أسبوع!',
+    // الجوائز الشهرية
+    prizesTitle: 'الجوائز الشهرية',
+    prizesSubtitleLine1: 'جائزة جديدة كل شهر!',
     prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
+    remainingMonthsTitle: 'باقي الشهور',
 
     // بطاقة المشاركة
     shareCardTitle: 'شارك الان واربح',
@@ -1330,8 +1332,8 @@ export const ar = {
     channelInstagram: 'إنستغرام',
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
-    referralHintLead: 'الترتيب يزيد لما صاحبك يسجّل من ',
-    referralHintXp: 'رابطك',
+    referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
+    referralHintXp: 'XP',
     linkCopied: 'تم نسخ الرابط',
     linkCopiedDetail: 'الصقه في محادثة — الترتيب يزيد لما صاحبك ينضم',
     copyFailed: 'تعذّر نسخ الرابط',
@@ -1347,7 +1349,7 @@ export const ar = {
     // آخر فائز
     lastWinnerTitle: 'آخر فائز',
     lastWinnerViewStory: 'عرض القصة',
-    lastWinnerNone: 'لم يُتوّج فائز بعد — الأسبوع الأول لم ينتهِ',
+    lastWinnerNone: 'لم يُتوّج فائز بعد — الشهر الأول لم ينتهِ',
     timeAgoHours: 'منذ {count} ساعة',
     timeAgoDays: 'منذ {count} يوم',
     timeAgoNow: 'الآن',

@@ -11,6 +11,7 @@ export const SW_ASSET = {
   copy: require('../../assets/images/share-win/icon-copy.svg'),
   linkDiagonal: require('../../assets/images/share-win/icon-link-diagonal.svg'),
   chevronRight: require('../../assets/images/share-win/icon-chevron-right.svg'),
+  chevronDown: require('../../assets/images/share-win/icon-chevron-down.svg'),
   alertCircle: require('../../assets/images/share-win/icon-alert-circle.svg'),
   gift: require('../../assets/images/share-win/icon-gift.svg'),
   usersDuo: require('../../assets/images/share-win/icon-users-duo.svg'),
@@ -19,6 +20,7 @@ export const SW_ASSET = {
   arrowRight: require('../../assets/images/share-win/icon-arrow-right.svg'),
   xpPolygon: require('../../assets/images/share-win/xp-polygon.svg'),
   dividerVertical: require('../../assets/images/share-win/divider-vertical.svg'),
+  bell: require('../../assets/images/share-win/icon-bell.svg'),
 
   // Section rules flanking "الجوائز الأسبوعية"
   ruleLeft: require('../../assets/images/share-win/rule-left.svg'),
@@ -49,18 +51,22 @@ export const SW_ASSET = {
  * `DEFAULT_PRIZES`. A cycle that supplies its own `imageUrl` overrides these.
  */
 export const PRIZE_FALLBACK_IMAGE: Record<string, number> = {
-  football: require('../../assets/images/share-win/prize-1.png'),
-  jersey: require('../../assets/images/share-win/prize-2.png'),
-  boots: require('../../assets/images/share-win/prize-3.png'),
-  'boots-pro': require('../../assets/images/share-win/prize-4.png'),
+  ps5: require('../../assets/images/share-win/prize-ps5.png'),
+  kit: require('../../assets/images/share-win/prize-kit.png'),
+  'kit-2': require('../../assets/images/share-win/prize-kit.png'),
+  football: require('../../assets/images/share-win/prize-football.png'),
+  jersey: require('../../assets/images/share-win/prize-jersey-sm.png'),
+  boots: require('../../assets/images/share-win/prize-kit.png'),
+  'boots-pro': require('../../assets/images/share-win/prize-football.png'),
 };
 
 /** Ordered fallbacks for prizes whose id isn't recognised. */
 export const PRIZE_FALLBACK_ORDER = [
-  require('../../assets/images/share-win/prize-1.png'),
-  require('../../assets/images/share-win/prize-2.png'),
-  require('../../assets/images/share-win/prize-3.png'),
-  require('../../assets/images/share-win/prize-4.png'),
+  require('../../assets/images/share-win/prize-ps5.png'),
+  require('../../assets/images/share-win/prize-kit.png'),
+  require('../../assets/images/share-win/prize-kit.png'),
+  require('../../assets/images/share-win/prize-football.png'),
+  require('../../assets/images/share-win/prize-jersey-sm.png'),
 ];
 
 /** Medal art for ranks 1-3; ranks 4+ render a plain number instead. */

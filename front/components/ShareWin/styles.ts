@@ -3,7 +3,7 @@
  * SHARE & WIN — DESIGN TOKENS & STYLESHEET
  * =============================================================================
  *
- * A 1:1 port of Figma node 109:470 ("iPhone 14 Plus - 2", 448pt artboard,
+ * A 1:1 port of Figma node 758:1880 ("iPhone 14 Plus - 27", 448pt artboard,
  * 22pt side gutters ⇒ 404pt content column).
  *
  * Every number below is the RAW FIGMA VALUE, converted to device units at
@@ -48,8 +48,28 @@ export const SW_COLOR = {
   screen: '#030303',
   /** Card fill shared by the wheel / weekly / share cards. */
   cardBg: '#080613',
-  /** 1px card border. */
-  cardBorder: 'rgba(223,192,252,0.39)',
+  /** 1px card border — Figma 758:1880 uses 0.11 opacity. */
+  cardBorder: 'rgba(223,192,252,0.11)',
+
+  /** Featured (month-1) prize card. */
+  prizeFeaturedBg: 'rgba(253,223,111,0.11)',
+  prizeFeaturedBorder: '#FFC758',
+  prizeFeaturedTitle: '#E99C03',
+  prizeFeaturedBadgeBg: 'rgba(176,119,6,0.29)',
+  prizeFeaturedBadgeText: '#FFC758',
+
+  /** Secondary (month 2/3) prize cards. */
+  prizeSecondaryBorder: 'rgba(139,92,246,0.5)',
+  prizeSecondaryCopyBg: 'rgba(79,26,188,0.28)',
+  prizeSecondaryTitle: '#BCA2F7',
+  prizeSecondarySubtitle: '#A4A4A4',
+  prizeSecondaryBadgeBg: 'rgba(141,91,255,0.29)',
+  prizeSecondaryBadgeText: '#B79AF8',
+
+  /** Remaining-months pill. */
+  prizeRemainingHeaderBg: '#16063A',
+  prizeRemainingHeaderText: '#D4C2FC',
+  prizeMiniBorder: 'rgba(58,58,58,0.25)',
 
   /** "شارك" in the hero title. */
   heroAccent: '#6B11D4',
@@ -502,12 +522,11 @@ function buildStyles(scale: DesignScale, language: string) {
 
     /* ── Weekly ranking card (node 147:312) — gap 18 ───────────────────── */
     weeklyCard: {
-      // Figma node 147:312 fixes the card at 667pt tall with its content
-      // vertically centred — keep the height, not a padding approximation.
-      height: s(667),
+      // Figma node 758:2004 — 640pt tall ranking card.
+      height: s(640),
       justifyContent: 'center',
       gap: s(18),
-      marginTop: s(24),
+      marginTop: s(46),
     },
     weeklyInner: {
       width: '100%',
@@ -668,12 +687,12 @@ function buildStyles(scale: DesignScale, language: string) {
       textAlign: 'center',
     },
 
-    /* ── Weekly prizes (node 161:79) — gap 24 ──────────────────────────── */
+    /* ── Monthly prizes (node 758:2114) — featured + pair + remaining ─── */
     prizesSection: {
       width: s(448),
       alignItems: 'center',
       gap: s(24),
-      marginTop: s(38),
+      marginTop: s(46),
     },
     prizesHeader: {
       width: s(313),
@@ -703,6 +722,199 @@ function buildStyles(scale: DesignScale, language: string) {
       color: SW_COLOR.bodyGrey,
       textAlign: 'center',
     },
+    prizesStack: {
+      width: '100%',
+      alignItems: 'center',
+      gap: s(32),
+    },
+    prizeFeaturedCard: {
+      width: s(420),
+      backgroundColor: SW_COLOR.prizeFeaturedBg,
+      borderWidth: 1,
+      borderColor: SW_COLOR.prizeFeaturedBorder,
+      borderRadius: s(SW_RADIUS.card),
+      paddingTop: s(14),
+      paddingBottom: s(28),
+      paddingHorizontal: s(12),
+      gap: s(18),
+      alignItems: 'stretch',
+    },
+    prizeFeaturedImageWrap: {
+      width: '100%',
+      height: s(410),
+      borderRadius: s(SW_RADIUS.tile),
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    prizeFeaturedImage: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    prizeFeaturedBadge: {
+      position: 'absolute',
+      top: s(16),
+      right: s(11),
+      backgroundColor: SW_COLOR.prizeFeaturedBadgeBg,
+      borderRadius: s(64),
+      paddingHorizontal: s(18),
+      paddingVertical: s(6),
+    },
+    prizeFeaturedBadgeText: {
+      fontFamily: font(500),
+      fontSize: f(15),
+      color: SW_COLOR.prizeFeaturedBadgeText,
+      textAlign: 'center',
+    },
+    prizeFeaturedCopy: {
+      alignItems: 'center',
+      gap: s(4),
+      width: '100%',
+    },
+    prizeFeaturedTitle: {
+      fontFamily: font(700),
+      fontSize: f(20),
+      color: SW_COLOR.prizeFeaturedTitle,
+      textAlign: 'center',
+    },
+    prizeFeaturedSubtitle: {
+      fontFamily: font(400),
+      fontSize: f(16),
+      color: '#AAAAAA',
+      textAlign: 'center',
+    },
+    prizeSecondaryRow: {
+      width: '100%',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: s(8),
+      paddingHorizontal: s(8),
+    },
+    prizeSecondaryCard: {
+      width: s(212),
+      alignItems: 'center',
+    },
+    prizeSecondaryImageWrap: {
+      width: '100%',
+      height: s(225),
+      borderTopLeftRadius: s(SW_RADIUS.tile),
+      borderTopRightRadius: s(SW_RADIUS.tile),
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      borderColor: SW_COLOR.prizeSecondaryBorder,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    prizeSecondaryImage: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    prizeSecondaryBadge: {
+      position: 'absolute',
+      top: s(12),
+      right: s(9),
+      backgroundColor: SW_COLOR.prizeSecondaryBadgeBg,
+      borderRadius: s(64),
+      paddingHorizontal: s(10),
+      paddingVertical: s(4),
+    },
+    prizeSecondaryBadgeText: {
+      fontFamily: font(500),
+      fontSize: f(10),
+      color: SW_COLOR.prizeSecondaryBadgeText,
+      textAlign: 'center',
+    },
+    prizeSecondaryCopy: {
+      width: '100%',
+      backgroundColor: SW_COLOR.prizeSecondaryCopyBg,
+      borderWidth: 1,
+      borderTopWidth: 0,
+      borderColor: SW_COLOR.prizeSecondaryBorder,
+      borderBottomLeftRadius: s(20),
+      borderBottomRightRadius: s(20),
+      paddingTop: s(13),
+      paddingBottom: s(14),
+      paddingHorizontal: s(11),
+      alignItems: 'center',
+      gap: s(4),
+    },
+    prizeSecondaryTitle: {
+      fontFamily: font(700),
+      fontSize: f(16),
+      color: SW_COLOR.prizeSecondaryTitle,
+      textAlign: 'center',
+    },
+    prizeSecondarySubtitle: {
+      fontFamily: font(400),
+      fontSize: f(12),
+      color: SW_COLOR.prizeSecondarySubtitle,
+      textAlign: 'center',
+    },
+    prizeRemainingSection: {
+      width: s(448),
+      paddingHorizontal: s(18),
+      gap: s(8),
+      alignItems: 'stretch',
+    },
+    prizeRemainingHeader: {
+      backgroundColor: SW_COLOR.prizeRemainingHeaderBg,
+      borderRadius: s(20),
+      paddingHorizontal: s(13),
+      paddingVertical: s(9),
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    prizeRemainingHeaderText: {
+      fontFamily: font(600),
+      fontSize: f(14),
+      color: SW_COLOR.prizeRemainingHeaderText,
+      textAlign: 'center',
+    },
+    prizeRemainingTrack: {
+      gap: s(12),
+      paddingVertical: s(6),
+      paddingHorizontal: s(7),
+      alignItems: 'center',
+    },
+    prizeMiniCard: {
+      width: s(127),
+      height: s(165),
+      borderRadius: s(SW_RADIUS.tile),
+      borderWidth: 1,
+      borderColor: SW_COLOR.prizeMiniBorder,
+      paddingHorizontal: s(10),
+      paddingVertical: s(11),
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      overflow: 'hidden',
+    },
+    prizeMiniImage: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: s(SW_RADIUS.tile),
+    },
+    prizeMiniScrim: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: s(SW_RADIUS.tile),
+    },
+    prizeMiniCopy: {
+      alignItems: 'center',
+      gap: s(4),
+      width: s(107),
+      zIndex: 1,
+    },
+    prizeMiniTitle: {
+      fontFamily: font(600),
+      fontSize: f(15),
+      color: SW_COLOR.white,
+      textAlign: 'center',
+      width: '100%',
+    },
+    prizeMiniSubtitle: {
+      fontFamily: font(400),
+      fontSize: f(11),
+      color: SW_COLOR.bodyGrey,
+      textAlign: 'center',
+      width: '100%',
+    },
+    /* Legacy carousel aliases — kept so Fast Refresh / skeleton never crash. */
     prizesCarousel: {
       height: s(208),
       justifyContent: 'center',
@@ -727,11 +939,6 @@ function buildStyles(scale: DesignScale, language: string) {
     prizeCardActive: {
       borderColor: SW_COLOR.prizeActiveBorder,
       paddingVertical: s(11),
-      shadowColor: 'rgba(70,11,203,0.5)',
-      shadowOpacity: 1,
-      shadowRadius: s(9.1),
-      shadowOffset: { width: 0, height: 1 },
-      elevation: 8,
     },
     prizeCardIdle: {
       borderColor: SW_COLOR.prizeIdleBorder,
@@ -775,10 +982,9 @@ function buildStyles(scale: DesignScale, language: string) {
       overflow: 'hidden',
     },
 
-    /* ── Share card (node 163:154) — gap 24 ────────────────────────────── */
+    /* ── Share card (node 758:2141) — first content card after hero ───── */
     shareCard: {
-      // Figma node 163:154 — 389pt tall, content vertically centred.
-      height: s(389),
+      paddingVertical: s(34),
       justifyContent: 'center',
       gap: s(24),
       marginTop: s(38),
@@ -879,7 +1085,7 @@ function buildStyles(scale: DesignScale, language: string) {
       width: s(404),
       alignItems: 'center',
       gap: s(24),
-      marginTop: s(38),
+      marginTop: s(46),
     },
     winnerTitleRow: {
       width: '100%',
@@ -1062,20 +1268,32 @@ function buildStyles(scale: DesignScale, language: string) {
      */
     pageHeader: {
       width: '100%',
-      minHeight: s(48),
+      minHeight: s(66),
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#0C051A',
       zIndex: 40,
     },
+    pageHeaderTitle: {
+      fontFamily: font(600),
+      fontSize: f(20),
+      color: SW_COLOR.white,
+      textAlign: 'center',
+      flex: 1,
+    },
     pageBackButton: {
-      width: s(44),
-      height: s(44),
-      borderRadius: s(22),
+      width: s(38),
+      height: s(38),
+      borderRadius: s(19),
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(255,255,255,0.10)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.22)',
+    },
+    pageBellButton: {
+      width: s(32),
+      height: s(32),
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     lbListContent: {
       width: s(371),

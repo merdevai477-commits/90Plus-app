@@ -7,17 +7,16 @@
  * 22pt gutters ⇒ 404pt content column).
  *
  * ── COMPOSITION MAP ──────────────────────────────────────────────────────────
- *   <View>                            screen shell (safe area via insets —
- *                                     RN's SafeAreaView is a no-op on Android)
+ *   Figma 758:1880 ("iPhone 14 Plus - 27").
+ *   <View>                            screen shell (safe area via insets)
+ *     <pageHeader/>                   back · title · notifications
  *     <ScrollView>
- *       <HeroHeader/>                 "شارك واربح" + ranking-by-friends line
- *       <WeeklyRankingCard/>          countdown + top 5 + full-ranking pill
- *       <WeeklyPrizes/>               cycle prize carousel
+ *       <HeroHeader/>                 "شارك واربح" + every-share XP line
  *       <ShareCard/>                  referral link, copy, channels, hint
+ *       <WeeklyPrizes/>               featured + side pair + remaining months
+ *       <WeeklyRankingCard/>          countdown + top 5 + full-ranking pill
  *       <LastWinnerCard/>             rank 1 of the last closed cycle
- *       <StatsBar/>                   LAST SECTION of the page content —
- *                                     friends · confirmed shares · rank. In normal flow,
- *                                     not a footer and not pinned.
+ *       <StatsBar/>                   friends · XP · rank (last scroll section)
  *
  * ── WHERE THE NUMBERS COME FROM ──────────────────────────────────────────────
  *   Everything statistical — shares, participants, score, rank, the cycle
@@ -130,9 +129,10 @@ export default function ShareWinScreen() {
       style={[
         sw.pageHeader,
         {
-          paddingTop: insets.top + s(8),
-          paddingLeft: Math.max(insets.left, s(16)),
-          paddingRight: Math.max(insets.right, s(16)),
+          paddingTop: insets.top + s(10),
+          paddingBottom: s(10),
+          paddingLeft: Math.max(insets.left, s(24)),
+          paddingRight: Math.max(insets.right, s(24)),
           flexDirection: language === 'ar' ? 'row-reverse' : 'row',
         },
       ]}
@@ -148,11 +148,31 @@ export default function ShareWinScreen() {
         <Image
           source={SW_ASSET.chevronRight}
           style={{
-            width: s(22),
-            height: s(22),
+            width: s(24),
+            height: s(24),
             tintColor: '#FFFFFF',
             transform: [{ scaleX: language === 'ar' ? 1 : -1 }],
           }}
+          contentFit="contain"
+          transition={0}
+        />
+      </Pressable>
+
+      <Text style={sw.pageHeaderTitle} numberOfLines={1}>
+        {`${copy.titleHighlight}${copy.titleRest}`}
+      </Text>
+
+      <Pressable
+        onPress={() => router.push('/notifications')}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Notifications"
+        testID="share-win-notifications"
+        style={({ pressed }) => [sw.pageBellButton, pressed && { opacity: 0.7 }]}
+      >
+        <Image
+          source={SW_ASSET.bell}
+          style={{ width: s(32), height: s(32) }}
           contentFit="contain"
           transition={0}
         />
@@ -266,14 +286,7 @@ export default function ShareWinScreen() {
          */}
         {false ? <LuckyWheelCard onSpinSettled={() => undefined} /> : null}
 
-        <WeeklyRankingCard
-          entries={overview.leaderboard}
-          cycleEndAt={overview.cycle.endAt}
-          onViewFullRanking={handleViewFullRanking}
-        />
-
-        <WeeklyPrizes prizes={overview.prizes} />
-
+        {/* Figma 758:1880 order: Share → Prizes → Ranking → Winner → Stats */}
         <ShareCard
           referralCode={overview.referralCode}
           referralLink={overview.referralLink}
@@ -282,13 +295,19 @@ export default function ShareWinScreen() {
           onFallbackShare={handleFallbackShare}
         />
 
+        <WeeklyPrizes prizes={overview.prizes} />
+
+        <WeeklyRankingCard
+          entries={overview.leaderboard}
+          cycleEndAt={overview.cycle.endAt}
+          onViewFullRanking={handleViewFullRanking}
+        />
+
         <LastWinnerCard winner={overview.lastWinner} onViewStory={handleViewStory} />
 
-        {/* Final content section — scrolls with the page, 44pt below the card
-            above it (Figma 186:108 at y=2615, last winner ending at 2571). */}
         <StatsBar
           participants={overview.participants}
-          shares={overview.shareCount}
+          score={overview.score}
           rank={overview.rank}
         />
       </ScrollView>

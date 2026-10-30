@@ -1,15 +1,15 @@
 /**
- * Stats bar — Figma node 186:108.
+ * Stats bar — Figma node 758:2181.
  *
  * The final content section of the page, NOT a footer: it scrolls with
- * everything else and sits 44pt below the last-winner section in the same
- * 404pt column. See `statsBar` in ../styles.ts for the Figma coordinates.
+ * everything else and sits below the last-winner section in the same
+ * 404pt column.
  *
- * Invited friends · confirmed shares this week · rank this week.
+ * Invited friends · current XP · rank this cycle.
  */
 
 import React, { memo } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { useTranslation } from '../../../src/i18n';
@@ -20,11 +20,11 @@ import GradientText from './GradientText';
 
 interface StatsBarProps {
   participants: number;
-  shares: number;
+  score: number;
   rank: number;
 }
 
-const StatsBar = memo(function StatsBar({ participants, shares, rank }: StatsBarProps) {
+const StatsBar = memo(function StatsBar({ participants, score, rank }: StatsBarProps) {
   const { sw, metrics } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
@@ -48,12 +48,22 @@ const StatsBar = memo(function StatsBar({ participants, shares, rank }: StatsBar
       />
 
       <View style={[sw.statsCol, { width: s(80) }]}>
-        <Text style={sw.statsLabel}>{copy.statsShares}</Text>
+        <Text style={sw.statsLabel}>{copy.statsCurrentPoints}</Text>
         <GradientText colors={SW_GRADIENT.purpleText} style={sw.statsValue}>
-          {formatNumber(shares, language)}
+          {`${formatNumber(score, language)} xp`}
         </GradientText>
       </View>
-      <Image source={SW_ASSET.gift} style={sw.statsIcon} contentFit="contain" transition={0} />
+      <View style={sw.statsXpBadge}>
+        <Image
+          source={SW_ASSET.xpPolygon}
+          style={[StyleSheet.absoluteFillObject, { width: s(26), height: s(26) }]}
+          contentFit="contain"
+          transition={0}
+        />
+        <GradientText colors={['#460BCB', '#BFABED', '#460BCB']} style={sw.statsXpBadgeText}>
+          XP
+        </GradientText>
+      </View>
 
       <Image
         source={SW_ASSET.dividerVertical}

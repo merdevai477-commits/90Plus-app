@@ -16,8 +16,10 @@ const ShareWinSkeleton = memo(function ShareWinSkeleton() {
     <View style={{ alignItems: 'center', gap: s(24), paddingTop: s(24) }}>
       <View style={[sw.skeleton, { width: s(220), height: s(38) }]} />
       <View style={[sw.skeleton, { width: s(300), height: s(44) }]} />
+      {/* Share card → prizes → ranking */}
+      <View style={[sw.skeleton, { width: s(404), height: s(360), borderRadius: s(25) }]} />
+      <View style={[sw.skeleton, { width: s(404), height: s(280), borderRadius: s(25) }]} />
       <View style={[sw.skeleton, { width: s(404), height: s(320), borderRadius: s(25) }]} />
-      <View style={[sw.skeleton, { width: s(404), height: s(200), borderRadius: s(25) }]} />
     </View>
   );
 });

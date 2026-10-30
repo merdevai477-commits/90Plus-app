@@ -63,6 +63,32 @@ export function prizeCopy(prize: ShareWinPrize, language: Language) {
   };
 }
 
+/** Arabic ordinals for "الشهر الأول" … "الشهر الثاني عشر". */
+const AR_MONTH_ORDINALS = [
+  'الأول',
+  'الثاني',
+  'الثالث',
+  'الرابع',
+  'الخامس',
+  'السادس',
+  'السابع',
+  'الثامن',
+  'التاسع',
+  'العاشر',
+  'الحادي عشر',
+  'الثاني عشر',
+] as const;
+
+/** Month badge on prize cards — "الشهر الأول" / "Month 1". */
+export function monthBadge(zeroBasedIndex: number, language: Language): string {
+  const n = zeroBasedIndex + 1;
+  if (language === 'ar') {
+    const ordinal = AR_MONTH_ORDINALS[zeroBasedIndex];
+    return ordinal ? `الشهر ${ordinal}` : `الشهر ${n}`;
+  }
+  return `Month ${n}`;
+}
+
 /** Remote prize art if the cycle configured any, else the bundled Figma art. */
 export function prizeImageSource(prize: ShareWinPrize, index: number) {
   if (prize.imageUrl) return { uri: prize.imageUrl };
