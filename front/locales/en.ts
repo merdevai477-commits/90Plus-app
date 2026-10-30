@@ -2135,9 +2135,8 @@ export const en = {
   },
 
   topScorersFive: {
-    title: 'Egyptian Top Five',
-    subtitle:
-      'Pick 5 players from the Egyptian league, predict their goals and win a football shirt',
+    title: 'Top Scorers Five',
+    subtitle: 'Pick 5 players, predict their goals and win a football shirt',
     cta: 'Start picking',
     back: 'Back',
     hub: {

@@ -222,7 +222,8 @@ export default function TopScorersFiveHubScreen() {
   }, [router]);
 
   const padX = s(22);
-  const headerH = insets.top + s(48);
+  const backSize = s(40);
+  const headerH = insets.top + s(56);
   const bottomPad = Math.max(insets.bottom, 10) + s(16);
 
   return (
@@ -271,6 +272,7 @@ export default function TopScorersFiveHubScreen() {
           styles.header,
           {
             paddingTop: insets.top + s(8),
+            paddingBottom: s(8),
             paddingLeft: Math.max(insets.left, s(16)),
             paddingRight: Math.max(insets.right, s(16)),
           },
@@ -284,10 +286,19 @@ export default function TopScorersFiveHubScreen() {
           accessibilityRole="button"
           accessibilityLabel={copy.back}
           testID="top-scorers-five-hub-back"
-          style={[styles.backButton, { width: s(40), height: s(40), borderRadius: s(20) }]}
+          style={[styles.backButton, { width: backSize, height: backSize, borderRadius: backSize / 2 }]}
         >
           <Ionicons name="arrow-back" size={s(22)} color="#FFFFFF" />
         </TouchableOpacity>
+        <Text
+          style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20) }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
+          testID="top-scorers-five-hub-title"
+        >
+          {copy.title}
+        </Text>
+        <View style={{ width: backSize }} />
       </View>
     </View>
   );
@@ -326,7 +337,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   backButton: {
     alignItems: 'center',
