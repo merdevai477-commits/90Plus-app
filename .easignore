@@ -33,6 +33,14 @@
 /tmp-validation_health.json
 /tmp-validation_metrics.json
 /today-check.json
+/artifacts/
+/scratch/
+
+# Local binaries must never ride along in the EAS upload (a preview APK alone was ~160MB).
+*.apk
+*.aab
+*.ipa
+*.apk.*
 
 # Any node_modules tree (EAS runs npm install on the builder)
 node_modules/
