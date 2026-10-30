@@ -1,10 +1,10 @@
 /**
- * Monthly prizes — Figma node 758:2114.
+ * Prizes podium — Figma nodes 1536:3235 / 1538:3403 / 1540:3499 / 1538:3311.
  *
- * Layout (not a flat carousel):
- *   1. Featured gold card  → prizes[0]  (الشهر الأول)
- *   2. Side-by-side pair    → prizes[1], prizes[2]
- *   3. "باقي الشهور" track → prizes.slice(3)
+ * Layout:
+ *   1. Featured gold card  → prizes[0]  (الفائز الأول — PS5)
+ *   2. Side-by-side pair    → prizes[1], prizes[2]  (الفائز الثاني / الثالث)
+ *   3. "باقي الفائزين"     → prizes.slice(3)
  */
 
 import React, { memo } from 'react';
@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../../../src/i18n';
 import type { ShareWinPrize } from '../../../services/shareWin.service';
 import { SW_ASSET } from '../assets';
-import { monthBadge, prizeCopy, prizeImageSource } from '../data';
+import { prizeCopy, prizeImageSource, winnerBadge } from '../data';
 import { useShareWinStyles } from '../styles';
 
 interface WeeklyPrizesProps {
@@ -64,18 +64,19 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
       </View>
 
       <View style={sw.prizesStack}>
-        {/* Featured — month 1 */}
+        {/* Featured — 1st winner (PS5) */}
         <View style={sw.prizeFeaturedCard}>
           <View style={sw.prizeFeaturedImageWrap}>
             <Image
               source={prizeImageSource(featured, 0)}
               style={sw.prizeFeaturedImage}
               contentFit="cover"
+              contentPosition="center"
               transition={150}
               cachePolicy="memory-disk"
             />
             <View style={sw.prizeFeaturedBadge}>
-              <Text style={sw.prizeFeaturedBadgeText}>{monthBadge(0, language)}</Text>
+              <Text style={sw.prizeFeaturedBadgeText}>{winnerBadge(0, language)}</Text>
             </View>
           </View>
           <View style={sw.prizeFeaturedCopy}>
@@ -88,7 +89,7 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           </View>
         </View>
 
-        {/* Months 2 & 3 */}
+        {/* 2nd & 3rd winners — jersey + stars kit */}
         {secondary.length > 0 ? (
           <View style={sw.prizeSecondaryRow}>
             {secondary.map((prize, offset) => {
@@ -106,7 +107,7 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
                       cachePolicy="memory-disk"
                     />
                     <View style={sw.prizeSecondaryBadge}>
-                      <Text style={sw.prizeSecondaryBadgeText}>{monthBadge(index, language)}</Text>
+                      <Text style={sw.prizeSecondaryBadgeText}>{winnerBadge(index, language)}</Text>
                     </View>
                   </View>
                   <View style={sw.prizeSecondaryCopy}>
@@ -123,13 +124,13 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           </View>
         ) : null}
 
-        {/* Remaining months */}
+        {/* Remaining winners */}
         {remaining.length > 0 ? (
           <View style={sw.prizeRemainingSection}>
             <View style={sw.prizeRemainingHeader}>
               <Image
                 source={SW_ASSET.chevronDown}
-                style={{ width: s(24), height: s(24) }}
+                style={{ width: s(24), height: s(24), transform: [{ scaleY: -1 }] }}
                 contentFit="contain"
                 transition={0}
               />
@@ -146,7 +147,7 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
                 const index = offset + 3;
                 const text = prizeCopy(prize, language);
                 return (
-                  <View key={prize.id} style={sw.prizeMiniCard}>
+                  <View key={`${prize.id}-${index}`} style={sw.prizeMiniCard}>
                     <Image
                       source={prizeImageSource(prize, index)}
                       style={sw.prizeMiniImage}

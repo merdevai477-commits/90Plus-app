@@ -51,10 +51,10 @@ export const SW_COLOR = {
   /** 1px card border — Figma 758:1880 uses 0.11 opacity. */
   cardBorder: 'rgba(223,192,252,0.11)',
 
-  /** Featured (month-1) prize card. */
-  prizeFeaturedBg: 'rgba(253,223,111,0.11)',
-  prizeFeaturedBorder: '#FFC758',
-  prizeFeaturedTitle: '#E99C03',
+  /** Featured (1st winner) prize card — Figma 1536:3235. */
+  prizeFeaturedBg: 'rgba(238,173,54,0.11)',
+  prizeFeaturedBorder: '#EEAD36',
+  prizeFeaturedTitle: '#EEAD36',
   prizeFeaturedBadgeBg: 'rgba(176,119,6,0.29)',
   prizeFeaturedBadgeText: '#FFC758',
 
@@ -752,7 +752,7 @@ function buildStyles(scale: DesignScale, language: string) {
     prizeFeaturedBadge: {
       position: 'absolute',
       top: s(16),
-      right: s(11),
+      left: s(16),
       backgroundColor: SW_COLOR.prizeFeaturedBadgeBg,
       borderRadius: s(64),
       paddingHorizontal: s(18),
@@ -809,7 +809,7 @@ function buildStyles(scale: DesignScale, language: string) {
     prizeSecondaryBadge: {
       position: 'absolute',
       top: s(12),
-      right: s(9),
+      left: s(10),
       backgroundColor: SW_COLOR.prizeSecondaryBadgeBg,
       borderRadius: s(64),
       paddingHorizontal: s(10),
@@ -855,7 +855,7 @@ function buildStyles(scale: DesignScale, language: string) {
     },
     prizeRemainingHeader: {
       backgroundColor: SW_COLOR.prizeRemainingHeaderBg,
-      borderRadius: s(20),
+      borderRadius: s(10),
       paddingHorizontal: s(13),
       paddingVertical: s(9),
       flexDirection: 'row',

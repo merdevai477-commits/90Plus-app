@@ -1,4 +1,4 @@
-import { monthBadge } from '../../data';
+import { winnerBadge } from '../../data';
 import { getCarouselPageCount } from '../carouselPagination';
 
 describe('WeeklyPrizes helpers', () => {
@@ -9,9 +9,11 @@ describe('WeeklyPrizes helpers', () => {
     expect(getCarouselPageCount(3)).toBe(1);
   });
 
-  it('formats month badges in Arabic and English', () => {
-    expect(monthBadge(0, 'ar')).toBe('الشهر الأول');
-    expect(monthBadge(1, 'ar')).toBe('الشهر الثاني');
-    expect(monthBadge(2, 'en')).toBe('Month 3');
+  it('formats winner badges in Arabic and English', () => {
+    expect(winnerBadge(0, 'ar')).toBe('الفائز الأول');
+    expect(winnerBadge(1, 'ar')).toBe('الفائز الثاني');
+    expect(winnerBadge(2, 'ar')).toBe('الفائز الثالث');
+    expect(winnerBadge(0, 'en')).toBe('1st Winner');
+    expect(winnerBadge(2, 'en')).toBe('3rd Winner');
   });
 });

@@ -1236,7 +1236,7 @@ export const en = {
     prizesTitle: 'Monthly Prizes',
     prizesSubtitleLine1: 'A new prize every month!',
     prizesSubtitleLine2: ' Share now to be the winner',
-    remainingMonthsTitle: 'Remaining months',
+    remainingMonthsTitle: 'More winners',
 
     // Share card
     shareCardTitle: 'Share now & win',

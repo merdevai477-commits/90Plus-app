@@ -63,8 +63,8 @@ export function prizeCopy(prize: ShareWinPrize, language: Language) {
   };
 }
 
-/** Arabic ordinals for "الشهر الأول" … "الشهر الثاني عشر". */
-const AR_MONTH_ORDINALS = [
+/** Arabic ordinals for "الفائز الأول" … "الفائز الثاني عشر". */
+const AR_WINNER_ORDINALS = [
   'الأول',
   'الثاني',
   'الثالث',
@@ -79,15 +79,20 @@ const AR_MONTH_ORDINALS = [
   'الثاني عشر',
 ] as const;
 
-/** Month badge on prize cards — "الشهر الأول" / "Month 1". */
-export function monthBadge(zeroBasedIndex: number, language: Language): string {
+/** Winner badge on prize cards — "الفائز الأول" / "1st Winner". */
+export function winnerBadge(zeroBasedIndex: number, language: Language): string {
   const n = zeroBasedIndex + 1;
   if (language === 'ar') {
-    const ordinal = AR_MONTH_ORDINALS[zeroBasedIndex];
-    return ordinal ? `الشهر ${ordinal}` : `الشهر ${n}`;
+    const ordinal = AR_WINNER_ORDINALS[zeroBasedIndex];
+    return ordinal ? `الفائز ${ordinal}` : `الفائز ${n}`;
   }
-  return `Month ${n}`;
+  const enOrdinal =
+    n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
+  return `${enOrdinal} Winner`;
 }
+
+/** @deprecated Prefer winnerBadge — kept for any stale Fast Refresh bindings. */
+export const monthBadge = winnerBadge;
 
 /** Remote prize art if the cycle configured any, else the bundled Figma art. */
 export function prizeImageSource(prize: ShareWinPrize, index: number) {

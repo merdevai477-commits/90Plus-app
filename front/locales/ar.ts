@@ -1323,7 +1323,7 @@ export const ar = {
     prizesTitle: 'الجوائز الشهرية',
     prizesSubtitleLine1: 'جائزة جديدة كل شهر!',
     prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
-    remainingMonthsTitle: 'باقي الشهور',
+    remainingMonthsTitle: 'باقي الفائزين',
 
     // بطاقة المشاركة
     shareCardTitle: 'شارك الان واربح',
