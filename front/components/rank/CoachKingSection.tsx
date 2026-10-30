@@ -3,17 +3,9 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import {
-  CoachArrowIcon,
-  CoachFieldIcon,
-  CoachTrophyIcon,
-  CoachUsersIcon,
-} from './CoachKingIcons';
+import { CoachArrowIcon } from './CoachKingIcons';
 
 const PAGE_BG = '#030303';
-const CARD_HINT = '#BBA1F6';
-const CARD_BG = '#09001D';
-const CARD_BORDER = '#241152';
 const PROMO = require('../../assets/images/coach-king/banner/promo.png');
 const WEEK_HERO = require('../../assets/images/coach-king/coach-week-hero.png');
 const WEEK_BADGE = require('../../assets/images/coach-king/coach-week-badge.svg');
@@ -36,13 +28,6 @@ export type CoachKingCopy = {
 
 type Fonts = { medium: string; semibold: string; bold: string; extrabold: string };
 
-type Pillar = {
-  key: string;
-  title: string;
-  hint: string;
-  Icon: React.ComponentType;
-};
-
 interface Props {
   isAr: boolean;
   fonts: Fonts;
@@ -50,48 +35,15 @@ interface Props {
   onStart?: () => void;
 }
 
-/** Rank landing — pillars, Coach of the Week card (Figma 1550:6500), jersey promo, CTA. */
+/** Rank landing — Coach of the Week card (Figma 1550:6500), jersey promo, CTA. */
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
   const { width } = useWindowDimensions();
   const bannerWidth = width - 44;
   const dir = isAr ? 'rtl' : 'ltr';
   const headerRow = isAr ? ('row' as const) : ('row-reverse' as const);
 
-  const pillars: Pillar[] = [
-    { key: 'squad', title: copy.squad, hint: copy.squadHint, Icon: CoachUsersIcon },
-    { key: 'tactics', title: copy.tactics, hint: copy.tacticsHint, Icon: CoachFieldIcon },
-    { key: 'matches', title: copy.matches, hint: copy.matchesHint, Icon: CoachTrophyIcon },
-  ];
-
   return (
     <View style={s.root} testID="coach-king-section">
-      <View style={s.cards}>
-        {pillars.map(({ key, title, hint, Icon }) => (
-          <View key={key} style={s.card}>
-            <View style={s.cardIcon}>
-              <Icon />
-            </View>
-            <View style={s.cardCopy}>
-              <Text
-                style={[s.cardTitle, { fontFamily: fonts.bold, writingDirection: dir }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.72}
-              >
-                {title}
-              </Text>
-              <Text
-                style={[s.cardHint, { fontFamily: fonts.medium, writingDirection: dir }]}
-                numberOfLines={1}
-              >
-                {hint}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      {/* Coach of the Week — sits above the jersey promo (Figma 1550:6500). */}
       <View style={s.weekCard} testID="coach-week-card">
         <View style={[s.weekHeader, { flexDirection: headerRow }]}>
           <Image source={WEEK_BADGE} style={s.weekBadge} contentFit="contain" transition={0} />
@@ -200,44 +152,6 @@ const s = StyleSheet.create({
     paddingBottom: 36,
     gap: 18,
   },
-  cards: {
-    flexDirection: 'row',
-    gap: 10,
-    height: 130,
-  },
-  card: {
-    flex: 1,
-    minWidth: 0,
-    height: 130,
-    borderRadius: 16,
-    backgroundColor: CARD_BG,
-    borderWidth: 0.5,
-    borderColor: CARD_BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    gap: 14,
-  },
-  cardIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardCopy: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  cardHint: {
-    color: CARD_HINT,
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
   weekCard: {
     width: '100%',
     borderRadius: 24,
@@ -246,7 +160,6 @@ const s = StyleSheet.create({
     paddingVertical: 17,
     gap: 14,
     alignItems: 'center',
-    // Soft purple inner glow
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.39,
     shadowRadius: 14,
