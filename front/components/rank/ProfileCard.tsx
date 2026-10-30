@@ -28,8 +28,8 @@ import { useUserRank } from '../../hooks/useUserRank';
 
 const ACCENT = '#A855F7';
 const CARD_RADIUS = 22;
-/** Translucent purple — light enough that frosted hero art stays visible. */
-const CARD_TINT = 'rgba(36, 14, 68, 0.38)';
+/** Lighter tint so the frosted hero art reads more clearly through the glass. */
+const CARD_TINT = 'rgba(36, 14, 68, 0.22)';
 const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 export interface ProfileCardProps {
