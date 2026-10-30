@@ -8,7 +8,8 @@ import { CoachArrowIcon } from './CoachKingIcons';
 const PAGE_BG = '#030303';
 const PROMO = require('../../assets/images/coach-king/banner/promo.png');
 const WEEK_HERO = require('../../assets/images/coach-king/coach-week-hero.png');
-const WEEK_BADGE = require('../../assets/images/coach-king/coach-week-badge.svg');
+const WEEK_BADGE = require('../../assets/images/coach-king/coach-week-badge.png');
+/** Figma promo artboard 404×161. */
 const PROMO_RATIO = 404 / 161;
 
 export type CoachKingCopy = {
@@ -35,25 +36,49 @@ interface Props {
   onStart?: () => void;
 }
 
-/** Rank landing — Coach of the Week card (Figma 1550:6500), jersey promo, CTA. */
+/**
+ * Rank landing for King of Coaches:
+ *  1. Coach of the Week card — Figma 1550:6500 (badge 1552:6543, CTA 1551:6521)
+ *  2. Jersey / ملك المدربين promo banner
+ *  3. Full-width start CTA
+ */
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
   const { width } = useWindowDimensions();
   const bannerWidth = width - 44;
   const dir = isAr ? 'rtl' : 'ltr';
-  const headerRow = isAr ? ('row' as const) : ('row-reverse' as const);
+  /**
+   * Figma lays the header LTR as [badge][copy] with Arabic copy right-aligned —
+   * badge stays on the visual left in both languages.
+   */
+  const headerRow = 'row' as const;
+  const ctaRow = isAr ? ('row' as const) : ('row-reverse' as const);
 
   return (
     <View style={s.root} testID="coach-king-section">
       <View style={s.weekCard} testID="coach-week-card">
+        <View pointerEvents="none" style={s.weekGlow} />
+
         <View style={[s.weekHeader, { flexDirection: headerRow }]}>
-          <Image source={WEEK_BADGE} style={s.weekBadge} contentFit="contain" transition={0} />
+          <Image
+            source={WEEK_BADGE}
+            style={s.weekBadge}
+            contentFit="contain"
+            transition={0}
+            accessibilityIgnoresInvertColors
+          />
           <View style={[s.weekCopy, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
             <Text
               style={[
                 s.weekTitle,
-                { fontFamily: fonts.bold, writingDirection: dir, textAlign: isAr ? 'right' : 'left' },
+                {
+                  fontFamily: fonts.bold,
+                  writingDirection: dir,
+                  textAlign: isAr ? 'right' : 'left',
+                },
               ]}
               numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
             >
               {copy.weekTitle}
             </Text>
@@ -78,7 +103,9 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
             source={WEEK_HERO}
             style={s.weekHero}
             contentFit="cover"
+            contentPosition="center"
             cachePolicy="memory-disk"
+            transition={120}
             accessibilityLabel={copy.weekTitle}
           />
         </View>
@@ -113,6 +140,7 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
           style={{ width: '100%', aspectRatio: PROMO_RATIO }}
           contentFit="cover"
           cachePolicy="memory-disk"
+          transition={120}
           accessibilityLabel={copy.title}
         />
       </View>
@@ -133,7 +161,7 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
             end={{ x: 0.5, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <View style={s.ctaRow}>
+          <View style={[s.ctaRow, { flexDirection: ctaRow }]}>
             <CoachArrowIcon />
             <Text style={[s.ctaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
           </View>
@@ -160,11 +188,20 @@ const s = StyleSheet.create({
     paddingVertical: 17,
     gap: 14,
     alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(139,92,246,0.35)',
+  },
+  /** Figma inset glow: inset 0 0 27.7 rgba(139,92,246,0.39) */
+  weekGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139,92,246,0.22)',
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.39,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
   },
   weekHeader: {
     width: '100%',
@@ -197,6 +234,7 @@ const s = StyleSheet.create({
     height: 238,
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: 'rgba(80,37,69,0.5)',
   },
   weekHero: {
     width: '100%',
@@ -235,7 +273,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaRow: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
