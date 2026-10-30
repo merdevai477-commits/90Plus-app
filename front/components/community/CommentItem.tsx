@@ -27,7 +27,10 @@ interface Props extends CommentHandlers {
   labels: { reply: string };
 }
 
-/** Figma node 1474:4305 — avatar, name/time column, heart, then the text. */
+/**
+ * Figma node 1474:4347 — header is [heart ⟷ name/time] + avatar, then
+ * body text aligned to the avatar side. Reply/menu stay as product actions.
+ */
 export const CommentItem = memo(
   function CommentItem({
     comment,
@@ -43,10 +46,49 @@ export const CommentItem = memo(
     onHashtag,
     onMention,
   }: Props) {
-    const row = isAr ? 'row-reverse' : 'row';
     const name = comment.author.displayName || comment.author.username;
     const pending = comment.id.startsWith('temp-');
     const size = isReply ? 28 : COMMENT_AVATAR_SIZE;
+    const textAlign = isAr ? 'right' : 'left';
+
+    const likeControl = pending ? (
+      <ActivityIndicator size="small" color={C.accentSoft} />
+    ) : (
+      <Pressable
+        onPress={() => onLike(comment)}
+        hitSlop={12}
+        style={styles.like}
+        accessibilityRole="button"
+        accessibilityState={{ selected: comment.likedByMe }}
+      >
+        {comment.likedByMe ? (
+          <LikeIcon liked size={24} />
+        ) : (
+          <Image source={CI.commentHeartOutlined} style={styles.heartIcon} contentFit="contain" />
+        )}
+        {comment.likesCount > 0 && (
+          <Text style={[styles.likeCount, { fontFamily: fonts.regular }]}>{formatCount(comment.likesCount)}</Text>
+        )}
+      </Pressable>
+    );
+
+    const meta = (
+      <Pressable
+        onPress={() => onProfile(comment.author.username)}
+        style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
+      >
+        <View style={[styles.nameRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          <Text style={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold }]} numberOfLines={1}>
+            {name}
+          </Text>
+          {comment.author.isVerified && <Image source={CI.verified} style={styles.icon16} contentFit="contain" />}
+        </View>
+        <View style={[styles.timeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>
+          <Image source={CI.earth} style={styles.icon16} contentFit="contain" />
+        </View>
+      </Pressable>
+    );
 
     return (
       <Pressable
@@ -54,61 +96,32 @@ export const CommentItem = memo(
         delayLongPress={320}
         style={[styles.wrap, isReply && (isAr ? styles.replyAr : styles.replyEn), pending && styles.pending]}
       >
-        <View style={[styles.header, { flexDirection: row }]}>
+        {/* Figma 1474:4348 — flex-1 space-between (heart + meta) then avatar */}
+        <View style={[styles.header, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+          <View style={[styles.headerMain, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+            {likeControl}
+            {meta}
+          </View>
           <CommunityAvatar
             uri={comment.author.avatar}
             name={name}
             size={size}
             onPress={() => onProfile(comment.author.username)}
           />
-          <Pressable
-            onPress={() => onProfile(comment.author.username)}
-            style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
-          >
-            <View style={[styles.nameRow, { flexDirection: row }]}>
-              <Text style={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold }]} numberOfLines={1}>
-                {name}
-              </Text>
-              {comment.author.isVerified && <Image source={CI.verified} style={styles.icon16} contentFit="contain" />}
-            </View>
-            <View style={[styles.timeRow, { flexDirection: row }]}>
-              <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>
-              <Image source={CI.earth} style={styles.icon14} contentFit="contain" />
-            </View>
-          </Pressable>
-          {pending ? (
-            <ActivityIndicator size="small" color={C.accentSoft} />
-          ) : (
-            <Pressable
-              onPress={() => onLike(comment)}
-              hitSlop={12}
-              style={styles.like}
-              accessibilityRole="button"
-              accessibilityState={{ selected: comment.likedByMe }}
-            >
-              {comment.likedByMe ? (
-                <LikeIcon liked size={22} />
-              ) : (
-                <Image source={CI.commentHeartOutlined} style={{ width: 22, height: 22 }} contentFit="contain" />
-              )}
-              {comment.likesCount > 0 && (
-                <Text style={[styles.likeCount, { fontFamily: fonts.regular }]}>{formatCount(comment.likesCount)}</Text>
-              )}
-            </Pressable>
-          )}
         </View>
 
         <RichText
           key={comment.id}
           text={comment.content}
           style={[styles.text, { fontFamily: fonts.medium }]}
+          align={textAlign}
           onHashtag={onHashtag}
           onMention={onMention}
           onLongPress={() => !pending && onMenu(comment)}
         />
 
         {!pending && (
-          <View style={[styles.footer, { flexDirection: row }]}>
+          <View style={[styles.footer, { flexDirection: isAr ? 'row-reverse' : 'row', alignSelf: isAr ? 'flex-end' : 'flex-start' }]}>
             <Pressable onPress={() => onReply(comment)} hitSlop={8} accessibilityRole="button">
               <Text style={[styles.replyBtn, { fontFamily: fonts.semibold }]}>{labels.reply}</Text>
             </Pressable>
@@ -125,8 +138,9 @@ export const CommentItem = memo(
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 10,
+    gap: 12,
     paddingVertical: 12,
+    alignItems: 'stretch',
   },
   replyAr: {
     marginRight: 46,
@@ -140,10 +154,18 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     gap: 11,
+    width: '100%',
+  },
+  headerMain: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minWidth: 0,
   },
   meta: {
-    flex: 1,
-    gap: 3,
+    gap: 4,
+    flexShrink: 1,
+    maxWidth: '78%',
   },
   nameRow: {
     alignItems: 'center',
@@ -163,14 +185,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   time: {
-    color: C.muted,
-    fontSize: 12,
+    color: '#a3a3a3',
+    fontSize: 13,
   },
   icon16: { width: 16, height: 16 },
-  icon14: { width: 14, height: 14 },
+  heartIcon: { width: 24, height: 24 },
   like: {
     alignItems: 'center',
-    minWidth: 28,
+    minWidth: 24,
   },
   likeCount: {
     color: C.muted,
@@ -182,6 +204,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     fontWeight: '500',
+    width: '100%',
   },
   footer: {
     alignItems: 'center',
@@ -195,6 +218,7 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 18,
     height: 18,
+    // Asset is vertical; rotate to match horizontal "…" in the comments sheet.
     transform: [{ rotate: '90deg' }],
   },
 });

@@ -14,6 +14,11 @@ interface Props {
   seeMoreLabel?: string;
   seeLessLabel?: string;
   onLongPress?: () => void;
+  /**
+   * Force alignment (e.g. comments sheet follows app locale so emoji-only
+   * bodies still sit on the avatar side — Figma 1474:4347).
+   */
+  align?: 'left' | 'right';
 }
 
 export const RichText = memo(function RichText({
@@ -25,9 +30,11 @@ export const RichText = memo(function RichText({
   seeMoreLabel,
   seeLessLabel,
   onLongPress,
+  align,
 }: Props) {
   const segments = useMemo(() => parseRichText(text), [text]);
-  const rtl = useMemo(() => isArabicText(text), [text]);
+  const detectedRtl = useMemo(() => isArabicText(text), [text]);
+  const rtl = align ? align === 'right' : detectedRtl;
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const collapsible = !!collapseAfterLines;
