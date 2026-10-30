@@ -11,7 +11,7 @@ import { communityApi, type CommunityPost } from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { useCommunityPosts, useCommunityToken } from '../../hooks/community/useCommunityFeed';
-import { usePostActions } from '../../hooks/community/usePostActions';
+import { REPORT_REASONS, usePostActions } from '../../hooks/community/usePostActions';
 import { discardPending, retryPending, usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
 import { findPost } from '../../hooks/community/communityCache';
 import { ActionMenu, type ActionMenuItem } from './ActionMenu';
@@ -301,6 +301,19 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
       )}
 
       <ActionMenu visible={!!menuPost} items={menuItems} cancelLabel={s.cancel} onClose={() => setMenuPost(null)} fontFamily={fonts.semibold} />
+      <ActionMenu
+        visible={!!actions.reportPrompt}
+        title={s.reportTitle}
+        items={REPORT_REASONS.map((reason) => ({
+          key: reason,
+          label: s.reportReasons[reason],
+          destructive: reason === 'HARASSMENT' || reason === 'INAPPROPRIATE',
+          onPress: () => actions.pickReportReason(reason),
+        }))}
+        cancelLabel={s.cancel}
+        onClose={actions.closeReport}
+        fontFamily={fonts.semibold}
+      />
       <ConfirmSheet
         visible={!!deleteTarget}
         title={s.deletePostTitle}

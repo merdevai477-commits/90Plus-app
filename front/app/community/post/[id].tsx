@@ -21,7 +21,7 @@ import { formatRelativeTime } from '../../../components/community/format';
 import { C } from '../../../components/community/theme';
 import { communityKeys, findPost } from '../../../hooks/community/communityCache';
 import { useCommunityToken } from '../../../hooks/community/useCommunityFeed';
-import { usePostActions } from '../../../hooks/community/usePostActions';
+import { REPORT_REASONS, usePostActions } from '../../../hooks/community/usePostActions';
 import { CommunityApiError, communityApi, type CommunityPost } from '../../../services/community.api';
 
 export default function CommunityPostScreen() {
@@ -198,6 +198,27 @@ export default function CommunityPostScreen() {
 
       <ActionMenu visible={menuOpen} items={menuItems} cancelLabel={s.cancel} onClose={() => setMenuOpen(false)} fontFamily={fonts.semibold} />
       <ActionMenu visible={!!ctx.menu} items={ctx.menuItems} cancelLabel={s.cancel} onClose={ctx.closeMenu} fontFamily={fonts.semibold} />
+      <ActionMenu
+        visible={!!actions.reportPrompt}
+        title={s.reportTitle}
+        items={REPORT_REASONS.map((reason) => ({
+          key: reason,
+          label: s.reportReasons[reason],
+          destructive: reason === 'HARASSMENT' || reason === 'INAPPROPRIATE',
+          onPress: () => actions.pickReportReason(reason),
+        }))}
+        cancelLabel={s.cancel}
+        onClose={actions.closeReport}
+        fontFamily={fonts.semibold}
+      />
+      <ActionMenu
+        visible={ctx.reportOpen}
+        title={s.reportTitle}
+        items={ctx.reportItems}
+        cancelLabel={s.cancel}
+        onClose={ctx.closeReport}
+        fontFamily={fonts.semibold}
+      />
       <ConfirmSheet
         visible={!!ctx.deleteTarget}
         title={s.deleteCommentTitle}

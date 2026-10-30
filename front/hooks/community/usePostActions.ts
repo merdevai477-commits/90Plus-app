@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { Alert, Share } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Share } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,12 @@ import { getClerkBearerToken } from '../../utils/clerkAuthToken';
 import { communityErrorMessage, fillTemplate } from '../../components/community/format';
 import { findPost, removePostEverywhere, updateAuthorFollowingEverywhere, updatePostEverywhere } from './communityCache';
 import { useCommunityToken } from './useCommunityFeed';
+
+export type ReportPrompt = {
+  kind: 'post' | 'comment';
+  id: string;
+  onHidden?: () => void;
+};
 
 /**
  * Likes are optimistic and coalesced: rapid taps only flip local state, and
@@ -37,6 +43,7 @@ export function usePostActions() {
   const router = useRouter();
   const { t } = useTranslation();
   const s = t.community;
+  const [reportPrompt, setReportPrompt] = useState<ReportPrompt | null>(null);
 
   const flushLike = useCallback(
     async (postId: string): Promise<void> => {
@@ -133,17 +140,21 @@ export function usePostActions() {
     [getToken, qc, s],
   );
 
-  const askReport = useCallback(
-    (kind: 'post' | 'comment', id: string, onHidden?: () => void) => {
-      Alert.alert(s.reportTitle, undefined, [
-        ...REPORT_REASONS.map((reason) => ({
-          text: s.reportReasons[reason],
-          onPress: () => void report(kind, id, reason, onHidden),
-        })),
-        { text: s.cancel, style: 'cancel' as const },
-      ]);
+  const askReport = useCallback((kind: 'post' | 'comment', id: string, onHidden?: () => void) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReportPrompt({ kind, id, onHidden });
+  }, []);
+
+  const closeReport = useCallback(() => setReportPrompt(null), []);
+
+  const pickReportReason = useCallback(
+    (reason: ReportReason) => {
+      setReportPrompt((prompt) => {
+        if (prompt) void report(prompt.kind, prompt.id, reason, prompt.onHidden);
+        return null;
+      });
     },
-    [report, s],
+    [report],
   );
 
   const performDelete = useCallback(
@@ -158,16 +169,6 @@ export function usePostActions() {
       }
     },
     [getToken, qc, s],
-  );
-
-  const deletePost = useCallback(
-    (post: CommunityPost, onDeleted?: () => void) => {
-      Alert.alert(s.deletePostTitle, s.deleteBody, [
-        { text: s.cancel, style: 'cancel' },
-        { text: s.delete, style: 'destructive', onPress: () => void performDelete(post, onDeleted) },
-      ]);
-    },
-    [performDelete, s],
   );
 
   const copyText = useCallback(
@@ -252,7 +253,9 @@ export function usePostActions() {
     share,
     askReport,
     report,
-    deletePost,
+    reportPrompt,
+    closeReport,
+    pickReportReason,
     performDelete,
     copyText,
     openProfile,

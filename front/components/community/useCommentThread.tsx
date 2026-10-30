@@ -7,7 +7,7 @@ import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { useComments, type CommentRow } from '../../hooks/community/useComments';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
-import { usePostActions } from '../../hooks/community/usePostActions';
+import { REPORT_REASONS, usePostActions } from '../../hooks/community/usePostActions';
 import type { ActionMenuItem } from './ActionMenu';
 import { CommentItem } from './CommentItem';
 import type { CommentComposerHandle } from './CommentComposer';
@@ -116,6 +116,17 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
     [s],
   );
 
+  const reportItems = useMemo<ActionMenuItem[]>(
+    () =>
+      REPORT_REASONS.map((reason) => ({
+        key: reason,
+        label: s.reportReasons[reason],
+        destructive: reason === 'HARASSMENT' || reason === 'INAPPROPRIATE',
+        onPress: () => actions.pickReportReason(reason),
+      })),
+    [actions, s.reportReasons],
+  );
+
   return {
     thread,
     rows: thread.rows,
@@ -132,6 +143,9 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
     confirmDelete: () => {
       if (deleteTarget) void thread.remove(deleteTarget);
     },
+    reportOpen: !!actions.reportPrompt,
+    reportItems,
+    closeReport: actions.closeReport,
     fonts,
     isAr,
     s,

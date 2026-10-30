@@ -182,6 +182,14 @@ export function CommentsSheet({ post, onClose }: Props) {
           onClose={ctx.closeMenu}
           fontFamily={fonts.semibold}
         />
+        <ActionMenu
+          visible={ctx.reportOpen}
+          title={s.reportTitle}
+          items={ctx.reportItems}
+          cancelLabel={s.cancel}
+          onClose={ctx.closeReport}
+          fontFamily={fonts.semibold}
+        />
         <ConfirmSheet
           visible={!!ctx.deleteTarget}
           title={s.deleteCommentTitle}
