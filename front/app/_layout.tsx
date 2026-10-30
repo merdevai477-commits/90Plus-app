@@ -33,7 +33,7 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppKeyboardProvider } from '@/utils/keyboardControllerSafe';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, StyleSheet, Text, InteractionManager } from 'react-native';
+import { View, StatusBar, I18nManager, StyleSheet, Text, InteractionManager, Platform } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
 import { isFlashListScrollRaceError } from '../components/chat/safeFlashListScroll';
 import { SettingsProvider } from "../contexts/SettingsContext";
@@ -531,7 +531,9 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       // Soft-wait Android Install Referrer up to 2s so other preload can proceed;
       // redeem still awaits the full shared settle (hard cap 5s / 30s iOS).
       try {
-        const { Platform } = await import('react-native');
+        // Named import only. A dynamic import('react-native') enumerates every
+        // export, including PushNotificationIOS, which fatals on iOS
+        // (NativeEventEmitter with a null native module). Fixes 90PLUS-APP-2H.
         const { ensureDeferredReferralSettled } = await import('../utils/deferredReferral');
         if (Platform.OS === 'android') {
           await Promise.race([
