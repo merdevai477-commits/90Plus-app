@@ -6,6 +6,7 @@
  * - King of Coaches landing (replaces the old Top Players podium)
  */
 
+import { BlurTargetView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -64,6 +65,8 @@ export default function RankScreen() {
   };
   const [refreshing, setRefreshing] = useState(false);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
+  /** Android BlurTarget for the profile liquid-glass card over the hero art. */
+  const heroBlurTargetRef = useRef<View | null>(null);
 
   const { loadShareStatus, shareRewardHint } = useAppShareReward();
   const loadShareStatusRef = useRef(loadShareStatus);
@@ -185,28 +188,30 @@ export default function RankScreen() {
         contentContainerStyle={scrollContentStyle}
       >
         <View style={s.heroBlock}>
-          <Image
-            source={require('../../assets/images/90Plus world cup.jpg')}
-            style={s.heroBgTrophy}
-            contentFit="cover"
-            // Keep trophy art opposite the copy so EN text sits on the dark side too.
-            contentPosition={isAr ? 'left center' : 'right center'}
-            cachePolicy="memory-disk"
-          />
-          {/* Figma: linear-gradient(71deg, …) — mirrored for LTR so copy stays legible */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.78)']}
-            locations={[0.05, 0.42, 0.78]}
-            style={s.heroBgGradDiag}
-            start={isAr ? { x: 0.05, y: 0.95 } : { x: 0.95, y: 0.95 }}
-            end={isAr ? { x: 0.95, y: 0.05 } : { x: 0.05, y: 0.05 }}
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(3,3,3,0.55)', APP_BG]}
-            style={s.heroBgGradBottom}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-          />
+          <BlurTargetView ref={heroBlurTargetRef} style={s.heroBlurTarget} pointerEvents="none">
+            <Image
+              source={require('../../assets/images/90Plus world cup.jpg')}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              // Keep trophy art opposite the copy so EN text sits on the dark side too.
+              contentPosition={isAr ? 'left center' : 'right center'}
+              cachePolicy="memory-disk"
+            />
+            {/* Figma: linear-gradient(71deg, …) — mirrored for LTR so copy stays legible */}
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.78)']}
+              locations={[0.05, 0.42, 0.78]}
+              style={StyleSheet.absoluteFill}
+              start={isAr ? { x: 0.05, y: 0.95 } : { x: 0.95, y: 0.95 }}
+              end={isAr ? { x: 0.95, y: 0.05 } : { x: 0.05, y: 0.05 }}
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(3,3,3,0.55)', APP_BG]}
+              style={s.heroBgGradBottom}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+            />
+          </BlurTargetView>
 
           <View style={[s.heroText, { alignItems: alignEnd, alignSelf: alignEnd }]}>
             <View
@@ -246,7 +251,7 @@ export default function RankScreen() {
             </View>
           </View>
 
-          <ProfileCard />
+          <ProfileCard blurTarget={heroBlurTargetRef} />
         </View>
 
         <View style={s.compGrid}>
@@ -281,7 +286,7 @@ const s = StyleSheet.create({
     // Pull art up under the floating header like Figma (image y=0).
     marginTop: -44,
   },
-  heroBgTrophy: {
+  heroBlurTarget: {
     position: 'absolute',
     top: -32,
     left: 0,
@@ -289,16 +294,9 @@ const s = StyleSheet.create({
     width: '100%',
     height: HERO_IMG_H + 32,
   },
-  heroBgGradDiag: {
-    position: 'absolute',
-    top: -32,
-    left: 0,
-    right: 0,
-    height: HERO_IMG_H + 32,
-  },
   heroBgGradBottom: {
     position: 'absolute',
-    top: HERO_IMG_H - 110,
+    bottom: 0,
     left: 0,
     right: 0,
     height: 110,

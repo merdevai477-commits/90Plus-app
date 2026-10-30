@@ -4,15 +4,9 @@
  * Displays the logged-in user's avatar, display name, level and XP progress
  * on the Rank screen. Tapping the card navigates to the user's own profile.
  *
- * Avatar source priority:
- *   1. R2 avatar from `/api/profile/me` (set when the user uploads in Profile)
- *   2. Clerk imageUrl (Clerk-hosted fallback)
- *   3. Local placeholder asset
- *
- * This mirrors how the Profile screen resolves the avatar so both surfaces
- * always show the same image — the previous implementation only read
- * `useUser().imageUrl`, which returned the Clerk avatar even after the user
- * had uploaded a new one to R2.
+ * Surface uses LiquidWaterSurface (native Liquid Glass on iOS 26+, Skia
+ * water-glass + BlurTarget frost on Android) so the hero art behind the card
+ * shows through as real liquid glass — not a flat purple panel.
  */
 
 import { Image } from 'expo-image';
@@ -20,21 +14,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-import { GlassWrapper, glassProps } from '../../constants/ui';
+import { LiquidWaterSurface } from '../chat/LiquidWaterSurface';
 import { useTranslation } from '../../src/i18n';
 import { useXp } from '../../contexts/XpContext';
 import { useMyProfileBasics } from '../../hooks/useMyProfileBasics';
 import { useUserRank } from '../../hooks/useUserRank';
-import { isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 
 const ACCENT = '#A855F7';
+const CARD_RADIUS = 22;
+/** Translucent purple — light enough that frosted hero art stays visible. */
+const CARD_TINT = 'rgba(36, 14, 68, 0.38)';
 const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 export interface ProfileCardProps {
@@ -48,6 +43,8 @@ export interface ProfileCardProps {
   xpInLevel?: number;
   /** Total XP span needed to clear the current level (override). */
   xpForNextLevel?: number;
+  /** Android blur target (BlurTargetView wrapping the hero art). */
+  blurTarget?: React.RefObject<View | null>;
 }
 
 const ProfileCard: React.FC<ProfileCardProps> = ({
@@ -56,6 +53,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   level: levelProp,
   xpInLevel: xpInLevelProp,
   xpForNextLevel: xpSpanProp,
+  blurTarget,
 }) => {
   const router = useRouter();
   const { t } = useTranslation();
@@ -63,22 +61,14 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   const { data: profile, refetch: refetchProfile } = useMyProfileBasics();
   const { rankData } = useUserRank();
 
-  // Refresh basics every time the rank tab regains focus so a freshly
-  // uploaded avatar shows up immediately without waiting for the React Query
-  // staleTime to elapse.
   useFocusEffect(
     useCallback(() => {
       refetchProfile();
     }, [refetchProfile]),
   );
 
-  // Source of truth for level/XP: live XpContext (SSE/poll), then profile,
-  // then sane defaults. The bar shows progress *within* the current level —
-  // not the absolute lifetime XP — so the label matches the bar.
   const level = levelProp ?? xpCtx.level ?? profile?.level ?? 1;
   const xpInLevel = xpInLevelProp ?? xpCtx.xpInLevel ?? 0;
-  // A level is 100 XP wide (backend xp.service.ts). The context value wins
-  // whenever it is loaded; this is only the pre-load default.
   const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 100);
 
   const resolvedName: string =
@@ -117,25 +107,18 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={t.rank.a11yProfileCard}
-      style={({ pressed }) => [s.pressable, pressed && { opacity: 0.88 }]}
+      style={({ pressed }) => [s.pressable, pressed && { opacity: 0.92 }]}
     >
-      <View style={s.cardShell}>
-        <GlassWrapper
-          {...(glassProps.card as object)}
-          {...(!isLiquidGlassSupported
-            ? {
-                // Stronger frost so the hero art behind the card actually blurs.
-                intensity: Platform.OS === 'android' ? 110 : 48,
-                tint: 'dark' as const,
-                experimentalBlurMethod: 'dimezisBlurView' as const,
-              }
-            : { effect: 'clear' as const, interactive: true })}
-          style={StyleSheet.absoluteFill}
-        />
-        {/* Soft purple wash — keeps glass readable without killing the blur. */}
-        <View style={s.glassTint} pointerEvents="none" />
-        <View style={s.glassRim} pointerEvents="none" />
-
+      <LiquidWaterSurface
+        radius={CARD_RADIUS}
+        tint={CARD_TINT}
+        glow={[0.72, 0.48, 1]}
+        strength={0.34}
+        scale={2.4}
+        sheen={0.85}
+        blurTarget={blurTarget}
+        style={s.card}
+      >
         <View style={s.profileRow}>
           <View style={s.avatarWrap}>
             <Image
@@ -184,7 +167,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
             </View>
           </View>
         </View>
-      </View>
+      </LiquidWaterSurface>
     </Pressable>
   );
 };
@@ -193,25 +176,10 @@ export default ProfileCard;
 
 const s = StyleSheet.create({
   pressable: { marginHorizontal: 12, marginTop: 19 },
-  cardShell: {
-    borderRadius: 22,
+  card: {
     padding: 18,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.32)',
-    backgroundColor: 'transparent',
   },
-  glassTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(28, 10, 52, 0.42)',
-  },
-  glassRim: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14, zIndex: 1 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatarWrap: { position: 'relative' },
   avatar: {
     width: 68,
@@ -233,7 +201,7 @@ const s = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   username: { color: '#fff', fontSize: 18, fontWeight: '800', flexShrink: 1 },
   rankLabel: {
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.62)',
     fontSize: 12,
     fontWeight: '600',
     marginTop: -4,
@@ -249,7 +217,7 @@ const s = StyleSheet.create({
   xpBarBg: {
     flex: 1,
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: 6,
     overflow: 'hidden',
   },
