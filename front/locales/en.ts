@@ -3944,6 +3944,7 @@ export const en = {
     profanity: 'Your text contains language that breaks the community guidelines.',
     imageRejectedTitle: "Error — this photo isn't allowed",
     imageRejected: 'This photo breaks the community guidelines.',
+    imageOffTopic: "This photo isn't related to football. Share photos of matches, players and clubs.",
     imageScanFailed: "Couldn't verify the photo. Try again.",
     spam: 'This looks like spam. Remove extra links or repeated characters.',
     postCooldown: 'Wait {seconds}s before posting again.',

@@ -1,37 +1,71 @@
 /**
  * Community image safety — scans a photo *before* it is stored on R2 so
- * nudity / porn / gore never gets a public URL.
+ * sexual content, obscene text, gore and obviously off-topic photos never
+ * get a public URL.
  *
- * Uses Gemini's native safety ratings + a short classifier prompt.
- * Fail-closed if the key is missing or the call errors — a photo that was
- * never scanned must not reach the feed.
+ * Posts are also reviewed by humans, so the classifier only blocks clear
+ * violations and allows anything football-related or ambiguous.
+ *
+ * Fail-closed only when no model could produce a verdict at all (missing key,
+ * every model erroring) — that surfaces as SCAN_FAILED ("try again"), never as
+ * a guideline violation.
  */
 
 import sharp from 'sharp';
 import { logger } from '../utils/logger';
 
+export type CommunityImageViolation = 'SEXUAL' | 'PROFANITY' | 'GORE' | 'HATE' | 'OFF_TOPIC';
+
 export type CommunityImageVerdict =
     | { safe: true; skipped?: boolean; raw?: string }
     | { safe: false; categories: string[]; raw: string };
 
-const SCAN_EDGE = 640;
-const TIMEOUT_MS = 12_000;
+const SCAN_EDGE = 768;
+const TIMEOUT_MS = 15_000;
 const SEXUAL = 'HARM_CATEGORY_SEXUALLY_EXPLICIT';
 
 const SAFETY_SETTINGS = [
-    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
 ] as const;
 
-const PROMPT =
-    'Classify this image for a public all-ages football app. ' +
-    'If you see ANY nudity, bare breasts, nipples, genitals, sex, pornography, or erotic posing, reply exactly:\n' +
-    'User Safety: unsafe\nSafety Categories: Sexual\n' +
-    'If it is a normal photo (match, stadium, kit, crowd, shirtless male athlete celebrating) reply exactly:\n' +
-    'User Safety: safe\n' +
-    'If unsure, reply: User Safety: unsafe';
+const VIOLATIONS: Record<string, CommunityImageViolation> = {
+    sexual: 'SEXUAL',
+    profanity: 'PROFANITY',
+    gore: 'GORE',
+    hate: 'HATE',
+    off_topic: 'OFF_TOPIC',
+};
+
+const PROMPT = `You are the image moderator for a public, all-ages football (soccer) community app.
+Users attach this image to a post. Human moderators review posts afterwards, so block ONLY clear, obvious violations. When in doubt, allow.
+
+Block only if one of these is clearly true:
+- "sexual": nudity, exposed genitals, female breasts/nipples or buttocks, sexual acts, pornography, or sexually suggestive content (lingerie/underwear posing, erotic or provocative body-focused poses, sexualized close-ups).
+- "profanity": clearly readable text, a sign, banner or caption in the image that is obscene, vulgar, a sexual curse or a slur in any language (including Arabic/Egyptian slang and Franco-Arabic), or an obscene hand gesture such as the middle finger.
+- "gore": graphic blood, severe open injuries, dead bodies or extreme violence.
+- "hate": hate symbols (e.g. swastika) or content attacking people for race, religion or ethnicity.
+- "off_topic": the image obviously has nothing to do with football or sport — nothing in it (people's clothing, objects, setting, screen, text or graphics) relates to football. Examples: food, pets, cars, landscapes, product ads, unrelated memes, screenshots of unrelated chats or apps, political or religious propaganda.
+
+Always allow (football-related, not violations):
+- matches, players, goal celebrations (including shirtless male players), referees, coaches, fans, ultras, tifos, flares in stadiums, stadiums, pitches, balls, boots, kits, jerseys, scarves, trophies, other sports;
+- club or national-team logos, posters, edits, news or transfer graphics, stats, tables, scores, fixtures, lineup/formation or fantasy screenshots, TV broadcasts, football video games, screenshots of football apps (including dark, blurred or partly covered ones);
+- football memes and banter without obscene words; people wearing football shirts or posing with a ball; normal fouls and on-pitch injuries without graphic gore;
+- low-quality, dark, blurry, cropped or partially loaded images when nothing violating is visible.
+
+Reply with JSON only: {"verdict":"allow"|"block","category":"none"|"sexual"|"profanity"|"gore"|"hate"|"off_topic","reason":"<max 12 words>"}`;
+
+const RESPONSE_SCHEMA = {
+    type: 'OBJECT',
+    properties: {
+        verdict: { type: 'STRING', enum: ['allow', 'block'] },
+        category: { type: 'STRING', enum: ['none', 'sexual', 'profanity', 'gore', 'hate', 'off_topic'] },
+        reason: { type: 'STRING' },
+    },
+    required: ['verdict', 'category'],
+} as const;
 
 export function isCommunityImageSafetyConfigured(): boolean {
     return !!geminiKey();
@@ -55,18 +89,31 @@ function geminiBase(): string {
 
 function models(): string[] {
     const preferred = process.env.COMMUNITY_IMAGE_SAFETY_MODEL?.trim();
-    const all = [preferred, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash-preview'].filter(
+    const all = [preferred, 'gemini-3-flash-preview', 'gemini-flash-lite-latest', 'gemini-3.8-flash'].filter(
         (m, i, arr): m is string => !!m && arr.indexOf(m) === i,
     );
     return all;
+}
+
+/** Gemini 3 models count thinking tokens against maxOutputTokens; keep it low so the verdict is never truncated. */
+function thinkingConfig(model: string): Record<string, unknown> | undefined {
+    return /gemini-3|-latest$/.test(model) ? { thinkingLevel: 'low' } : undefined;
 }
 
 type SafetyRating = { category?: string; probability?: string };
 
 function ratingHits(r: SafetyRating): boolean {
     const p = (r.probability ?? '').toUpperCase();
-    if (r.category === SEXUAL) return p === 'LOW' || p === 'MEDIUM' || p === 'HIGH';
+    if (r.category === SEXUAL) return p === 'MEDIUM' || p === 'HIGH';
     return p === 'HIGH';
+}
+
+function ratingCategory(category: string | undefined): string {
+    if (category === SEXUAL) return 'SEXUAL';
+    if (category === 'HARM_CATEGORY_HATE_SPEECH') return 'HATE';
+    if (category === 'HARM_CATEGORY_HARASSMENT') return 'PROFANITY';
+    if (category === 'HARM_CATEGORY_DANGEROUS_CONTENT') return 'GORE';
+    return 'SAFETY';
 }
 
 function collectRatings(payload: unknown): SafetyRating[] {
@@ -93,66 +140,73 @@ function extractText(payload: unknown): string {
     let out = '';
     for (const part of parts) {
         if (!part || typeof part !== 'object') continue;
-        const text = (part as { text?: string }).text;
-        if (typeof text === 'string') out += text;
+        const { text, thought } = part as { text?: string; thought?: boolean };
+        if (typeof text === 'string' && !thought) out += text;
     }
     return out.trim();
 }
 
-/** Pure — used by unit tests. Allow only an explicit "User Safety: safe". */
-export function parseGeminiImageSafety(payload: unknown): CommunityImageVerdict {
-    if (!payload || typeof payload !== 'object') {
-        return { safe: false, categories: ['UNPARSED'], raw: 'empty' };
+function parseVerdictJson(text: string): { verdict?: string; category?: string; reason?: string } | null {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+        const parsed = JSON.parse(match[0]);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
     }
+}
+
+/**
+ * Pure — used by unit tests. Returns `null` when the model produced no usable
+ * verdict (empty / truncated / malformed), so the caller can try another model
+ * instead of punishing the user for a model hiccup.
+ */
+export function parseGeminiImageSafety(payload: unknown): CommunityImageVerdict | null {
+    if (!payload || typeof payload !== 'object') return null;
     const obj = payload as Record<string, unknown>;
     const prompt = obj.promptFeedback as { blockReason?: string } | undefined;
+    const hitRatings = collectRatings(obj).filter(ratingHits);
+    const hitCategories = [...new Set(hitRatings.map((r) => ratingCategory(r.category)))];
+
     if (prompt?.blockReason) {
-        const cats = collectRatings(obj)
-            .filter(ratingHits)
-            .map((r) => r.category || prompt.blockReason || 'SAFETY');
-        return { safe: false, categories: cats.length ? cats : [String(prompt.blockReason)], raw: 'blocked' };
+        return {
+            safe: false,
+            categories: hitCategories.length ? hitCategories : ['SAFETY'],
+            raw: `blocked:${prompt.blockReason}`,
+        };
     }
     const candidates = obj.candidates as Array<{ finishReason?: string }> | undefined;
     const finish = candidates?.[0]?.finishReason;
-    if (finish && /safety/i.test(finish)) {
-        return { safe: false, categories: ['SAFETY'], raw: finish };
+    if (finish && /safety|prohibited|blocklist|image_safety/i.test(finish)) {
+        return { safe: false, categories: hitCategories.length ? hitCategories : ['SAFETY'], raw: finish };
     }
-    const hitRatings = collectRatings(obj).filter(ratingHits);
-    if (hitRatings.length) {
-        return {
-            safe: false,
-            categories: hitRatings.map((r) => r.category || r.probability || 'SAFETY'),
-            raw: 'ratings',
-        };
+    if (hitCategories.length) {
+        return { safe: false, categories: hitCategories, raw: 'ratings' };
     }
+
     const text = extractText(payload);
-    const userLine = text.match(/user\s*safety\s*:\s*(safe|unsafe)/i);
-    if (userLine && userLine[1].toLowerCase() === 'unsafe') {
-        const catLine = text.match(/safety\s*categories\s*:\s*(.+)/i);
-        const categories = catLine
-            ? catLine[1]
-                  .split(/[,;|]/)
-                  .map((c) => c.trim())
-                  .filter(Boolean)
-                  .slice(0, 12)
-            : ['UNSAFE'];
-        return { safe: false, categories, raw: text.slice(0, 300) };
+    const json = parseVerdictJson(text);
+    if (!json || (json.verdict !== 'allow' && json.verdict !== 'block')) return null;
+
+    const violation = VIOLATIONS[String(json.category ?? '').toLowerCase()];
+    if (json.verdict === 'block' && violation) {
+        return { safe: false, categories: [violation], raw: text.slice(0, 300) };
     }
-    if (userLine && userLine[1].toLowerCase() === 'safe') {
-        return { safe: true, raw: text.slice(0, 300) };
-    }
-    return { safe: false, categories: ['UNPARSED'], raw: text.slice(0, 300) || 'no-verdict' };
+    return { safe: true, raw: text.slice(0, 300) };
 }
 
 async function toScanJpeg(buffer: Buffer): Promise<Buffer> {
     return sharp(buffer, { failOn: 'error' })
         .rotate()
         .resize(SCAN_EDGE, SCAN_EDGE, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 62, mozjpeg: true })
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality: 70, mozjpeg: true })
         .toBuffer();
 }
 
 async function callModel(model: string, jpeg: Buffer, apiKey: string): Promise<unknown> {
+    const thinking = thinkingConfig(model);
     const res = await fetch(`${geminiBase()}/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: {
@@ -170,7 +224,13 @@ async function callModel(model: string, jpeg: Buffer, apiKey: string): Promise<u
                 },
             ],
             safetySettings: SAFETY_SETTINGS,
-            generationConfig: { temperature: 0, maxOutputTokens: 80 },
+            generationConfig: {
+                temperature: 0,
+                maxOutputTokens: 1024,
+                responseMimeType: 'application/json',
+                responseSchema: RESPONSE_SCHEMA,
+                ...(thinking ? { thinkingConfig: thinking } : {}),
+            },
         }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -195,27 +255,29 @@ export async function classifyCommunityImage(buffer: Buffer): Promise<CommunityI
         return { safe: false, categories: ['SCAN_FAILED'], raw: err?.message || 'resize' };
     }
 
-    const list = models();
-    let lastErr: string | undefined;
-    for (let i = 0; i < list.length; i++) {
+    const errors: string[] = [];
+    for (const model of models()) {
         try {
-            const payload = await callModel(list[i], jpeg, apiKey);
+            const payload = await callModel(model, jpeg, apiKey);
             const verdict = parseGeminiImageSafety(payload);
+            if (!verdict) {
+                errors.push(`${model}: no verdict (${extractText(payload).slice(0, 80) || 'empty'})`);
+                continue;
+            }
             if (verdict.safe) {
-                logger.info('[community-image-safety] allowed', { model: list[i], raw: verdict.raw });
+                logger.info('[community-image-safety] allowed', { model, raw: verdict.raw });
             } else {
                 logger.warn('[community-image-safety] blocked', {
-                    model: list[i],
+                    model,
                     categories: verdict.categories,
                     raw: verdict.raw,
                 });
             }
             return verdict;
         } catch (err: any) {
-            lastErr = err?.message || String(err);
-            if (i < list.length - 1) continue;
+            errors.push(`${model}: ${err?.message || String(err)}`.slice(0, 200));
         }
     }
-    logger.warn('[community-image-safety] scan failed — blocking upload', { err: lastErr });
-    return { safe: false, categories: ['SCAN_FAILED'], raw: lastErr || 'scan-failed' };
+    logger.warn('[community-image-safety] scan failed — blocking upload', { errors });
+    return { safe: false, categories: ['SCAN_FAILED'], raw: errors.join(' | ').slice(0, 300) || 'scan-failed' };
 }

@@ -117,21 +117,25 @@ async function moderateOrThrow(userId: string, kind: CommunityContentKind, text:
 }
 
 function rejectUnsafeImage(userId: string, imageSafety: Extract<CommunityImageVerdict, { safe: false }>): never {
-    const scanFailed = imageSafety.categories.some((c) => c === 'SCAN_FAILED' || c === 'SCAN_UNAVAILABLE');
+    const cats = imageSafety.categories;
+    const scanFailed = cats.some((c) => c === 'SCAN_FAILED' || c === 'SCAN_UNAVAILABLE');
+    const offTopic = !scanFailed && cats.every((c) => c === 'OFF_TOPIC');
+    const code = scanFailed ? 'IMAGE_SCAN_FAILED' : offTopic ? 'IMAGE_OFF_TOPIC' : 'IMAGE_REJECTED';
     void prisma.moderationLog
         .create({
             data: {
                 userId,
                 contentType: 'community_media',
                 action: 'BLOCKED',
-                reason: scanFailed ? 'IMAGE_SCAN_FAILED' : 'IMAGE_REJECTED',
-                detectedWords: imageSafety.categories.slice(0, 10),
-                severity: 'high',
+                reason: code,
+                detectedWords: cats.slice(0, 10),
+                severity: offTopic ? 'low' : 'high',
             },
         })
         .catch(() => undefined);
     if (scanFailed) throw new CommunityError(503, 'IMAGE_SCAN_FAILED', 'Could not verify the image');
-    void markCommunitySafetyFlag(userId, 'NSFW');
+    if (offTopic) throw new CommunityError(422, 'IMAGE_OFF_TOPIC', 'Image is not related to football');
+    if (cats.some((c) => c === 'SEXUAL' || c === 'GORE')) void markCommunitySafetyFlag(userId, 'NSFW');
     throw new CommunityError(422, 'IMAGE_REJECTED', 'Image violates community guidelines');
 }
 

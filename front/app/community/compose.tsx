@@ -414,7 +414,7 @@ export default function ComposeScreen() {
                     <ShieldAlert size={28} color="#FECACA" />
                   </View>
                   <Text style={[styles.previewErrorTitle, { fontFamily: fonts.semibold }]}>{s.imageRejectedTitle}</Text>
-                  <Text style={[styles.previewErrorBody, { fontFamily: fonts.medium }]}>{s.imageRejected}</Text>
+                  <Text style={[styles.previewErrorBody, { fontFamily: fonts.medium }]}>{communityErrorMessage(draft.error, s)}</Text>
                 </View>
               ) : (
                 <Pressable

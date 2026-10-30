@@ -40,6 +40,8 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
       return s.profanity;
     case 'IMAGE_REJECTED':
       return s.imageRejected;
+    case 'IMAGE_OFF_TOPIC':
+      return s.imageOffTopic;
     case 'IMAGE_SCAN_FAILED':
       return s.imageScanFailed;
     case 'SPAM_DETECTED':
@@ -71,13 +73,13 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
 }
 
 export function isImageRejected(err: unknown): boolean {
-  return err instanceof CommunityApiError && err.code === 'IMAGE_REJECTED';
+  return err instanceof CommunityApiError && (err.code === 'IMAGE_REJECTED' || err.code === 'IMAGE_OFF_TOPIC');
 }
 
 /** Errors the user can fix by editing their text — keep the composer open. */
 export function isContentRejection(err: unknown): boolean {
   return (
     err instanceof CommunityApiError &&
-    ['PROFANITY_DETECTED', 'IMAGE_REJECTED', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
+    ['PROFANITY_DETECTED', 'IMAGE_REJECTED', 'IMAGE_OFF_TOPIC', 'SPAM_DETECTED', 'POST_TOO_LONG', 'COMMENT_TOO_LONG', 'EMPTY_POST', 'EMPTY_COMMENT'].includes(err.code)
   );
 }
