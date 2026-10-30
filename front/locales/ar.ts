@@ -1987,6 +1987,7 @@ export const ar = {
     playNow: 'العب الآن',
     coachKing: {
       title: 'ملك المدربين',
+      weekTitle: 'مدرب الأسبوع',
       hero: 'أنت المدرب',
       subtitle: 'ابني تشكيلتك..اتخذ قراراتك..واجمع النقاط',
       brand: '90Plus',

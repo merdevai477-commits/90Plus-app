@@ -2032,6 +2032,7 @@ export const en = {
     playNow: 'Play Now',
     coachKing: {
       title: 'King of Coaches',
+      weekTitle: 'Coach of the Week',
       hero: 'You are the coach',
       subtitle: 'Build your squad. Make your calls. Collect the points.',
       brand: '90Plus',
