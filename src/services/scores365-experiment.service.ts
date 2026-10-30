@@ -1340,7 +1340,7 @@ export function classifyScores365MatchStatus(
 
   // Extra time (live) / after extra time (finished) / break before ET.
   const mentionsExtraTime =
-    has('extra time', 'extra-time', 'e.t.', 'after extra', 'إضاف', 'اضاف', 'وقت اضافي') ||
+    has('extra time', 'extra-time', 'e.t.', 'after extra', 'after et', 'إضاف', 'اضاف', 'وقت اضافي') ||
     shortCode === 'et' ||
     shortCode === 'aet' ||
     shortCode === 'et1' ||
@@ -1348,7 +1348,7 @@ export function classifyScores365MatchStatus(
     shortCode === 'aet1' ||
     shortCode === 'aet2';
   if (mentionsExtraTime) {
-    if (statusGroup === 4 || has('after extra', 'ended', 'انته', 'full time')) {
+    if (statusGroup === 4 || has('after extra', 'after et', 'ended', 'انته', 'full time')) {
       return withExtra('AET', 'After Extra Time', 120);
     }
     if (has('break', 'استراح', 'فاصل')) {

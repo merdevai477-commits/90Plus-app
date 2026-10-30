@@ -117,6 +117,17 @@ describe('settlementSnapshotFrom365Game', () => {
     expect(snap).toEqual({ status: 'AET', homeScore: 3, awayScore: 2, penaltyHome: null, penaltyAway: null });
   });
 
+  it('365 "After ET" (statusId 154, seen on 4730724) → AET, not FT', async () => {
+    mockFindUnique.mockResolvedValue(dbRow('Zamalek', 'Pyramids'));
+    const snap = await settlementSnapshotFrom365Game(game({
+      statusText: 'After ET',
+      shortStatusText: 'After ET',
+      homeCompetitor: { id: 8100, name: 'Zamalek', score: 5 },
+      awayCompetitor: { id: 8200, name: 'Pyramids', score: 4 },
+    } as Partial<Game>), AF_ID);
+    expect(snap).toMatchObject({ status: 'AET', homeScore: 5, awayScore: 4 });
+  });
+
   it('cancelled game keeps CANC and null scores', async () => {
     mockFindUnique.mockResolvedValue(dbRow('Zamalek', 'Pyramids'));
     const snap = await settlementSnapshotFrom365Game(game({

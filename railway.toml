@@ -7,7 +7,9 @@ dockerfilePath = "Dockerfile"
 # previous deployment keeps serving. Also set on the service itself because
 # config-as-code is deprecated by Railway.
 preDeployCommand = ["npx prisma migrate deploy"]
-startCommand = "npm run start:prod"
+# Exec node directly: under `npm run` SIGTERM never reached the app's shutdown
+# handler (npm -> sh -> node), so in-flight settles could not drain.
+startCommand = "node dist/src/main.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 180
 restartPolicyType = "ON_FAILURE"

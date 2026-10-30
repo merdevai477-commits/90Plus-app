@@ -48,6 +48,7 @@ export function fromCacheRow(row: CacheRow): SettlementFixtureInput {
 }
 
 const FINAL_STATUSES = new Set(['FT', 'AET', 'PEN']);
+const NO_RESULT_STATUSES = new Set(['ABD', 'CANC', 'AWD', 'WO']);
 
 const isScore = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0;
@@ -133,6 +134,20 @@ export async function loadAuthoritativeSettlementFixture(
   if (gameId != null) {
     const snap = await from365(apiMatchId, gameId);
     if (snap) {
+      // An abandoned / cancelled / awarded match that the provider later shows
+      // as ended may carry the score at abandonment — never settle that
+      // automatically. (PST -> final is a rescheduled match and is fine.)
+      if (fallback && NO_RESULT_STATUSES.has(String(fallback.status)) && FINAL_STATUSES.has(String(snap.status))) {
+        logger.warn(
+          JSON.stringify({
+            event: 'SETTLE_SOURCE_CONFLICT',
+            apiMatchId,
+            cachedStatus: fallback.status,
+            providerStatus: snap.status,
+          }),
+        );
+        return fallback;
+      }
       if (isCompleteFinalSnapshot(snap) || !fallback) return snap;
       // A stale non-final cache row (e.g. NS) loses to 365's current status.
       if (!FINAL_STATUSES.has(String(fallback.status))) return snap;

@@ -90,6 +90,23 @@ describe('loadAuthoritativeSettlementFixture', () => {
     expect(r?.status).toBe('CANC');
   });
 
+  it.each(['ABD', 'CANC', 'AWD', 'WO'])(
+    'cached %s is not overridden by a provider "Ended" (the 4870902 case)',
+    async (status) => {
+      mockFindUnique.mockResolvedValue(cacheRow(status, 0, 0));
+      mockSnap365.mockResolvedValue({ status: 'FT', homeScore: 0, awayScore: 0, penaltyHome: null, penaltyAway: null });
+      const r = await loadAuthoritativeSettlementFixture(NATIVE);
+      expect(r?.status).toBe(status);
+    },
+  );
+
+  it('cached PST that the provider now shows final settles (rescheduled and played)', async () => {
+    mockFindUnique.mockResolvedValue(cacheRow('PST', null, null));
+    mockSnap365.mockResolvedValue({ status: 'FT', homeScore: 2, awayScore: 0, penaltyHome: null, penaltyAway: null });
+    const r = await loadAuthoritativeSettlementFixture(NATIVE);
+    expect(r).toMatchObject({ status: 'FT', homeScore: 2 });
+  });
+
   it('API-Football id with no 365 mapping never calls 365 with the AF id', async () => {
     mockFetchApi.mockResolvedValue([]);
     mockFindUnique.mockResolvedValue(cacheRow('PEN', 1, 1));
