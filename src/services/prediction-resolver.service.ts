@@ -11,18 +11,23 @@ import { logger } from '../utils/logger';
 import { NotificationService } from './notification.service';
 import { awardXp, levelFromXp, XP_VALUES } from './xp.service';
 import { clearResponseCache } from '../middleware/responseCache.middleware';
-import { acquireSettleLock } from './prediction-settle-lock';
+import { acquireSettleLock, startLeaseHeartbeat, type LeaseHeartbeat } from './prediction-settle-lock';
 import {
   isExactPredictionCorrect,
   isWinnerPredictionCorrect,
   resolveSettlementInput,
+  type SettlementFixtureInput,
   type SettlementOk,
 } from './prediction-settlement-gate';
 import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snapshot';
 import { isSchemaOk } from './schema-guard.service';
 import { decideResultPush, isStaleKickoff } from './prediction-settle-push-policy';
+import { maybeVoidMatchPredictions } from './prediction-void.service';
 
 const CORRECT_PREDICTION_REWARD = 10;
+const SETTLE_CHUNK_SIZE = 200;
+/** A snapshot the caller fetched this recently is reused instead of re-fetched (E7). */
+export const PREFETCH_MAX_AGE_MS = 60_000;
 
 export type SettleOutcome =
   | 'SETTLE_COMPLETE'
@@ -30,8 +35,17 @@ export type SettleOutcome =
   | 'SETTLE_SKIPPED_LOCKED'
   | 'SETTLE_SKIPPED_NO_LOCK'
   | 'SETTLE_SKIPPED_NO_FIXTURE'
+  | 'SETTLE_SKIPPED_SHUTDOWN'
   | 'SETTLE_GATE_REJECTED'
+  | 'SETTLE_LOCK_LOST'
+  | 'SETTLE_ABORTED_SHUTDOWN'
+  | 'SETTLE_VOIDED'
   | 'SETTLE_ERROR';
+
+export type PrefetchedSnapshot = { snapshot: SettlementFixtureInput; fetchedAt: number };
+
+let shuttingDown = false;
+let inFlight = 0;
 
 export type SettleResult = {
   outcome: SettleOutcome;
@@ -83,28 +97,63 @@ function predictionXpAction(prediction: ScoredPrediction): 'PREDICTION_EXACT' | 
   return hasScoreline(prediction) ? 'PREDICTION_EXACT' : 'PREDICTION_WINNER';
 }
 
+type ResolveOpts = { source?: SettleSource; prefetched?: PrefetchedSnapshot };
+
 export class PredictionResolverService {
+  /** Stop starting new settles; in-flight ones finish their current row and stop. */
+  static beginShutdown(): void {
+    shuttingDown = true;
+  }
+
+  /** Resolve once no settle is in flight, or after timeoutMs. True when drained. */
+  static async drain(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (inFlight > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return inFlight === 0;
+  }
+
+  static __resetShutdownForTests(): void {
+    shuttingDown = false;
+    inFlight = 0;
+  }
+
   /**
    * Resolve all unresolved predictions for a finished match.
-   * Caller-provided scores are ignored — fixture is re-loaded under the lock.
+   * Caller-provided scores are ignored — fixture is re-loaded under the lock
+   * unless the caller passes a snapshot fetched within PREFETCH_MAX_AGE_MS.
    */
   static async resolveMatchPredictions(
     apiMatchId: number,
-    _homeScoreOrOpts?: number | { source?: SettleSource },
+    _homeScoreOrOpts?: number | ResolveOpts,
     _awayScore?: number,
-    opts?: { source?: SettleSource },
+    opts?: ResolveOpts,
   ): Promise<SettleResult> {
-    const source: SettleSource =
-      (typeof _homeScoreOrOpts === 'object' && _homeScoreOrOpts?.source) ||
-      opts?.source ||
-      'unknown';
+    const resolved = typeof _homeScoreOrOpts === 'object' ? _homeScoreOrOpts : opts;
+    const source: SettleSource = resolved?.source || 'unknown';
     const skipped = (outcome: SettleOutcome): SettleResult => ({ outcome, settled: 0, staleOnly: false });
 
     if (!isSchemaOk()) {
       logger.warn(JSON.stringify({ event: 'SETTLE_SKIPPED_SCHEMA', apiMatchId, source }));
       return skipped('SETTLE_SKIPPED_SCHEMA');
     }
+    if (shuttingDown) return skipped('SETTLE_SKIPPED_SHUTDOWN');
 
+    inFlight += 1;
+    try {
+      return await this.resolveLocked(apiMatchId, source, resolved?.prefetched);
+    } finally {
+      inFlight -= 1;
+    }
+  }
+
+  private static async resolveLocked(
+    apiMatchId: number,
+    source: SettleSource,
+    prefetched: PrefetchedSnapshot | undefined,
+  ): Promise<SettleResult> {
+    const skipped = (outcome: SettleOutcome): SettleResult => ({ outcome, settled: 0, staleOnly: false });
     const lock = await acquireSettleLock(apiMatchId);
     if (!lock.ok) {
       logger.info(
@@ -118,8 +167,12 @@ export class PredictionResolverService {
       return skipped(lock.reason);
     }
 
+    const heartbeat = startLeaseHeartbeat(lock.handle);
     try {
-      const snapshot = await loadAuthoritativeSettlementFixture(apiMatchId);
+      const reuse = prefetched && Date.now() - prefetched.fetchedAt < PREFETCH_MAX_AGE_MS;
+      const snapshot = reuse
+        ? prefetched!.snapshot
+        : await loadAuthoritativeSettlementFixture(apiMatchId);
       if (!snapshot) {
         logger.info(
           JSON.stringify({
@@ -133,6 +186,10 @@ export class PredictionResolverService {
       }
 
       const gated = resolveSettlementInput(snapshot);
+      if (!gated.ok && gated.reason === 'STATUS_NOT_SETTLEABLE') {
+        const voided = await maybeVoidMatchPredictions(apiMatchId, snapshot.status, source);
+        if (voided > 0) return { outcome: 'SETTLE_VOIDED', settled: 0, staleOnly: false };
+      }
       if (!gated.ok) {
         logger.info(
           JSON.stringify({
@@ -151,11 +208,12 @@ export class PredictionResolverService {
         return skipped('SETTLE_GATE_REJECTED');
       }
 
-      return await this.settleUnlocked(apiMatchId, gated, source, lock.waitMs);
+      return await this.settleUnlocked(apiMatchId, gated, source, lock.waitMs, heartbeat);
     } catch (error) {
       logger.error(`❌ Error resolving predictions for match ${apiMatchId}:`, error);
       return skipped('SETTLE_ERROR');
     } finally {
+      heartbeat.stop();
       await lock.handle.release();
     }
   }
@@ -165,13 +223,14 @@ export class PredictionResolverService {
     settled: SettlementOk,
     source: SettleSource,
     lockWaitMs: number,
+    heartbeat: LeaseHeartbeat,
   ): Promise<SettleResult> {
     const { homeScore, awayScore, winner, status } = settled;
 
     logger.info(`🎯 Resolving predictions for match ${apiMatchId} (${homeScore}-${awayScore}, ${status}, winner=${winner})`);
 
     const predictions = (await (prisma as any).prediction.findMany({
-      where: { apiMatchId, isCorrect: null },
+      where: { apiMatchId, isCorrect: null, voidedAt: null },
     })) as ScoredPrediction[];
 
     if (predictions.length === 0) {
@@ -185,7 +244,21 @@ export class PredictionResolverService {
     let pushSuppressed = 0;
     const settledAt = new Date();
 
-    for (const prediction of predictions) {
+    let aborted: 'SETTLE_LOCK_LOST' | 'SETTLE_ABORTED_SHUTDOWN' | null = null;
+
+    for (let index = 0; index < predictions.length; index += 1) {
+      // A6: stop at the next row once the lease is lost so a second settler
+      // never races this one.
+      if (index > 0 && index % SETTLE_CHUNK_SIZE === 0) await heartbeat.beat();
+      if (heartbeat.isLost()) {
+        aborted = 'SETTLE_LOCK_LOST';
+        break;
+      }
+      if (shuttingDown) {
+        aborted = 'SETTLE_ABORTED_SHUTDOWN';
+        break;
+      }
+      const prediction = predictions[index];
       const isCorrect = isPredictionCorrect(prediction, settled);
       const xpAction = predictionXpAction(prediction);
       const points = isCorrect ? XP_VALUES[xpAction] : 0;
@@ -330,6 +403,20 @@ export class PredictionResolverService {
           rowErr?.message ?? rowErr,
         );
       }
+    }
+
+    if (aborted) {
+      logger.warn(
+        JSON.stringify({
+          event: aborted,
+          apiMatchId,
+          settled: correctCount + wrongCount,
+          remaining: predictions.length - correctCount - wrongCount,
+          source,
+        }),
+      );
+      clearResponseCache('/predictions/stats').catch(() => {});
+      return { outcome: aborted, settled: correctCount + wrongCount, staleOnly: false };
     }
 
     logger.info(

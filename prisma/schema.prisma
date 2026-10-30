@@ -1555,6 +1555,9 @@ model Prediction {
   settledAt          DateTime?
   /// Provider-independent fixture identity ("365:<gameId>" or "af:<fixtureId>"); null on legacy rows.
   canonicalFixtureKey String?
+  /// Match will never produce a result (CANC/ABD/PST/AWD/WO past 48h); row leaves the pending set, no refund.
+  voidedAt           DateTime?
+  voidReason         String?
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiMatchId])
@@ -1565,7 +1568,18 @@ model Prediction {
   @@index([userId, createdAt])
   @@index([isCorrect])
   @@index([userId, isCorrect])
+  @@index([isCorrect, apiMatchId])
   @@map("predictions")
+}
+
+/// Per-match settlement lease (one lock domain for every replica).
+model SettleLease {
+  apiMatchId Int      @id
+  owner      String
+  expiresAt  DateTime
+  acquiredAt DateTime @default(now())
+
+  @@map("settle_leases")
 }
 
 /// King daily prediction quota per Africa/Cairo calendar day.

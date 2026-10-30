@@ -10,8 +10,25 @@ const mockTransaction = jest.fn();
 const mockAwardXp = jest.fn();
 const mockNotify = jest.fn();
 
+const mockBeat = jest.fn(async () => true);
+const mockHeartbeatStop = jest.fn();
+let heartbeatLost = false;
 jest.mock('../prediction-settle-lock', () => ({
   acquireSettleLock: (...args: unknown[]) => mockAcquire(...args),
+  startLeaseHeartbeat: () => ({
+    isLost: () => heartbeatLost,
+    beat: async () => {
+      const ok = await mockBeat();
+      if (!ok) heartbeatLost = true;
+      return ok;
+    },
+    stop: mockHeartbeatStop,
+  }),
+}));
+
+const mockVoid = jest.fn(async () => 0);
+jest.mock('../prediction-void.service', () => ({
+  maybeVoidMatchPredictions: (...a: unknown[]) => mockVoid(...(a as [])),
 }));
 
 jest.mock('../prediction-settlement-snapshot', () => ({
@@ -50,13 +67,22 @@ import { PredictionResolverService } from '../prediction-resolver.service';
 function releaseOk() {
   return {
     ok: true as const,
-    handle: { kind: 'redis' as const, release: jest.fn().mockResolvedValue(undefined) },
+    handle: {
+      kind: 'lease' as const,
+      owner: 'o',
+      extend: jest.fn().mockResolvedValue(true),
+      release: jest.fn().mockResolvedValue(undefined),
+    },
     waitMs: 1,
   };
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  heartbeatLost = false;
+  mockBeat.mockResolvedValue(true);
+  mockVoid.mockResolvedValue(0);
+  PredictionResolverService.__resetShutdownForTests();
   mockAcquire.mockResolvedValue(releaseOk());
   mockAwardXp.mockResolvedValue({ awarded: 1 });
   mockNotify.mockResolvedValue(undefined);
@@ -345,5 +371,118 @@ describe('PredictionResolverService.resolveMatchPredictions', () => {
     ]);
 
     expect(mockLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('only pending, non-voided rows are loaded', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue([]);
+    await PredictionResolverService.resolveMatchPredictions(30, { source: 'prediction-watcher' });
+    expect(mockFindMany.mock.calls[0][0].where).toEqual({ apiMatchId: 30, isCorrect: null, voidedAt: null });
+  });
+});
+
+describe('single fetch (E7)', () => {
+  it('reuses a snapshot fetched under 60s ago', async () => {
+    mockFindMany.mockResolvedValue([]);
+    await PredictionResolverService.resolveMatchPredictions(40, {
+      source: 'prediction-watcher',
+      prefetched: { snapshot: { status: 'FT', homeScore: 1, awayScore: 0 }, fetchedAt: Date.now() - 5_000 },
+    });
+    expect(mockLoad).not.toHaveBeenCalled();
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-fetches when the prefetched snapshot is older than 60s', async () => {
+    mockLoad.mockResolvedValue({ status: 'NS', homeScore: null, awayScore: null });
+    const r = await PredictionResolverService.resolveMatchPredictions(41, {
+      source: 'prediction-watcher',
+      prefetched: { snapshot: { status: 'FT', homeScore: 1, awayScore: 0 }, fetchedAt: Date.now() - 61_000 },
+    });
+    expect(mockLoad).toHaveBeenCalledTimes(1);
+    expect(r.outcome).toBe('SETTLE_GATE_REJECTED');
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('lease heartbeat (A6)', () => {
+  it('stops at the chunk boundary when the lease is lost; the rest stay pending', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue(Array.from({ length: 450 }, (_, i) => row(`r${i}`, null)));
+    const outcomes: Array<{ id: string; isCorrect: boolean }> = [];
+    mockTransaction.mockImplementation(txRecorder(outcomes));
+    mockBeat.mockResolvedValue(false);
+    const lock = releaseOk();
+    mockAcquire.mockResolvedValue(lock);
+
+    const r = await PredictionResolverService.resolveMatchPredictions(50, { source: 'prediction-watcher' });
+
+    expect(r).toEqual({ outcome: 'SETTLE_LOCK_LOST', settled: 200, staleOnly: false });
+    expect(outcomes).toHaveLength(200);
+    expect(mockHeartbeatStop).toHaveBeenCalledTimes(1);
+    expect(lock.handle.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('a healthy lease settles every chunk', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue(Array.from({ length: 450 }, (_, i) => row(`r${i}`, null)));
+    mockTransaction.mockImplementation(txRecorder([]));
+
+    const r = await PredictionResolverService.resolveMatchPredictions(51, { source: 'prediction-watcher' });
+    expect(r.outcome).toBe('SETTLE_COMPLETE');
+    expect(r.settled).toBe(450);
+    expect(mockBeat).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('shutdown drain (E5)', () => {
+  it('refuses new settles after beginShutdown', async () => {
+    PredictionResolverService.beginShutdown();
+    const r = await PredictionResolverService.resolveMatchPredictions(60, { source: 'prediction-watcher' });
+    expect(r.outcome).toBe('SETTLE_SKIPPED_SHUTDOWN');
+    expect(mockAcquire).not.toHaveBeenCalled();
+  });
+
+  it('in-flight settle stops at the next row, releases, and drain resolves', async () => {
+    mockLoad.mockResolvedValue({ status: 'FT', homeScore: 1, awayScore: 0 });
+    mockFindMany.mockResolvedValue([row('a', null), row('b', null), row('c', null)]);
+    let releaseFirst!: () => void;
+    const firstRowGate = new Promise<void>((r) => (releaseFirst = r));
+    const outcomes: Array<{ id: string; isCorrect: boolean }> = [];
+    const record = txRecorder(outcomes);
+    mockTransaction.mockImplementation(async (fn: any) => {
+      if (outcomes.length === 0) await firstRowGate;
+      return record(fn);
+    });
+    const lock = releaseOk();
+    mockAcquire.mockResolvedValue(lock);
+
+    const pending = PredictionResolverService.resolveMatchPredictions(61, { source: 'prediction-watcher' });
+    await new Promise((r) => setTimeout(r, 10));
+    PredictionResolverService.beginShutdown();
+    const drained = PredictionResolverService.drain(2_000);
+    releaseFirst();
+
+    const r = await pending;
+    expect(r).toEqual({ outcome: 'SETTLE_ABORTED_SHUTDOWN', settled: 1, staleOnly: false });
+    expect(outcomes).toEqual([{ id: 'a', isCorrect: true }]);
+    await expect(drained).resolves.toBe(true);
+    expect(lock.handle.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('VOID hand-off (E11)', () => {
+  it('a never-final status goes to the void path under the lease', async () => {
+    mockLoad.mockResolvedValue({ status: 'CANC', homeScore: null, awayScore: null });
+    mockVoid.mockResolvedValue(4);
+    const r = await PredictionResolverService.resolveMatchPredictions(70, { source: 'prediction-watcher' });
+    expect(mockVoid).toHaveBeenCalledWith(70, 'CANC', 'prediction-watcher');
+    expect(r.outcome).toBe('SETTLE_VOIDED');
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it('nothing voided (flag off / too recent) stays a gate reject', async () => {
+    mockLoad.mockResolvedValue({ status: 'PST', homeScore: null, awayScore: null });
+    const r = await PredictionResolverService.resolveMatchPredictions(71, { source: 'prediction-watcher' });
+    expect(r.outcome).toBe('SETTLE_GATE_REJECTED');
   });
 });

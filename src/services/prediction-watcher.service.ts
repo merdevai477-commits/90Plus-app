@@ -9,14 +9,19 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { CompetitionResolverService } from './competition-resolver.service';
 import { notifyUser } from './notify.service';
 import { NotificationType } from './notification.service';
-import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { allowLeaderboardPush, getMaxMatchesPerTick } from './prediction-settle-push-policy';
 import { isSchemaOk } from './schema-guard.service';
+import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snapshot';
+import { VOID_STATUSES } from './prediction-void.service';
+
+const FINAL_STATUSES = new Set(['FT', 'AET', 'PEN']);
+
+const isScore = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 /**
  * Stable bucket for idempotency on leaderboard notifications. We use UTC
@@ -71,6 +76,28 @@ export class PredictionWatcherService {
     }
 
     /**
+     * SIGTERM path (E5): stop scheduling, tell in-flight settles to stop at the
+     * next row boundary, and wait up to timeoutMs. Unsettled rows stay pending
+     * and the lease is released, so the next instance resumes them.
+     */
+    static async stopAndDrain(timeoutMs: number): Promise<boolean> {
+        this.stop();
+        PredictionResolverService.beginShutdown();
+        const started = Date.now();
+        while (this.isRunning && Date.now() - started < timeoutMs) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        const drained = await PredictionResolverService.drain(Math.max(0, timeoutMs - (Date.now() - started)));
+        logger.info(
+            JSON.stringify({
+                event: drained && !this.isRunning ? 'SETTLE_DRAINED' : 'SETTLE_DRAIN_TIMEOUT',
+                waitedMs: Date.now() - started,
+            }),
+        );
+        return drained && !this.isRunning;
+    }
+
+    /**
      * Check all unresolved predictions and resolve finished matches
      */
     static async checkPredictions() {
@@ -92,7 +119,7 @@ export class PredictionWatcherService {
             // Get all unique match IDs that have unresolved predictions.
             const [unresolvedPredictions, unresolvedCompetitions] = await Promise.all([
                 (prisma as any).prediction.findMany({
-                    where: { isCorrect: null },
+                    where: { isCorrect: null, voidedAt: null },
                     select: { apiMatchId: true },
                     distinct: ['apiMatchId'],
                 }),
@@ -153,136 +180,54 @@ export class PredictionWatcherService {
     }
 
     /**
-     * Resolve match status/score. Native 365 game ids never go to API-Football.
+     * Check a single match and settle it when finished. `resolved` is true only
+     * when this call actually settled rows (A11) — a gate reject, a held lock or
+     * an already-settled match does not count.
      */
-    private static async resolveMatchSnapshot(
-        matchId: number,
-    ): Promise<{ status: string; homeScore: number; awayScore: number } | null> {
-        if (isNative365FixtureId(matchId)) {
-            return this.resolve365Snapshot(matchId);
-        }
-
-        try {
-            const data = await footballService.fetchFromApi<any[]>(
-                '/fixtures',
-                { id: matchId },
-                { source: 'job' },
-            );
-            if (data?.length) {
-                const match = data[0];
-                const homeScore = match.goals?.home;
-                const awayScore = match.goals?.away;
-                if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
-                    return null;
-                }
-                return {
-                    status: match.fixture.status.short,
-                    homeScore,
-                    awayScore,
-                };
-            }
-        } catch {
-            // fall through to cache / 365
-        }
-
-        const cached = await prisma.cachedFixture.findUnique({
-            where: { fixtureId: matchId },
-            select: { status: true, fullData: true, homeScore: true, awayScore: true },
-        });
-        if (cached?.status) {
-            const fullData = cached.fullData as { goals?: { home?: number | null; away?: number | null } } | null;
-            const homeScore =
-                cached.homeScore != null ? cached.homeScore : fullData?.goals?.home ?? null;
-            const awayScore =
-                cached.awayScore != null ? cached.awayScore : fullData?.goals?.away ?? null;
-            if (homeScore == null || awayScore == null) return null;
-            return { status: cached.status, homeScore, awayScore };
-        }
-
-        return this.resolve365Snapshot(matchId);
-    }
-
-    private static async resolve365Snapshot(
-        matchId: number,
-    ): Promise<{ status: string; homeScore: number; awayScore: number } | null> {
-        const cached = await prisma.cachedFixture.findUnique({
-            where: { fixtureId: matchId },
-            select: { status: true, fullData: true, homeScore: true, awayScore: true },
-        });
-        if (cached?.status) {
-            const fullData = cached.fullData as { goals?: { home?: number | null; away?: number | null } } | null;
-            const homeScore =
-                cached.homeScore != null ? cached.homeScore : fullData?.goals?.home ?? null;
-            const awayScore =
-                cached.awayScore != null ? cached.awayScore : fullData?.goals?.away ?? null;
-            if (homeScore == null || awayScore == null || homeScore < 0 || awayScore < 0) {
-                return null;
-            }
-            return { status: cached.status, homeScore, awayScore };
-        }
-
-        try {
-            const { fetchScores365GameById } = await import('./scores365-experiment.service');
-            const game = await fetchScores365GameById(matchId, { language: 'en' });
-            if (game) {
-                const statusGroup = game.statusGroup;
-                // statusGroup=4 with score=-1 is upstream lag — do not invent FT 0-0.
-                const homeScore = game.homeCompetitor?.score;
-                const awayScore = game.awayCompetitor?.score;
-                if (
-                    typeof homeScore !== 'number' ||
-                    typeof awayScore !== 'number' ||
-                    homeScore < 0 ||
-                    awayScore < 0
-                ) {
-                    return null;
-                }
-                const status =
-                    statusGroup === 4 ? 'FT' : statusGroup === 3 ? 'LIVE' : 'NS';
-                return { status, homeScore, awayScore };
-            }
-        } catch {
-            // ignore
-        }
-
-        return null;
-    }
-
-    /**
-     * Check a single match and resolve predictions if finished
-     * Returns true if predictions were resolved
-     */
-    private static async checkAndResolveMatch(
+    static async checkAndResolveMatch(
         matchId: number,
     ): Promise<{ resolved: boolean; staleOnly: boolean }> {
         const notResolved = { resolved: false, staleOnly: false };
         try {
-            const snapshot = await this.resolveMatchSnapshot(matchId);
+            // Same snapshot source + 365 classifier the settler uses (A2).
+            const fetchedAt = Date.now();
+            const snapshot = await loadAuthoritativeSettlementFixture(matchId);
 
-            if (!snapshot) {
+            if (!snapshot?.status) {
                 logger.debug(`Prediction watcher: no fixture data for match ${matchId}`);
                 return notResolved;
             }
 
             const { status, homeScore, awayScore } = snapshot;
+            const prefetched = { snapshot, fetchedAt };
 
-            // Check if match is finished (FT, AET, PEN)
-            if (['FT', 'AET', 'PEN'].includes(status)) {
+            if (FINAL_STATUSES.has(status)) {
                 logger.info(`🏁 Match ${matchId} is finished (${homeScore}-${awayScore}), resolving predictions...`);
 
-                // King settlement re-loads the fixture under its own lock+gate.
                 const settle = await PredictionResolverService.resolveMatchPredictions(matchId, {
                     source: 'prediction-watcher',
+                    prefetched,
                 });
-                await CompetitionResolverService.resolveMatchCompetitions(matchId, homeScore, awayScore, status);
-                return { resolved: true, staleOnly: settle.staleOnly };
-            } else {
-                // A postponed/abandoned match will never produce a result, so any
-                // Predict & Win competition riding on it is closed out instead of
-                // being left open forever.
-                await CompetitionResolverService.cancelForAbandonedMatch(matchId, status);
-                logger.debug(`⏳ Match ${matchId} status: ${status} - not finished yet`);
+                if (isScore(homeScore) && isScore(awayScore)) {
+                    await CompetitionResolverService.resolveMatchCompetitions(matchId, homeScore, awayScore, status);
+                }
+                const resolved = settle.outcome === 'SETTLE_COMPLETE' && settle.settled > 0;
+                return { resolved, staleOnly: resolved && settle.staleOnly };
             }
+
+            if (VOID_STATUSES.has(status)) {
+                // The settler owns VOID (lease + 48h + flag); the gate rejects and
+                // hands the row set to the void path.
+                await PredictionResolverService.resolveMatchPredictions(matchId, {
+                    source: 'prediction-watcher',
+                    prefetched,
+                });
+            }
+            // A postponed/abandoned match will never produce a result, so any
+            // Predict & Win competition riding on it is closed out instead of
+            // being left open forever.
+            await CompetitionResolverService.cancelForAbandonedMatch(matchId, status);
+            logger.debug(`⏳ Match ${matchId} status: ${status} - not finished yet`);
         } catch (error) {
             logger.error(`Error fetching match ${matchId}:`, error);
         }
@@ -314,27 +259,32 @@ export class PredictionWatcherService {
      */
     static async manualResolve(matchId: number): Promise<{ success: boolean; message: string }> {
         try {
-            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId }, { source: 'job' });
-
-            if (!data || data.length === 0) {
+            const fetchedAt = Date.now();
+            const snapshot = await loadAuthoritativeSettlementFixture(matchId);
+            if (!snapshot?.status) {
                 return { success: false, message: 'Match not found' };
             }
 
-            const match = data[0];
-            const status = match.fixture.status.short;
-            const homeScore = match.goals.home;
-            const awayScore = match.goals.away;
-
-            if (!['FT', 'AET', 'PEN'].includes(status)) {
+            const { status, homeScore, awayScore } = snapshot;
+            if (!FINAL_STATUSES.has(status)) {
                 return { success: false, message: `Match not finished yet (status: ${status})` };
             }
 
             const oldBoard = await this.getTopUserIds(10);
-            await PredictionResolverService.resolveMatchPredictions(matchId, { source: 'manual' });
+            const settle = await PredictionResolverService.resolveMatchPredictions(matchId, {
+                source: 'manual',
+                prefetched: { snapshot, fetchedAt },
+            });
             const newBoard = await this.getTopUserIds(10);
             await this.notifyLeaderboardEntries(oldBoard, newBoard);
 
-            return { success: true, message: `Resolved predictions for match ${matchId} (${homeScore}-${awayScore})` };
+            if (settle.outcome !== 'SETTLE_COMPLETE') {
+                return { success: false, message: `Not settled: ${settle.outcome}` };
+            }
+            return {
+                success: true,
+                message: `Resolved ${settle.settled} predictions for match ${matchId} (${homeScore}-${awayScore})`,
+            };
         } catch (error: any) {
             return { success: false, message: error.message || 'Unknown error' };
         }

@@ -18,7 +18,10 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
     'settledStatus',
     'settledWinner',
     'settledAt',
+    'voidedAt',
+    'canonicalFixtureKey',
   ],
+  settle_leases: ['apiMatchId', 'owner', 'expiresAt'],
 };
 
 export type AppliedMigrationRow = {

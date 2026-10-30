@@ -1222,11 +1222,14 @@ async function startServer() {
     }
 }
 
+/** In-flight settles get this long to stop at a row boundary; Railway drainingSeconds must exceed it. */
+const SETTLE_DRAIN_MS = 20_000;
+
 process.on('SIGINT', async () => {
     logger.info('\n👋 Shutting down gracefully...');
     WebSocketService.shutdown();
     MatchWatcherService.stop();
-    PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
     FollowedTeamWatcherService.stop(); // ✅ Stop followed-team watcher
     try {
@@ -1253,7 +1256,7 @@ process.on('SIGTERM', async () => {
     logger.info('\n👋 Shutting down gracefully...');
     WebSocketService.shutdown();
     MatchWatcherService.stop();
-    PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);
     LeagueMatchWatcherService.stop();
     FollowedTeamWatcherService.stop(); // ✅ Stop followed-team watcher
     try {

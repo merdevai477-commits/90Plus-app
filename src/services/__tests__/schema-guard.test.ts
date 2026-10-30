@@ -94,7 +94,7 @@ describe('checkSchemaAtBoot', () => {
     const s = await checkSchemaAtBoot();
     expect(s.checked).toBe(true);
     expect(s.ok).toBe(false);
-    expect(s.missingColumns.length).toBe(REQUIRED_COLUMNS.predictions.length);
+    expect(s.missingColumns.length).toBe(Object.values(REQUIRED_COLUMNS).flat().length);
     expect(getSchemaStatus().ok).toBe(false);
   });
 
