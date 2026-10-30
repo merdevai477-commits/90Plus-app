@@ -24,11 +24,13 @@ import {
   TrendingUp,
   Play,
   ChevronRight,
+  MessageCircle,
 } from 'lucide-react-native';
 import { useFadeIn, useSlideIn } from '../Matches/Animations';
 import { useHapticFeedback } from '../Matches/HapticFeedback';
 import { useAuth } from '@clerk/clerk-expo';
 import { AuthService, SearchUserResult, ReelsService } from '../../src/services/authService';
+import { communityApi } from '../../services/community.api';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -59,14 +61,15 @@ const MAX_RECENT_SEARCHES = 10;
 
 export interface SearchResult {
   id: string;
-  type: 'profile' | 'reel' | 'hashtag';
+  type: 'profile' | 'reel' | 'hashtag' | 'post';
   title: string;
   subtitle: string;
   image?: string;
   data: any;
 }
 
-type SearchTab = 'all' | 'users' | 'reels' | 'hashtags';
+type SearchTab = 'all' | 'users' | 'reels' | 'posts' | 'hashtags';
+type SearchVariant = 'default' | 'community';
 
 interface AdvancedSearchBarProps {
   onResultSelect: (result: SearchResult) => void;
@@ -74,21 +77,31 @@ interface AdvancedSearchBarProps {
   visible: boolean;
   /** Opens on this tab when the modal becomes visible (default: all). */
   initialTab?: SearchTab;
+  /**
+   * `community` (Rank): users + community posts + post hashtags.
+   * `default`: users + reels + reel hashtags.
+   */
+  variant?: SearchVariant;
 }
+
+const emptyResults = () => ({
+  users: [] as SearchResult[],
+  reels: [] as SearchResult[],
+  posts: [] as SearchResult[],
+  hashtags: [] as SearchResult[],
+});
 
 const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   onResultSelect,
   onClose,
   visible,
   initialTab = 'all',
+  variant = 'default',
 }) => {
+  const isCommunity = variant === 'community';
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<SearchTab>(initialTab);
-  const [searchResults, setSearchResults] = useState<{
-    users: SearchResult[];
-    reels: SearchResult[];
-    hashtags: SearchResult[];
-  }>({ users: [], reels: [], hashtags: [] });
+  const [searchResults, setSearchResults] = useState(emptyResults);
   const [isSearching, setIsSearching] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
@@ -131,15 +144,22 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
     }
   }, []);
 
-  // Load trending hashtags
+  // Load trending hashtags (reel vs community depending on variant)
   const loadTrendingHashtags = useCallback(async () => {
     try {
-      const hashtags = await AuthService.getTrendingHashtags();
-      setTrendingHashtags(hashtags);
+      if (isCommunity) {
+        const tags = await communityApi.trending(getToken);
+        setTrendingHashtags(
+          tags.map((t) => ({ id: t.tag, name: t.tag, reelCount: t.count, postsCount: t.count })),
+        );
+      } else {
+        const hashtags = await AuthService.getTrendingHashtags();
+        setTrendingHashtags(hashtags);
+      }
     } catch (error) {
       console.error('Error loading trending hashtags:', error);
     }
-  }, []);
+  }, [getToken, isCommunity]);
 
   // Load recent searches and trending hashtags on mount - FIXED: removed function deps
   const hasLoadedRef = useRef(false);
@@ -167,7 +187,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       hasLoadedRef.current = false;
       // Reset search when closing
       setSearchQuery('');
-      setSearchResults({ users: [], reels: [], hashtags: [] });
+      setSearchResults(emptyResults());
     }
   }, [visible, initialTab]); // Only depend on visible / opening tab
 
@@ -210,12 +230,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
-      setSearchResults({ users: [], reels: [], hashtags: [] });
+      setSearchResults(emptyResults());
       setIsSearching(false);
       return;
     }
 
-    const cacheKey = `${normalizedQuery}_${tab}`;
+    const cacheKey = `${isCommunity ? 'c' : 'd'}_${normalizedQuery}_${tab}`;
     
     // Check cache first
     const cached = searchCache.get(cacheKey);
@@ -234,69 +254,129 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         return;
       }
 
-      // Parallel search based on tab - OPTIMIZED
-      const promises: Promise<any>[] = [];
+      const withTimeout = <T,>(p: Promise<T>, label: string): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timeout`)), SEARCH_TIMEOUT),
+          ),
+        ]);
 
-      if (tab === 'all' || tab === 'users') {
-        promises.push(
-          Promise.race([
-            AuthService.searchUsers(token, query, 10).catch(() => []),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('User search timeout')), SEARCH_TIMEOUT)
-            )
-          ])
-        );
+      let formattedUsers: SearchResult[] = [];
+      let formattedReels: SearchResult[] = [];
+      let formattedPosts: SearchResult[] = [];
+      let formattedHashtags: SearchResult[] = [];
+
+      if (isCommunity) {
+        const needUsers = tab === 'all' || tab === 'users';
+        const needCommunity = tab === 'all' || tab === 'posts' || tab === 'hashtags';
+        const communityType =
+          tab === 'hashtags' ? 'hashtags' : tab === 'posts' ? 'posts' : 'all';
+
+        const [users, communityData] = await Promise.all([
+          needUsers
+            ? withTimeout(AuthService.searchUsers(token, query, 10).catch(() => []), 'User search')
+            : Promise.resolve([]),
+          needCommunity
+            ? withTimeout(
+                communityApi.search(getToken, query, communityType, 10).catch(() => ({
+                  posts: [],
+                  hashtags: [],
+                })),
+                'Community search',
+              )
+            : Promise.resolve({ posts: [], hashtags: [] }),
+        ]);
+
+        formattedUsers = Array.isArray(users)
+          ? users.map((user: SearchUserResult) => ({
+              id: user.id,
+              type: 'profile' as const,
+              title: user.displayName || user.username,
+              subtitle: `@${user.username}${user.favoriteTeam ? ` • ${user.favoriteTeam}` : ''}`,
+              image: user.avatar || undefined,
+              data: user,
+            }))
+          : [];
+
+        formattedPosts = Array.isArray(communityData?.posts)
+          ? communityData.posts.map((post: any) => ({
+              id: post.id,
+              type: 'post' as const,
+              title: (post.content || '').trim() || tSearch.tabPosts,
+              subtitle: `@${post.author?.username || 'user'} • ${(post.likesCount || 0).toLocaleString()}`,
+              image: post.image?.url || post.author?.avatar || undefined,
+              data: post,
+            }))
+          : [];
+
+        formattedHashtags = Array.isArray(communityData?.hashtags)
+          ? communityData.hashtags.map((hashtag: any) => ({
+              id: hashtag.id,
+              type: 'hashtag' as const,
+              title: `#${hashtag.name}`,
+              subtitle: `${(hashtag.postsCount || 0).toLocaleString()} ${tSearch.postsCountLabel}`,
+              data: { ...hashtag, scope: 'community' },
+            }))
+          : [];
       } else {
-        promises.push(Promise.resolve([]));
-      }
-
-      if (tab === 'all' || tab === 'reels' || tab === 'hashtags') {
+        const needUsers = tab === 'all' || tab === 'users';
+        const needReels = tab === 'all' || tab === 'reels' || tab === 'hashtags';
         const searchType = tab === 'hashtags' ? 'hashtags' : tab === 'reels' ? 'reels' : 'all';
-        promises.push(
-          Promise.race([
-            ReelsService.searchReels(token, query, 10, searchType).catch(() => ({ reels: [], hashtags: [] })),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Reels search timeout')), SEARCH_TIMEOUT)
-            )
-          ])
-        );
-      } else {
-        promises.push(Promise.resolve({ reels: [], hashtags: [] }));
+
+        const [users, reelsData] = await Promise.all([
+          needUsers
+            ? withTimeout(AuthService.searchUsers(token, query, 10).catch(() => []), 'User search')
+            : Promise.resolve([]),
+          needReels
+            ? withTimeout(
+                ReelsService.searchReels(token, query, 10, searchType).catch(() => ({
+                  reels: [],
+                  hashtags: [],
+                })),
+                'Reels search',
+              )
+            : Promise.resolve({ reels: [], hashtags: [] }),
+        ]);
+
+        formattedUsers = Array.isArray(users)
+          ? users.map((user: SearchUserResult) => ({
+              id: user.id,
+              type: 'profile' as const,
+              title: user.displayName || user.username,
+              subtitle: `@${user.username}${user.favoriteTeam ? ` • ${user.favoriteTeam}` : ''}`,
+              image: user.avatar || undefined,
+              data: user,
+            }))
+          : [];
+
+        formattedReels = Array.isArray(reelsData?.reels)
+          ? reelsData.reels.map((reel: any) => ({
+              id: reel.id,
+              type: 'reel' as const,
+              title: reel.caption || 'Video',
+              subtitle: `@${reel.user?.username || 'user'} • ${(reel.views || 0).toLocaleString()} views`,
+              image: reel.thumbnail,
+              data: reel,
+            }))
+          : [];
+
+        formattedHashtags = Array.isArray(reelsData?.hashtags)
+          ? reelsData.hashtags.map((hashtag: any) => ({
+              id: hashtag.id,
+              type: 'hashtag' as const,
+              title: `#${hashtag.name}`,
+              subtitle: `${(hashtag.reelCount || 0).toLocaleString()} videos`,
+              data: { ...hashtag, scope: 'reels' },
+            }))
+          : [];
       }
-
-      const [users, reelsData] = await Promise.all(promises);
-
-      // Format results with null safety - FIXED: ensure arrays are always defined
-      const formattedUsers: SearchResult[] = Array.isArray(users) ? users.map((user: SearchUserResult) => ({
-            id: user.id,
-            type: 'profile',
-            title: user.displayName || user.username,
-            subtitle: `@${user.username}${user.favoriteTeam ? ` • ${user.favoriteTeam}` : ''}`,
-            image: user.avatar || undefined,
-            data: user
-      })) : [];
-
-      const formattedReels: SearchResult[] = Array.isArray(reelsData?.reels) ? reelsData.reels.map((reel: any) => ({
-        id: reel.id,
-        type: 'reel',
-        title: reel.caption || 'Video',
-        subtitle: `@${reel.user?.username || 'user'} • ${(reel.views || 0).toLocaleString()} views`,
-        image: reel.thumbnail,
-        data: reel
-      })) : [];
-
-      const formattedHashtags: SearchResult[] = Array.isArray(reelsData?.hashtags) ? reelsData.hashtags.map((hashtag: any) => ({
-        id: hashtag.id,
-        type: 'hashtag',
-        title: `#${hashtag.name}`,
-        subtitle: `${(hashtag.reelCount || 0).toLocaleString()} videos`,
-        data: hashtag
-      })) : [];
 
       const results = {
         users: formattedUsers,
         reels: formattedReels,
-        hashtags: formattedHashtags
+        posts: formattedPosts,
+        hashtags: formattedHashtags,
       };
 
       // Cache results
@@ -321,29 +401,29 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         setIsSearching(false);
         
         // Show user-friendly error message
-        if (error.message.includes('timeout') || error.message.includes('network')) {
+        if (error.message?.includes('timeout') || error.message?.includes('network')) {
           // Could add a toast notification here
           console.warn('Search timeout - please check your connection');
         }
       }
     }
-  }, [getToken]); // Removed saveToRecentSearches to prevent loop
+  }, [getToken, isCommunity, tSearch.postsCountLabel, tSearch.tabPosts]);
     
   // Debounced search - OPTIMIZED: faster debounce + immediate cache lookup
   useEffect(() => {
     if (searchQuery.length < 2) {
-      setSearchResults({ users: [], reels: [], hashtags: [] });
+      setSearchResults(emptyResults());
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    const cacheKey = `${normalizedQuery}_${activeTab}`;
+    const cacheKey = `${isCommunity ? 'c' : 'd'}_${normalizedQuery}_${activeTab}`;
     const cached = searchCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
       setSearchResults(cached.results);
-    setIsSearching(false);
+      setIsSearching(false);
       return;
     }
 
@@ -360,7 +440,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         abortControllerRef.current.abort();
       }
     };
-  }, [searchQuery, activeTab]); // Removed performSearch from dependencies
+  }, [searchQuery, activeTab, isCommunity]); // Removed performSearch from dependencies
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);
@@ -393,14 +473,27 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
         pathname: '/(tabs)/reels',
         params: { reelId: result.id }
       });
-    } else if (result.type === 'hashtag') {
+    } else if (result.type === 'post') {
       onClose();
       router.push({
-        pathname: '/(tabs)/reels',
-        params: { hashtag: result.data.name }
+        pathname: '/community/post/[id]',
+        params: { id: result.id },
       });
+    } else if (result.type === 'hashtag') {
+      onClose();
+      if (isCommunity || result.data?.scope === 'community') {
+        router.push({
+          pathname: '/community/tag/[tag]',
+          params: { tag: result.data.name },
+        });
+      } else {
+        router.push({
+          pathname: '/(tabs)/reels',
+          params: { hashtag: result.data.name },
+        });
+      }
     } else {
-    onResultSelect(result);
+      onResultSelect(result);
     }
   };
 
@@ -412,7 +505,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
   const handleClear = () => {
     setSearchQuery('');
-    setSearchResults({ users: [], reels: [], hashtags: [] });
+    setSearchResults(emptyResults());
     haptic.light();
   };
 
@@ -430,9 +523,18 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const filteredResults = useMemo(() => {
     if (activeTab === 'users') return searchResults.users;
     if (activeTab === 'reels') return searchResults.reels;
+    if (activeTab === 'posts') return searchResults.posts;
     if (activeTab === 'hashtags') return searchResults.hashtags;
+    if (isCommunity) {
+      return [...searchResults.users, ...searchResults.posts, ...searchResults.hashtags];
+    }
     return [...searchResults.users, ...searchResults.reels, ...searchResults.hashtags];
-  }, [activeTab, searchResults]);
+  }, [activeTab, searchResults, isCommunity]);
+
+  const tabs = useMemo<SearchTab[]>(
+    () => (isCommunity ? ['all', 'users', 'posts', 'hashtags'] : ['all', 'users', 'reels', 'hashtags']),
+    [isCommunity],
+  );
 
   const hasResults = filteredResults.length > 0;
   const showSuggestions = searchQuery.length > 0 && suggestions.length > 0 && !hasResults && !isSearching;
@@ -445,6 +547,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
     if (tab === 'all') return tSearch.tabAll;
     if (tab === 'users') return tSearch.tabUsers;
     if (tab === 'reels') return tSearch.tabReels;
+    if (tab === 'posts') return tSearch.tabPosts;
     return tSearch.tabHashtags;
   };
 
@@ -485,7 +588,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                   style={styles.searchInput}
                   value={searchQuery}
                   onChangeText={handleSearch}
-                  placeholder={tSearch.placeholder}
+                  placeholder={isCommunity ? tSearch.placeholderCommunity : tSearch.placeholder}
                   placeholderTextColor="#666"
                   autoFocus
                   autoCorrect={false}
@@ -508,7 +611,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
           {searchQuery.length > 0 && (
             <View style={styles.tabsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-                {(['all', 'users', 'reels', 'hashtags'] as SearchTab[]).map((tab) => (
+                {tabs.map((tab) => (
                   <TouchableOpacity
                     key={tab}
                     style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -614,6 +717,30 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                         </View>
                         <Play size={18} color={PURPLE_PRIMARY} />
                       </View>
+                    ) : item.type === 'post' ? (
+                      <View style={styles.reelResult}>
+                        {item.image ? (
+                          <Image
+                            source={{ uri: item.image }}
+                            style={styles.reelThumbnail}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                          />
+                        ) : (
+                          <View style={[styles.reelThumbnail, styles.postIconFallback]}>
+                            <MessageCircle size={18} color={PURPLE_PRIMARY} />
+                          </View>
+                        )}
+                        <View style={styles.reelInfo}>
+                          <Text style={styles.reelTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <Text style={styles.reelSubtitle} numberOfLines={1}>
+                            {item.subtitle}
+                          </Text>
+                        </View>
+                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                      </View>
                     ) : (
                       <View style={styles.hashtagResult}>
                         <View style={styles.hashtagIcon}>
@@ -675,7 +802,9 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                       activeOpacity={0.7}
                     >
                       <Text style={styles.trendingText}>#{hashtag.name}</Text>
-                      <Text style={styles.trendingCount}>{hashtag.reelCount}</Text>
+                      <Text style={styles.trendingCount}>
+                        {hashtag.postsCount ?? hashtag.reelCount}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -855,6 +984,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 10,
     backgroundColor: '#333',
+  },
+  postIconFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(168,85,247,0.18)',
   },
   reelInfo: {
     flex: 1,

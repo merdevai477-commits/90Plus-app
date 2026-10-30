@@ -2036,6 +2036,7 @@ export const ar = {
     a11yProfileCard: 'افتح ملفي الشخصي',
     a11yCoinChip: 'رصيدك من الكوينز',
     a11ySearchUsers: 'بحث عن مستخدمين',
+    a11ySearch: 'بحث عن مستخدمين ومنشورات وهاشتاجات',
 
     // Competition cards
     competitionNames: {
@@ -3345,11 +3346,14 @@ export const ar = {
 
   searchModal: {
     placeholder: 'ابحث عن لاعبين، فيديوهات، هاشتاجات...',
+    placeholderCommunity: 'ابحث عن مستخدمين، منشورات، هاشتاجات...',
     searching: 'جاري البحث...',
     tabAll: 'الكل',
     tabUsers: 'لاعبون',
     tabReels: 'ريلز',
+    tabPosts: 'منشورات',
     tabHashtags: 'هاشتاج',
+    postsCountLabel: 'منشور',
     noResults: 'لا توجد نتائج',
     recentSearches: 'عمليات البحث الأخيرة',
     trending: 'رائج الآن',

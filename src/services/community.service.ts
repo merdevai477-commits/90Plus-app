@@ -542,6 +542,89 @@ export async function getTrendingHashtags(): Promise<{ tag: string; count: numbe
     return result;
 }
 
+export interface CommunityHashtagSearchDto {
+    id: string;
+    name: string;
+    postsCount: number;
+}
+
+export async function searchCommunity(
+    viewerId: string,
+    qRaw: string,
+    type: 'all' | 'posts' | 'hashtags' = 'all',
+    limit = 10,
+): Promise<{ posts: CommunityPostDto[]; hashtags: CommunityHashtagSearchDto[] }> {
+    const q = qRaw.replace(/^#/, '').trim();
+    const take = Math.min(Math.max(limit, 1), 20);
+    if (q.length < 2) return { posts: [], hashtags: [] };
+
+    const blocked = await blockedPairIds(viewerId);
+    const blockedList = [...blocked];
+    const tagQ = q.toLowerCase();
+    const out: { posts: CommunityPostDto[]; hashtags: CommunityHashtagSearchDto[] } = { posts: [], hashtags: [] };
+
+    if (type === 'all' || type === 'posts') {
+        const rows = await prisma.communityPost.findMany({
+            where: {
+                status: 'ACTIVE',
+                ...(blockedList.length ? { userId: { notIn: blockedList } } : {}),
+                OR: [
+                    { content: { contains: q, mode: 'insensitive' } },
+                    {
+                        hashtags: {
+                            some: {
+                                hashtag: { name: { contains: tagQ, mode: 'insensitive' } },
+                            },
+                        },
+                    },
+                    {
+                        user: {
+                            OR: [
+                                { username: { contains: q, mode: 'insensitive' } },
+                                { displayName: { contains: q, mode: 'insensitive' } },
+                            ],
+                        },
+                    },
+                ],
+            },
+            take,
+            orderBy: [{ likesCount: 'desc' }, { createdAt: 'desc' }],
+            select: postSelect,
+        });
+        const ids = rows.map((r) => r.id);
+        const [liked, following, pollVotes] = await Promise.all([
+            likedPostIds(viewerId, ids),
+            followingAuthorIds(viewerId, rows.map((r) => r.userId)),
+            myPollVotes(viewerId, ids),
+        ]);
+        out.posts = rows.map((r) => toPostDto(r, viewerId, liked, following, pollVotes));
+    }
+
+    if (type === 'all' || type === 'hashtags') {
+        const tags = await prisma.hashtag.findMany({
+            where: {
+                name: { contains: tagQ, mode: 'insensitive' },
+                communityPosts: { some: { post: { status: 'ACTIVE' } } },
+            },
+            take: 10,
+            select: {
+                id: true,
+                name: true,
+                _count: {
+                    select: {
+                        communityPosts: { where: { post: { status: 'ACTIVE' } } },
+                    },
+                },
+            },
+        });
+        out.hashtags = tags
+            .map((t) => ({ id: t.id, name: t.name, postsCount: t._count.communityPosts }))
+            .sort((a, b) => b.postsCount - a.postsCount);
+    }
+
+    return out;
+}
+
 export async function getPost(viewerId: string, postId: string): Promise<CommunityPostDto> {
     const row = await prisma.communityPost.findFirst({
         where: { id: postId, status: 'ACTIVE' },

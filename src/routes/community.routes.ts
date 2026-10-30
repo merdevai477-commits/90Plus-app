@@ -59,6 +59,19 @@ router.get('/feed/peek', requireAuth, lenientLimiter, handle((_req, _res, actor)
 router.get('/trending', requireAuth, lenientLimiter, handle(() => community.getTrendingHashtags()));
 
 router.get(
+    '/search',
+    requireAuth,
+    lenientLimiter,
+    handle((req, _res, actor) => {
+        const q = String(req.query.q ?? '').slice(0, 80);
+        const typeRaw = String(req.query.type ?? 'all');
+        const type = typeRaw === 'posts' || typeRaw === 'hashtags' ? typeRaw : 'all';
+        const limit = Math.min(parseInt(String(req.query.limit ?? '10'), 10) || 10, 20);
+        return community.searchCommunity(actor.id, q, type, limit);
+    }),
+);
+
+router.get(
     '/hashtags/:tag/posts',
     requireAuth,
     lenientLimiter,

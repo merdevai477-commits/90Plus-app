@@ -133,6 +133,17 @@ export const communityApi = {
 
   trending: (getToken: GetTokenFn) => request<{ tag: string; count: number }[]>(getToken, '/trending'),
 
+  search: (
+    getToken: GetTokenFn,
+    q: string,
+    type: 'all' | 'posts' | 'hashtags' = 'all',
+    limit = 10,
+  ) =>
+    request<{
+      posts: CommunityPost[];
+      hashtags: { id: string; name: string; postsCount: number }[];
+    }>(getToken, `/search${qs({ q, type, limit: String(limit) })}`),
+
   hashtagPosts: (getToken: GetTokenFn, tag: string, cursor?: string | null) =>
     request<CommunityPage<CommunityPost> & { tag: string; postsCount: number }>(
       getToken,

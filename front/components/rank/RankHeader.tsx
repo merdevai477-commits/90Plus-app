@@ -2,8 +2,8 @@
  * RankHeader
  *
  * Floating header for the Rank tab. Centered brand pill matches Matches /
- * Predict & Win (90 + purple PLUS chip + screen title). Search (users) on the
- * leading edge; live coin balance on the trailing edge.
+ * Predict & Win (90 + purple PLUS chip + screen title). Search (users, posts,
+ * hashtags) on the leading edge; live coin balance on the trailing edge.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -47,7 +47,7 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
           style={s.searchBtn}
           onPress={() => setShowUserSearch(true)}
           accessibilityRole="button"
-          accessibilityLabel={t.rank.a11ySearchUsers}
+          accessibilityLabel={t.rank.a11ySearch}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Search size={20} color="#e9d5ff" />
@@ -114,7 +114,8 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
       <AdvancedSearchBar
         visible={showUserSearch}
         onClose={() => setShowUserSearch(false)}
-        initialTab="users"
+        variant="community"
+        initialTab="all"
         onResultSelect={() => setShowUserSearch(false)}
       />
     </>

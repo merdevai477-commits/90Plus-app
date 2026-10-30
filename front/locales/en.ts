@@ -2081,6 +2081,7 @@ export const en = {
     a11yProfileCard: 'Open my profile',
     a11yCoinChip: 'Your coin balance',
     a11ySearchUsers: 'Search users',
+    a11ySearch: 'Search users, posts, and hashtags',
 
     // Competition cards
     competitionNames: {
@@ -3427,11 +3428,14 @@ export const en = {
 
   searchModal: {
     placeholder: 'Search players, videos, hashtags...',
+    placeholderCommunity: 'Search users, posts, hashtags...',
     searching: 'Searching...',
     tabAll: 'All',
     tabUsers: 'Users',
     tabReels: 'Reels',
+    tabPosts: 'Posts',
     tabHashtags: 'Hashtags',
+    postsCountLabel: 'posts',
     noResults: 'No results found',
     recentSearches: 'Recent searches',
     trending: 'Trending now',
