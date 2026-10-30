@@ -136,6 +136,11 @@ export type PushTemplateKey =
     | 'communityMentionTitle'
     | 'communityMentionPostBody'
     | 'communityMentionCommentBody'
+    | 'communityOfficialPostTitle'
+    | 'communityOfficialPostBody'
+    | 'communityOfficialPostBodyFallback'
+    | 'communityOfficialPollTitle'
+    | 'communityOfficialPollBody'
     | 'communityHiddenTitle'
     | 'communityHiddenBody'
     | 'communityPostDeletedTitle'
@@ -351,6 +356,11 @@ const en: TemplateMap = {
     communityMentionTitle: '📣 You were mentioned',
     communityMentionPostBody: '{user} mentioned you in a post',
     communityMentionCommentBody: '{user} mentioned you in a comment',
+    communityOfficialPostTitle: '📢 New from 90Plus',
+    communityOfficialPostBody: '{content}',
+    communityOfficialPostBodyFallback: 'Open Community to see the latest update',
+    communityOfficialPollTitle: '📊 New poll from 90Plus',
+    communityOfficialPollBody: '{a} vs {b}',
     communityHiddenTitle: 'Content removed',
     communityHiddenBody: 'One of your community posts or comments was hidden for breaking the community guidelines.',
     communityPostDeletedTitle: 'Warning: your post was removed',
@@ -574,6 +584,11 @@ const ar: TemplateMap = {
     communityMentionTitle: '📣 حد عمل لك منشن',
     communityMentionPostBody: '{user} عمل لك منشن في منشور',
     communityMentionCommentBody: '{user} عمل لك منشن في تعليق',
+    communityOfficialPostTitle: '📢 جديد من 90Plus',
+    communityOfficialPostBody: '{content}',
+    communityOfficialPostBodyFallback: 'افتح المجتمع وشوف آخر تحديث',
+    communityOfficialPollTitle: '📊 استطلاع جديد من 90Plus',
+    communityOfficialPollBody: '{a} ضد {b}',
     communityHiddenTitle: 'تم إخفاء محتوى',
     communityHiddenBody: 'تم إخفاء منشور أو تعليق ليك في المجتمع لأنه مخالف لقواعد المجتمع.',
     communityPostDeletedTitle: 'تحذير: تم حذف منشورك',

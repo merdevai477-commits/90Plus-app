@@ -13,7 +13,8 @@ import { logger } from '../utils/logger';
 import { ensureBackendUserId } from '../utils/ensureBackendUser';
 import { redisCacheService } from './redis-cache.service';
 import { r2MediaStorage } from './r2-media-storage.service';
-import { notifyUser } from './notify.service';
+import { notifyUser, notifyUsers } from './notify.service';
+import { NotificationType } from './notification.service';
 import type { PushTemplateKey } from './push-templates.service';
 import {
     checkCommunityText,
@@ -56,6 +57,7 @@ export class CommunityError extends Error {
 
 export interface CommunityActor {
     id: string;
+    clerkUserId: string | null;
     username: string;
     displayName: string | null;
     avatar: string | null;
@@ -66,8 +68,35 @@ export interface CommunityActor {
 const actorCache = new Map<string, { actor: CommunityActor; at: number }>();
 const ACTOR_TTL_MS = 60_000;
 
+/** Built-in app announcement account(s). Override / extend via COMMUNITY_OFFICIAL_CLERK_IDS. */
+const BUILTIN_OFFICIAL_COMMUNITY_CLERK_IDS = ['user_3JC6sq761wD2lubsmIlkE7LzLHx'];
+
+let officialClerkIdsCache: Set<string> | null = null;
+
+function officialCommunityClerkIds(): Set<string> {
+    if (!officialClerkIdsCache) {
+        const fromEnv = (process.env.COMMUNITY_OFFICIAL_CLERK_IDS ?? '')
+            .split(/[,;\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        officialClerkIdsCache = new Set([...BUILTIN_OFFICIAL_COMMUNITY_CLERK_IDS, ...fromEnv]);
+    }
+    return officialClerkIdsCache;
+}
+
+/** Test helper — clears cached official-account set after env changes. */
+export function resetOfficialCommunityClerkIdsCache(): void {
+    officialClerkIdsCache = null;
+}
+
+export function isOfficialCommunityAccount(actor: Pick<CommunityActor, 'clerkUserId'>): boolean {
+    const clerkId = actor.clerkUserId?.trim();
+    return Boolean(clerkId && officialCommunityClerkIds().has(clerkId));
+}
+
 const actorSelect = {
     id: true,
+    clerkUserId: true,
     username: true,
     displayName: true,
     avatar: true,
@@ -86,9 +115,10 @@ export async function resolveActor(clerkUserId: string): Promise<CommunityActor>
     }
     if (!user) throw new CommunityError(404, 'USER_NOT_FOUND', 'User not found');
 
-    actorCache.set(clerkUserId, { actor: user, at: Date.now() });
+    const actor: CommunityActor = { ...user, clerkUserId: user.clerkUserId ?? clerkUserId };
+    actorCache.set(clerkUserId, { actor, at: Date.now() });
     if (actorCache.size > 5000) actorCache.delete(actorCache.keys().next().value as string);
-    return user;
+    return actor;
 }
 
 function assertCanWrite(actor: CommunityActor): void {
@@ -707,6 +737,96 @@ async function notifyCommunity(input: CommunityNotifyInput): Promise<void> {
     }
 }
 
+const OFFICIAL_BROADCAST_PAGE = 500;
+
+/**
+ * Fan-out push + inbox to every user when the app's official community
+ * account publishes a post or poll. Never throws — publish must succeed.
+ */
+async function broadcastOfficialCommunityPost(input: {
+    actor: CommunityActor;
+    postId: string;
+    kind: CommunityPostKindDto;
+    content: string;
+    pollOptionA?: string;
+    pollOptionB?: string;
+}): Promise<void> {
+    const isPoll = input.kind === 'TEAM_POLL';
+    const authorName = input.actor.displayName || input.actor.username || '90Plus';
+    const snippet = snippetOf(input.content);
+    const titleKey: PushTemplateKey = isPoll
+        ? 'communityOfficialPollTitle'
+        : 'communityOfficialPostTitle';
+    const bodyKey: PushTemplateKey = isPoll
+        ? 'communityOfficialPollBody'
+        : snippet
+          ? 'communityOfficialPostBody'
+          : 'communityOfficialPostBodyFallback';
+
+    let cursor: string | undefined;
+    let delivered = 0;
+    let suppressed = 0;
+    let failed = 0;
+    let scanned = 0;
+
+    for (;;) {
+        const page = await prisma.user.findMany({
+            where: { id: { not: input.actor.id } },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+            take: OFFICIAL_BROADCAST_PAGE,
+            ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        });
+        if (!page.length) break;
+        scanned += page.length;
+        cursor = page[page.length - 1]?.id;
+
+        const result = await notifyUsers(
+            page.map((u) => ({
+                userId: u.id,
+                type: NotificationType.GENERAL,
+                titleKey,
+                bodyKey,
+                vars: {
+                    user: authorName,
+                    content: snippet,
+                    a: input.pollOptionA ?? '',
+                    b: input.pollOptionB ?? '',
+                },
+                data: {
+                    kind: 'community',
+                    screen: '/community/post/[id]',
+                    postId: input.postId,
+                    entityId: input.postId,
+                    actorId: input.actor.id,
+                    official: true,
+                },
+                idempotencyKey: `community:official:${input.postId}:${u.id}`,
+                bypassPreferences: true,
+                actor: {
+                    id: input.actor.id,
+                    username: input.actor.username,
+                    displayName: input.actor.displayName,
+                    avatar: input.actor.avatar,
+                },
+            })),
+            { concurrency: 20 },
+        );
+        delivered += result.delivered;
+        suppressed += result.suppressed;
+        failed += result.failed;
+    }
+
+    logger.info('[community] official broadcast complete', {
+        postId: input.postId,
+        kind: input.kind,
+        scanned,
+        delivered,
+        suppressed,
+        failed,
+    });
+}
+
 function fireAndForget(task: () => Promise<unknown>): void {
     setImmediate(() => {
         task().catch((err) => logger.warn('[community] background task failed:', err?.message));
@@ -856,6 +976,19 @@ export async function createPost(
     });
 
     fireAndForget(async () => {
+        if (isOfficialCommunityAccount(actor)) {
+            // Official app account: one announcement push to every user.
+            // Skip per-mention fan-out so recipients are not double-notified.
+            await broadcastOfficialCommunityPost({
+                actor,
+                postId: post.id,
+                kind,
+                content,
+                pollOptionA: kind === 'TEAM_POLL' ? pollOptionA : undefined,
+                pollOptionB: kind === 'TEAM_POLL' ? pollOptionB : undefined,
+            });
+            return;
+        }
         await Promise.all(
             mentioned.map((u) =>
                 notifyCommunity({
