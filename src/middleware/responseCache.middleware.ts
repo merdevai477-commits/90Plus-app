@@ -454,10 +454,14 @@ export function responseCacheMiddleware(options: {
             const isSuccessFlag = body?.success === true;
             // Degraded = fallback payload after an upstream/DB failure; sharing it
             // would serve the outage to every user for the TTL.
+            // Soft-fail markers (e.g. empty 365 stats boards) must not lock
+            // every client onto an empty SUCCESS payload for the full TTL.
+            const isUnavailableMeta = body?._meta?.unavailable === true;
             const shouldCache = res.statusCode >= 200 &&
                 res.statusCode < 300 &&
                 (isStatusSuccess || isSuccessFlag) &&
-                body?.degraded !== true;
+                body?.degraded !== true &&
+                !isUnavailableMeta;
 
             // Cap cache lifetime for empty payloads so a transient backend
             // outage (e.g. API quota exhausted → empty list) doesn't freeze

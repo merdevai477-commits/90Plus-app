@@ -10,19 +10,27 @@ export class TermsService {
    * Get the latest terms of service
    */
   static async getLatestTerms(): Promise<{ version: string; content: string }> {
-    try {
-      // Read terms content from file
-      const termsPath = path.join(__dirname, '../data/terms-of-service-v1.0.md');
-      const content = await fs.readFile(termsPath, 'utf-8');
-
-      return {
-        version: CURRENT_TERMS_VERSION,
-        content,
-      };
-    } catch (error) {
-      logger.error('Error reading terms of service:', error);
-      throw new Error('Failed to load terms of service');
+    const candidates = [
+      // Compiled deploy: dist/src/services → dist/src/data (copied by copy:public)
+      path.join(__dirname, '../data/terms-of-service-v1.0.md'),
+      // Local ts-node / monorepo cwd fallback
+      path.join(process.cwd(), 'src/data/terms-of-service-v1.0.md'),
+      path.join(process.cwd(), 'dist/src/data/terms-of-service-v1.0.md'),
+    ];
+    let lastError: unknown;
+    for (const termsPath of candidates) {
+      try {
+        const content = await fs.readFile(termsPath, 'utf-8');
+        return {
+          version: CURRENT_TERMS_VERSION,
+          content,
+        };
+      } catch (error) {
+        lastError = error;
+      }
     }
+    logger.error('Error reading terms of service:', lastError);
+    throw new Error('Failed to load terms of service');
   }
 
   /**

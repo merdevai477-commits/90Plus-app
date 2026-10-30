@@ -28,6 +28,7 @@ import {
   buildScores365AthletePhotoUrl,
   buildScores365CoachPhotoUrl,
 } from '../utils/scores365-athlete-photo';
+import { normalizeAthletesStatsBoards } from '../utils/scores365-athletes-stats';
 import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
 import {
   competitionIndexRecords,
@@ -799,26 +800,8 @@ interface TransfersPayload {
 
 interface StatsPayload {
   stats?: {
-    athletesStats?: Array<{
-      id: number;
-      name?: string;
-      competitionId?: number;
-      statsTypes?: Array<{ typeId: number; name?: string }>;
-      rows?: Array<{
-        position: number;
-        secondaryStatName?: string;
-        entity?: {
-          id: number;
-          name?: string;
-          shortName?: string;
-          competitorId?: number;
-          positionName?: string;
-          isLeftClub?: boolean;
-          imageVersion?: number;
-        };
-        stats?: Array<{ typeId: number; value: string }>;
-      }>;
-    }>;
+    /** Legacy: board[]; current 365: { tables, filters }. */
+    athletesStats?: unknown;
   };
 }
 
@@ -2583,7 +2566,7 @@ export class ThreeSixFiveScoresService {
     competitionId: number,
     opts: { maxBoards: number; maxRows: number },
   ): ThreeSixFiveCompetitorStats | null {
-    const boards = payload?.stats?.athletesStats ?? [];
+    const boards = normalizeAthletesStatsBoards(payload?.stats?.athletesStats);
     if (!boards.length) return null;
     const leaderboards: ThreeSixFiveStatLeaderboard[] = boards
       .slice(0, opts.maxBoards)

@@ -46,3 +46,19 @@ for (const entry of fs.readdirSync(webDist)) {
   copyRecursive(path.join(webDist, entry), path.join(dest, entry));
 }
 console.log('✅ Website (web/dist) overlaid onto dist/public');
+
+// tsc does not copy non-TS assets; TermsService reads
+// dist/src/data/terms-of-service-v1.0.md at runtime (see GET /api/terms/latest).
+const dataSrc = path.join(root, 'src', 'data');
+const dataDest = path.join(root, 'dist', 'src', 'data');
+if (fs.existsSync(dataSrc)) {
+  fs.mkdirSync(dataDest, { recursive: true });
+  for (const entry of fs.readdirSync(dataSrc)) {
+    const from = path.join(dataSrc, entry);
+    if (!fs.statSync(from).isFile()) continue;
+    fs.copyFileSync(from, path.join(dataDest, entry));
+  }
+  console.log('✅ src/data assets copied to dist/src/data');
+} else {
+  console.log('⚠️ src/data folder not found, skipping copy');
+}

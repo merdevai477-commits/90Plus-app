@@ -164,4 +164,21 @@ describe('responseCacheMiddleware', () => {
     await middleware(makeReq(path), makeRes(), next);
     expect(next).toHaveBeenCalled();
   });
+
+  it('does not cache unavailable soft-fails (empty 365 stats boards)', async () => {
+    const middleware = responseCacheMiddleware({ ttl: 5 * 60_000, sharedCache: true });
+    const path = '/api/football/cached/365/competition/7/stats';
+    const first = makeRes();
+    await middleware(makeReq(path), first, jest.fn());
+    (first as any).json({
+      status: 'SUCCESS',
+      response: { competitionId: 7, leaderboards: [] },
+      _meta: { competitionId: 7, unavailable: true },
+    });
+    expect(first.headers['x-cache']).toBe('SKIP');
+
+    const next = jest.fn();
+    await middleware(makeReq(path), makeRes(), next);
+    expect(next).toHaveBeenCalled();
+  });
 });
