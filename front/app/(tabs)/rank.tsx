@@ -13,6 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Crown, Gift, Handshake, Share2, Target, Trophy, Zap } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Dimensions,
   ImageSourcePropType,
   RefreshControl,
   ScrollView,
@@ -40,6 +41,12 @@ import { useLanguageStore } from '../../src/i18n/store';
 import { useScreenFont, useAppFont } from '../../utils/fontSetup';
 
 const ACCENT = '#A855F7';
+/** Figma iPhone 14 Plus frame: hero art node 998:2475 is 448×415, full-bleed cover. */
+const FIGMA_FRAME_W = 448;
+const FIGMA_HERO_H = 415;
+const HERO_IMG_H = Math.round(
+  Dimensions.get('window').width * (FIGMA_HERO_H / FIGMA_FRAME_W),
+);
 
 export default function RankScreen() {
   useScreenFont();
@@ -177,17 +184,20 @@ export default function RankScreen() {
           <Image
             source={require('../../assets/images/90Plus world cup.jpg')}
             style={s.heroBgTrophy}
-            contentFit="contain"
+            contentFit="cover"
+            contentPosition="left center"
             cachePolicy="memory-disk"
           />
+          {/* Figma: linear-gradient(71deg, transparent 6.8%, black 0.64 at 56.9%) */}
           <LinearGradient
-            colors={['#030008', '#030008', 'rgba(3,0,8,0.0)', 'transparent']}
-            style={s.heroBgGradLeft}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.64)']}
+            locations={[0.068, 0.569]}
+            style={s.heroBgGradDiag}
+            start={{ x: 0.1, y: 1 }}
+            end={{ x: 0.9, y: 0 }}
           />
           <LinearGradient
-            colors={['transparent', 'rgba(10,6,18,0.55)', '#0A0612']}
+            colors={['transparent', 'rgba(3,3,3,0.55)', APP_BG]}
             style={s.heroBgGradBottom}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
@@ -195,6 +205,7 @@ export default function RankScreen() {
 
           <View style={s.heroText}>
             <View style={s.titleRow}>
+              {/* Icon first so RTL row renders [title][icon] on the trailing edge like Figma. */}
               <View style={s.trophyIconBox}>
                 <Trophy size={20} color="#fff" />
               </View>
@@ -233,54 +244,78 @@ export default function RankScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: APP_BG },
 
-  heroBlock: { overflow: 'hidden', paddingBottom: 20 },
+  heroBlock: {
+    overflow: 'hidden',
+    paddingBottom: 8,
+    // Pull art up under the floating header like Figma (image y=0).
+    marginTop: -28,
+  },
   heroBgTrophy: {
     position: 'absolute',
     top: 0,
-    end: 0,
-    width: '90%',
-    height: '100%',
-    opacity: 0.95,
+    left: 0,
+    right: 0,
+    width: '100%',
+    height: HERO_IMG_H,
   },
-  heroBgGradLeft: {
+  heroBgGradDiag: {
     position: 'absolute',
     top: 0,
-    start: 0,
-    bottom: 0,
-    width: '62%',
+    left: 0,
+    right: 0,
+    height: HERO_IMG_H,
   },
   heroBgGradBottom: {
     position: 'absolute',
-    bottom: 0,
-    start: 0,
-    end: 0,
-    height: 100,
+    top: HERO_IMG_H - 110,
+    left: 0,
+    right: 0,
+    height: 110,
   },
-  heroText: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12, zIndex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  // Figma title sits ~185/415 down the hero art.
+  heroText: {
+    paddingHorizontal: 16,
+    paddingTop: Math.round(HERO_IMG_H * 0.36),
+    paddingBottom: 12,
+    zIndex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
   trophyIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(39, 8, 94, 0.5)',
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: 'rgba(86, 12, 157, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.4)',
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.8,
+    borderColor: '#5f4292',
+    shadowColor: '#713BEE',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.75,
     shadowRadius: 10,
     elevation: 8,
   },
-  pageTitle: { color: '#fff', fontSize: 34, fontWeight: '900' },
+  pageTitle: { color: '#fff', fontSize: 34, fontWeight: '900', textAlign: 'right' },
   pageSub1: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 16,
+    color: '#d4d4d4',
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'right',
+    width: '100%',
   },
-  pageSub2: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
+  pageSub2: {
+    color: '#a49bad',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'right',
+    width: '100%',
+  },
 
   compGrid: {
     paddingHorizontal: COMP_GRID_PADDING,
