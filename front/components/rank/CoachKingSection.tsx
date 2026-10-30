@@ -38,8 +38,8 @@ interface Props {
 
 /**
  * Rank landing for King of Coaches:
- *  1. Coach of the Week card — Figma 1550:6500 (badge 1552:6543, CTA 1551:6521)
- *  2. Jersey / ملك المدربين promo card with the full-width start CTA inside
+ *  1. Coach of the Week card — header + hero only (no CTA)
+ *  2. Jersey / ملك المدربين card — art + the single full-width start CTA inside
  */
 export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) {
   const { width } = useWindowDimensions();
@@ -109,25 +109,6 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
             accessibilityLabel={copy.weekTitle}
           />
         </View>
-
-        <Pressable
-          onPress={onStart}
-          disabled={!onStart}
-          accessibilityRole="button"
-          accessibilityLabel={copy.start}
-          testID="coach-week-start"
-          style={({ pressed }) => [s.weekCtaHit, pressed && { opacity: 0.92 }]}
-        >
-          <LinearGradient
-            colors={['#8B5CF6', '#2E146A']}
-            locations={[0, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={s.weekCta}
-          >
-            <Text style={[s.weekCtaTxt, { fontFamily: fonts.semibold }]}>{copy.start}</Text>
-          </LinearGradient>
-        </Pressable>
       </View>
 
       <View
@@ -137,7 +118,7 @@ export default function CoachKingSection({ isAr, fonts, copy, onStart }: Props) 
       >
         <Image
           source={PROMO}
-          style={[s.promoArt, { aspectRatio: PROMO_RATIO }]}
+          style={[s.promoArt, { borderTopLeftRadius: bannerRadius, borderTopRightRadius: bannerRadius }]}
           contentFit="cover"
           cachePolicy="memory-disk"
           transition={120}
@@ -240,34 +221,18 @@ const s = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  weekCtaHit: {
-    width: '100%',
-  },
-  weekCta: {
-    width: '100%',
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 23,
-  },
-  weekCtaTxt: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   promoCard: {
     width: '100%',
     overflow: 'hidden',
-    backgroundColor: 'rgba(46,6,165,0.18)',
+    backgroundColor: 'rgba(46,6,165,0.22)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(139,92,246,0.35)',
+    borderColor: 'rgba(139,92,246,0.4)',
     paddingBottom: 14,
     gap: 12,
   },
   promoArt: {
     width: '100%',
+    aspectRatio: PROMO_RATIO,
   },
   ctaHit: {
     width: '100%',
