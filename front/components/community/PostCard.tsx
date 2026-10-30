@@ -53,6 +53,8 @@ interface Props extends PostCardHandlers {
   seeMore: string;
   seeLess: string;
   labels: PostCardLabels;
+  /** expo-image priority — keep high only for near-viewport cards. */
+  imagePriority?: 'low' | 'normal' | 'high';
 }
 
 /** Figma ratio: 216px tall image in a 368px wide card body. */
@@ -90,11 +92,13 @@ function PostImage({
   width,
   onOpen,
   onDoubleTap,
+  priority = 'normal',
 }: {
   post: CommunityPost;
   width: number;
   onOpen: () => void;
   onDoubleTap: () => void;
+  priority?: 'low' | 'normal' | 'high';
 }) {
   const heart = useSharedValue(0);
   const height = Math.round(width * IMAGE_ASPECT);
@@ -134,10 +138,11 @@ function PostImage({
           placeholderContentFit="cover"
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          transition={180}
+          transition={120}
           cachePolicy="memory-disk"
           recyclingKey={post.id}
-          priority="high"
+          priority={priority}
+          allowDownscaling
         />
         <Animated.View pointerEvents="none" style={[styles.burst, heartStyle]}>
           <Image source={CI.heartFilled} tintColor="#FFFFFF" style={{ width: 92, height: 92 }} contentFit="contain" />
@@ -264,6 +269,7 @@ function PostCardBase({
   seeMore,
   seeLess,
   labels,
+  imagePriority = 'normal',
   onLike,
   onDoubleTapLike,
   onComment,
@@ -334,7 +340,13 @@ function PostCardBase({
             {post.kind === 'TEAM_POLL' && <PollOptions post={post} isAr={isAr} fonts={fonts} onVote={onVote} />}
           </View>
         )}
-        <PostImage post={post} width={contentWidth} onOpen={() => onOpenImage(post)} onDoubleTap={() => onDoubleTapLike(post)} />
+        <PostImage
+          post={post}
+          width={contentWidth}
+          priority={imagePriority}
+          onOpen={() => onOpenImage(post)}
+          onDoubleTap={() => onDoubleTapLike(post)}
+        />
       </View>
 
       <View style={[styles.actions, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
@@ -386,7 +398,8 @@ export const PostCard = memo(
     a.isAr === b.isAr &&
     a.timeLabel === b.timeLabel &&
     a.fonts === b.fonts &&
-    a.labels === b.labels,
+    a.labels === b.labels &&
+    a.imagePriority === b.imagePriority,
 );
 
 export const postCardStyles = StyleSheet.create({

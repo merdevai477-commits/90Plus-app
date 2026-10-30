@@ -1,9 +1,12 @@
 import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useAuth } from '@clerk/clerk-expo';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from '@/src/i18n';
+import { prefetchCommunityFeed } from '@/hooks/community/useCommunityFeed';
 import { prefetchRoute, prefetchRoutes } from '@/utils/routePrefetcher';
 
 import {
@@ -114,6 +117,9 @@ const BottomNav = memo(function BottomNav() {
     [activeIndex, pathname, router],
   );
 
+  const qc = useQueryClient();
+  const { getToken, isSignedIn } = useAuth();
+
   const handleTabPressIn = useCallback(
     (index: number) => {
       if (index === activeIndex) return;
@@ -125,8 +131,11 @@ const BottomNav = memo(function BottomNav() {
         .filter(Boolean)
         .map((t) => String(t!.route));
       if (adjacent.length > 0) prefetchRoutes(adjacent).catch(() => {});
+      if (tab.id === 'community' && isSignedIn) {
+        void prefetchCommunityFeed(qc, getToken);
+      }
     },
-    [activeIndex],
+    [activeIndex, getToken, isSignedIn, qc],
   );
 
   const { t } = useTranslation();

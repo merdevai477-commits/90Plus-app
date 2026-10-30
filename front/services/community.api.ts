@@ -127,6 +127,10 @@ export const communityApi = {
   feed: (getToken: GetTokenFn, cursor?: string | null) =>
     request<CommunityPage<CommunityPost>>(getToken, `/feed${qs({ cursor })}`),
 
+  /** Lightweight head check — id + createdAt only (for the "new posts" pill). */
+  feedPeek: (getToken: GetTokenFn) =>
+    request<{ id: string; createdAt: string; isMine: boolean } | null>(getToken, '/feed/peek'),
+
   trending: (getToken: GetTokenFn) => request<{ tag: string; count: number }[]>(getToken, '/trending'),
 
   hashtagPosts: (getToken: GetTokenFn, tag: string, cursor?: string | null) =>

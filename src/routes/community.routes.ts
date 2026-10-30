@@ -54,6 +54,8 @@ const param = (req: Request, key: string) => String(req.params[key] ?? '');
 
 router.get('/feed', requireAuth, lenientLimiter, handle((req, _res, actor) => community.getFeed(actor.id, req.query.cursor)));
 
+router.get('/feed/peek', requireAuth, lenientLimiter, handle((_req, _res, actor) => community.peekFeedHead(actor.id)));
+
 router.get('/trending', requireAuth, lenientLimiter, handle(() => community.getTrendingHashtags()));
 
 router.get(

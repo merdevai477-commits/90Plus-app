@@ -366,7 +366,7 @@ async function likedCommentIds(viewerId: string, commentIds: string[]): Promise<
 
 export const FEED_PAGE_SIZE = 15;
 const FIRST_PAGE_CACHE_KEY = 'community:feed:first:v2';
-const FIRST_PAGE_TTL_MS = 20_000;
+const FIRST_PAGE_TTL_MS = 45_000;
 export const POLL_OPTION_MAX_LENGTH = 40;
 
 export interface FeedPage<T> {
@@ -436,6 +436,23 @@ export async function getFeed(viewerId: string, cursor: unknown, limit = FEED_PA
         void redisCacheService.set(FIRST_PAGE_CACHE_KEY, toCache, FIRST_PAGE_TTL_MS).catch(() => undefined);
     }
     return finishPostPage(rows, viewerId, nextCursor);
+}
+
+/** Tiny head check for the "new posts" pill — no viewer hydration, no full DTO. */
+export async function peekFeedHead(
+    viewerId: string,
+): Promise<{ id: string; createdAt: string; isMine: boolean } | null> {
+    const blocked = await blockedPairIds(viewerId);
+    const rows = await prisma.communityPost.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: blocked.size ? 8 : 1,
+        select: { id: true, createdAt: true, userId: true },
+    });
+    const top = rows.find((r) => !blocked.has(r.userId)) ?? null;
+    return top
+        ? { id: top.id, createdAt: top.createdAt.toISOString(), isMine: top.userId === viewerId }
+        : null;
 }
 
 export async function invalidateFeedCache(): Promise<void> {

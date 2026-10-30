@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { communityApi, type CommunityPage, type CommunityPost } from '../../services/community.api';
 import type { GetTokenFn } from '../../utils/clerkAuthToken';
@@ -12,6 +12,18 @@ export function useCommunityToken(): GetTokenFn {
   const ref = useRef(getToken);
   ref.current = getToken;
   return useCallback<GetTokenFn>((opts) => ref.current(opts), []);
+}
+
+/** Warm the first feed page so the community tab opens with data already in cache. */
+export function prefetchCommunityFeed(qc: QueryClient, getToken: GetTokenFn) {
+  return qc.prefetchInfiniteQuery({
+    queryKey: communityKeys.feed,
+    queryFn: ({ pageParam }) => communityApi.feed(getToken, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: CommunityPage<CommunityPost>) => last.nextCursor,
+    pages: 1,
+    staleTime: 30_000,
+  });
 }
 
 type FeedSource =
@@ -76,4 +88,20 @@ export function useTrendingHashtags() {
     enabled: isLoaded === true && isSignedIn === true,
     staleTime: 5 * 60_000,
   });
+}
+
+/** Prefetch feed (+ trending) as soon as the user is signed in — call from community tab / press-in. */
+export function usePrefetchCommunityFeed(enabled = true) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const getToken = useCommunityToken();
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled || isLoaded !== true || isSignedIn !== true) return;
+    void prefetchCommunityFeed(qc, getToken);
+    void qc.prefetchQuery({
+      queryKey: communityKeys.trending,
+      queryFn: () => communityApi.trending(getToken),
+      staleTime: 5 * 60_000,
+    });
+  }, [enabled, getToken, isLoaded, isSignedIn, qc]);
 }

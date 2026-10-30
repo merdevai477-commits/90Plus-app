@@ -10,7 +10,7 @@ import { ComposerCard } from '../../components/community/ComposerCard';
 import { C } from '../../components/community/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
-import { useTrendingHashtags } from '../../hooks/community/useCommunityFeed';
+import { usePrefetchCommunityFeed, useTrendingHashtags } from '../../hooks/community/useCommunityFeed';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 
@@ -54,34 +54,38 @@ export default function CommunityScreen() {
   const isAr = language === 'ar';
   const me = useCommunityMe();
   const headerOffset = useCommunityHeaderOffset();
+  usePrefetchCommunityFeed(true);
   const fonts = useMemo(
     () => ({ regular: getAppFont(400, language), semibold: getAppFont(600, language) }),
     [language],
+  );
+
+  const header = useMemo(
+    () => (
+      <View style={styles.listHeader}>
+        <ComposerCard
+          isAr={isAr}
+          avatar={me.avatar}
+          name={me.displayName || me.username}
+          placeholder={s.composerPlaceholder}
+          writeLabel={s.writePost}
+          photoLabel={s.addPhoto}
+          pollLabel={s.pollType}
+          fonts={fonts}
+          onWrite={() => router.push('/community/compose')}
+          onPhoto={() => router.push({ pathname: '/community/compose', params: { photo: '1' } })}
+          onPoll={() => router.push({ pathname: '/community/compose', params: { poll: '1' } })}
+        />
+        <TrendingChips isAr={isAr} fontFamily={fonts.semibold} label={s.trending} />
+      </View>
+    ),
+    [fonts, isAr, me.avatar, me.displayName, me.username, router, s],
   );
 
   const onBack = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/matches');
   }, [router]);
-
-  const header = (
-    <View style={styles.listHeader}>
-      <ComposerCard
-        isAr={isAr}
-        avatar={me.avatar}
-        name={me.displayName || me.username}
-        placeholder={s.composerPlaceholder}
-        writeLabel={s.writePost}
-        photoLabel={s.addPhoto}
-        pollLabel={s.pollType}
-        fonts={fonts}
-        onWrite={() => router.push('/community/compose')}
-        onPhoto={() => router.push({ pathname: '/community/compose', params: { photo: '1' } })}
-        onPoll={() => router.push({ pathname: '/community/compose', params: { poll: '1' } })}
-      />
-      <TrendingChips isAr={isAr} fontFamily={fonts.semibold} label={s.trending} />
-    </View>
-  );
 
   return (
     <View style={styles.root}>

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -69,16 +70,19 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [sheetPostId, setSheetPostId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 60_000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     onPostsCount?.(feed.postsCount);
   }, [feed.postsCount, onPostsCount]);
+
+  // Warm the first few image URLs so the opening scroll feels instant.
+  useEffect(() => {
+    const urls = feed.posts
+      .slice(0, 5)
+      .map((p) => p.image?.url)
+      .filter((u): u is string => !!u);
+    if (urls.length) void Image.prefetch(urls);
+  }, [feed.posts]);
 
   useFocusEffect(
     useCallback(
@@ -105,16 +109,16 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const newest = feed.posts[0];
   const peek = useQuery({
     queryKey: ['community', 'peek'],
-    queryFn: () => communityApi.feed(getToken, null),
+    queryFn: () => communityApi.feedPeek(getToken),
     enabled: source.kind === 'feed' && !!newest,
     refetchInterval: 45_000,
     refetchIntervalInBackground: false,
     staleTime: 40_000,
   });
   const hasNewPosts = useMemo(() => {
-    const top = peek.data?.items[0];
-    if (!top || !newest || top.id === newest.id) return false;
-    return new Date(top.createdAt).getTime() > new Date(newest.createdAt).getTime() && !top.isMine;
+    const top = peek.data;
+    if (!top || !newest || top.id === newest.id || top.isMine) return false;
+    return new Date(top.createdAt).getTime() > new Date(newest.createdAt).getTime();
   }, [newest, peek.data]);
 
   const showNewPosts = useCallback(async () => {
@@ -159,7 +163,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: Row }) => {
+    ({ item, index }: { item: Row; index: number }) => {
       if (item.type === 'ghost') {
         const p = item.pending;
         const err = p.status === 'failed' ? p.error : null;
@@ -190,6 +194,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
           seeMore={s.seeMore}
           seeLess={s.seeLess}
           labels={postCardLabels}
+          imagePriority={index < 3 ? 'high' : index < 8 ? 'normal' : 'low'}
           onLike={actions.toggleLike}
           onDoubleTapLike={actions.likeOnce}
           onComment={onComment}
@@ -233,11 +238,14 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
 
   const sheetPost = sheetPostId ? (feed.posts.find((p) => p.id === sheetPostId) ?? findPost(qc, sheetPostId) ?? null) : null;
 
-  const listHeader = (
-    <View>
-      {header}
-      {feed.isLoading && <FeedSkeleton isAr={isAr} imageHeight={metrics.imageHeight} />}
-    </View>
+  const listHeader = useMemo(
+    () => (
+      <View>
+        {header}
+        {feed.isLoading && <FeedSkeleton isAr={isAr} imageHeight={metrics.imageHeight} />}
+      </View>
+    ),
+    [feed.isLoading, header, isAr, metrics.imageHeight],
   );
 
   const empty =
@@ -286,7 +294,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
         refreshing={refreshing}
         onRefresh={onRefresh}
         maintainVisibleContentPosition={{ autoscrollToTopThreshold: 120 }}
-        drawDistance={metrics.imageHeight * 4}
+        drawDistance={metrics.imageHeight * 2}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       />
