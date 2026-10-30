@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
-    <title>90Plus · مراجعة الإعلانات</title>
-    <link rel="stylesheet" href="/ass/ass.css" />
+    <title>90Plus · مراجعة المحتوى</title>
+    <link rel="stylesheet" href="/ass/ass.css?v=20261030a" />
   </head>
   <body>
     <div id="login" class="login-wrap">
       <div class="login-card">
         <div class="brand">90Plus</div>
-        <h1>مراجعة الإعلانات</h1>
+        <h1>مراجعة المحتوى</h1>
         <p class="muted">دخول محدود لفريق المراجعة</p>
         <form id="login-form" autocomplete="off">
           <label>
@@ -32,18 +32,33 @@
       <header class="topbar">
         <div>
           <div class="brand sm">90Plus</div>
-          <h1>مراجعة إعلانات المسابقات</h1>
+          <h1>مراجعة الإعلانات والمنشورات</h1>
         </div>
         <button type="button" id="logout" class="ghost">خروج</button>
       </header>
 
       <nav class="tabs" id="tabs">
-        <button type="button" data-tab="DRAFT" class="active">مراجعة</button>
+        <button type="button" data-tab="DRAFT" class="active">مراجعة إعلانات</button>
         <button type="button" data-tab="PUBLISHED">منشور</button>
         <button type="button" data-tab="REJECTED">مرفوض</button>
         <button type="button" data-tab="SETTLED">مكتمل</button>
+        <button type="button" data-tab="posts">منشورات المجتمع</button>
         <button type="button" data-tab="activity">نشاط</button>
       </nav>
+
+      <div id="post-filters" class="post-filters" hidden>
+        <div class="filter-group">
+          <span class="filter-label">ترتيب</span>
+          <button type="button" data-order="newest" class="chip active">الأحدث</button>
+          <button type="button" data-order="oldest" class="chip">الأقدم</button>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">فلتر</span>
+          <button type="button" data-filter="all" class="chip active">الكل</button>
+          <button type="button" data-filter="reported" class="chip">بلاغات</button>
+          <button type="button" data-filter="ai" class="chip">مشكوك AI</button>
+        </div>
+      </div>
 
       <p id="desk-error" class="error banner" hidden></p>
       <section id="cards" class="cards"></section>
@@ -62,6 +77,29 @@
       </div>
     </div>
 
-    <script src="/ass/ass.js?v=20260829b" defer></script>
+    <div id="image-modal" class="modal" hidden>
+      <div class="modal-card image-modal-card">
+        <button type="button" id="image-close" class="ghost image-close" aria-label="إغلاق">إغلاق</button>
+        <img id="image-preview" alt="معاينة المنشور" />
+        <p id="image-caption" class="meta image-caption"></p>
+        <div class="row">
+          <button type="button" id="image-delete" class="danger">حذف المنشور</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="delete-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h2>حذف المنشور</h2>
+        <p class="muted">الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.</p>
+        <textarea id="delete-reason" rows="4" maxlength="500" placeholder="سبب الحذف (اختياري)"></textarea>
+        <div class="row">
+          <button type="button" id="delete-cancel" class="ghost">إلغاء</button>
+          <button type="button" id="delete-confirm" class="danger">تأكيد الحذف</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/ass/ass.js?v=20261030a" defer></script>
   </body>
 </html>

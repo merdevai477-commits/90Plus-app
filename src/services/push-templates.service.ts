@@ -138,6 +138,9 @@ export type PushTemplateKey =
     | 'communityMentionCommentBody'
     | 'communityHiddenTitle'
     | 'communityHiddenBody'
+    | 'communityPostDeletedTitle'
+    | 'communityPostDeletedBody'
+    | 'communityPostDeletedBodyWithReason'
     // Ranking achievements (top-3 medal + team-of-month diamond streak)
     | 'medalGoldName'
     | 'medalSilverName'
@@ -347,6 +350,11 @@ const en: TemplateMap = {
     communityMentionCommentBody: '{user} mentioned you in a comment',
     communityHiddenTitle: 'Content removed',
     communityHiddenBody: 'One of your community posts or comments was hidden for breaking the community guidelines.',
+    communityPostDeletedTitle: 'Warning: your post was removed',
+    communityPostDeletedBody:
+        'A moderator removed your community post for breaking the guidelines. Continued violations may lead to account suspension.',
+    communityPostDeletedBodyWithReason:
+        'A moderator removed your community post. Reason: {reason}. Continued violations may lead to account suspension.',
     // Ranking achievements
     medalGoldName: 'Gold 🥇',
     medalSilverName: 'Silver 🥈',
@@ -560,6 +568,11 @@ const ar: TemplateMap = {
     communityMentionCommentBody: '{user} عمل لك منشن في تعليق',
     communityHiddenTitle: 'تم إخفاء محتوى',
     communityHiddenBody: 'تم إخفاء منشور أو تعليق ليك في المجتمع لأنه مخالف لقواعد المجتمع.',
+    communityPostDeletedTitle: 'تحذير: تم حذف منشورك',
+    communityPostDeletedBody:
+        'المراقب حذف منشورك في المجتمع لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    communityPostDeletedBodyWithReason:
+        'المراقب حذف منشورك في المجتمع. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
     // إنجازات الترتيب
     medalGoldName: 'ذهبية 🥇',
     medalSilverName: 'فضية 🥈',

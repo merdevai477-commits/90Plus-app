@@ -17,6 +17,11 @@ import {
   isAssConfigured,
 } from '../services/ass-session.service';
 import { publishCompetition, rejectCompetition } from '../services/competitions.service';
+import {
+  AssCommunityError,
+  assDeleteCommunityPost,
+  listAssCommunityPosts,
+} from '../services/ass-community.service';
 
 const router = Router();
 
@@ -163,6 +168,38 @@ router.post('/competitions/:id/reject', requireAssSession, async (req: Request, 
     }
     logger.error('[AsS] reject failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to reject' });
+  }
+});
+
+router.get('/community/posts', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const filterRaw = typeof req.query.filter === 'string' ? req.query.filter : 'all';
+    const orderRaw = typeof req.query.order === 'string' ? req.query.order : 'newest';
+    const filter = filterRaw === 'reported' || filterRaw === 'ai' ? filterRaw : 'all';
+    const order = orderRaw === 'oldest' ? 'oldest' : 'newest';
+    const limit = Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 80, 200);
+    const posts = await listAssCommunityPosts({ filter, order, limit });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data: posts });
+  } catch (err) {
+    logger.error('[AsS] list community posts failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load posts' });
+  }
+});
+
+router.post('/community/posts/:id/delete', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+    const result = await assDeleteCommunityPost(id, reason);
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof AssCommunityError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] delete community post failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to delete post' });
   }
 });
 
