@@ -124,7 +124,7 @@ export default function RankScreen() {
         title: t.rank.competitionNames.engagementHero.title,
         sub: t.rank.competitionNames.engagementHero.sub,
         actionText: t.rank.competitionNames.engagementHero.action,
-        img: require('../../assets/images/top-scorers-five/hero-egypt.jpg') as ImageSourcePropType,
+        img: require('../../assets/images/rank/comp-top-scorers-five.jpg') as ImageSourcePropType,
         photoScrim: true,
         titleIcon: Zap,
         ctaIcon: Zap,
