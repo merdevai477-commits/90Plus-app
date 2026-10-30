@@ -346,10 +346,16 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
         const abuseStats = AbuseDetectionService.getStats();
         const { getSchemaStatus } = await import('./services/schema-guard.service');
         const schema = getSchemaStatus();
+        const { getSettleHealthSummary } = await import('./services/settle-metrics.service');
+        const settlement = await Promise.race([
+            getSettleHealthSummary(),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]).catch(() => null);
 
         res.status(200).json({
             status: schema.ok ? 'OK' : 'DEGRADED',
             schema,
+            settlement,
             message: '90Plus API is running',
             timestamp,
             database: 'Connected',
@@ -864,7 +870,11 @@ async function startServer() {
 
             try {
                 const { checkSchemaAtBoot } = await import('./services/schema-guard.service');
-                await checkSchemaAtBoot();
+                const schema = await checkSchemaAtBoot();
+                // One grouped info event per boot: proves this process reaches Sentry.
+                const { captureMessage, setTag } = await import('./config/sentry.config');
+                setTag('git', process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 12) || 'local');
+                captureMessage(`SETTLE_OBSERVABILITY_BOOT schema=${schema.ok ? 'ok' : 'mismatch'}`, 'info');
             } catch (schemaErr) {
                 logger.warn('Schema guard failed to run (non-fatal):', schemaErr);
             }

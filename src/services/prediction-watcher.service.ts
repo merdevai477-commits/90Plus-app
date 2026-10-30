@@ -17,6 +17,7 @@ import { allowLeaderboardPush, getMaxMatchesPerTick } from './prediction-settle-
 import { isSchemaOk } from './schema-guard.service';
 import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snapshot';
 import { VOID_STATUSES } from './prediction-void.service';
+import { runSettleWatchdog } from './settle-metrics.service';
 
 const FINAL_STATUSES = new Set(['FT', 'AET', 'PEN']);
 
@@ -164,6 +165,10 @@ export class PredictionWatcherService {
                     logger.error(`Error checking match ${matchId}:`, error);
                 }
             }
+
+            await runSettleWatchdog().catch((err) =>
+                logger.warn('[predictionWatcher] settle watchdog failed:', err?.message),
+            );
 
             // Leaderboard-entry pushes only for fresh results; a stale backlog settles silently.
             if (resolvedAny && freshResolved && allowLeaderboardPush()) {

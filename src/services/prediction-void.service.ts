@@ -7,6 +7,7 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { recordSettleMetric } from './settle-metrics.service';
 
 export const VOID_STATUSES = new Set(['CANC', 'ABD', 'PST', 'AWD', 'WO']);
 export const VOID_AFTER_MS = 48 * 60 * 60 * 1000;
@@ -49,6 +50,7 @@ export async function maybeVoidMatchPredictions(
       loggedCandidates.add(apiMatchId);
       const pending = await prisma.prediction.count({ where });
       if (pending > 0) {
+        recordSettleMetric('VOID_CANDIDATE');
         logger.info(
           JSON.stringify({
             event: 'VOID_CANDIDATE',
@@ -68,6 +70,7 @@ export async function maybeVoidMatchPredictions(
     data: { voidedAt: now, voidReason: status },
   });
   if (result.count > 0) {
+    recordSettleMetric('ROWS_VOIDED', result.count);
     logger.info(
       JSON.stringify({ event: 'PREDICTION_VOIDED', apiMatchId, status, count: result.count, source }),
     );

@@ -12,6 +12,7 @@ import {
   type SettlementFixtureInput,
 } from './prediction-settlement-gate';
 import { logger } from '../utils/logger';
+import { recordSettleMetric } from './settle-metrics.service';
 
 type CacheRow = {
   status: string;
@@ -138,6 +139,7 @@ export async function loadAuthoritativeSettlementFixture(
       // as ended may carry the score at abandonment — never settle that
       // automatically. (PST -> final is a rescheduled match and is fine.)
       if (fallback && NO_RESULT_STATUSES.has(String(fallback.status)) && FINAL_STATUSES.has(String(snap.status))) {
+        recordSettleMetric('SETTLE_SOURCE_CONFLICT');
         logger.warn(
           JSON.stringify({
             event: 'SETTLE_SOURCE_CONFLICT',

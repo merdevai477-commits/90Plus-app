@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { recordSettleMetric } from './settle-metrics.service';
 
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
   predictions: [
@@ -110,6 +111,7 @@ export async function checkSchemaAtBoot(): Promise<SchemaStatus> {
     if (!repo) status.error = 'MIGRATIONS_DIR_MISSING';
 
     if (!status.ok) {
+      recordSettleMetric('SCHEMA_MISMATCH');
       logger.error(
         JSON.stringify({
           event: 'SCHEMA_MISMATCH',

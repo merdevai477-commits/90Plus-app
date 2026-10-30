@@ -23,6 +23,7 @@ import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snap
 import { isSchemaOk } from './schema-guard.service';
 import { decideResultPush, isStaleKickoff } from './prediction-settle-push-policy';
 import { maybeVoidMatchPredictions } from './prediction-void.service';
+import { recordSettleMetric } from './settle-metrics.service';
 
 const CORRECT_PREDICTION_REWARD = 10;
 const SETTLE_CHUNK_SIZE = 200;
@@ -136,13 +137,17 @@ export class PredictionResolverService {
 
     if (!isSchemaOk()) {
       logger.warn(JSON.stringify({ event: 'SETTLE_SKIPPED_SCHEMA', apiMatchId, source }));
+      recordSettleMetric('SETTLE_SKIPPED_SCHEMA');
       return skipped('SETTLE_SKIPPED_SCHEMA');
     }
     if (shuttingDown) return skipped('SETTLE_SKIPPED_SHUTDOWN');
 
     inFlight += 1;
     try {
-      return await this.resolveLocked(apiMatchId, source, resolved?.prefetched);
+      const result = await this.resolveLocked(apiMatchId, source, resolved?.prefetched);
+      recordSettleMetric(result.outcome);
+      recordSettleMetric('ROWS_SETTLED', result.settled);
+      return result;
     } finally {
       inFlight -= 1;
     }
@@ -191,6 +196,7 @@ export class PredictionResolverService {
         if (voided > 0) return { outcome: 'SETTLE_VOIDED', settled: 0, staleOnly: false };
       }
       if (!gated.ok) {
+        recordSettleMetric(`GATE_${gated.reason}`);
         logger.info(
           JSON.stringify({
             event: 'SETTLE_GATE_REJECTED',

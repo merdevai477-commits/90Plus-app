@@ -15,6 +15,11 @@ import { ErrorCode, sendError } from '../constants/errors';
 import { getSchemaStatus, isSchemaOk } from '../services/schema-guard.service';
 import { predictionWriteLimiter } from '../middleware/rateLimit.middleware';
 import {
+    getSettleHealthSummary,
+    readSettleMetrics,
+    runSettleWatchdog,
+} from '../services/settle-metrics.service';
+import {
     getDailyPredictionsUsed,
     getKingDailyMatches,
     getKingHistory,
@@ -690,6 +695,24 @@ router.post('/resolve-all', requireAuth, requireAdmin, async (req: Request, res:
         });
     } catch (error) {
         logger.error('Error resolving all predictions:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * GET /api/predictions/admin/settle-metrics
+ * Settlement counters (14 days), health summary and stale finals (admin only).
+ */
+router.get('/admin/settle-metrics', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const [days, summary, stale] = await Promise.all([
+            readSettleMetrics(14),
+            getSettleHealthSummary(),
+            runSettleWatchdog(new Date(), { report: false }),
+        ]);
+        res.json({ success: true, data: { summary, stale, days, schema: getSchemaStatus() } });
+    } catch (error) {
+        logger.error('Error reading settle metrics:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
