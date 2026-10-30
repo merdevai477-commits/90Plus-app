@@ -1,7 +1,11 @@
 import { ALL_COUNTRY_FLAGS } from '../data/localCountryFlags';
 import { COUNTRIES } from '../data/countries';
 
-const GENERIC_FLAGS = new Set(['🌍', '🏳️', '🏴']);
+/** Unset / decorative placeholders — not a chosen country. */
+const UNSET_FLAGS = new Set(['🏳️', '🏴']);
+
+/** Intentional global / app-world marker (shown as a globe, not a national flag). */
+export const WORLD_COUNTRY_FLAG = '🌍';
 
 /**
  * Resolve a human-readable country label from stored profile fields.
@@ -16,7 +20,8 @@ export function resolveCountryDisplayName(
   if (trimmed) return trimmed;
 
   const flag = (countryFlag ?? '').trim();
-  if (!flag || GENERIC_FLAGS.has(flag)) return '';
+  if (!flag || UNSET_FLAGS.has(flag)) return '';
+  if (flag === WORLD_COUNTRY_FLAG) return preferArabic ? 'عالمي' : 'Global';
 
   const fromLocal = ALL_COUNTRY_FLAGS.find((c) => c.flag === flag);
   if (fromLocal) return preferArabic ? fromLocal.nameAr : fromLocal.name;
@@ -27,7 +32,8 @@ export function resolveCountryDisplayName(
   return '';
 }
 
+/** True when the profile should show a country/globe slot (not blank / unset). */
 export function isMeaningfulCountryFlag(countryFlag?: string | null): boolean {
   const flag = (countryFlag ?? '').trim();
-  return flag.length > 0 && !GENERIC_FLAGS.has(flag);
+  return flag.length > 0 && !UNSET_FLAGS.has(flag);
 }

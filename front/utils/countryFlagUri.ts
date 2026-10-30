@@ -101,6 +101,15 @@ export function getCountryFlagUri(
   apiFlag?: string | null,
   width = 40,
 ): string | null {
+  const flagEmoji = (apiFlag ?? '').trim();
+  // App / global accounts use the globe emoji — do not map "World" labels to the UN PNG.
+  if (flagEmoji === '🌍') return null;
+
+  const countryKey = normKey(country);
+  if (countryKey === 'world' || countryKey === 'global' || countryKey === 'عالمي') {
+    return null;
+  }
+
   const iso = resolveIsoCode(country, apiFlag);
   if (iso) return FLAGCDN(iso, width);
 
