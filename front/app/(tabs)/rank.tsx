@@ -248,22 +248,22 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     paddingBottom: 8,
     // Pull art up under the floating header like Figma (image y=0).
-    marginTop: -28,
+    marginTop: -44,
   },
   heroBgTrophy: {
     position: 'absolute',
-    top: 0,
+    top: -32,
     left: 0,
     right: 0,
     width: '100%',
-    height: HERO_IMG_H,
+    height: HERO_IMG_H + 32,
   },
   heroBgGradDiag: {
     position: 'absolute',
-    top: 0,
+    top: -32,
     left: 0,
     right: 0,
-    height: HERO_IMG_H,
+    height: HERO_IMG_H + 32,
   },
   heroBgGradBottom: {
     position: 'absolute',
@@ -275,7 +275,7 @@ const s = StyleSheet.create({
   // Figma title sits ~185/415 down the hero art.
   heroText: {
     paddingHorizontal: 16,
-    paddingTop: Math.round(HERO_IMG_H * 0.36),
+    paddingTop: Math.round(HERO_IMG_H * 0.30),
     paddingBottom: 12,
     zIndex: 1,
   },
