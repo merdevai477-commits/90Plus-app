@@ -417,7 +417,7 @@ function cursorWhere(cursorRaw: unknown): Prisma.CommunityPostWhereInput {
 
 async function queryPosts(where: Prisma.CommunityPostWhereInput, limit: number): Promise<{ rows: PostRow[]; nextCursor: string | null }> {
     const rows = await prisma.communityPost.findMany({
-        where: { status: 'ACTIVE', ...where },
+        where: { status: 'ACTIVE', user: { isDeleted: false }, ...where },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
         select: postSelect,
@@ -474,7 +474,7 @@ export async function peekFeedHead(
 ): Promise<{ id: string; createdAt: string; isMine: boolean } | null> {
     const blocked = await blockedPairIds(viewerId);
     const rows = await prisma.communityPost.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', user: { isDeleted: false } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: blocked.size ? 8 : 1,
         select: { id: true, createdAt: true, userId: true },
@@ -567,6 +567,7 @@ export async function searchCommunity(
         const rows = await prisma.communityPost.findMany({
             where: {
                 status: 'ACTIVE',
+                user: { isDeleted: false },
                 ...(blockedList.length ? { userId: { notIn: blockedList } } : {}),
                 OR: [
                     { content: { contains: q, mode: 'insensitive' } },
@@ -627,7 +628,7 @@ export async function searchCommunity(
 
 export async function getPost(viewerId: string, postId: string): Promise<CommunityPostDto> {
     const row = await prisma.communityPost.findFirst({
-        where: { id: postId, status: 'ACTIVE' },
+        where: { id: postId, status: 'ACTIVE', user: { isDeleted: false } },
         select: postSelect,
     });
     if (!row) throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
@@ -1164,10 +1165,25 @@ export async function deletePost(actor: CommunityActor, postId: string): Promise
     });
     if (!post || post.status === 'DELETED') throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
     if (post.userId !== actor.id) throw new CommunityError(403, 'FORBIDDEN', 'You can only delete your own posts');
-    await prisma.communityPost.update({ where: { id: postId }, data: { status: 'DELETED' } });
+    const key = post.imageStoragePath;
+    await prisma.$transaction(async (tx) => {
+        await tx.communityPost.update({
+            where: { id: postId },
+            data: {
+                status: 'DELETED',
+                imageUrl: null,
+                imageStoragePath: null,
+                imageWidth: null,
+                imageHeight: null,
+                imagePlaceholder: null,
+            },
+        });
+        if (key) {
+            await tx.communityMedia.deleteMany({ where: { userId: actor.id, storagePath: key } });
+        }
+    });
     void invalidateFeedCache();
-    if (post.imageStoragePath) {
-        const key = post.imageStoragePath;
+    if (key) {
         fireAndForget(() => r2MediaStorage.deleteObject(key));
     }
 }

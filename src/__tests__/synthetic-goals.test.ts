@@ -114,6 +114,12 @@ describe('synthetic goals', () => {
     expect(buildSyntheticGoalEvents(goals, teams, { home: 2, away: 0 })).toEqual([]);
   });
 
+  it('seeds placeholders when score > 0 but no delta log was recorded yet', async () => {
+    const seeded = await mergeSyntheticGoalsIntoEvents(4752417, [], teams, { home: 1, away: 1 });
+    expect(seeded.synthesized).toBe(2);
+    expect(seeded.events.every((event: any) => event._synthetic === true)).toBe(true);
+  });
+
   it('merges into a feed only when the provider has no goals and the score is non-zero', async () => {
     await reconcileSyntheticGoals(4752417, { home: 0, away: 0 }, { home: 0, away: 1 }, 55);
 

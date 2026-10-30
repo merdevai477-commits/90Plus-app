@@ -25,6 +25,8 @@ export const AUTH_PANEL_GAP = {
 } as const;
 
 type Props = {
+  /** Reserved for signup vs login styling; currently unused by layout. */
+  variant?: 'signup' | 'login' | string;
   header: React.ReactNode;
   form: React.ReactNode;
   cta: React.ReactNode;

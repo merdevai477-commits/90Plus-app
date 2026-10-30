@@ -527,6 +527,11 @@ class LiveFixtureSyncService {
 
                 if (scoreChanged) {
                     // Leagues without an event feed still get goals on the events tab.
+                    // Clear empty-upstream backoff so the next events poll is not stuck
+                    // at 60–300s after the scoreboard already moved.
+                    void import('./empty-upstream-backoff.service')
+                        .then(({ clearEmptyUpstreamBackoff }) => clearEmptyUpstreamBackoff(id))
+                        .catch(() => undefined);
                     void import('./synthetic-goals.service')
                         .then(({ reconcileSyntheticGoals }) =>
                             reconcileSyntheticGoals(

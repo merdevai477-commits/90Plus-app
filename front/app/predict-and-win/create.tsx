@@ -1008,15 +1008,13 @@ export default function CreateCompetitionScreen() {
                   >
                     {storeImageUrl ? (
                       <Image
-                        source={{ uri: storeImageUrl }}
-                        cacheKey={storeImageUrl}
+                        source={{ uri: storeImageUrl, cacheKey: storeImageUrl }}
                         style={{ width: '100%', height: '100%' }}
                         contentFit="cover"
                       />
                     ) : (
                       <Image
                         source={DEFAULT_STORE_LOGO}
-                        cacheKey="default-store"
                         style={{ width: '100%', height: '100%' }}
                         contentFit="cover"
                       />

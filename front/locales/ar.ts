@@ -1062,6 +1062,8 @@ export const ar = {
     topScorers: 'هدافو البطولة',
     topAssists: 'صناع اللعب',
     noScorers: 'الإحصائيات غير متاحة حالياً',
+    statsUnavailable: 'تعذّر تحميل إحصائيات اللاعبين',
+    retry: 'إعادة المحاولة',
     follow: 'متابعة',
     following: 'متابع',
     followNotifHint: 'تنبيهات المباريات مفعّلة للبطولة دي',
@@ -1292,8 +1294,8 @@ export const ar = {
     titleHighlight: 'شارك',
     titleRest: ' واربح',
     subtitle: 'شارك التطبيق مع أصدقائك واربح جوائز رائعة!',
-    perShareLead: 'كل مشاركة = ',
-    perSharePoints: 'نقاط XP',
+    perShareLead: 'كل صديق يسجّل عبر رابطك ',
+    perSharePoints: 'يرفع ترتيبك',
     perShareXp: 'XP',
 
     // بطاقة عجلة الحظ
@@ -1304,8 +1306,8 @@ export const ar = {
     wheelSpinningCta: 'جاري اللف...',
     wheelNote: 'لفة واحدة يوميًا فقط',
 
-    // الترتيب الشهري
-    weeklyTitle: 'الترتيب الشهري',
+    // الترتيب الأسبوعي
+    weeklyTitle: 'الترتيب الأسبوعي',
     weeklyEndsIn: 'ينتهي بعد:',
     unitDays: 'أيام',
     unitHours: 'ساعات',
@@ -1313,15 +1315,15 @@ export const ar = {
     unitSeconds: 'ثواني',
     viewFullRanking: 'عرض الترتيب الكامل',
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
-    leaderboardCompetitors: '{count} مشارك هذا الشهر',
+    leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
     boardUnit: 'صديق',
     close: 'إغلاق',
     backToRank: 'رجوع للرانك',
 
-    // الجوائز الشهرية
-    prizesTitle: 'الجوائز الشهرية',
-    prizesSubtitleLine1: 'جائزة جديدة كل شهر!',
+    // الجوائز الأسبوعية
+    prizesTitle: 'الجوائز الأسبوعية',
+    prizesSubtitleLine1: 'جائزة جديدة كل أسبوع!',
     prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
     remainingMonthsTitle: 'باقي الفائزين',
 
@@ -1333,7 +1335,7 @@ export const ar = {
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
     referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
-    referralHintXp: 'XP',
+    referralHintXp: '50 XP',
     linkCopied: 'تم نسخ الرابط',
     linkCopiedDetail: 'الصقه في محادثة — الترتيب يزيد لما صاحبك ينضم',
     copyFailed: 'تعذّر نسخ الرابط',
@@ -1342,14 +1344,15 @@ export const ar = {
     // شريط الإحصائيات
     statsInvitedFriends: 'أصدقاؤك المدعوون',
     statsFriendsValue: '{count} صديق',
-    statsCurrentPoints: 'نقاطك الحالية',
+    statsCurrentPoints: 'نقاط الترتيب',
+    statsRankingUnit: 'نقاط',
     statsRankThisWeek: 'ترتيبك هذا الأسبوع',
     statsShares: 'مشاركاتك',
 
     // آخر فائز
     lastWinnerTitle: 'آخر فائز',
     lastWinnerViewStory: 'عرض القصة',
-    lastWinnerNone: 'لم يُتوّج فائز بعد — الشهر الأول لم ينتهِ',
+    lastWinnerNone: 'لم يُتوّج فائز بعد — الأسبوع الأول لم ينتهِ',
     timeAgoHours: 'منذ {count} ساعة',
     timeAgoDays: 'منذ {count} يوم',
     timeAgoNow: 'الآن',
@@ -3573,6 +3576,7 @@ export const ar = {
     ok: 'حسناً',
     contentReel: 'فيديو',
     contentComment: 'تعليق',
+    contentPost: 'منشور',
     contentUser: 'مستخدم',
     statusPending: 'قيد المراجعة',
     statusReviewed: 'تمت المراجعة',

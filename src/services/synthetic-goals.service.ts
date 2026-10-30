@@ -284,8 +284,15 @@ export async function mergeSyntheticGoalsIntoEvents(
     const totalGoals = normalizeScore(score.home) + normalizeScore(score.away);
     if (totalGoals === 0 || feedHasGoalEvents(events)) return { events, synthesized: 0 };
 
-    const goals = await readSyntheticGoals(fixtureId);
-    if (goals.length === 0) return { events, synthesized: 0 };
+    let goals = await readSyntheticGoals(fixtureId);
+    // Score already on the board but no delta log yet (missed ticks / EmptyBackoff
+    // skip before sync recorded): seed minute-less placeholders so the timeline
+    // is not blank while goals > 0.
+    if (goals.length === 0) {
+        await reconcileSyntheticGoals(fixtureId, null, score, null, null);
+        goals = await readSyntheticGoals(fixtureId);
+        if (goals.length === 0) return { events, synthesized: 0 };
+    }
 
     const synthetic = buildSyntheticGoalEvents(goals, teams, score);
     if (synthetic.length === 0) return { events, synthesized: 0 };

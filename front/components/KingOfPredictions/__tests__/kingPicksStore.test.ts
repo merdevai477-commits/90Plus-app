@@ -144,9 +144,9 @@ describe('a save that failed without a definite answer (D3)', () => {
   });
 
   it('treats only a 4xx as a definite rejection', () => {
-    expect(isDefiniteRejection(new PredictionApiError('locked', 409))).toBe(true);
-    expect(isDefiniteRejection(new PredictionApiError('limit', 429))).toBe(true);
-    expect(isDefiniteRejection(new PredictionApiError('boom', 502))).toBe(false);
+    expect(isDefiniteRejection(new PredictionApiError('locked', 'locked', 409))).toBe(true);
+    expect(isDefiniteRejection(new PredictionApiError('limit', 'limit', 429))).toBe(true);
+    expect(isDefiniteRejection(new PredictionApiError('boom', 'boom', 502))).toBe(false);
     expect(isDefiniteRejection(new TypeError('Network request failed'))).toBe(false);
   });
 });

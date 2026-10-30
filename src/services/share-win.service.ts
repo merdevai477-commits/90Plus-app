@@ -230,7 +230,9 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
     if (!cycle || cycle.status === ShareWinCycleStatus.COMPLETED) return;
 
     // Single UPDATE ... FROM — no per-user round trips regardless of size.
-    // Same order as live getLeaderboard / getRankFor.
+    // Same order as live getLeaderboard / getRankFor, but only users with at
+    // least one converted referral can receive a finalRank (so share-only
+    // farming cannot take physical prize rank 1).
     await tx.$executeRaw`
       UPDATE "share_win_standings" AS s
       SET "finalRank" = ranked.rank
@@ -246,6 +248,7 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
           )::int AS rank
         FROM "share_win_standings"
         WHERE "cycleId" = ${cycleId}
+          AND "participantCount" > 0
       ) AS ranked
       WHERE s."id" = ranked."id"
     `;

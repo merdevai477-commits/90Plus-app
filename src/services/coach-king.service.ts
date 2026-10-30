@@ -88,6 +88,34 @@ function migrationStatements(sql: string): string[] {
 }
 
 let schemaReady: Promise<void> | null = null;
+/** Skip slot-lock ALTER after a successful presence check (or apply). */
+let slotLockColumnsReady = false;
+
+async function ensureSlotLockColumns(): Promise<void> {
+  if (slotLockColumnsReady) return;
+  const cols = await prisma.$queryRawUnsafe<Array<{ attname: string }>>(
+    `SELECT a.attname
+     FROM pg_attribute a
+     JOIN pg_class c ON c.oid = a.attrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname IN ('coach_king_squads', 'coach_king_squad_slots')
+       AND a.attname IN ('coachLockedAt', 'coachPriceMilli', 'priceMilli', 'lockedAt')
+       AND a.attnum > 0 AND NOT a.attisdropped`,
+  );
+  const names = new Set(cols.map((row) => row.attname));
+  const present =
+    names.has('coachLockedAt')
+    && names.has('coachPriceMilli')
+    && names.has('priceMilli')
+    && names.has('lockedAt');
+  if (!present) {
+    for (const statement of migrationStatements(fs.readFileSync(SLOT_LOCK_MIGRATION_FILE, 'utf8'))) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+  }
+  slotLockColumnsReady = true;
+}
 
 /** Create the fantasy tables when this deploy's migration did not land. */
 export function ensureCoachKingSchema(): Promise<void> {
@@ -102,9 +130,7 @@ export function ensureCoachKingSchema(): Promise<void> {
         }
         logger.info('[CoachKing] created missing fantasy tables');
       }
-      for (const statement of migrationStatements(fs.readFileSync(SLOT_LOCK_MIGRATION_FILE, 'utf8'))) {
-        await prisma.$executeRawUnsafe(statement);
-      }
+      await ensureSlotLockColumns();
     })().catch((error) => {
       schemaReady = null;
       throw error;
@@ -147,12 +173,12 @@ async function requireUser(clerkUserId: string) {
   return user;
 }
 
-/** Every week the squad budget is a fresh 100M (max). Keeping a lineup still spends against that cap. */
+/** Ensure a wallet row exists. Balance is set only on create (weekly budget is applied elsewhere). */
 async function ensureWallet(userId: string) {
   return prisma.coachKingWallet.upsert({
     where: { userId },
     create: { userId, balanceMilli: CK_WEEKLY_BUDGET_MILLI },
-    update: { balanceMilli: CK_WEEKLY_BUDGET_MILLI },
+    update: {},
   });
 }
 
@@ -577,37 +603,61 @@ export async function pickCoachKingSlot(
   }
 
   const squad = await openSquad(user.id, gameweek, now);
-  const current = squad.slots.find((slot) => slot.slotKey === spec.key) ?? null;
-  if (current?.lockedAt) throw new CoachKingError('SLOT_LOCKED', 'This pick is locked until the week ends');
 
-  const started = await startedTeamIds([player.teamId, ...(current ? [current.player.teamId] : [])], gameweek, now);
-  if (started.size) throw new CoachKingError('MATCH_STARTED', 'This club already played this week');
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT 1 FROM "coach_king_squads" WHERE id = ${squad.id} FOR UPDATE`;
+    const lockedRows = await tx.$queryRaw<Array<{
+      playerId: string;
+      lockedAt: Date | null;
+      priceMilli: number;
+      teamId: number;
+    }>>`
+      SELECT s."playerId", s."lockedAt", s."priceMilli", p."teamId"
+      FROM "coach_king_squad_slots" s
+      JOIN "coach_king_players" p ON p.id = s."playerId"
+      WHERE s."squadId" = ${squad.id} AND s."slotKey" = ${spec.key}
+      FOR UPDATE OF s
+    `;
+    const current = lockedRows[0] ?? null;
+    if (current?.lockedAt) {
+      // Idempotent re-confirm of the same locked pick.
+      if (current.playerId === player.id) return;
+      throw new CoachKingError('SLOT_LOCKED', 'This pick is locked until the week ends');
+    }
 
-  const keepPrice = current?.playerId === player.id;
-  const priceMilli = keepPrice && current ? slotCost(current) : player.priceMilli;
-  const next = draftOf(squad).filter((slot) => slot.slotKey !== spec.key);
-  next.push({ slotKey: spec.key, playerId: player.id, line: player.line as CkLine, teamId: player.teamId, priceMilli });
-  const check = inspectCoachKingSquad({
-    slots: next,
-    coachPriceMilli: squad.coach ? coachCost(squad) : null,
-    coachTeamId: squad.coach?.teamId ?? null,
-    balanceMilli: wallet.balanceMilli,
-    startedTeamIds: new Set(),
-    requireComplete: false,
-  });
-  if (!check.ok) throw new CoachKingError(check.code, 'Pick was rejected');
+    const started = await startedTeamIds(
+      [player.teamId, ...(current ? [current.teamId] : [])],
+      gameweek,
+      now,
+    );
+    if (started.size) throw new CoachKingError('MATCH_STARTED', 'This club already played this week');
 
-  await prisma.$transaction([
-    prisma.coachKingSquadSlot.upsert({
+    const keepPrice = current?.playerId === player.id;
+    const priceMilli = keepPrice && current
+      ? (current.priceMilli > 0 ? current.priceMilli : player.priceMilli)
+      : player.priceMilli;
+    const next = draftOf(squad).filter((slot) => slot.slotKey !== spec.key);
+    next.push({ slotKey: spec.key, playerId: player.id, line: player.line as CkLine, teamId: player.teamId, priceMilli });
+    const check = inspectCoachKingSquad({
+      slots: next,
+      coachPriceMilli: squad.coach ? coachCost(squad) : null,
+      coachTeamId: squad.coach?.teamId ?? null,
+      balanceMilli: wallet.balanceMilli,
+      startedTeamIds: new Set(),
+      requireComplete: false,
+    });
+    if (!check.ok) throw new CoachKingError(check.code, 'Pick was rejected');
+
+    await tx.coachKingSquadSlot.upsert({
       where: { squadId_slotKey: { squadId: squad.id, slotKey: spec.key } },
       create: { squadId: squad.id, slotKey: spec.key, playerId: player.id, priceMilli, lockedAt: now },
       update: { playerId: player.id, priceMilli, lockedAt: now },
-    }),
-    prisma.coachKingSquad.update({
+    });
+    await tx.coachKingSquad.update({
       where: { id: squad.id },
       data: { spentMilli: check.spentMilli, confirmedAt: squad.confirmedAt ?? now },
-    }),
-  ]);
+    });
+  });
   invalidateBoard();
   return getCoachKingHome(clerkUserId, lang, now);
 }

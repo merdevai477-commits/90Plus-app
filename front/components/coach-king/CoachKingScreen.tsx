@@ -116,6 +116,7 @@ export default function CoachKingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<CkPoolKind | null>(null);
   const [slotKey, setSlotKey] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [locked, setLocked] = useState<(CkLockedNotice & { player: CkPlayer | null }) | null>(null);
   const [period, setPeriod] = useState<KingPeriod>('week');
@@ -255,7 +256,7 @@ export default function CoachKingScreen() {
   };
 
   const onConfirm = async (pick: CkPick) => {
-    if (!home) return;
+    if (!home || confirming) return;
     if (pick.kind !== 'COACH') {
       if (takenIds.has(pick.id)) {
         setSheetError(copy.errors.duplicate);
@@ -271,6 +272,7 @@ export default function CoachKingScreen() {
     if (!token) return;
     const before = home;
     const key = slotKey;
+    setConfirming(true);
     setHome(withPick(home, pick, key));
     setPicker(null);
     setSheetError(null);
@@ -283,6 +285,8 @@ export default function CoachKingScreen() {
     } catch (err) {
       setHome(before);
       setError(copy.errors[errorKey(err instanceof CkApiError ? err.reason : null)]);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -450,7 +454,7 @@ export default function CoachKingScreen() {
         remainingMilli={shown?.wallet.remainingMilli ?? 0}
         refundMilli={refundMilli}
         takenIds={takenIds}
-        confirming={false}
+        confirming={confirming}
         error={sheetError}
         onClose={() => setPicker(null)}
         onConfirm={(pick) => void onConfirm(pick)}

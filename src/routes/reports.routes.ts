@@ -173,6 +173,11 @@ router.post('/comment/:commentId', requireAuth, strictLimiter, async (req: Reque
 
     if (!comment) { sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found'); return; }
 
+    if (comment.userId === user.id) {
+      sendError(req, res, ErrorCode.VALIDATION, 'Cannot report your own comment');
+      return;
+    }
+
     const reasonToType: Record<string, string> = {
       'spam': 'SPAM',
       'harassment': 'HARASSMENT',
@@ -360,6 +365,8 @@ router.get('/my-reports', requireAuth, async (req: Request, res: Response): Prom
         createdAt: true,
         reportedReelId: true,
         reportedCommentId: true,
+        reportedCommunityPostId: true,
+        reportedCommunityCommentId: true,
         reportedUserId: true,
       },
       orderBy: {
@@ -379,8 +386,18 @@ router.get('/my-reports', requireAuth, async (req: Request, res: Response): Prom
         ? 'reel'
         : report.reportedCommentId
         ? 'comment'
+        : report.reportedCommunityPostId
+        ? 'community_post'
+        : report.reportedCommunityCommentId
+        ? 'community_comment'
         : 'user',
-      contentId: report.reportedReelId || report.reportedCommentId || report.reportedUserId || '',
+      contentId:
+        report.reportedReelId ||
+        report.reportedCommentId ||
+        report.reportedCommunityPostId ||
+        report.reportedCommunityCommentId ||
+        report.reportedUserId ||
+        '',
     }));
 
     res.json({ status: 'SUCCESS', reports: formattedReports });

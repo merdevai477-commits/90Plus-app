@@ -262,6 +262,19 @@ export default function CompetitionProfileScreen() {
               <Text style={styles.section}>{cp.scorers ?? cp.topScorers}</Text>
               {statsQ.isLoading ? (
                 <ActivityIndicator color={Colors.purpleSoft} style={{ marginVertical: 20 }} />
+              ) : statsQ.isError || statsQ.data?.unavailable ? (
+                <View style={styles.scorersError}>
+                  <Text style={styles.mutedCenter}>
+                    {cp.statsUnavailable ?? cp.noScorers}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.retryBtn}
+                    onPress={() => void statsQ.refetch()}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.retryBtnText}>{cp.retry ?? t.common.retry}</Text>
+                  </TouchableOpacity>
+                </View>
               ) : boards.length === 0 ? (
                 <Text style={styles.mutedCenter}>{cp.noScorers}</Text>
               ) : (
@@ -429,6 +442,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.lg,
     marginHorizontal: Spacing.base,
+  },
+  scorersError: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.chip,
+    backgroundColor: Colors.purpleMuted,
+  },
+  retryBtnText: {
+    color: Colors.purpleSoft,
+    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.md,
   },
   hero: { alignItems: 'center', paddingVertical: Spacing['2xl'], gap: Spacing.sm },
   crestRing: {

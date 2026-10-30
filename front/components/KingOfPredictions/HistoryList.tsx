@@ -95,9 +95,14 @@ export function KingHistoryList({
 
   const fetchPage = useCallback(
     async (nextPage: number) => {
-      const token = await getTokenRef.current().catch(() => null);
-      if (!token) return null;
-      return PredictionsService.getKingHistory(token, toApiMode(mode), status, nextPage);
+      const hasToken = !!(await getTokenRef.current().catch(() => null));
+      if (!hasToken) return null;
+      return PredictionsService.getKingHistory(
+        getTokenRef.current,
+        toApiMode(mode),
+        status,
+        nextPage,
+      );
     },
     [mode, status],
   );

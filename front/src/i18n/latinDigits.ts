@@ -123,7 +123,8 @@ function patchCtor(name: 'NumberFormat' | 'DateTimeFormat' | 'RelativeTimeFormat
   Object.defineProperty(Patched, 'name', { value: name });
   const supported = (Original as { supportedLocalesOf?: unknown }).supportedLocalesOf;
   if (typeof supported === 'function') {
-    (Patched as { supportedLocalesOf: unknown }).supportedLocalesOf = supported.bind(Original);
+    (Patched as unknown as { supportedLocalesOf: unknown }).supportedLocalesOf =
+      supported.bind(Original);
   }
 
   try {

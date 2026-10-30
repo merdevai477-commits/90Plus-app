@@ -32,7 +32,7 @@ interface Report {
   reason: string;
   status: 'PENDING' | 'REVIEWED' | 'RESOLVED' | 'REJECTED';
   createdAt: string;
-  contentType: 'reel' | 'comment' | 'user';
+  contentType: 'reel' | 'comment' | 'community_post' | 'community_comment' | 'user';
   contentId: string;
 }
 
@@ -220,8 +220,10 @@ export default function MyReportsScreen() {
           <Text style={styles.reportContentType}>
             {item.contentType === 'reel'
               ? tReports.contentReel
-              : item.contentType === 'comment'
+              : item.contentType === 'comment' || item.contentType === 'community_comment'
               ? tReports.contentComment
+              : item.contentType === 'community_post'
+              ? tReports.contentPost
               : tReports.contentUser}
           </Text>
         </View>

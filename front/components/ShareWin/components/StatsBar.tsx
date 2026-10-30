@@ -5,7 +5,7 @@
  * everything else and sits below the last-winner section in the same
  * 404pt column.
  *
- * Invited friends · current XP · rank this cycle.
+ * Invited friends · ranking points · rank this cycle.
  */
 
 import React, { memo } from 'react';
@@ -50,7 +50,7 @@ const StatsBar = memo(function StatsBar({ participants, score, rank }: StatsBarP
       <View style={[sw.statsCol, { width: s(80) }]}>
         <Text style={sw.statsLabel}>{copy.statsCurrentPoints}</Text>
         <GradientText colors={SW_GRADIENT.purpleText} style={sw.statsValue}>
-          {`${formatNumber(score, language)} xp`}
+          {`${formatNumber(score, language)} ${copy.statsRankingUnit}`}
         </GradientText>
       </View>
       <View style={sw.statsXpBadge}>
@@ -61,7 +61,7 @@ const StatsBar = memo(function StatsBar({ participants, score, rank }: StatsBarP
           transition={0}
         />
         <GradientText colors={['#460BCB', '#BFABED', '#460BCB']} style={sw.statsXpBadgeText}>
-          XP
+          {copy.statsRankingUnit}
         </GradientText>
       </View>
 

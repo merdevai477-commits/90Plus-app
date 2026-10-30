@@ -148,84 +148,96 @@ export async function upsertKingPrediction(
   const dayKey = cairoDayKey();
   const now = new Date();
 
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const existing = await tx.prediction.findUnique({
-        where: {
-          userId_apiMatchId: { userId: user.id, apiMatchId: input.apiMatchId },
-        },
-      });
-
-      if (existing) {
-        if (existing.isCorrect !== null) {
-          throw new KingPredictionError('ALREADY_RESOLVED');
-        }
-        // Any change after kickoff is refused, including switching mode (B4, Q4, Q6).
-        const verdict = lockVerdict(fixture, { isNew: false }, now);
-        if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
-
-        const prediction = await tx.prediction.update({
-          where: { id: existing.id },
-          data: {
-            predictionType,
-            predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
-            predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
-            homeTeam: input.homeTeam ?? existing.homeTeam,
-            awayTeam: input.awayTeam ?? existing.awayTeam,
-            homeTeamLogo: input.homeTeamLogo ?? existing.homeTeamLogo,
-            awayTeamLogo: input.awayTeamLogo ?? existing.awayTeamLogo,
-            matchDate: fixture!.kickoff,
-            leagueName: input.leagueName ?? existing.leagueName,
-            canonicalFixtureKey: existing.canonicalFixtureKey ?? fixture!.canonicalKey,
+  // Concurrent first-create on (userId, apiMatchId) can lose with P2002; retry once as update (GK-6).
+  let racedCreate = false;
+  for (;;) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const existing = await tx.prediction.findUnique({
+          where: {
+            userId_apiMatchId: { userId: user.id, apiMatchId: input.apiMatchId },
           },
         });
 
-        const used = await readDailyCount(tx, user.id, dayKey);
+        if (existing) {
+          if (existing.isCorrect !== null) {
+            throw new KingPredictionError('ALREADY_RESOLVED');
+          }
+          // Any change after kickoff is refused, including switching mode (B4, Q4, Q6).
+          const verdict = lockVerdict(fixture, { isNew: false }, now);
+          if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
+
+          const prediction = await tx.prediction.update({
+            where: { id: existing.id },
+            data: {
+              predictionType,
+              predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
+              predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
+              homeTeam: input.homeTeam ?? existing.homeTeam,
+              awayTeam: input.awayTeam ?? existing.awayTeam,
+              homeTeamLogo: input.homeTeamLogo ?? existing.homeTeamLogo,
+              awayTeamLogo: input.awayTeamLogo ?? existing.awayTeamLogo,
+              matchDate: fixture!.kickoff,
+              leagueName: input.leagueName ?? existing.leagueName,
+              canonicalFixtureKey: existing.canonicalFixtureKey ?? fixture!.canonicalKey,
+            },
+          });
+
+          const used = await readDailyCount(tx, user.id, dayKey);
+          return {
+            prediction,
+            remaining: Math.max(0, input.dailyLimit - used),
+            updated: true,
+            coins: user.coins,
+          };
+        }
+
+        const verdict = lockVerdict(fixture, { isNew: true }, now);
+        if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
+
+        const used = await claimDailySlot(tx, user.id, dayKey, input.dailyLimit);
+        if (used == null) throw new KingPredictionError('DAILY_LIMIT_REACHED');
+
+        const prediction = await tx.prediction.create({
+          data: {
+            userId: user.id,
+            apiMatchId: input.apiMatchId,
+            predictionType,
+            coinsSpent: input.coinsSpent,
+            isCorrect: null,
+            predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
+            predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
+            homeTeam: input.homeTeam ?? null,
+            awayTeam: input.awayTeam ?? null,
+            homeTeamLogo: input.homeTeamLogo ?? null,
+            awayTeamLogo: input.awayTeamLogo ?? null,
+            matchDate: fixture!.kickoff,
+            leagueName: input.leagueName ?? null,
+            canonicalFixtureKey: fixture!.canonicalKey,
+          },
+        });
+
         return {
           prediction,
           remaining: Math.max(0, input.dailyLimit - used),
-          updated: true,
+          updated: false,
           coins: user.coins,
         };
-      }
-
-      const verdict = lockVerdict(fixture, { isNew: true }, now);
-      if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
-
-      const used = await claimDailySlot(tx, user.id, dayKey, input.dailyLimit);
-      if (used == null) throw new KingPredictionError('DAILY_LIMIT_REACHED');
-
-      const prediction = await tx.prediction.create({
-        data: {
-          userId: user.id,
-          apiMatchId: input.apiMatchId,
-          predictionType,
-          coinsSpent: input.coinsSpent,
-          isCorrect: null,
-          predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
-          predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
-          homeTeam: input.homeTeam ?? null,
-          awayTeam: input.awayTeam ?? null,
-          homeTeamLogo: input.homeTeamLogo ?? null,
-          awayTeamLogo: input.awayTeamLogo ?? null,
-          matchDate: fixture!.kickoff,
-          leagueName: input.leagueName ?? null,
-          canonicalFixtureKey: fixture!.canonicalKey,
-        },
       });
-
-      return {
-        prediction,
-        remaining: Math.max(0, input.dailyLimit - used),
-        updated: false,
-        coins: user.coins,
-      };
-    });
-  } catch (err: any) {
-    if (err?.code === 'P2002' && String(err?.meta?.target ?? '').includes('canonicalFixtureKey')) {
-      throw new KingPredictionError('DUPLICATE_FIXTURE');
+    } catch (err: any) {
+      if (err instanceof KingPredictionError) throw err;
+      if (err?.code === 'P2002') {
+        const target = String(err?.meta?.target ?? '');
+        if (target.includes('canonicalFixtureKey')) {
+          throw new KingPredictionError('DUPLICATE_FIXTURE');
+        }
+        if (!racedCreate && target.includes('apiMatchId')) {
+          racedCreate = true;
+          continue;
+        }
+      }
+      throw err;
     }
-    throw err;
   }
 }
 

@@ -62,7 +62,7 @@ export interface FavoritesTabProps {
     onOpenTeam?: (team: StoredFollowedTeam) => void;
     onOpenLeague?: (league: StoredFollowedLeague) => void;
     onChooseFavoriteTeam?: () => void;
-    refreshControl?: React.ReactElement;
+    refreshControl?: React.ReactElement<import('react-native').RefreshControlProps>;
     /** Optional FlashList style — used by the matches horizontal pager for a bounded height. */
     listStyle?: StyleProp<ViewStyle>;
 }

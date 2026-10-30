@@ -4,6 +4,7 @@ import { Text } from './MatchText';
 import type { Standing } from '../../services/apiFootball';
 import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { standingRowMatchesTeam } from '../../utils/standingsHelpers';
+import type { Language } from '../../src/i18n';
 
 type TeamRef = { id?: number | null; name?: string | null };
 
@@ -86,7 +87,7 @@ function MatchStandingsTableComponent({
             <View style={styles.teamCell}>
               <Image source={{ uri: team.team.logo }} style={styles.logo} />
               <Text style={[styles.text, styles.teamName]} numberOfLines={1}>
-                {getTeamDisplayName(team.team.name, language)}
+                {getTeamDisplayName(team.team.name, language as Language)}
               </Text>
             </View>
             <Text style={[styles.text, styles.num, { width: colW }]}>{team.all.played}</Text>

@@ -215,9 +215,14 @@ export function PWMapPickerModal({
               originWhitelist={['*']}
               source={{ html, baseUrl: 'https://90plus.pro' }}
               geolocationEnabled
-              onGeolocationPermissionsShowPrompt={(event) => {
-                event.nativeEvent.callback(true);
-              }}
+              // Android runtime prop; omitted from react-native-webview typings.
+              {...({
+                onGeolocationPermissionsShowPrompt: (event: {
+                  nativeEvent: { callback: (allow: boolean) => void };
+                }) => {
+                  event.nativeEvent.callback(true);
+                },
+              } as object)}
               onMessage={(event) => handleMessage(event.nativeEvent.data)}
               style={{ flex: 1, backgroundColor: '#080512' }}
             />

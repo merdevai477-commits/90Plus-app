@@ -339,7 +339,6 @@ export function CompetitionCard({
             }}
             contentFit="contain"
             transition={150}
-            cacheKey={sponsor.logoUrl ?? (usesDefaultStoreLogo(sponsor.socialLinks) ? 'default-store' : 'none')}
             recyclingKey={`${sponsor.id}:${sponsor.logoUrl ?? (usesDefaultStoreLogo(sponsor.socialLinks) ? 'default' : 'none')}`}
           />
         ) : null}

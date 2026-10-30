@@ -31,12 +31,16 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const token = await getTokenRef.current().catch(() => null);
-    if (!token) {
+    const hasToken = !!(await getTokenRef.current().catch(() => null));
+    if (!hasToken) {
       setBoard(null);
       return;
     }
-    const data = await PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null);
+    const data = await PredictionsService.getKingLeaderboard(
+      getTokenRef.current,
+      toApiMode(mode),
+      period,
+    ).catch(() => null);
     setBoard(data);
     // `results` re-runs this when a PREDICTION_RESULT push lands (D9).
   }, [mode, period, results]);

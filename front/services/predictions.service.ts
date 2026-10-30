@@ -5,8 +5,46 @@
 
 import { logger } from '../utils/logger';
 import { getApiUrl } from '../config/api.config';
+import type { GetTokenFn } from '../utils/clerkAuthToken';
 
 const API_URL = getApiUrl(); // Already includes /api
+
+/** Bearer string or Clerk getToken — getToken enables a single 401→skipCache retry (GK-5). */
+export type PredictionAuth = string | GetTokenFn;
+
+async function authFetch(
+  auth: PredictionAuth,
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const getToken = typeof auth === 'function' ? auth : null;
+  let token: string | null | undefined = getToken
+    ? await getToken()
+    : typeof auth === 'string'
+      ? auth
+      : null;
+  if (!token) {
+    throw new PredictionApiError('E002', 'Unauthorized', 401);
+  }
+
+  const build = (bearer: string): RequestInit => {
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', `Bearer ${bearer}`);
+    if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    return { ...init, headers };
+  };
+
+  let response = await fetch(url, build(token));
+  if (response.status === 401 && getToken) {
+    const fresh = await getToken({ skipCache: true }).catch(() => null);
+    if (fresh) {
+      response = await fetch(url, build(fresh));
+    }
+  }
+  return response;
+}
 
 // ─── In-flight deduplication ──────────────────────────────────────────────────
 // Multiple screens (Home, Matches, Rank) call getRemainingPredictions and
@@ -159,18 +197,13 @@ export const PredictionsService = {
   /**
    * Get remaining daily predictions
    */
-  getRemainingPredictions: async (token: string): Promise<PredictionRemaining> => {
+  getRemainingPredictions: async (token: PredictionAuth): Promise<PredictionRemaining> => {
     // Collapse concurrent calls — multiple screens call this on mount.
     if (_inFlightRemaining) return _inFlightRemaining;
 
     _inFlightRemaining = (async () => {
       try {
-        const response = await fetch(`${API_URL}/predictions/remaining`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const response = await authFetch(token, `${API_URL}/predictions/remaining`);
 
         if (!response.ok) {
           throw await PredictionsService._parseError(response);
@@ -197,7 +230,7 @@ export const PredictionsService = {
    * Submit a prediction
    */
   submitPrediction: async (
-    token: string,
+    token: PredictionAuth,
     matchData: {
       apiMatchId: string;
       predictionType: 'home' | 'draw' | 'away';
@@ -212,12 +245,8 @@ export const PredictionsService = {
     }
   ): Promise<{ prediction: Prediction; remaining?: number; updated?: boolean }> => {
     try {
-      const response = await fetch(`${API_URL}/predictions`, {
+      const response = await authFetch(token, `${API_URL}/predictions`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(matchData),
       });
 
@@ -243,17 +272,12 @@ export const PredictionsService = {
    * keep the picks they already show instead of treating them as gone.
    */
   getPredictionsForMatches: async (
-    token: string,
+    token: PredictionAuth,
     matchIds: (string | number)[],
   ): Promise<Record<string, unknown>> => {
     if (matchIds.length === 0) return {};
     const query = encodeURIComponent(matchIds.join(','));
-    const response = await fetch(`${API_URL}/predictions/user?matchIds=${query}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await authFetch(token, `${API_URL}/predictions/user?matchIds=${query}`);
     if (!response.ok) {
       throw await PredictionsService._parseError(response);
     }
@@ -267,18 +291,13 @@ export const PredictionsService = {
   /**
    * Get user predictions
    */
-  getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: Record<string, Prediction & { prediction: { type: 'home' | 'draw' | 'away' } }> }> => {
+  getUserPredictions: async (token: PredictionAuth): Promise<{ predictions: Prediction[]; predictionsMap: Record<string, Prediction & { prediction: { type: 'home' | 'draw' | 'away' } }> }> => {
     // Collapse concurrent calls.
     if (_inFlightUserPreds) return _inFlightUserPreds;
 
     _inFlightUserPreds = (async () => {
       try {
-        const response = await fetch(`${API_URL}/predictions/user`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const response = await authFetch(token, `${API_URL}/predictions/user`);
 
         if (!response.ok) {
           throw await PredictionsService._parseError(response);
@@ -356,19 +375,14 @@ export const PredictionsService = {
   /**
    * Get prediction count for a specific match
    */
-  getMatchPredictionCount: async (token: string, matchId: string): Promise<{
+  getMatchPredictionCount: async (token: PredictionAuth, matchId: string): Promise<{
     home: number;
     draw: number;
     away: number;
     total: number;
   }> => {
     try {
-      const response = await fetch(`${API_URL}/predictions/match/${matchId}/count`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await authFetch(token, `${API_URL}/predictions/match/${matchId}/count`);
 
       if (!response.ok) {
         throw await PredictionsService._parseError(response);
@@ -392,19 +406,14 @@ export const PredictionsService = {
    * `mode=winner|exact` keeps the legacy accuracy leaderboard untouched.
    */
   getKingLeaderboard: async (
-    token: string,
+    token: PredictionAuth,
     mode: KingMode,
     period: KingPeriod,
     limit = 50,
   ): Promise<KingLeaderboard> => {
-    const response = await fetch(
+    const response = await authFetch(
+      token,
       `${API_URL}/predictions/leaderboard?mode=${mode}&period=${period}&limit=${limit}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      },
     );
     if (!response.ok) {
       throw await PredictionsService._parseError(response);
@@ -441,19 +450,14 @@ export const PredictionsService = {
 
   /** The signed-in user's King predictions for one mode, 20 per page. */
   getKingHistory: async (
-    token: string,
+    token: PredictionAuth,
     mode: KingMode,
     status: KingHistoryStatus,
     page: number,
   ): Promise<KingHistory> => {
-    const response = await fetch(
+    const response = await authFetch(
+      token,
       `${API_URL}/predictions/king/history?mode=${mode}&status=${status}&page=${page}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      },
     );
     if (!response.ok) {
       throw await PredictionsService._parseError(response);

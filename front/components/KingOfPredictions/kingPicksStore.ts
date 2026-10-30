@@ -8,6 +8,7 @@ import {
   PredictionApiError,
   PredictionsService,
   type KingHistoryItem,
+  type PredictionAuth,
 } from '../../services/predictions.service';
 
 export type KingPickType = 'home' | 'draw' | 'away';
@@ -207,7 +208,7 @@ export function isDefiniteRejection(err: unknown): boolean {
  * when the server cannot be reached either.
  */
 export async function settleUncertainSave(
-  token: string,
+  token: PredictionAuth,
   matchId: string,
   seq: number,
 ): Promise<'confirmed' | 'reverted' | 'unknown'> {

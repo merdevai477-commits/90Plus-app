@@ -83,7 +83,10 @@ export function AppRatingBootstrap({ blocked = false }: Props) {
       if (stars >= 4) {
         const opened = await openAppStoreForRating();
         if (!opened) {
-          toastManager.showInfo(t.settings.rateThanks, t.settings.rateThanksDetail);
+          toastManager.showInfo(
+            (t.settings as { rateThanks?: string }).rateThanks ?? t.appRating.thanksTitle,
+            (t.settings as { rateThanksDetail?: string }).rateThanksDetail ?? t.appRating.thanksLowDetail,
+          );
         }
       } else {
         toastManager.showSuccess(

@@ -7,9 +7,17 @@ import type { Lineup } from '../../services/apiFootball';
 function xi(count: number, extra: Partial<Lineup> = {}): Lineup {
   return {
     team: { id: 1, name: 'Home', logo: '' },
+    coach: { id: null, name: null, photo: null },
     formation: extra.formation ?? '',
     startXI: Array.from({ length: count }, (_, i) => ({
-      player: { id: i + 1, name: `P${i}`, number: i + 1, pos: 'M', grid: null },
+      player: {
+        id: i + 1,
+        name: `P${i}`,
+        number: i + 1,
+        pos: 'M',
+        grid: '',
+        photo: '',
+      },
     })),
     substitutes: [],
     ...extra,

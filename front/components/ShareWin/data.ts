@@ -37,7 +37,7 @@ export function splitCountdown(remainingMs: number): CountdownParts {
   };
 }
 
-/** Thousands separators with Latin digits — Figma shows "1,250" and "3,250 xp". */
+/** Thousands separators with Latin digits — Figma shows "1,250" and ranking pts. */
 export function formatNumber(value: number, language: Language): string {
   try {
     return toLatinDigits(new Intl.NumberFormat(localeWithLatinNumerals(language)).format(value));

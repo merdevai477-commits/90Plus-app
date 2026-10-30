@@ -139,4 +139,27 @@ describe('upsertKingPrediction', () => {
     );
     expect(await reason(upsertKingPrediction(input({ apiMatchId: 1234567 })))).toBe('DUPLICATE_FIXTURE');
   });
+
+  it('concurrent create on userId_apiMatchId retries as update (GK-6)', async () => {
+    mockTx.$queryRaw.mockResolvedValue([{ count: 1 }]);
+    mockTx.prediction.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'p1',
+        isCorrect: null,
+        homeTeam: 'A',
+        awayTeam: 'B',
+        homeTeamLogo: null,
+        awayTeamLogo: null,
+        leagueName: null,
+        canonicalFixtureKey: '365:999',
+      });
+    mockTx.prediction.create.mockRejectedValueOnce(
+      Object.assign(new Error('unique'), { code: 'P2002', meta: { target: ['userId', 'apiMatchId'] } }),
+    );
+    mockTx.prediction.update.mockResolvedValue({ id: 'p1' });
+    const r = await upsertKingPrediction(input());
+    expect(r.updated).toBe(true);
+    expect(mockTx.prediction.update).toHaveBeenCalled();
+  });
 });

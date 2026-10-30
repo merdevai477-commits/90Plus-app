@@ -53,6 +53,9 @@ const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 const TERMINAL_LATCH_STATUSES_SET = new Set(TERMINAL_LATCH_STATUSES);
 
+/** Drop long-suspended rows from /fixtures/live after kickoff+N (calendar status kept). */
+const SUSP_LIVE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
 /** Redis TTL for the allscores-replaced 365 live list — must outlive the ~20s tick. */
 export function scores365LiveListTtlSec(): number {
   const tickMs = parseInt(process.env.SCORES365_ALLSCORES_LIVE_MS || '20000', 10) || 20_000;
@@ -999,6 +1002,28 @@ export function shouldRescueLiveListFromApiFootball(
   return source == null;
 }
 
+/**
+ * Age-out long-suspended fixtures from the live feed (kickoff + 6h) so EmptyBackoff
+ * zombies do not inflate /fixtures/live. Calendar / details keep SUSP status.
+ */
+export function isAgedSuspendedLiveFixture(
+  fixture: FixtureFromAPI,
+  nowMs = Date.now(),
+): boolean {
+  const short = fixture?.fixture?.status?.short ?? '';
+  if (short !== 'SUSP') return false;
+  const kickoffIso = fixture?.fixture?.date;
+  const kickoffMs =
+    typeof kickoffIso === 'string' && kickoffIso
+      ? Date.parse(kickoffIso)
+      : Number.NaN;
+  if (!Number.isFinite(kickoffMs)) {
+    // No kickoff timestamp — treat as aged so a stuck SUSP cannot linger forever.
+    return true;
+  }
+  return nowMs >= kickoffMs + SUSP_LIVE_MAX_AGE_MS;
+}
+
 export async function resolveLiveFixturesForClient(
   language?: string | null,
 ): Promise<{
@@ -1010,8 +1035,10 @@ export async function resolveLiveFixturesForClient(
   let source: 'redis' | 'scores365-experiment' | null = null;
 
   if (fromRedis != null) {
-    fixtures = fromRedis.filter((f) =>
-      LIVE_STATUSES_SET.has(f?.fixture?.status?.short ?? ''),
+    fixtures = fromRedis.filter(
+      (f) =>
+        LIVE_STATUSES_SET.has(f?.fixture?.status?.short ?? '') &&
+        !isAgedSuspendedLiveFixture(f),
     );
     source = 'redis';
   }
@@ -1022,7 +1049,7 @@ export async function resolveLiveFixturesForClient(
   );
   if (experimentFixture) {
     const short = experimentFixture.fixture?.status?.short ?? '';
-    if (LIVE_STATUSES_SET.has(short)) {
+    if (LIVE_STATUSES_SET.has(short) && !isAgedSuspendedLiveFixture(experimentFixture)) {
       const id = experimentFixture.fixture.id;
       fixtures = fixtures.filter((f) => f.fixture.id !== id);
       fixtures.unshift(experimentFixture);

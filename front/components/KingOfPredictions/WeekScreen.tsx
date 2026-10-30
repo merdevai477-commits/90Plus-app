@@ -125,8 +125,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
 
     const ids = dayMatches.map((match) => match.id);
     const [picks, leaderboard] = await Promise.all([
-      PredictionsService.getPredictionsForMatches(token, ids).catch(() => null),
-      PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null),
+      PredictionsService.getPredictionsForMatches(getTokenRef.current, ids).catch(() => null),
+      PredictionsService.getKingLeaderboard(getTokenRef.current, toApiMode(mode), period).catch(
+        () => null,
+      ),
     ]);
     if (gen !== loadGenRef.current) return;
     if (picks) useKingPicksStore.getState().hydrate(picks, ids);

@@ -113,7 +113,8 @@ async function checkAndroidInstallReferrer(): Promise<void> {
       sleep(ANDROID_REFERRER_SOFT_MS).then(() => ({ timedOut: true as const })),
     ]);
 
-    const raw = soft.timedOut ? await referrerPromise : soft.raw;
+    const raw =
+      soft.timedOut === false ? soft.raw : await referrerPromise;
 
     // TODO: remove temporary debug logging after real-device verification
     logger.debug('[DeferredReferral] raw referrer:', raw);

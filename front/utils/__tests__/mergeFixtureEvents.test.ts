@@ -1,5 +1,5 @@
 import { mergeFixtureEvents, fixtureEventDedupeKey } from '../mergeFixtureEvents';
-import type { FixtureEvent } from '../services/apiFootball';
+import type { FixtureEvent } from '../../services/apiFootball';
 
 const goal = (minute: number): FixtureEvent => ({
   time: { elapsed: minute, extra: null },

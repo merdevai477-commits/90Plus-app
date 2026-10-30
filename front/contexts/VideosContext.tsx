@@ -53,7 +53,7 @@ interface VideosContextType {
     uploadedVideos: UploadedVideo[];
     addVideo: (video: UploadedVideo) => void;
     removeVideo: (videoId: string) => void;
-    clearVideos: () => void;
+    clearVideos: () => Promise<void>;
     userVideoData: UserVideoData | null;
     setUserVideoData: (data: UserVideoData) => void;
     reelComments: Record<string, Comment[]>;

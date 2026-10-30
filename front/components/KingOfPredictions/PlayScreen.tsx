@@ -135,10 +135,10 @@ export function KingPlayScreen({
     setMatches(dayMatches);
 
     // No token is a gap, not a sign-out: the picks stay until Clerk says otherwise (D6).
-    const token = await getTokenRef.current().catch(() => null);
-    if (gen !== loadGenRef.current || !token) return;
+    const hasToken = !!(await getTokenRef.current().catch(() => null));
+    if (gen !== loadGenRef.current || !hasToken) return;
     const ids = dayMatches.map((match) => match.id);
-    const picks = await PredictionsService.getPredictionsForMatches(token, ids).catch(() => null);
+    const picks = await PredictionsService.getPredictionsForMatches(getTokenRef.current, ids).catch(() => null);
     if (gen !== loadGenRef.current) return;
     if (picks) useKingPicksStore.getState().hydrate(picks, ids);
   }, [dateKey]);
@@ -239,11 +239,8 @@ export function KingPlayScreen({
     });
 
     void (async () => {
-      let token: string | null = null;
       try {
-        token = await getTokenRef.current();
-        if (!token) throw new PredictionApiError('E002', 'Unauthorized', 401);
-        await PredictionsService.submitPrediction(token, {
+        await PredictionsService.submitPrediction(getTokenRef.current, {
           apiMatchId: match.id,
           predictionType,
           ...meta,
@@ -252,13 +249,13 @@ export function KingPlayScreen({
         });
         picks.confirm(matchId, seq);
       } catch (err) {
-        if (isDefiniteRejection(err) || !token) {
+        if (isDefiniteRejection(err)) {
           picks.revert(matchId, seq);
           explain(err);
           return;
         }
         // Timeout / network / 5xx: the save may have landed, so ask before undoing it (D3).
-        const outcome = await settleUncertainSave(token, matchId, seq);
+        const outcome = await settleUncertainSave(getTokenRef.current, matchId, seq);
         if (outcome !== 'confirmed') explain(err);
       }
     })();

@@ -927,6 +927,8 @@ export interface Stat365Leaderboard {
 export interface Competitor365Stats {
   competitionId: number;
   leaderboards: Stat365Leaderboard[];
+  /** Soft-fail from backend `_meta.unavailable` (empty boards ≠ real empty season). */
+  unavailable?: boolean;
 }
 
 export type SquadPositionGroup = 'goalkeeper' | 'defender' | 'midfielder' | 'forward' | 'other';
@@ -2992,17 +2994,44 @@ export const ApiFootballService = {
   },
 
   /** League-wide scorers / assists boards for a 365 competition. */
-  async getCompetition365Stats(competitionId: number): Promise<Competitor365Stats | null> {
-    if (!competitionId || competitionId <= 0) return null;
-    try {
-      const res = await fetchFromProxy<Competitor365Stats>(
-        `/cached/365/competition/${competitionId}/stats`,
-      );
-      return res && Array.isArray((res as any).leaderboards) ? res : null;
-    } catch (error) {
-      console.error('Error fetching 365 competition stats:', error);
-      return null;
+  async getCompetition365Stats(competitionId: number): Promise<Competitor365Stats> {
+    if (!competitionId || competitionId <= 0) {
+      throw new Error('Invalid competition id');
     }
+    // Preserve `_meta.unavailable` — fetchFromProxy only returns `response`.
+    const baseUrl = getApiUrl();
+    const url = new URL(`${baseUrl}/football/cached/365/competition/${competitionId}/stats`);
+    url.searchParams.set('language', getAppLanguageCode());
+    const response = await fetchWithSignal(
+      url.toString(),
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Language': acceptLanguageHeader(),
+        },
+      },
+      { timeout: DEFAULT_TIMEOUT },
+    );
+    if (!response.ok) {
+      throw new ApiFootballError(
+        `API request failed: ${response.status} ${response.statusText}`,
+        response.status,
+      );
+    }
+    const data = (await response.json()) as ProxyResponse<Competitor365Stats> & {
+      _meta?: { unavailable?: boolean; competitionId?: number };
+    };
+    if (data.status === 'ERROR') {
+      throw new ApiFootballError(data.message || 'Competition stats unavailable');
+    }
+    const body = data.response;
+    const leaderboards = Array.isArray(body?.leaderboards) ? body!.leaderboards : [];
+    return {
+      competitionId: body?.competitionId ?? competitionId,
+      leaderboards,
+      unavailable: data._meta?.unavailable === true || !body,
+    };
   },
 
   /** Live / upcoming / finished fixtures for a competition profile Matches tab. */

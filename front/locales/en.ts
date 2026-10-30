@@ -825,6 +825,8 @@ export const en = {
     topScorers: 'Top scorers',
     topAssists: 'Top assists',
     noScorers: 'Stats are not available yet',
+    statsUnavailable: 'Could not load player stats',
+    retry: 'Retry',
     follow: 'Follow',
     following: 'Following',
     followNotifHint: 'Match alerts are on for this competition',
@@ -1205,8 +1207,8 @@ export const en = {
     titleHighlight: 'Share',
     titleRest: ' & Win',
     subtitle: 'Share the app with your friends and win great prizes!',
-    perShareLead: 'Every share = ',
-    perSharePoints: 'XP points',
+    perShareLead: 'Every friend who joins via your invite ',
+    perSharePoints: 'counts',
     perShareXp: 'XP',
 
     // Lucky wheel card
@@ -1217,8 +1219,8 @@ export const en = {
     wheelSpinningCta: 'Spinning...',
     wheelNote: 'One spin per day only',
 
-    // Monthly ranking
-    weeklyTitle: 'Monthly Ranking',
+    // Weekly ranking
+    weeklyTitle: 'Weekly Ranking',
     weeklyEndsIn: 'Ends in:',
     unitDays: 'Days',
     unitHours: 'Hours',
@@ -1226,15 +1228,15 @@ export const en = {
     unitSeconds: 'Seconds',
     viewFullRanking: 'View full ranking',
     leaderboardEmpty: 'No ranking yet — be the first to share!',
-    leaderboardCompetitors: '{count} competing this month',
+    leaderboardCompetitors: '{count} competing this week',
     leaderboardEnd: 'You have reached the end',
     boardUnit: 'friends',
     close: 'Close',
     backToRank: 'Back to Rank',
 
-    // Monthly prizes
-    prizesTitle: 'Monthly Prizes',
-    prizesSubtitleLine1: 'A new prize every month!',
+    // Weekly prizes
+    prizesTitle: 'Weekly Prizes',
+    prizesSubtitleLine1: 'A new prize every week!',
     prizesSubtitleLine2: ' Share now to be the winner',
     remainingMonthsTitle: 'More winners',
 
@@ -1246,7 +1248,7 @@ export const en = {
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
     referralHintLead: 'Every friend who signs up via your link gives you ',
-    referralHintXp: 'XP',
+    referralHintXp: '50 XP',
     linkCopied: 'Link copied',
     linkCopiedDetail: 'Paste it in a chat — rank rises when they join',
     copyFailed: 'Could not copy the link',
@@ -1255,14 +1257,15 @@ export const en = {
     // Stats bar
     statsInvitedFriends: 'Friends invited',
     statsFriendsValue: '{count} friends',
-    statsCurrentPoints: 'Your points',
+    statsCurrentPoints: 'Ranking points',
+    statsRankingUnit: 'pts',
     statsRankThisWeek: 'Your rank this week',
     statsShares: 'Your shares',
 
     // Last winner
     lastWinnerTitle: 'Latest winner',
     lastWinnerViewStory: 'View story',
-    lastWinnerNone: 'No winner crowned yet — month one is still running',
+    lastWinnerNone: 'No winner crowned yet — week one is still running',
     timeAgoHours: '{count}h ago',
     timeAgoDays: '{count}d ago',
     timeAgoNow: 'Just now',
@@ -3664,6 +3667,7 @@ export const en = {
     ok: 'OK',
     contentReel: 'Reel',
     contentComment: 'Comment',
+    contentPost: 'Post',
     contentUser: 'User',
     statusPending: 'Pending review',
     statusReviewed: 'Reviewed',

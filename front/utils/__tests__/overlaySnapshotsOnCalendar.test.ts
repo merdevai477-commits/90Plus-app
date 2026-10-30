@@ -11,8 +11,8 @@ jest.mock('../../src/utils/snapshotToMatchRow', () => ({
     };
   }) => ({
     id: String(snap.fixtureId),
-    homeTeam: { id: 1, name: 'Home', logo: '' },
-    awayTeam: { id: 2, name: 'Away', logo: '' },
+    homeTeam: { name: 'Home', logo: '' },
+    awayTeam: { name: 'Away', logo: '' },
     score: {
       home: snap.fixture.goals.home ?? 0,
       away: snap.fixture.goals.away ?? 0,
@@ -34,8 +34,8 @@ import type { LiveFixtureSnapshot } from '../../src/store/liveFixtureStore.types
 
 function makeMatch(overrides: Partial<Match> & { id: string }): Match {
   return {
-    homeTeam: { id: 1, name: 'Home', logo: '' },
-    awayTeam: { id: 2, name: 'Away', logo: '' },
+    homeTeam: { name: 'Home', logo: '' },
+    awayTeam: { name: 'Away', logo: '' },
     score: { home: 0, away: 0 },
     status: 'live',
     time: '12:00',
