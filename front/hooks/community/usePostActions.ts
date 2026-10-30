@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Share } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -44,6 +44,7 @@ export function usePostActions() {
   const { t } = useTranslation();
   const s = t.community;
   const [reportPrompt, setReportPrompt] = useState<ReportPrompt | null>(null);
+  const reportPromptRef = useRef<ReportPrompt | null>(null);
 
   const flushLike = useCallback(
     async (postId: string): Promise<void> => {
@@ -142,17 +143,22 @@ export function usePostActions() {
 
   const askReport = useCallback((kind: 'post' | 'comment', id: string, onHidden?: () => void) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setReportPrompt({ kind, id, onHidden });
+    const prompt = { kind, id, onHidden };
+    reportPromptRef.current = prompt;
+    setReportPrompt(prompt);
   }, []);
 
-  const closeReport = useCallback(() => setReportPrompt(null), []);
+  const closeReport = useCallback(() => {
+    reportPromptRef.current = null;
+    setReportPrompt(null);
+  }, []);
 
   const pickReportReason = useCallback(
     (reason: ReportReason) => {
-      setReportPrompt((prompt) => {
-        if (prompt) void report(prompt.kind, prompt.id, reason, prompt.onHidden);
-        return null;
-      });
+      const prompt = reportPromptRef.current;
+      reportPromptRef.current = null;
+      setReportPrompt(null);
+      if (prompt) void report(prompt.kind, prompt.id, reason, prompt.onHidden);
     },
     [report],
   );

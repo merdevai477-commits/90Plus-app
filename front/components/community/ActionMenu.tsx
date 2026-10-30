@@ -160,8 +160,10 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
               <Pressable
                 key={item.key}
                 onPress={() => {
+                  // Fire first so handlers can still read sheet state (e.g. report
+                  // prompt), then close for the exit animation.
+                  item.onPress();
                   onClose();
-                  setTimeout(item.onPress, 220);
                 }}
                 style={({ pressed }) => [
                   styles.row,
