@@ -31,6 +31,7 @@ import {
     type KingPeriod,
 } from '../services/king-prediction.service';
 import { cairoDayKey, cairoWeekBounds } from '../services/king-prediction-rules';
+import { resettleMatchPredictions } from '../services/prediction-resettle.service';
 
 const router = Router();
 
@@ -714,6 +715,32 @@ router.get('/admin/settle-metrics', requireAuth, requireAdmin, async (req: Reque
         res.json({ success: true, data: { summary, stale, days, schema: getSchemaStatus() } });
     } catch (error) {
         logger.error('Error reading settle metrics:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * POST /api/predictions/admin/resettle/:matchId?dryRun=1
+ * Re-judge an already-settled match under the current gate (admin only, A7).
+ * Dry run unless dryRun=0 is passed explicitly.
+ */
+router.post('/admin/resettle/:matchId', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const matchId = Number(req.params.matchId);
+        if (!Number.isInteger(matchId) || matchId <= 0) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid match id');
+            return;
+        }
+        const dryRun = req.query.dryRun !== '0';
+        const result = await resettleMatchPredictions(matchId, { dryRun, adminUserId: req.auth?.userId ?? null });
+        if (!result.ok) {
+            const status = result.reason === 'SETTLE_SKIPPED_LOCKED' ? 409 : result.reason === 'SCHEMA_MISMATCH' ? 503 : 422;
+            res.status(status).json({ success: false, error: { code: result.reason, detail: result.detail ?? null } });
+            return;
+        }
+        res.json({ success: true, data: result });
+    } catch (error) {
+        logger.error('Error re-settling match:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

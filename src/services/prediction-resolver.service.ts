@@ -13,8 +13,7 @@ import { awardXp, levelFromXp, XP_VALUES } from './xp.service';
 import { clearResponseCache } from '../middleware/responseCache.middleware';
 import { acquireSettleLock, startLeaseHeartbeat, type LeaseHeartbeat } from './prediction-settle-lock';
 import {
-  isExactPredictionCorrect,
-  isWinnerPredictionCorrect,
+  judgePrediction,
   resolveSettlementInput,
   type SettlementFixtureInput,
   type SettlementOk,
@@ -25,7 +24,7 @@ import { decideResultPush, isStaleKickoff } from './prediction-settle-push-polic
 import { maybeVoidMatchPredictions } from './prediction-void.service';
 import { recordSettleMetric } from './settle-metrics.service';
 
-const CORRECT_PREDICTION_REWARD = 10;
+export const CORRECT_PREDICTION_REWARD = 10;
 const SETTLE_CHUNK_SIZE = 200;
 /** A snapshot the caller fetched this recently is reused instead of re-fetched (E7). */
 export const PREFETCH_MAX_AGE_MS = 60_000;
@@ -64,7 +63,7 @@ export type SettleSource =
   | 'admin'
   | 'unknown';
 
-type ScoredPrediction = {
+export type ScoredPrediction = {
   id: string;
   userId: string;
   predictionType: string;
@@ -83,18 +82,10 @@ function hasScoreline(prediction: ScoredPrediction): boolean {
 }
 
 function isPredictionCorrect(prediction: ScoredPrediction, settled: SettlementOk): boolean {
-  if (hasScoreline(prediction)) {
-    return isExactPredictionCorrect(
-      prediction.predictedHomeScore!,
-      prediction.predictedAwayScore!,
-      settled.exactHomeScore,
-      settled.exactAwayScore,
-    );
-  }
-  return isWinnerPredictionCorrect(prediction.predictionType, settled.winner, settled.status);
+  return judgePrediction(prediction, settled);
 }
 
-function predictionXpAction(prediction: ScoredPrediction): 'PREDICTION_EXACT' | 'PREDICTION_WINNER' {
+export function predictionXpAction(prediction: ScoredPrediction): 'PREDICTION_EXACT' | 'PREDICTION_WINNER' {
   return hasScoreline(prediction) ? 'PREDICTION_EXACT' : 'PREDICTION_WINNER';
 }
 

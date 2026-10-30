@@ -169,6 +169,38 @@ export function isExactPredictionCorrect(
   return predictedHome === exactHome && predictedAway === exactAway;
 }
 
+export type JudgeablePrediction = {
+  predictionType: string;
+  predictedHomeScore: number | null;
+  predictedAwayScore: number | null;
+};
+
+/** A row with a scoreline is a King of Results pick; otherwise a winner pick. */
+export function judgePrediction(prediction: JudgeablePrediction, settled: SettlementOk): boolean {
+  if (prediction.predictedHomeScore != null && prediction.predictedAwayScore != null) {
+    return isExactPredictionCorrect(
+      prediction.predictedHomeScore,
+      prediction.predictedAwayScore,
+      settled.exactHomeScore,
+      settled.exactAwayScore,
+    );
+  }
+  return isWinnerPredictionCorrect(prediction.predictionType, settled.winner, settled.status);
+}
+
+export type StoredVerdictBucket = 'wrongToCorrect' | 'correctToWrong' | 'unchanged';
+
+/** Stored verdict vs the gate today; used by admin re-settle and the reconcile script (A7). */
+export function classifyStoredVerdict(
+  prediction: JudgeablePrediction & { isCorrect: boolean },
+  settled: SettlementOk,
+): { bucket: StoredVerdictBucket; computed: boolean } {
+  const computed = judgePrediction(prediction, settled);
+  if (!prediction.isCorrect && computed) return { bucket: 'wrongToCorrect', computed };
+  if (prediction.isCorrect && !computed) return { bucket: 'correctToWrong', computed };
+  return { bucket: 'unchanged', computed };
+}
+
 export function extractPenaltyFromFullData(
   fullData: unknown,
 ): { home: number | null; away: number | null } {

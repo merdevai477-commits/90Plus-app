@@ -1558,6 +1558,9 @@ model Prediction {
   /// Match will never produce a result (CANC/ABD/PST/AWD/WO past 48h); row leaves the pending set, no refund.
   voidedAt           DateTime?
   voidReason         String?
+  /// Set when an admin re-settle changed this row (A7); see prediction_resettle_runs.
+  resettledAt        DateTime?
+  resettleRunId      String?
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, apiMatchId])
@@ -1580,6 +1583,38 @@ model SettleLease {
   acquiredAt DateTime @default(now())
 
   @@map("settle_leases")
+}
+
+/// One applied admin re-settle of a match (A7). Dry runs are not recorded.
+model PredictionResettleRun {
+  id          String                   @id @default(uuid())
+  apiMatchId  Int
+  adminUserId String?
+  /// Gated snapshot the run judged against.
+  snapshot    Json
+  /// Bucket counts and credits granted.
+  summary     Json
+  createdAt   DateTime                 @default(now())
+  items       PredictionResettleItem[]
+
+  @@index([apiMatchId, createdAt])
+  @@map("prediction_resettle_runs")
+}
+
+/// Per-prediction diff of a re-settle run; correctToWrong rows are recorded, never applied (Q3).
+model PredictionResettleItem {
+  id           String                @id @default(uuid())
+  runId        String
+  predictionId String
+  bucket       String
+  applied      Boolean               @default(false)
+  diff         Json
+  createdAt    DateTime              @default(now())
+  run          PredictionResettleRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([predictionId])
+  @@map("prediction_resettle_items")
 }
 
 /// King daily prediction quota per Africa/Cairo calendar day.
