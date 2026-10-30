@@ -21,6 +21,7 @@ import {
 } from '../../services/pushTokenRegistration.service';
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
 import { useLiveFixtureStore } from '../store/liveFixtureStore';
+import { useKingPicksStore } from '../../components/KingOfPredictions/kingPicksStore';
 
 const PERMISSION_REQUESTED_KEY = NOTIFICATION_PERMISSION_REQUESTED_KEY;
 
@@ -194,6 +195,7 @@ export function usePushNotifications(): PushNotificationState {
                     r.push('/notifications');
                 }
             } else if (type === 'PREDICTION_RESULT') {
+                useKingPicksStore.getState().noteResult();
                 const fId = data.matchId || data.fixtureId;
                 if (fId) {
                     r.push({
@@ -370,6 +372,8 @@ export function usePushNotifications(): PushNotificationState {
             if (data?.notificationId) {
                 markTrayNotificationPresented(String(data.notificationId));
             }
+
+            if (data?.type === 'PREDICTION_RESULT') useKingPicksStore.getState().noteResult();
 
             if (data?.silent === true || data?.silent === 'true') {
                 logger.debug('🔕 Silent notification received, invalidating cache:', data.type);

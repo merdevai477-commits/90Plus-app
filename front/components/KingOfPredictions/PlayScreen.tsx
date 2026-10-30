@@ -29,7 +29,13 @@ import { KingHistoryList } from './HistoryList';
 import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KingToast, type KingToastState } from './KingToast';
-import { useKingPicksStore, type KingPick } from './kingPicksStore';
+import {
+  isDefiniteRejection,
+  settleUncertainSave,
+  useBindKingPicksUser,
+  useKingPicksStore,
+  type KingPick,
+} from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
@@ -86,6 +92,7 @@ export function KingPlayScreen({
   const dayPassed = dateKey !== '' && dateKey < todayKey;
   const insets = useSafeAreaInsets();
   const { getToken, isSignedIn } = useAuth();
+  useBindKingPicksUser();
   // Clerk hands out a new getToken on renders; keeping it out of load's deps
   // stops the focus effect from re-running (and re-rendering) forever.
   const getTokenRef = useRef(getToken);
@@ -127,18 +134,13 @@ export function KingPlayScreen({
     if (calendar) setTodayKey(calendar.today);
     setMatches(dayMatches);
 
+    // No token is a gap, not a sign-out: the picks stay until Clerk says otherwise (D6).
     const token = await getTokenRef.current().catch(() => null);
+    if (gen !== loadGenRef.current || !token) return;
+    const ids = dayMatches.map((match) => match.id);
+    const picks = await PredictionsService.getPredictionsForMatches(token, ids).catch(() => null);
     if (gen !== loadGenRef.current) return;
-    if (!token) {
-      useKingPicksStore.getState().clear();
-      return;
-    }
-    const picks = await PredictionsService.getPredictionsForMatches(
-      token,
-      dayMatches.map((match) => match.id),
-    ).catch(() => null);
-    if (gen !== loadGenRef.current) return;
-    if (picks) useKingPicksStore.getState().hydrate(picks);
+    if (picks) useKingPicksStore.getState().hydrate(picks, ids);
   }, [dateKey]);
 
   useFocusEffect(
@@ -237,8 +239,9 @@ export function KingPlayScreen({
     });
 
     void (async () => {
+      let token: string | null = null;
       try {
-        const token = await getTokenRef.current();
+        token = await getTokenRef.current();
         if (!token) throw new PredictionApiError('E002', 'Unauthorized', 401);
         await PredictionsService.submitPrediction(token, {
           apiMatchId: match.id,
@@ -249,8 +252,14 @@ export function KingPlayScreen({
         });
         picks.confirm(matchId, seq);
       } catch (err) {
-        picks.revert(matchId, seq);
-        explain(err);
+        if (isDefiniteRejection(err) || !token) {
+          picks.revert(matchId, seq);
+          explain(err);
+          return;
+        }
+        // Timeout / network / 5xx: the save may have landed, so ask before undoing it (D3).
+        const outcome = await settleUncertainSave(token, matchId, seq);
+        if (outcome !== 'confirmed') explain(err);
       }
     })();
   }, [awayText, copy, explain, homeText, isGame, isSignedIn, saved, sheetMatch, sheetPick, showError, teamName]);
@@ -374,8 +383,9 @@ export function KingPlayScreen({
       )}
 
       <Modal visible={sheetMatch != null} transparent animationType="fade" onRequestClose={closeSheet}>
+        {/* A Modal is its own Android window, so adjustResize does not reach it (D12). */}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.backdrop}
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />

@@ -34,7 +34,7 @@ import {
 } from './KingBoardList';
 import { GlassSurface } from './GlassSurface';
 import { KingHeader } from './KingHeader';
-import { isExactPick, useKingPicksStore } from './kingPicksStore';
+import { isExactPick, useBindKingPicksUser, useKingPicksStore } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
@@ -64,7 +64,8 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
+  useBindKingPicksUser();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const { t } = useTranslation();
@@ -89,6 +90,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const matchCount = dayMatchIds.length;
   const serverPicks = useKingPicksStore((state) => state.server);
   const localPicks = useKingPicksStore((state) => state.local);
+  const results = useKingPicksStore((state) => state.results);
   const [period, setPeriod] = useState<KingPeriod>('week');
   const [board, setBoard] = useState<KingLeaderboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,23 +117,22 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
     }
     setDayMatchIds(dayMatches.map((match) => String(match.id)));
 
+    // No token is a gap, not a sign-out: the picks stay until Clerk says otherwise (D6).
     if (!token) {
-      useKingPicksStore.getState().clear();
-      setBoard(null);
+      if (!isSignedIn) setBoard(null);
       return;
     }
 
+    const ids = dayMatches.map((match) => match.id);
     const [picks, leaderboard] = await Promise.all([
-      PredictionsService.getPredictionsForMatches(
-        token,
-        dayMatches.map((match) => match.id),
-      ).catch(() => null),
+      PredictionsService.getPredictionsForMatches(token, ids).catch(() => null),
       PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null),
     ]);
     if (gen !== loadGenRef.current) return;
-    if (picks) useKingPicksStore.getState().hydrate(picks);
+    if (picks) useKingPicksStore.getState().hydrate(picks, ids);
     setBoard(leaderboard);
-  }, [calendar, mode, period, selectedKey]);
+    // `results` re-runs this when a PREDICTION_RESULT push lands (D9).
+  }, [calendar, isSignedIn, mode, period, results, selectedKey]);
 
   const predictedIds = useMemo(() => {
     const ids = new Set<string>();

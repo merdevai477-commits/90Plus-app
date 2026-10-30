@@ -72,6 +72,8 @@ export function KingHistoryList({
   const { getToken, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+  const signedInRef = useRef(isSignedIn);
+  signedInRef.current = isSignedIn;
   const { t, language } = useTranslation();
   const copy = t.kingPredictions;
   const teamName = (name: string) => getTeamDisplayName(name, language);
@@ -82,12 +84,14 @@ export function KingHistoryList({
   const [status, setStatus] = useState<KingHistoryStatus>('all');
   const [items, setItems] = useState<KingHistoryItem[]>([]);
   const [counts, setCounts] = useState<Record<KingHistoryStatus, number> | null>(null);
-  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const requestId = useRef(0);
+  const pageRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const tokenRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
     async (nextPage: number) => {
@@ -105,10 +109,23 @@ export function KingHistoryList({
     try {
       const data = await fetchPage(0);
       if (id !== requestId.current) return;
-      setItems(data?.items ?? []);
-      setCounts(data?.counts ?? null);
-      setHasMore(data?.hasMore ?? false);
-      setPage(0);
+      if (!data) {
+        if (!signedInRef.current) {
+          setItems([]);
+          setCounts(null);
+          setHasMore(false);
+          return;
+        }
+        // A token gap (Clerk refreshing) is not an empty history: keep the rows
+        // and try again shortly (D2).
+        if (tokenRetry.current) clearTimeout(tokenRetry.current);
+        tokenRetry.current = setTimeout(() => { void reload(true); }, 3000);
+        return;
+      }
+      setItems(data.items);
+      setCounts(data.counts);
+      setHasMore(data.hasMore);
+      pageRef.current = 0;
     } catch {
       if (id === requestId.current) setError(true);
     } finally {
@@ -118,15 +135,21 @@ export function KingHistoryList({
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, isSignedIn]);
+
+  useEffect(() => () => {
+    if (tokenRetry.current) clearTimeout(tokenRetry.current);
+  }, []);
 
   const confirmed = useKingPicksStore((state) => state.confirmed);
-  const confirmedSeen = useRef(confirmed);
+  const results = useKingPicksStore((state) => state.results);
+  const refreshSeen = useRef(`${confirmed}:${results}`);
   useEffect(() => {
-    if (confirmed === confirmedSeen.current) return;
-    confirmedSeen.current = confirmed;
+    const key = `${confirmed}:${results}`;
+    if (key === refreshSeen.current) return;
+    refreshSeen.current = key;
     void reload(true);
-  }, [confirmed, reload]);
+  }, [confirmed, reload, results]);
 
   // Saves still on their way to the server show here right away, and an edit
   // replaces the stored pick on its card.
@@ -163,22 +186,29 @@ export function KingHistoryList({
   }, [counts, items, localPicks, mode, status]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || loading || loadingMore) return;
+    // The ref, not state, guards: two onEndReached in one frame both see the old state (D13).
+    if (!hasMore || loading || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
     const id = requestId.current;
+    const next = pageRef.current + 1;
     setLoadingMore(true);
     try {
-      const data = await fetchPage(page + 1);
+      const data = await fetchPage(next);
       if (!data || id !== requestId.current) return;
-      setItems((prev) => [...prev, ...data.items]);
+      setItems((prev) => {
+        const seen = new Set(prev.map((row) => row.id));
+        return [...prev, ...data.items.filter((row) => !seen.has(row.id))];
+      });
       setCounts(data.counts);
       setHasMore(data.hasMore);
-      setPage(page + 1);
+      pageRef.current = next;
     } catch {
       // A failed next page leaves the list as it is; scrolling again retries.
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [fetchPage, hasMore, loading, loadingMore, page]);
+  }, [fetchPage, hasMore, loading]);
 
   const filterLabel: Record<KingHistoryStatus, string> = {
     all: copy.filterAll,
@@ -308,11 +338,15 @@ export function KingHistoryList({
       </ScrollView>
 
       <FlatList
-        data={loading ? [] : shown}
+        data={shown}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListEmptyComponent={empty}
-        ListFooterComponent={loadingMore ? <ActivityIndicator color={KING_PURPLE} style={styles.footer} /> : null}
+        // Rows already on screen stay while a reload runs; the full-list spinner
+        // is only for the very first load (D1).
+        ListFooterComponent={loadingMore || (loading && shown.length > 0)
+          ? <ActivityIndicator color={KING_PURPLE} style={styles.footer} />
+          : null}
         onEndReached={() => { void loadMore(); }}
         onEndReachedThreshold={0.4}
         contentContainerStyle={[styles.list, { paddingBottom: bottomPadding }]}

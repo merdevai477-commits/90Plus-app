@@ -12,6 +12,7 @@ import { KING_ICON } from './assets';
 import { KingBoardList, KingEmptyState, KingOrnament, KingPeriodTabs } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KING_BG, KING_PURPLE, parseKingMode, toApiMode } from './shared';
+import { useKingPicksStore } from './kingPicksStore';
 
 export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | string[] | undefined }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
@@ -25,6 +26,7 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const fontBold = useAppFont(700);
 
   const [period, setPeriod] = useState<KingPeriod>('week');
+  const results = useKingPicksStore((state) => state.results);
   const [board, setBoard] = useState<KingLeaderboard | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +38,8 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
     }
     const data = await PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null);
     setBoard(data);
-  }, [mode, period]);
+    // `results` re-runs this when a PREDICTION_RESULT push lands (D9).
+  }, [mode, period, results]);
 
   useFocusEffect(
     useCallback(() => {
