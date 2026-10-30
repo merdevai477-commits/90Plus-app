@@ -43,6 +43,24 @@ export function cairoDayRange(dayKey: string): { start: Date; end: Date } {
   };
 }
 
+export type CairoWeek = { start: Date; end: Date; days: string[] };
+
+/** Sunday-through-Saturday Cairo week containing `at`; [start, end) in UTC (Q1). */
+export function cairoWeekBounds(at: Date = new Date()): CairoWeek {
+  const [y, m, d] = cairoDayKey(at).split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const days = Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.UTC(y, m - 1, d - weekday + i)).toISOString().slice(0, 10),
+  );
+  return { start: cairoDayRange(days[0]).start, end: cairoDayRange(days[6]).end, days };
+}
+
+/** Rows that belong to a King week: by kickoff, or by creation when kickoff is unknown (B8, C4). */
+export function kingWeekWhere(week: { start: Date; end: Date }) {
+  const range = { gte: week.start, lt: week.end };
+  return { OR: [{ matchDate: range }, { matchDate: null, createdAt: range }] };
+}
+
 function persisted365GameId(fullData: unknown): number | null {
   if (!fullData || typeof fullData !== 'object') return null;
   const raw = (fullData as { _scores365GameId?: unknown })._scores365GameId;

@@ -31,7 +31,7 @@ const CARD_BG = ['#0C051A', '#07040D'] as const;
 const VS_COLOR = '#A855F7';
 const FILTERS: KingHistoryStatus[] = ['all', 'correct', 'wrong', 'pending'];
 
-type Verdict = 'correct' | 'wrong' | 'pending';
+type Verdict = 'correct' | 'wrong' | 'pending' | 'void';
 
 const VERDICT_LOOK: Record<
   Verdict,
@@ -40,12 +40,13 @@ const VERDICT_LOOK: Record<
   pending: { tone: 'yellow', icon: 'time', text: '#FEF3C7' },
   correct: { tone: 'green', icon: 'checkmark-circle', text: '#DCFCE7' },
   wrong: { tone: 'red', icon: 'close-circle', text: '#FEE2E2' },
+  void: { tone: 'muted', icon: 'ban', text: '#D4D4D8' },
 };
 
 function verdictOf(item: KingHistoryItem): Verdict {
   if (item.isCorrect === true) return 'correct';
   if (item.isCorrect === false) return 'wrong';
-  return 'pending';
+  return item.voided ? 'void' : 'pending';
 }
 
 function shortDate(iso: string | null): string {
@@ -209,7 +210,11 @@ export function KingHistoryList({
       <LinearGradient colors={CARD_BG} style={styles.card}>
         <HistoryTeam name={item.awayTeam ? teamName(item.awayTeam) : ''} logo={item.awayTeamLogo} font={fontBold} />
         <View style={styles.cardMid}>
-          {hasScore ? (
+          {verdict === 'void' ? (
+            <Text maxFontSizeMultiplier={1.15} style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
+              {copy.resultVoid}
+            </Text>
+          ) : hasScore ? (
             <Text maxFontSizeMultiplier={1.15} style={[styles.score, { fontFamily: fontBold }]}>
               {`${item.finalAwayScore} - ${item.finalHomeScore}`}
             </Text>

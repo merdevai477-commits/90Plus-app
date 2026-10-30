@@ -33,8 +33,8 @@ import { useKingPicksStore, type KingPick } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
+  cairoTodayKey,
   fetchKingMatches,
-  localDateKey,
   parseKingMode,
 } from './shared';
 
@@ -82,7 +82,8 @@ export function KingPlayScreen({
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
   const isGame = mode === 'game';
   const dateKey = (Array.isArray(date) ? date[0] : date) || '';
-  const dayPassed = dateKey !== '' && dateKey < localDateKey(new Date());
+  const [todayKey, setTodayKey] = useState(() => cairoTodayKey());
+  const dayPassed = dateKey !== '' && dateKey < todayKey;
   const insets = useSafeAreaInsets();
   const { getToken, isSignedIn } = useAuth();
   // Clerk hands out a new getToken on renders; keeping it out of load's deps
@@ -121,8 +122,9 @@ export function KingPlayScreen({
   const load = useCallback(async () => {
     const gen = ++loadGenRef.current;
     setError(false);
-    const dayMatches = await fetchKingMatches(dateKey || localDateKey(new Date()));
+    const { matches: dayMatches, calendar } = await fetchKingMatches(dateKey || cairoTodayKey());
     if (gen !== loadGenRef.current) return;
+    if (calendar) setTodayKey(calendar.today);
     setMatches(dayMatches);
 
     const token = await getTokenRef.current().catch(() => null);

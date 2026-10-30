@@ -29,16 +29,32 @@ export function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Sunday-start week in the device timezone, matching the Figma day strip. */
-export function currentWeekDays(now = new Date()): Date[] {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
-  return Array.from({ length: 7 }, (_, index) => {
-    const day = new Date(start);
-    day.setDate(start.getDate() + index);
-    return day;
-  });
+/** The King day and its Sunday–Saturday week as YYYY-MM-DD keys, in Cairo time. */
+export type KingCalendar = { today: string; days: string[] };
+
+/** Today in Cairo; the device day when the engine has no time zone data. */
+export function cairoTodayKey(now = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Cairo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  } catch {
+    return localDateKey(now);
+  }
+}
+
+/** Device-side guess of the server calendar, used until `/king/matches` answers (C2, C3). */
+export function fallbackKingCalendar(now = new Date()): KingCalendar {
+  const today = cairoTodayKey(now);
+  const [y, m, d] = today.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const days = Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.UTC(y, m - 1, d - weekday + i)).toISOString().slice(0, 10),
+  );
+  return { today, days };
 }
 
 export function kingLeagueLogos(): { id: number; logo: string }[] {
@@ -48,9 +64,14 @@ export function kingLeagueLogos(): { id: number; logo: string }[] {
   });
 }
 
-export async function fetchKingMatches(dateKey: string): Promise<Match[]> {
-  const fixtures = await PredictionsService.getKingMatches(dateKey);
-  return mapFixturesToMatches(fixtures as Parameters<typeof mapFixturesToMatches>[0]);
+export async function fetchKingMatches(
+  dateKey: string,
+): Promise<{ matches: Match[]; calendar: KingCalendar | null }> {
+  const { fixtures, calendar } = await PredictionsService.getKingMatches(dateKey);
+  return {
+    matches: mapFixturesToMatches(fixtures as Parameters<typeof mapFixturesToMatches>[0]),
+    calendar,
+  };
 }
 
 export function fillTemplate(template: string, values: Record<string, string | number>): string {

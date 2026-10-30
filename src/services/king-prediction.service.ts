@@ -12,7 +12,14 @@ import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
 import { pickTopFixtures } from '../utils/fixture-importance';
 import { projectMatchesForListView } from '../utils/matches-list-projection.util';
 import { XP_VALUES } from './xp.service';
-import { cairoDayKey, cairoDayRange, lockVerdict, resolveServerFixture } from './king-prediction-rules';
+import {
+  cairoDayKey,
+  cairoDayRange,
+  cairoWeekBounds,
+  kingWeekWhere,
+  lockVerdict,
+  resolveServerFixture,
+} from './king-prediction-rules';
 
 export type KingMode = 'winner' | 'exact';
 export type KingPeriod = 'week' | 'all';
@@ -35,15 +42,6 @@ export class KingPredictionError extends Error {
     super(reason);
     this.name = 'KingPredictionError';
   }
-}
-
-/** Sunday 00:00 UTC through the following Sunday. */
-export function utcSundayWeek(now = new Date()): { start: Date; end: Date } {
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
-  return { start, end };
 }
 
 export function deriveWinner(home: number, away: number): WinnerPick {
@@ -301,12 +299,12 @@ export async function getKingLeaderboard(params: {
     select: { id: true },
   });
 
-  const week = params.period === 'week' ? utcSundayWeek() : null;
+  const week = params.period === 'week' ? cairoWeekBounds() : null;
   const predictions = await prisma.prediction.findMany({
     where: {
       isCorrect: true,
       ...modeWhere(params.mode),
-      ...(week ? { matchDate: { gte: week.start, lt: week.end } } : {}),
+      ...(week ? kingWeekWhere(week) : {}),
     },
     select: {
       id: true,
@@ -314,15 +312,18 @@ export async function getKingLeaderboard(params: {
       apiMatchId: true,
       predictedHomeScore: true,
       predictedAwayScore: true,
+      settledHomeScore: true,
+      settledAwayScore: true,
     },
   });
 
   // Rows settled before King of Results required the exact scoreline were
   // marked correct for the right winner alone; only exact hits count here.
   const finalScoreByMatch = new Map<number, { home: number | null; away: number | null }>();
-  if (params.mode === 'exact' && predictions.length > 0) {
+  const unsnapshotted = predictions.filter((p) => p.settledHomeScore == null || p.settledAwayScore == null);
+  if (params.mode === 'exact' && unsnapshotted.length > 0) {
     const fixtures = await prisma.cachedFixture.findMany({
-      where: { fixtureId: { in: [...new Set(predictions.map((p) => p.apiMatchId))] } },
+      where: { fixtureId: { in: [...new Set(unsnapshotted.map((p) => p.apiMatchId))] } },
       select: { fixtureId: true, homeScore: true, awayScore: true },
     });
     for (const f of fixtures) {
@@ -334,7 +335,10 @@ export async function getKingLeaderboard(params: {
   const xpByUser = new Map<string, number>();
   for (const row of predictions) {
     if (params.mode === 'exact') {
-      const final = finalScoreByMatch.get(row.apiMatchId);
+      const final =
+        row.settledHomeScore != null && row.settledAwayScore != null
+          ? { home: row.settledHomeScore, away: row.settledAwayScore }
+          : finalScoreByMatch.get(row.apiMatchId);
       if (
         final &&
         final.home != null &&
@@ -402,11 +406,12 @@ export interface KingHistoryItem {
   finalHomeScore: number | null;
   finalAwayScore: number | null;
   matchStatus: string | null;
+  voided: boolean;
 }
 
 export interface KingHistoryResult {
   items: KingHistoryItem[];
-  counts: Record<KingHistoryStatus, number>;
+  counts: Record<KingHistoryStatus | 'void', number>;
   hasMore: boolean;
 }
 
@@ -416,10 +421,10 @@ function modeWhere(mode: KingMode) {
     : { predictedHomeScore: null };
 }
 
-const STATUS_WHERE: Record<Exclude<KingHistoryStatus, 'all'>, boolean | null> = {
-  correct: true,
-  wrong: false,
-  pending: null,
+const STATUS_WHERE: Record<Exclude<KingHistoryStatus, 'all'>, object> = {
+  correct: { isCorrect: true },
+  wrong: { isCorrect: false },
+  pending: { isCorrect: null, voidedAt: null },
 };
 
 export async function getKingHistory(params: {
@@ -431,7 +436,7 @@ export async function getKingHistory(params: {
 }): Promise<KingHistoryResult> {
   const empty: KingHistoryResult = {
     items: [],
-    counts: { all: 0, correct: 0, wrong: 0, pending: 0 },
+    counts: { all: 0, correct: 0, wrong: 0, pending: 0, void: 0 },
     hasMore: false,
   };
   const user = await prisma.user.findFirst({
@@ -440,19 +445,17 @@ export async function getKingHistory(params: {
   });
   if (!user) return empty;
 
-  // The King history starts empty every week, on the same Sunday boundary as
-  // the weekly leaderboard. Rows are kept; the profile still lists them all.
-  const week = utcSundayWeek();
-  const inWeek = { gte: week.start, lt: week.end };
+  // The King history starts empty every week, on the same Cairo Sunday boundary
+  // and the same predicate as the weekly leaderboard. Rows are kept; the
+  // profile still lists them all.
   const base = {
     userId: user.id,
     ...modeWhere(params.mode),
-    OR: [{ matchDate: inWeek }, { matchDate: null, createdAt: inWeek }],
+    ...kingWeekWhere(cairoWeekBounds()),
   };
-  const where =
-    params.status === 'all' ? base : { ...base, isCorrect: STATUS_WHERE[params.status] };
+  const where = params.status === 'all' ? base : { ...base, ...STATUS_WHERE[params.status] };
 
-  const [rows, grouped] = await Promise.all([
+  const [rows, grouped, voided] = await Promise.all([
     prisma.prediction.findMany({
       where,
       orderBy: [{ matchDate: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
@@ -460,9 +463,10 @@ export async function getKingHistory(params: {
       take: params.limit + 1,
     }),
     prisma.prediction.groupBy({ by: ['isCorrect'], where: base, _count: true }),
+    prisma.prediction.count({ where: { ...base, isCorrect: null, voidedAt: { not: null } } }),
   ]);
 
-  const counts = { ...empty.counts };
+  const counts = { ...empty.counts, void: voided };
   for (const row of grouped) {
     const n = row._count as number;
     counts.all += n;
@@ -470,11 +474,13 @@ export async function getKingHistory(params: {
     else if (row.isCorrect === false) counts.wrong += n;
     else counts.pending += n;
   }
+  counts.pending = Math.max(0, counts.pending - voided);
 
   const page = rows.slice(0, params.limit);
-  const fixtures = page.length
+  const needLive = page.filter((row) => row.settledHomeScore == null || row.settledAwayScore == null);
+  const fixtures = needLive.length
     ? await prisma.cachedFixture.findMany({
-        where: { fixtureId: { in: page.map((row) => row.apiMatchId) } },
+        where: { fixtureId: { in: needLive.map((row) => row.apiMatchId) } },
         select: { fixtureId: true, homeScore: true, awayScore: true, status: true },
       })
     : [];
@@ -483,6 +489,8 @@ export async function getKingHistory(params: {
   return {
     items: page.map((row) => {
       const fixture = fixtureById.get(row.apiMatchId);
+      // Settled rows show the score they were judged on, not whatever the cache says now (E10).
+      const snapshotted = row.settledHomeScore != null && row.settledAwayScore != null;
       return {
         id: row.id,
         apiMatchId: row.apiMatchId,
@@ -496,9 +504,10 @@ export async function getKingHistory(params: {
         matchDate: row.matchDate?.toISOString() ?? null,
         leagueName: row.leagueName,
         isCorrect: row.isCorrect,
-        finalHomeScore: fixture?.homeScore ?? null,
-        finalAwayScore: fixture?.awayScore ?? null,
-        matchStatus: fixture?.status ?? null,
+        finalHomeScore: snapshotted ? row.settledHomeScore : (fixture?.homeScore ?? null),
+        finalAwayScore: snapshotted ? row.settledAwayScore : (fixture?.awayScore ?? null),
+        matchStatus: row.settledStatus ?? row.voidReason ?? fixture?.status ?? null,
+        voided: row.voidedAt != null,
       };
     }),
     counts,

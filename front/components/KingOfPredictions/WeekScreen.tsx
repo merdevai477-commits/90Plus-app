@@ -38,12 +38,12 @@ import { isExactPick, useKingPicksStore } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
-  currentWeekDays,
+  fallbackKingCalendar,
   fetchKingMatches,
   fillTemplate,
-  localDateKey,
   parseKingMode,
   toApiMode,
+  type KingCalendar,
 } from './shared';
 
 const SIDE = 22;
@@ -75,10 +75,16 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const fontMedium = useAppFont(500);
   const fontRegular = useAppFont(400);
 
-  const days = useMemo(() => currentWeekDays(), []);
-  const todayKey = localDateKey(new Date());
-  const initialIndex = Math.max(0, days.findIndex((day) => localDateKey(day) === todayKey));
+  // The strip follows the server's Cairo week, not the device clock or zone (C2, C3).
+  const [calendar, setCalendar] = useState<KingCalendar>(() => fallbackKingCalendar());
+  const days = calendar.days;
+  const initialIndex = Math.max(0, days.indexOf(calendar.today));
   const [dayIndex, setDayIndex] = useState(initialIndex);
+  const pickedDayRef = useRef(false);
+  const pickDay = (index: number) => {
+    pickedDayRef.current = true;
+    setDayIndex(index);
+  };
   const [dayMatchIds, setDayMatchIds] = useState<string[]>([]);
   const matchCount = dayMatchIds.length;
   const serverPicks = useKingPicksStore((state) => state.server);
@@ -88,17 +94,25 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const selectedKey = localDateKey(days[dayIndex] ?? days[0]);
+  const selectedKey = days[dayIndex] ?? days[0];
 
   const loadGenRef = useRef(0);
 
   const load = useCallback(async () => {
     const gen = ++loadGenRef.current;
-    const [dayMatches, token] = await Promise.all([
-      fetchKingMatches(selectedKey).catch(() => []),
+    const [day, token] = await Promise.all([
+      fetchKingMatches(selectedKey).catch(() => ({ matches: [], calendar: null })),
       getTokenRef.current().catch(() => null),
     ]);
     if (gen !== loadGenRef.current) return;
+    const dayMatches = day.matches;
+    const server = day.calendar;
+    if (server && (server.today !== calendar.today || server.days[0] !== calendar.days[0])) {
+      setCalendar(server);
+      if (!pickedDayRef.current) setDayIndex(Math.max(0, server.days.indexOf(server.today)));
+      // The selected key changes with the calendar; the reload that follows fetches the right day.
+      return;
+    }
     setDayMatchIds(dayMatches.map((match) => String(match.id)));
 
     if (!token) {
@@ -117,7 +131,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
     if (gen !== loadGenRef.current) return;
     if (picks) useKingPicksStore.getState().hydrate(picks);
     setBoard(leaderboard);
-  }, [mode, period, selectedKey]);
+  }, [calendar, mode, period, selectedKey]);
 
   const predictedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -263,7 +277,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
 
         <View style={styles.dayRow}>
           {[...days].reverse().map((day) => {
-            const index = days.findIndex((item) => localDateKey(item) === localDateKey(day));
+            const index = days.indexOf(day);
             const selected = index === dayIndex;
             const past = !selected && index < initialIndex;
             const dayFont = selected ? fontBold : past ? fontMedium : fontRegular;
@@ -285,7 +299,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
               </>
             );
             return (
-              <Pressable key={localDateKey(day)} onPress={() => setDayIndex(index)} style={styles.dayCell}>
+              <Pressable key={day} onPress={() => pickDay(index)} style={styles.dayCell}>
                 <GlassSurface radius={8} tone={selected ? 'purple' : past ? 'muted' : 'neutral'} style={styles.dayChip}>
                   {label}
                 </GlassSurface>

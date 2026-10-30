@@ -88,11 +88,13 @@ export interface KingHistoryItem {
   finalHomeScore: number | null;
   finalAwayScore: number | null;
   matchStatus: string | null;
+  /** Cancelled/abandoned match; neither pending nor judged. Missing on older servers. */
+  voided?: boolean;
 }
 
 export interface KingHistory {
   items: KingHistoryItem[];
-  counts: Record<KingHistoryStatus, number>;
+  counts: Record<KingHistoryStatus, number> & { void?: number };
   hasMore: boolean;
 }
 
@@ -414,8 +416,10 @@ export const PredictionsService = {
     return result.data as KingLeaderboard;
   },
 
-  /** Raw list-view fixtures for the day's top 10 King matches. */
-  getKingMatches: async (date: string): Promise<unknown[]> => {
+  /** Raw list-view fixtures for the day's top 10 King matches, plus the server's Cairo calendar. */
+  getKingMatches: async (
+    date: string,
+  ): Promise<{ fixtures: unknown[]; calendar: { today: string; days: string[] } | null }> => {
     const response = await fetch(
       `${API_URL}/predictions/king/matches?date=${encodeURIComponent(date)}`,
       { headers: { 'Content-Type': 'application/json' } },
@@ -427,7 +431,12 @@ export const PredictionsService = {
     if (!result?.success || !Array.isArray(result.data)) {
       throw new PredictionApiError('E010', 'Invalid response format', response.status);
     }
-    return result.data;
+    const days = result.weekBounds?.days;
+    const calendar =
+      typeof result.serverDayCairo === 'string' && Array.isArray(days) && days.length === 7
+        ? { today: result.serverDayCairo as string, days: days as string[] }
+        : null;
+    return { fixtures: result.data, calendar };
   },
 
   /** The signed-in user's King predictions for one mode, 20 per page. */
