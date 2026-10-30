@@ -19,25 +19,29 @@ interface Props {
   onPoll?: () => void;
 }
 
-/** Feed-top "what's on your mind" card — Figma node 1474:3943. */
+/**
+ * Feed-top composer — Figma node 1542:3618.
+ * Avatar + pill prompt, then + / write / poll shortcuts.
+ */
 export const ComposerCard = memo(function ComposerCard({
   isAr,
   avatar,
   name,
   placeholder,
   writeLabel,
-  photoLabel,
+  photoLabel: _photoLabel,
   pollLabel,
   fonts,
   onWrite,
-  onPhoto,
+  onPhoto: _onPhoto,
   onPoll,
 }: Props) {
-  const row = isAr ? 'row-reverse' : 'row';
+  const row = isAr ? ('row-reverse' as const) : ('row' as const);
+
   return (
     <View style={styles.card}>
       <View style={[styles.top, { flexDirection: row }]}>
-        <CommunityAvatar uri={avatar} name={name} size={41} ring={false} />
+        <CommunityAvatar uri={avatar} name={name} size={41} ring />
         <Pressable
           onPress={onWrite}
           style={[styles.input, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
@@ -49,29 +53,48 @@ export const ComposerCard = memo(function ComposerCard({
           </Text>
         </Pressable>
       </View>
+
+      <View style={styles.hairline} />
+
       <View style={[styles.bottom, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <Pressable onPress={onWrite} hitSlop={8} accessibilityRole="button" accessibilityLabel={writeLabel}>
-          <Image source={CI.plus} style={styles.plus} contentFit="contain" />
+        <Pressable
+          onPress={onWrite}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={writeLabel}
+          style={styles.plusHit}
+        >
+          <Image source={CI.composerPlus} style={styles.plus} contentFit="contain" transition={0} />
         </Pressable>
-        <View style={[styles.shortcuts, { flexDirection: row }]}>
-          <Pressable onPress={onPhoto} hitSlop={8} style={[styles.shortcut, { flexDirection: row }]} accessibilityRole="button">
-            <Image source={CI.image} style={styles.icon24} contentFit="contain" />
-            <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{photoLabel}</Text>
+
+        {/* Physical LTR order matches Figma: write · poll (poll sits closer to the trailing edge). */}
+        <View style={styles.shortcuts}>
+          <Pressable
+            onPress={onWrite}
+            hitSlop={8}
+            style={[styles.shortcut, { flexDirection: row }]}
+            accessibilityRole="button"
+            accessibilityLabel={writeLabel}
+          >
+            <Image source={CI.composerSmile} style={styles.icon24} contentFit="contain" transition={0} />
+            <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{writeLabel}</Text>
           </Pressable>
+
           {onPoll && pollLabel ? (
             <>
-              <View style={styles.divider} />
-              <Pressable onPress={onPoll} hitSlop={8} style={[styles.shortcut, { flexDirection: row }]} accessibilityRole="button">
-                <Text style={[styles.pollGlyph, { fontFamily: fonts.semibold }]}>VS</Text>
+              <View style={styles.vDivider} />
+              <Pressable
+                onPress={onPoll}
+                hitSlop={8}
+                style={[styles.shortcut, { flexDirection: row }]}
+                accessibilityRole="button"
+                accessibilityLabel={pollLabel}
+              >
+                <Image source={CI.composerPoll} style={styles.icon24} contentFit="contain" transition={0} />
                 <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{pollLabel}</Text>
               </Pressable>
             </>
           ) : null}
-          <View style={styles.divider} />
-          <Pressable onPress={onWrite} hitSlop={8} style={[styles.shortcut, { flexDirection: row }]} accessibilityRole="button">
-            <Image source={CI.smile} style={styles.icon24} contentFit="contain" />
-            <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{writeLabel}</Text>
-          </Pressable>
         </View>
       </View>
     </View>
@@ -80,18 +103,13 @@ export const ComposerCard = memo(function ComposerCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: C.composer,
-    borderRadius: 16,
+    backgroundColor: '#0C0620',
+    borderRadius: 24,
     paddingHorizontal: 21,
     paddingVertical: 17,
     gap: 14,
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.18)',
-    shadowColor: C.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
+    borderColor: '#1F065A',
   },
   top: {
     alignItems: 'center',
@@ -103,18 +121,26 @@ const styles = StyleSheet.create({
     height: 41,
     justifyContent: 'center',
     paddingHorizontal: 17,
-    borderRadius: 15,
-    backgroundColor: C.input,
-    borderWidth: 1,
-    borderColor: C.inputBorder,
+    borderRadius: 100,
+    backgroundColor: '#130A34',
   },
   placeholder: {
-    color: C.placeholder,
+    color: '#A49BAD',
     fontSize: 13,
+  },
+  hairline: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+    backgroundColor: '#39246B',
   },
   bottom: {
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '100%',
+  },
+  plusHit: {
+    width: 51,
+    height: 36,
   },
   plus: {
     width: 51,
@@ -129,21 +155,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   icon24: { width: 24, height: 24 },
-  pollGlyph: {
-    color: C.accentSoft,
-    fontSize: 13,
-    fontWeight: '700',
-    minWidth: 24,
-    textAlign: 'center',
-  },
   label: {
     color: C.textStrong,
     fontSize: 14,
     fontWeight: '600',
   },
-  divider: {
-    width: 0.5,
+  vDivider: {
+    width: StyleSheet.hairlineWidth,
     height: 19,
-    backgroundColor: C.divider,
+    backgroundColor: '#39246B',
   },
 });

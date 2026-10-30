@@ -3794,7 +3794,7 @@ export const ar = {
   community: {
     title: 'المجتمع',
     subtitle: 'اتكلم كورة مع الجماهير في كل مكان',
-    composerPlaceholder: 'ايه اللي في بالك عن الماتش؟',
+    composerPlaceholder: 'ايه الي في بالك عن الماتش؟',
     composerTitle: 'منشور جديد',
     post: 'نشر',
     posting: 'جاري النشر…',
