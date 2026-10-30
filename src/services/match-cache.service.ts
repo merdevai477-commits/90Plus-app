@@ -15,6 +15,7 @@
 import { CachedFixture } from '@prisma/client';
 import { logger } from '../utils/logger';
 import prisma from '../lib/prisma'; // ✅ Use centralized singleton
+import { mergeScoreIntoFullData } from '../utils/fixture-score-merge.util';
 
 // Status codes for finished matches
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
@@ -367,7 +368,11 @@ class MatchCacheService {
                     // Live/calendar/provider list payloads are commonly partial.
                     // Preserve previously enriched events/lineups by default;
                     // callers with an authoritative full detail snapshot can opt out.
-                    if (options?.preserveFullData !== false) delete candidate.fullData;
+                    if (options?.preserveFullData !== false) {
+                        delete candidate.fullData;
+                        const merged = mergeScoreIntoFullData(existing.fullData, fixture);
+                        if (merged) candidate.fullData = merged;
+                    }
                     const changed = Object.entries(candidate).some(([field, value]) => {
                         const current = existing[field];
                         if (current instanceof Date && value instanceof Date) {

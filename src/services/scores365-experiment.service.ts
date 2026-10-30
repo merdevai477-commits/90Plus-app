@@ -2106,6 +2106,47 @@ function resolve365ExtraAndPenalty(
   return { extratime, penalty };
 }
 
+export type Scores365SettlementSnapshot = {
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  penaltyHome: number | null;
+  penaltyAway: number | null;
+};
+
+/**
+ * Settlement view of a 365 game (A2, A4): same classifier, home/away alignment
+ * and shootout tally the fixture writer uses. Terminal statuses require
+ * statusGroup 4 — the display classifier may infer FT from a stuck 90+ clock.
+ */
+export async function settlementSnapshotFrom365Game(
+  game: Scores365Game,
+  fixtureId: number,
+): Promise<Scores365SettlementSnapshot | null> {
+  // A mapped (non-native) fixture must align against its stored teams; the
+  // synthetic-base fallback would silently assume "not swapped".
+  let alignment: Scores365TeamAlignment | null;
+  if (isNative365FixtureId(fixtureId)) {
+    alignment = (await resolve365BaseAndAlignment(game, fixtureId))?.alignment ?? null;
+  } else {
+    const base = await loadBaseFixture(fixtureId);
+    alignment = base ? detect365TeamAlignment(game, base) : null;
+  }
+  if (!alignment) return null;
+  const classified = classifyScores365MatchStatus(game).short;
+  const terminal = classified === 'FT' || classified === 'AET' || classified === 'PEN';
+  const status = terminal && game.statusGroup !== 4 ? 'LIVE' : classified;
+  const goals = resolve365Scores(game, alignment);
+  const { penalty } = resolve365ExtraAndPenalty(game, alignment, status, goals);
+  return {
+    status,
+    homeScore: goals.home,
+    awayScore: goals.away,
+    penaltyHome: penalty?.home ?? null,
+    penaltyAway: penalty?.away ?? null,
+  };
+}
+
 function tallyGoalsFromMappedEvents(
   events: Array<{ type?: string; detail?: string; team?: { id?: number } }>,
   homeId: number,

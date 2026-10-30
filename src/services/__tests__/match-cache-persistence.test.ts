@@ -107,9 +107,67 @@ describe('match cache persistence', () => {
     expect(cachedFixture.update).toHaveBeenCalledTimes(2);
     expect(transaction).toHaveBeenCalledTimes(1);
     for (const call of cachedFixture.update.mock.calls) {
-      expect(call[0].data).not.toHaveProperty('fullData');
       expect(call[0].data).toMatchObject({ homeScore: 2, status: '2H', elapsed: 72 });
+      // Enriched arrays survive; only status / goals / score lines are merged.
+      expect(call[0].data.fullData.events).toEqual([{ type: 'Goal', player: 'Preserved' }]);
+      expect(call[0].data.fullData.lineups).toEqual([{ team: 'Preserved' }]);
+      expect(call[0].data.fullData.goals).toEqual({ home: 2, away: 1 });
+      expect(call[0].data.fullData.fixture.referee).toBe('Fresh Ref');
     }
+  });
+
+  it('persists the shootout tally into a stale preserved fullData (A10)', async () => {
+    const existing = row(160);
+    existing.status = 'PEN';
+    existing.fullData = {
+      ...(existing.fullData as object),
+      fixture: { ...fixture(160).fixture, status: { long: 'Not Started', short: 'NS', elapsed: null } },
+      goals: { away: null, home: null },
+      score: {
+        penalty: { away: null, home: null },
+        fulltime: { away: null, home: null },
+        halftime: { away: null, home: null },
+        extratime: { away: null, home: null },
+      },
+    } as never;
+    cachedFixture.findMany.mockResolvedValue([existing]);
+    const pen = fixture(160, 1);
+    pen.fixture.status = { long: 'Match Finished After Penalties', short: 'PEN', elapsed: 120 };
+    pen.score.penalty = { home: 3, away: 4 };
+
+    await matchCacheService.upsertFixtures([pen], { preserveFullData: true });
+
+    const data = cachedFixture.update.mock.calls[0][0].data;
+    expect(data.fullData.score.penalty).toEqual({ home: 3, away: 4 });
+    expect(data.fullData.fixture.status.short).toBe('PEN');
+    expect(data.fullData.events).toHaveLength(1);
+  });
+
+  it('does not rewrite when only jsonb key order differs', async () => {
+    const existing = row(170);
+    const fresh = fixture(170);
+    Object.assign(existing, {
+      leagueName: 'Fresh League', leagueLogo: 'league.png', leagueCountry: 'Egypt',
+      leagueSeason: 2026, leagueRound: '20', homeTeamName: 'Home', homeTeamLogo: 'home.png',
+      awayTeamName: 'Away', awayTeamLogo: 'away.png', homeScore: 2, awayScore: 1,
+      homeHalftimeScore: 1, awayHalftimeScore: 0, status: '2H', statusLong: 'Second Half',
+      venue: 'Fresh Venue', referee: 'Fresh Ref', elapsed: 72,
+      fullData: {
+        fixture: { ...fresh.fixture, status: { short: '2H', long: 'Second Half', elapsed: 72 } },
+        goals: { away: 1, home: 2 },
+        score: {
+          penalty: { away: null, home: null },
+          fulltime: { away: 1, home: 2 },
+          halftime: { away: 0, home: 1 },
+          extratime: { away: null, home: null },
+        },
+      },
+    });
+    cachedFixture.findMany.mockResolvedValue([existing]);
+
+    await matchCacheService.upsertFixtures([fresh], { preserveFullData: true });
+
+    expect(cachedFixture.update).not.toHaveBeenCalled();
   });
 
   it('skips unchanged rows after the single preload query', async () => {
@@ -133,6 +191,7 @@ describe('match cache persistence', () => {
       venue: 'Fresh Venue',
       referee: 'Fresh Ref',
       elapsed: 72,
+      fullData: { ...fixture(150), events: [{ type: 'Goal', player: 'Preserved' }] },
     });
     cachedFixture.findMany.mockResolvedValue([existing]);
 

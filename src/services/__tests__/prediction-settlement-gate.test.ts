@@ -87,6 +87,18 @@ describe('resolveSettlementInput', () => {
     expect(settlementGateCounters.penWinnerUnknown).toBe(1);
   });
 
+  it.each(['FT', 'AET'])('%s carrying a shootout tally → STATUS_SCORE_CONFLICT (A8)', (status) => {
+    expect(
+      resolveSettlementInput({ status, homeScore: 1, awayScore: 1, penaltyHome: 4, penaltyAway: 3 }),
+    ).toEqual({ ok: false, reason: 'STATUS_SCORE_CONFLICT' });
+  });
+
+  it('FT with empty penalty pair still settles', () => {
+    expect(
+      resolveSettlementInput({ status: 'FT', homeScore: 1, awayScore: 0, penaltyHome: null, penaltyAway: null }).ok,
+    ).toBe(true);
+  });
+
   it('PEN with tied shootout tallies → PEN_WINNER_UNKNOWN', () => {
     expect(
       resolveSettlementInput({

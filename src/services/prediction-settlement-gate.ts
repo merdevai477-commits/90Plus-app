@@ -43,7 +43,8 @@ export type SettlementFail = {
     | 'STATUS_NOT_SETTLEABLE'
     | 'SCORE_INVALID'
     | 'PEN_WINNER_UNKNOWN'
-    | 'PEN_SCORE_INVALID';
+    | 'PEN_SCORE_INVALID'
+    | 'STATUS_SCORE_CONFLICT';
 };
 
 export type SettlementResult = SettlementOk | SettlementFail;
@@ -120,6 +121,13 @@ export function resolveSettlementInput(fixture: SettlementFixtureInput): Settlem
       exactHomeScore: homeScore,
       exactAwayScore: awayScore,
     };
+  }
+
+  // FT / AET carrying a shootout tally contradict each other — the provider is
+  // mid-update; wait rather than settle a PEN match on goals (A8).
+  if (isValidNonNegativeScore(fixture.penaltyHome) && isValidNonNegativeScore(fixture.penaltyAway)) {
+    settlementGateCounters.rejectedStatus += 1;
+    return { ok: false, reason: 'STATUS_SCORE_CONFLICT' };
   }
 
   // FT / AET — winner and exact line both from goals.
