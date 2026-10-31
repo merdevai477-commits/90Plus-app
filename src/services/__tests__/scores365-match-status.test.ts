@@ -210,6 +210,60 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.extra).toBeNull();
   });
 
+  it('keeps a plain 90\' second half live with no stoppage (not FT before added time)', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: "90'",
+      }),
+    );
+    expect(result.short).toBe('2H');
+    expect(result.elapsed).toBe(90);
+    expect(result.extra).toBeNull();
+  });
+
+  it('keeps a plain 45\' first half at 45 with no stoppage (not 45+20)', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '1st Half',
+        shortStatusText: '1st Half',
+        gameTime: 45,
+        gameTimeDisplay: "45'",
+      }),
+    );
+    expect(result.short).toBe('1H');
+    expect(result.elapsed).toBe(45);
+    expect(result.extra).toBeNull();
+  });
+
+  it('keeps plain 105\' / 120\' extra-time minutes without stoppage', () => {
+    const at = (gameTime: number, gameTimeDisplay: string) =>
+      classifyScores365MatchStatus(
+        game({ statusGroup: 3, statusText: 'Extra Time', shortStatusText: 'ET', gameTime, gameTimeDisplay }),
+      );
+    expect(at(105, "105'")).toMatchObject({ short: 'ET', elapsed: 105, extra: null });
+    expect(at(120, "120'")).toMatchObject({ short: 'ET', elapsed: 120, extra: null });
+    expect(at(120, "120+2'")).toMatchObject({ short: 'ET', elapsed: 120, extra: 2 });
+  });
+
+  it('reads 365 stoppage written with the apostrophe before the plus', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: "90'+3",
+      }),
+    );
+    expect(result.short).toBe('2H');
+    expect(result.extra).toBe(3);
+  });
+
   it('keeps second-half gameTime 105 live and maps 110 to FT', () => {
     const at = (gameTime: number) =>
       classifyScores365MatchStatus(

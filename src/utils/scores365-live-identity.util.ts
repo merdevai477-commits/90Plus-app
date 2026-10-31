@@ -74,15 +74,20 @@ const REGULAR_MAX_STOPPAGE = MAX_PLAUSIBLE_STOPPAGE;
 const LIVE_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 const FINISHED_SHORTS = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
 
+/**
+ * Announced stoppage from a 365 `gameTimeDisplay` (`90+4'`, `90'+4`, `+4'`).
+ * Only a `+` marks stoppage: a plain `45'` / `90'` is the minute itself and
+ * must not be read as 45/90 minutes of stoppage.
+ */
 export function parseStoppageFromDisplay(display?: string | null, minute?: number | null): number | null {
   const raw = (display ?? '').trim();
   if (!raw) return null;
-  const plusMatch = raw.match(/(\d+)\s*\+\s*(\d+)/);
+  const plusMatch = raw.match(/(\d+)\s*['’′]?\s*\+\s*(\d+)/);
   if (plusMatch) {
     const n = Number(plusMatch[2]);
     return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), REGULAR_MAX_STOPPAGE) : null;
   }
-  const barePlus = raw.match(/^\+?\s*(\d+)\s*'?$/);
+  const barePlus = raw.match(/^\+\s*(\d+)\s*['’′]?$/);
   if (barePlus && minute != null && (minute === 45 || minute === 90 || minute === 105 || minute === 120)) {
     const n = Number(barePlus[1]);
     return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), REGULAR_MAX_STOPPAGE) : null;
@@ -159,7 +164,8 @@ export function isStale365InPlayClock(raw?: Stale365ClockRaw | null, nowMs = Dat
     hay.includes('extra time') ||
     hay.includes('extra-time') ||
     hay.includes('penalt') ||
-    hay.includes('shootout')
+    hay.includes('shootout') ||
+    /\b(et|et1|et2|aet)\b/.test(hay)
   ) {
     return false;
   }

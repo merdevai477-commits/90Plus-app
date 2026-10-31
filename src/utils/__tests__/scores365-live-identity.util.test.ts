@@ -4,7 +4,52 @@ import {
   isHotAllScoresPersistItem,
   isAllScoresLiveItem,
   coerceAllScoresLiveStatus,
+  isStale365InPlayClock,
+  parseStoppageFromDisplay,
 } from '../scores365-live-identity.util';
+
+describe('parseStoppageFromDisplay', () => {
+  it('reads stoppage only from an explicit plus', () => {
+    expect(parseStoppageFromDisplay("90+3'", 90)).toBe(3);
+    expect(parseStoppageFromDisplay('90+3', 93)).toBe(3);
+    expect(parseStoppageFromDisplay("90'+3", 90)).toBe(3);
+    expect(parseStoppageFromDisplay("45+2'", 45)).toBe(2);
+    expect(parseStoppageFromDisplay("+4'", 90)).toBe(4);
+    expect(parseStoppageFromDisplay("120+1'", 120)).toBe(1);
+  });
+
+  it('does not read a plain period-end minute as stoppage', () => {
+    expect(parseStoppageFromDisplay("45'", 45)).toBeNull();
+    expect(parseStoppageFromDisplay("90'", 90)).toBeNull();
+    expect(parseStoppageFromDisplay('90', 90)).toBeNull();
+    expect(parseStoppageFromDisplay("105'", 105)).toBeNull();
+    expect(parseStoppageFromDisplay("120’", 120)).toBeNull();
+    expect(parseStoppageFromDisplay("67'", 67)).toBeNull();
+  });
+
+  it('caps implausible stoppage at the stale threshold', () => {
+    expect(parseStoppageFromDisplay("90+35'", 90)).toBe(20);
+  });
+});
+
+describe('isStale365InPlayClock', () => {
+  const secondHalf = { statusGroup: 3, statusText: '2nd Half', shortStatusText: '2nd Half' };
+
+  it('does not end a match whose clock reads a plain 90\'', () => {
+    expect(isStale365InPlayClock({ ...secondHalf, gameTime: 90, gameTimeDisplay: "90'" })).toBe(false);
+    expect(isStale365InPlayClock({ ...secondHalf, gameTime: 91, gameTimeDisplay: "90'" })).toBe(false);
+  });
+
+  it('still ends a clock stuck at 90+20', () => {
+    expect(isStale365InPlayClock({ ...secondHalf, gameTime: 90, gameTimeDisplay: "90+20'" })).toBe(true);
+  });
+
+  it('never ends extra time on the 110\' second-half cap', () => {
+    expect(
+      isStale365InPlayClock({ statusGroup: 3, statusText: 'ET', shortStatusText: 'ET2', gameTime: 112 }),
+    ).toBe(false);
+  });
+});
 
 describe('findReplacedSyntheticFixture', () => {
   const kickoff = new Date('2026-08-24T17:00:00.000Z');
@@ -101,6 +146,21 @@ describe('isAllScoresLiveItem', () => {
     ).toBe(false);
   });
 
+  it('keeps a match at a plain 90\' in the live list', () => {
+    expect(
+      isAllScoresLiveItem({
+        phase: 'live',
+        raw: {
+          statusGroup: 3,
+          statusText: '2nd Half',
+          shortStatusText: '2nd Half',
+          gameTime: 90,
+          gameTimeDisplay: "90'",
+        },
+      }),
+    ).toBe(true);
+  });
+
   it('keeps a long but real 90+12 stoppage live', () => {
     expect(
       isAllScoresLiveItem({
@@ -128,6 +188,20 @@ describe('coerceAllScoresLiveStatus', () => {
       statusText: '2nd Half',
       shortStatusText: '2nd Half',
       gameTime: 77,
+    });
+    expect(coerced.fixture.status.short).toBe('2H');
+  });
+
+  it('keeps a plain 90\' row in 2H instead of finishing it', () => {
+    const fixture = {
+      fixture: { status: { short: '2H', long: 'Second Half', elapsed: 90, extra: null } },
+    };
+    const coerced = coerceAllScoresLiveStatus(fixture, {
+      statusGroup: 3,
+      statusText: '2nd Half',
+      shortStatusText: '2nd Half',
+      gameTime: 90,
+      gameTimeDisplay: "90'",
     });
     expect(coerced.fixture.status.short).toBe('2H');
   });
