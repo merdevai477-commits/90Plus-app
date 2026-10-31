@@ -69,9 +69,106 @@ function isSecondaryFixture(fixture: any): boolean {
   return SECONDARY_TEAM_RE.test(home) || SECONDARY_TEAM_RE.test(away);
 }
 
+function cairoDayDate(day: string): Date {
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+function stripHeavyFixtureFields(fixture: any): any {
+  const { events: _e, lineups: _l, statistics: _s, players: _p, fullData: _f, ...rest } = fixture ?? {};
+  return rest;
+}
+
+function fixtureIdOf(row: any): number | null {
+  const raw = row?.fixture?.id ?? row?.fixtureId;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** True when an admin curated slate exists for this Cairo day. */
+export async function hasKingDailySlate(day: string): Promise<boolean> {
+  if (!KING_DATE_RE.test(day)) return false;
+  const count = await prisma.kingDailySlate.count({ where: { cairoDay: cairoDayDate(day) } });
+  return count > 0;
+}
+
+/** Ordered fixture ids for a curated day, or [] when the day uses auto ranking. */
+export async function getKingDailySlateIds(day: string): Promise<number[]> {
+  if (!KING_DATE_RE.test(day)) return [];
+  const rows = await prisma.kingDailySlate.findMany({
+    where: { cairoDay: cairoDayDate(day) },
+    orderBy: [{ sortOrder: 'asc' }, { apiMatchId: 'asc' }],
+    select: { apiMatchId: true },
+  });
+  return rows.map((row) => row.apiMatchId);
+}
+
+export interface SetKingDailySlateResult {
+  date: string;
+  matchIds: number[];
+  source: 'curated';
+}
+
 /**
- * The day's top matches, ranked the same way the prediction-groups daily round
- * was (Big 5 first, then marquee clubs per continent).
+ * Replace the curated King slate for one Cairo day.
+ * Empty `matchIds` clears the slate so auto top-10 ranking returns.
+ */
+export async function setKingDailySlate(
+  dateString: string,
+  matchIds: number[],
+): Promise<SetKingDailySlateResult> {
+  if (!KING_DATE_RE.test(dateString)) {
+    throw new Error('INVALID_DATE');
+  }
+  const unique: number[] = [];
+  const seen = new Set<number>();
+  for (const raw of matchIds) {
+    const id = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    unique.push(id);
+    if (unique.length >= KING_DAILY_MATCH_LIMIT) break;
+  }
+
+  const day = cairoDayDate(dateString);
+  await prisma.$transaction(async (tx) => {
+    await tx.kingDailySlate.deleteMany({ where: { cairoDay: day } });
+    if (unique.length === 0) return;
+    await tx.kingDailySlate.createMany({
+      data: unique.map((apiMatchId, index) => ({
+        cairoDay: day,
+        apiMatchId,
+        sortOrder: index + 1,
+      })),
+    });
+  });
+
+  return { date: dateString, matchIds: unique, source: 'curated' };
+}
+
+async function loadFixturesByIds(ids: number[], dayFixtures: any[]): Promise<any[]> {
+  const byId = new Map<number, any>();
+  for (const row of dayFixtures) {
+    const id = fixtureIdOf(row);
+    if (id != null) byId.set(id, row);
+  }
+
+  const missing = ids.filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    const { matchCacheService } = await import('./match-cache.service');
+    const rows = await prisma.cachedFixture.findMany({ where: { fixtureId: { in: missing } } });
+    for (const row of rows) {
+      byId.set(row.fixtureId, matchCacheService.convertDbMatchToApiFormat(row));
+    }
+  }
+
+  return ids.map((id) => byId.get(id)).filter(Boolean);
+}
+
+/**
+ * The day's King matches. Prefer an admin-curated slate when one exists for the
+ * Cairo day; otherwise rank the same way the prediction-groups daily round did
+ * (Big 5 first, then marquee clubs per continent).
  *
  * `pickTopFixtures` only considers fixtures that have not kicked off, so every
  * fixture is ranked as if it were still upcoming. Otherwise a match would drop
@@ -83,6 +180,12 @@ export async function getKingDailyMatches(dateString?: string): Promise<unknown[
   const day = dateString && KING_DATE_RE.test(dateString) ? dateString : calendarTodayKey();
   const { footballDataCacheService } = await import('./football-data-cache.service');
   const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
+
+  const slateIds = await getKingDailySlateIds(day);
+  if (slateIds.length > 0) {
+    const curated = await loadFixturesByIds(slateIds, fixtures);
+    return projectMatchesForListView(curated.map(stripHeavyFixtureFields));
+  }
 
   const asUpcoming = fixtures.filter((f) => !isSecondaryFixture(f)).map((original) => ({
     ...original,
@@ -100,7 +203,7 @@ export async function getKingDailyMatches(dateString?: string): Promise<unknown[
       const right = Date.parse(b?.fixture?.date ?? '') || 0;
       return left - right;
     })
-    .map(({ events: _e, lineups: _l, statistics: _s, players: _p, fullData: _f, ...rest }: any) => rest);
+    .map(stripHeavyFixtureFields);
 
   return projectMatchesForListView(top);
 }
@@ -147,6 +250,15 @@ export async function upsertKingPrediction(
   const fixture = await resolveServerFixture(input.apiMatchId);
   const dayKey = cairoDayKey();
   const now = new Date();
+
+  // When a curated slate exists for today, only those fixtures accept new/updated picks.
+  if (fixture?.kickoff) {
+    const slateDay = cairoDayKey(fixture.kickoff);
+    const slateIds = await getKingDailySlateIds(slateDay);
+    if (slateIds.length > 0 && !slateIds.includes(input.apiMatchId)) {
+      throw new KingPredictionError('MATCH_NOT_ELIGIBLE');
+    }
+  }
 
   // Concurrent first-create on (userId, apiMatchId) can lose with P2002; retry once as update (GK-6).
   let racedCreate = false;

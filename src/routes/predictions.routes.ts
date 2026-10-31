@@ -22,6 +22,7 @@ import {
 import {
     getDailyPredictionsUsed,
     getKingDailyMatches,
+    getKingDailySlateIds,
     getKingHistory,
     getKingLeaderboard,
     KingPredictionError,
@@ -897,10 +898,13 @@ router.get('/king/matches', async (req: Request, res: Response): Promise<void> =
     try {
         const date = typeof req.query.date === 'string' ? req.query.date : undefined;
         const matches = await getKingDailyMatches(date);
+        const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : cairoDayKey();
+        const slateIds = await getKingDailySlateIds(day);
         const week = cairoWeekBounds();
         res.json({
             success: true,
             data: matches,
+            source: slateIds.length > 0 ? 'curated' : 'auto',
             serverDayCairo: cairoDayKey(),
             weekBounds: { start: week.start.toISOString(), end: week.end.toISOString(), days: week.days },
         });

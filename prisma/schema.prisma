@@ -1664,6 +1664,22 @@ model PredictionDailyCounter {
   @@map("prediction_daily_counters")
 }
 
+/// Curated King of the Game / King of Results slate for one Africa/Cairo day.
+/// When rows exist for a day, GET /predictions/king/matches returns these fixtures
+/// (in sortOrder) instead of the automatic top-10 ranking.
+model KingDailySlate {
+  id         String   @id @default(uuid())
+  cairoDay   DateTime @db.Date
+  apiMatchId Int
+  sortOrder  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cairoDay, apiMatchId])
+  @@index([cairoDay, sortOrder])
+  @@map("king_daily_slates")
+}
+
 model PredictionGroup {
   id                String        @id @default(uuid())
   name              String

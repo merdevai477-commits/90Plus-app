@@ -1665,5 +1665,82 @@ router.get('/community-flags', requireAdmin, async (req: Request, res: Response)
     }
 });
 
+/**
+ * GET /api/admin/king/daily-matches?date=YYYY-MM-DD
+ * Curated King slate for a Cairo day (empty = auto top-10), plus that day's candidates.
+ */
+router.get('/king/daily-matches', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const {
+            getKingDailySlateIds,
+            getKingDailyMatches,
+            KING_DAILY_MATCH_LIMIT,
+        } = await import('../services/king-prediction.service');
+        const { calendarTodayKey, offsetCalendarDateKey } = await import('../utils/calendar-day-bounds.util');
+        const raw = typeof req.query.date === 'string' ? req.query.date : '';
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : offsetCalendarDateKey(calendarTodayKey(), 1);
+        const [matchIds, matches] = await Promise.all([
+            getKingDailySlateIds(date),
+            getKingDailyMatches(date),
+        ]);
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                date,
+                source: matchIds.length > 0 ? 'curated' : 'auto',
+                matchIds,
+                matches,
+                limit: KING_DAILY_MATCH_LIMIT,
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Admin king daily-matches get error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load King daily matches');
+    }
+});
+
+/**
+ * PUT /api/admin/king/daily-matches
+ * Body: { date: "YYYY-MM-DD", matchIds: number[] }
+ * Replaces the curated slate for that Cairo day. Empty matchIds clears curation.
+ */
+router.put('/king/daily-matches', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { setKingDailySlate, getKingDailyMatches, KING_DAILY_MATCH_LIMIT } =
+            await import('../services/king-prediction.service');
+        const date = typeof req.body?.date === 'string' ? req.body.date.trim() : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            res.status(400).json({ status: 'ERROR', message: 'date must be YYYY-MM-DD' });
+            return;
+        }
+        const rawIds = Array.isArray(req.body?.matchIds) ? req.body.matchIds : null;
+        if (!rawIds) {
+            res.status(400).json({ status: 'ERROR', message: 'matchIds must be an array of fixture ids' });
+            return;
+        }
+        if (rawIds.length > KING_DAILY_MATCH_LIMIT) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: `At most ${KING_DAILY_MATCH_LIMIT} matches per day`,
+            });
+            return;
+        }
+        const saved = await setKingDailySlate(date, rawIds);
+        const matches = await getKingDailyMatches(date);
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                ...saved,
+                source: saved.matchIds.length > 0 ? 'curated' : 'auto',
+                matches,
+                limit: KING_DAILY_MATCH_LIMIT,
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Admin king daily-matches put error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to save King daily matches');
+    }
+});
+
 export default router;
 
