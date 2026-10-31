@@ -973,10 +973,16 @@ async function startServer() {
                     const { closeDueCycles, ensureCurrentCycle } = await import(
                         './services/share-win.service'
                     );
+                    const { drainPendingInstallAttributions } = await import(
+                        './services/share-win-install-click.service'
+                    );
                     const runShareWinRollover = () => {
                         ensureCurrentCycle()
                             .then(() => closeDueCycles())
                             .catch((err) => logger.error('Share & Win cycle rollover error:', err));
+                        drainPendingInstallAttributions().catch((err) =>
+                            logger.error('Share & Win install-click drain error:', err),
+                        );
                     };
                     runShareWinRollover();
                     setInterval(runShareWinRollover, 15 * 60 * 1000).unref?.();

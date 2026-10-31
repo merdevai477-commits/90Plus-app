@@ -144,6 +144,17 @@ describe('checkDeferredReferral — Android', () => {
     expect(await AsyncStorage.getItem('@90plus:deferred_referral_checked')).toBeTruthy();
   });
 
+  it('does not lock out when Play returns an empty referrer', async () => {
+    getReferrer.mockResolvedValue('');
+    await checkDeferredReferral();
+    await expect(getPendingReferral()).resolves.toBeNull();
+    expect(await AsyncStorage.getItem('@90plus:deferred_referral_checked')).toBeNull();
+
+    getReferrer.mockResolvedValue('invite_AB23CD');
+    await checkDeferredReferral();
+    await expect(getPendingReferral()).resolves.toBe('AB23CD');
+  });
+
   it('does not set the checked flag when Play throws', async () => {
     getReferrer.mockRejectedValue(new Error('ERR_APPLICATION_INSTALL_REFERRER_UNAVAILABLE'));
     await expect(checkDeferredReferral()).resolves.toBeUndefined();

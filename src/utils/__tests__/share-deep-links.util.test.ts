@@ -135,22 +135,22 @@ describe('Android App Links (front/app.json intent filters)', () => {
 describe('referral landing page — the app-is-not-installed path', () => {
   const html = buildReferralLandingPage('AB23CD');
 
-  it('carries the referral code into the app on every route it offers', () => {
-    // Universal/App Link (handled by the OS), custom scheme (in-app browsers),
-    // and the Android intent all have to name the same code, or the invite
-    // arrives with no attribution.
+  it('carries the referral code into the app and the Play referrer URL', () => {
+    // Universal/App Link (handled by the OS) and the custom scheme name the
+    // code. A cold Android install must use the Play URL, not a package intent
+    // that drops the referrer.
     expect(html).toContain('ninetyplus://invite/AB23CD');
-    expect(html).toContain('intent://invite/AB23CD#Intent');
     expect(html).toContain('90plus.pro/invite/AB23CD');
+    expect(html).toContain('var androidReferrerFirst = true');
+    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
   });
 
-  it('falls back to the Play Store with an invite referrer, not back to itself', () => {
-    const fallback = /browser_fallback_url=([^;]+);/.exec(html)?.[1] ?? '';
-    const decoded = decodeURIComponent(fallback);
-    expect(decoded).toBe(buildPlayStoreInviteUrl('AB23CD'));
-    expect(decoded).toContain('referrer=invite_AB23CD');
-    // The bounce that used to happen: fallback pointing at this same page.
-    expect(decoded).not.toContain('/invite/');
+  it('sends a phone with no app to Play with an invite referrer, not back to itself', () => {
+    const playUrl = buildPlayStoreInviteUrl('AB23CD');
+    expect(html).toContain(`var playStoreUrl = ${JSON.stringify(playUrl)}`);
+    expect(playUrl).toContain('referrer=invite_AB23CD');
+    expect(playUrl).not.toContain('/invite/');
+    expect(html).toContain('window.location.replace(playStoreUrl)');
   });
 
   it('sends phones without the app to their platform store', () => {

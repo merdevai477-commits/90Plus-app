@@ -57,12 +57,18 @@ describe('buildReferralLandingPage — deferred payloads', () => {
     );
   });
 
-  it('keeps platform guards (Android intent path vs iOS clipboard path)', () => {
+  it('sends Android straight to the Play referrer URL and keeps the iOS clipboard path', () => {
     expect(html).toContain('if (isAndroid)');
     expect(html).toContain('if (isIOS)');
     expect(html).toContain('if (iosInvitePayload) return;');
     expect(html).toContain('ninetyplus://invite/ABCDEF');
-    expect(html).toContain('intent://invite/ABCDEF#Intent');
+    expect(html).toContain('var androidReferrerFirst = true');
+    expect(html).toContain('window.location.replace(playStoreUrl)');
+    // The package intent opens Play without referrer and hides this page.
+    const autoIntent = html.indexOf('window.location.href = intentUrl');
+    const referrerReturn = html.indexOf('if (androidReferrerFirst)');
+    expect(referrerReturn).toBeGreaterThan(-1);
+    expect(autoIntent).toBeGreaterThan(referrerReturn);
   });
 
   it('does not put raw script tags or path traversal into HTML for valid codes', () => {

@@ -127,9 +127,15 @@ async function checkAndroidInstallReferrer(): Promise<void> {
 
     if (parsed && isValidReferralCode(parsed)) {
       await capturePendingReferral(parsed);
+      await AsyncStorage.setItem(CHECKED_KEY, String(Date.now()));
+      return;
     }
 
-    await AsyncStorage.setItem(CHECKED_KEY, String(Date.now()));
+    // A non-empty Play answer without our code is organic and will not change.
+    // null/blank means the referrer service was not ready — retry next launch.
+    if ((raw ?? '').trim()) {
+      await AsyncStorage.setItem(CHECKED_KEY, String(Date.now()));
+    }
   } catch (error) {
     // Do NOT set CHECKED_KEY — transient Play Store / API errors retry next launch.
     // TODO: remove temporary debug logging after real-device verification

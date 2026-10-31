@@ -53,7 +53,7 @@ const SHARE_DAILY_LIMIT = 200;
  * window. This is what stops a long-standing user from pasting a friend's code
  * and being counted as a "new" participant.
  */
-const REFERRAL_ATTRIBUTION_WINDOW_MS = 48 * 60 * 60 * 1000;
+export const REFERRAL_ATTRIBUTION_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 // ─── Referral codes ─────────────────────────────────────────────────────────
 

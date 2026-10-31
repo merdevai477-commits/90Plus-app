@@ -84,6 +84,13 @@ function buildStoreRedirectScript(
   customSchemeUrl: string,
   playStoreUrl: string = PLAY_STORE_URL,
   iosInviteClipboardPayload: string | null = null,
+  /**
+   * Referral landings. Do not open an Android package intent: when 90Plus is
+   * missing, that intent launches the Play Store listing with no referrer and
+   * hides the page, so the backup redirect that carries `referrer=invite_CODE`
+   * never runs. Go straight to that Play URL instead.
+   */
+  androidReferrerFirst: boolean = false,
 ): string {
   return `
     (function() {
@@ -92,6 +99,7 @@ function buildStoreRedirectScript(
       var playStoreUrl = ${JSON.stringify(playStoreUrl)};
       var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
       var iosInvitePayload = ${JSON.stringify(iosInviteClipboardPayload)};
+      var androidReferrerFirst = ${androidReferrerFirst ? 'true' : 'false'};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
       var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
@@ -154,7 +162,9 @@ function buildStoreRedirectScript(
           if (androidBtn) {
             androidBtn.className = 'btn primary store-btn';
           }
-          if (openBtn) openBtn.setAttribute('href', intentUrl);
+          // Package intents drop the Play Install Referrer. Leave the
+          // "open app" button on the custom scheme for referral links.
+          if (openBtn && !androidReferrerFirst) openBtn.setAttribute('href', intentUrl);
         } else if (isIOS) {
           if (androidBtn) androidBtn.style.display = 'none';
           if (iosBtn) {
@@ -171,6 +181,10 @@ function buildStoreRedirectScript(
       document.body.classList.add('opening');
 
       if (isAndroid) {
+        if (androidReferrerFirst) {
+          window.location.replace(playStoreUrl);
+          return;
+        }
         // Intent fallback is Play Store; JS backup covers WebViews that ignore it.
         window.location.href = intentUrl;
         setTimeout(function() {
@@ -234,11 +248,17 @@ type ContentLandingOptions = {
    * plain App Store redirect (no clipboard).
    */
   iosInviteClipboardPayload?: string | null;
+  /**
+   * Valid Share & Win codes. Android must land on the Play URL that includes
+   * `referrer=invite_CODE`, not on a package intent that strips it.
+   */
+  androidReferrerFirst?: boolean;
 };
 
 function buildSmartLandingPage(options: ContentLandingOptions): string {
   // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
   const androidStoreUrl = options.androidStoreUrl ?? PLAY_STORE_URL;
+  const androidReferrerFirst = options.androidReferrerFirst === true;
   const intentUrl = buildAndroidIntentUrl(options.deepPath, androidStoreUrl);
   const iosInviteClipboardPayload = options.iosInviteClipboardPayload ?? null;
   // Valid invite on iOS: href="#" so a pre-JS tap cannot skip clipboard copy.
@@ -281,6 +301,7 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
       options.customSchemeUrl,
       androidStoreUrl,
       iosInviteClipboardPayload,
+      androidReferrerFirst,
     )}
   </script>
 </body>
@@ -365,6 +386,7 @@ export function buildReferralLandingPage(code: string): string {
     customSchemeUrl: `ninetyplus://invite/${normalized}`,
     // Android cold-install: Play Install Referrer carries invite_CODE into the app.
     androidStoreUrl: buildPlayStoreInviteUrl(normalized),
+    androidReferrerFirst: codeOk,
     // iOS cold-install safety net: tap "تحميل التطبيق" copies then opens App Store.
     // Invalid codes get a plain store link with no clipboard write.
     iosInviteClipboardPayload: codeOk ? `90plus-invite:${normalized}` : null,

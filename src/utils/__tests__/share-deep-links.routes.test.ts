@@ -170,15 +170,17 @@ describe('GET /invite/:code — the web fallback', () => {
     const html = await (await get('/invite/AB23CD')).text();
 
     expect(html).toContain('ninetyplus://invite/AB23CD');
-    expect(html).toContain('intent://invite/AB23CD#Intent');
+    expect(html).toContain('var androidReferrerFirst = true');
+    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
   });
 
   it('sends a phone with no app to a store, never back to itself', async () => {
     const html = await (await get('/invite/AB23CD')).text();
-    const fallback = decodeURIComponent(/browser_fallback_url=([^;]+);/.exec(html)?.[1] ?? '');
+    const playUrl = buildPlayStoreInviteUrl('AB23CD');
 
-    expect(fallback).toBe(buildPlayStoreInviteUrl('AB23CD'));
-    expect(fallback.startsWith(PLAY_STORE_URL)).toBe(true);
+    expect(html).toContain(`var playStoreUrl = ${JSON.stringify(playUrl)}`);
+    expect(playUrl.startsWith(PLAY_STORE_URL)).toBe(true);
+    expect(playUrl).not.toContain('/invite/');
     expect(html).toContain(APP_STORE_URL);
   });
 

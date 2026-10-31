@@ -11,6 +11,8 @@ import {
     buildReferralLandingPage,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
+import { getClientIp, isPublicIp } from '../utils/client-ip';
+import { isAndroidInviteBrowser, rememberInviteClick } from '../services/share-win-install-click.service';
 
 const PRIVACY_PAGE_PATH = resolvePublicFile(__dirname, 'privacy.html');
 const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
@@ -86,6 +88,12 @@ function handleReferralLanding(req: Request, res: Response): void {
     if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(raw)) {
         res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Invite not found</p></body></html>');
         return;
+    }
+
+    const ip = getClientIp(req);
+    const ua = req.headers['user-agent'];
+    if (isPublicIp(ip) && isAndroidInviteBrowser(typeof ua === 'string' ? ua : undefined)) {
+        void rememberInviteClick(ip, raw);
     }
 
     sendShareLanding(res, buildReferralLandingPage(raw));

@@ -554,6 +554,15 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
 
         const user = await ClerkUserService.syncUserFromClerk(clerkUserId);
 
+        const { scheduleInstallClickAttribution } = await import(
+            '../services/share-win-install-click.service'
+        );
+        const { getClientIp, isPublicIp } = await import('../utils/client-ip');
+        const ip = getClientIp(req);
+        if (isPublicIp(ip)) {
+            scheduleInstallClickAttribution(user.id, user.createdAt, ip);
+        }
+
         recordSuccessfulSessionLogin(req, 'clerk/sync');
 
         res.json({
