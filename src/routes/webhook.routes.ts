@@ -14,7 +14,7 @@ import { generateUsername } from '../utils/username.utils';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
-import { claimReferral, referralCodeFromClerkMetadata } from '../services/share-win.service';
+import { claimReferral, inviteMetaFromClerk } from '../services/share-win.service';
 
 const router = Router();
 
@@ -176,16 +176,23 @@ async function attributeInviteFromClerk(
     userId: string,
     data: ClerkWebhookEvent['data'],
 ): Promise<void> {
-    const code =
-        referralCodeFromClerkMetadata(data.unsafe_metadata) ??
-        referralCodeFromClerkMetadata(data.public_metadata);
-    if (!code) return;
+    const fromUnsafe = inviteMetaFromClerk(data.unsafe_metadata);
+    const fromPublic = inviteMetaFromClerk(data.public_metadata);
+    const code = fromUnsafe.code ?? fromPublic.code;
+    const clickId = fromUnsafe.clickId ?? fromPublic.clickId;
+    if (!code && !clickId) return;
     try {
-        const result = await claimReferral(userId, code);
+        const result = await claimReferral({
+            referredUserId: userId,
+            code,
+            clickId,
+            source: 'webhook',
+        });
         logger.info('[ShareWin] invite counted from signup', {
             userId,
             attributed: result.attributed,
             reason: result.reason,
+            clickId,
         });
     } catch (err) {
         logger.error('[ShareWin] invite count from signup failed:', err);

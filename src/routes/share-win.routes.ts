@@ -10,7 +10,9 @@
 import { Router, Request, Response } from 'express';
 
 import { requireAuth } from '../middleware/clerk.middleware';
+import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { writeLimiter } from '../middleware/rateLimit.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
@@ -24,7 +26,10 @@ import {
   getMyStanding,
   getShareWinOverview,
   recordShare,
+  type ReferralClaimSource,
 } from '../services/share-win.service';
+import { markInviteFirstOpen } from '../services/share-win-invite-click.service';
+import { getShareWinFunnel } from '../services/share-win-funnel.service';
 
 const router = Router();
 
@@ -95,10 +100,47 @@ router.post('/share', requireAuth, async (req: Request, res: Response): Promise<
 });
 
 /**
+ * POST /api/share-win/referral/first-open
+ * Public, rate-limited. Marks installed_at on a click row. Always 200 neutral.
+ */
+router.post(
+  '/referral/first-open',
+  writeLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const clickId =
+        typeof req.body?.click_id === 'string'
+          ? req.body.click_id
+          : typeof req.body?.clickId === 'string'
+            ? req.body.clickId
+            : '';
+      await markInviteFirstOpen({
+        clickId,
+        installId:
+          typeof req.body?.install_id === 'string'
+            ? req.body.install_id
+            : typeof req.body?.installId === 'string'
+              ? req.body.installId
+              : null,
+        platform: typeof req.body?.platform === 'string' ? req.body.platform : null,
+        appVersion:
+          typeof req.body?.app_version === 'string'
+            ? req.body.app_version
+            : typeof req.body?.appVersion === 'string'
+              ? req.body.appVersion
+              : null,
+      });
+    } catch (err) {
+      logger.error('POST /api/share-win/referral/first-open error:', err);
+    }
+    res.status(200).json({ success: true, data: { ok: true } });
+  },
+);
+
+/**
  * POST /api/share-win/referral/claim
- * Attach a referral code to the authenticated account. Called once, right
- * after registration completes. Rejections are reported as a reason rather
- * than an error — a declined claim is a normal outcome, not a failure.
+ * Attach a referral (code and/or click_id) to the authenticated account.
+ * Optional fields keep old app builds working (code only).
  */
 router.post('/referral/claim', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -109,18 +151,68 @@ router.post('/referral/claim', requireAuth, async (req: Request, res: Response):
     }
 
     const code = typeof req.body?.code === 'string' ? req.body.code : '';
-    if (!code) {
-      sendError(req, res, ErrorCode.VALIDATION, 'Referral code is required');
+    const clickId =
+      typeof req.body?.click_id === 'string'
+        ? req.body.click_id
+        : typeof req.body?.clickId === 'string'
+          ? req.body.clickId
+          : null;
+    if (!code && !clickId) {
+      sendError(req, res, ErrorCode.VALIDATION, 'Referral code or click_id is required');
       return;
     }
 
-    const result = await claimReferral(userId, code);
+    const rawSource = typeof req.body?.source === 'string' ? req.body.source : 'manual';
+    const allowed: ReferralClaimSource[] = [
+      'deferred',
+      'deeplink',
+      'webhook',
+      'web',
+      'manual',
+    ];
+    const source = (allowed.includes(rawSource as ReferralClaimSource)
+      ? rawSource
+      : 'manual') as ReferralClaimSource;
+
+    const result = await claimReferral({
+      referredUserId: userId,
+      code: code || null,
+      clickId,
+      source,
+      appVersion:
+        typeof req.body?.app_version === 'string'
+          ? req.body.app_version
+          : typeof req.body?.appVersion === 'string'
+            ? req.body.appVersion
+            : null,
+      platform: typeof req.body?.platform === 'string' ? req.body.platform : null,
+    });
     res.json({ success: true, data: result });
   } catch (err) {
     logger.error('POST /api/share-win/referral/claim error:', err);
     sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
   }
 });
+
+/**
+ * GET /api/share-win/admin/funnel?days=7
+ * Admin-only click → install → register funnel.
+ */
+router.get(
+  '/admin/funnel',
+  requireAuth,
+  requireAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const days = toPositiveInt(param(req.query.days as string | string[] | undefined), 7, 90);
+      const data = await getShareWinFunnel(days);
+      res.json({ success: true, data });
+    } catch (err) {
+      logger.error('GET /api/share-win/admin/funnel error:', err);
+      sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+  },
+);
 
 /**
  * GET /api/share-win/leaderboard?weekKey=&limit=&offset=

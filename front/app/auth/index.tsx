@@ -31,7 +31,7 @@ import {
   normalizeAuthEmail,
 } from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
-import { getPendingReferral } from '../../utils/pendingReferral';
+import { getReferralUnsafeMetadata } from '../../utils/pendingReferral';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
@@ -169,14 +169,14 @@ export default function RegisterScreen() {
 
     setIsSubmitting(true);
     try {
-      const pendingCode = await getPendingReferral();
+      const referralMeta = await getReferralUnsafeMetadata();
       const result = await signUp.create({
         emailAddress: normalizedEmail,
         password,
         firstName: name.trim().split(' ')[0],
         lastName: name.trim().split(' ').slice(1).join(' ') || undefined,
         legalAccepted: true,
-        ...(pendingCode ? { unsafeMetadata: { referralCode: pendingCode } } : {}),
+        ...(referralMeta ? { unsafeMetadata: referralMeta } : {}),
       });
 
       if (result.status === 'complete' && result.createdSessionId) {

@@ -110,4 +110,15 @@ describe('buildReferralContestLandingPage', () => {
     expect(buildReferralLandingPage('ABCDEF')).not.toContain('mountSignUp');
     expect(buildReferralLandingPage('AB0O1D', { clerkPublishableKey: 'pk_test_invite' })).not.toContain('mountSignUp');
   });
+
+  it('embeds click_id in Play referrer, clipboard, deep link, and claim body', () => {
+    const html = buildReferralLandingPage('ABCDEF', {
+      clerkPublishableKey: 'pk_test_invite',
+      clickId: 'ck_testClick01',
+    });
+    expect(html).toContain('invite_ABCDEF_ck_testClick01');
+    expect(html).toContain('clickId');
+    expect(html).toContain('ck_testClick01');
+    expect(html).toContain('ninetyplus://invite/ABCDEF?c=ck_testClick01');
+  });
 });

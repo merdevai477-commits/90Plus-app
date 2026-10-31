@@ -14,6 +14,8 @@ const prismaMock = {
   shareWinReferral: { findUnique: jest.fn(), create: jest.fn(), count: jest.fn() },
   shareWinShareEvent: { findFirst: jest.fn(), count: jest.fn(), create: jest.fn() },
   shareWinStanding: { findUnique: jest.fn(), upsert: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), count: jest.fn() },
+  shareWinInviteClick: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+  shareWinClaimAttempt: { create: jest.fn().mockResolvedValue({}) },
   $transaction: jest.fn(),
   $executeRaw: jest.fn(),
   $queryRaw: jest.fn(),
@@ -197,7 +199,7 @@ describe('claimReferral', () => {
     prismaMock.shareWinReferral.findUnique.mockResolvedValue(null);
 
     const result = await claimReferral('new-user', 'AB23CD', NOW);
-    expect(result).toEqual({ attributed: false, reason: 'unknown_code' });
+    expect(result).toEqual({ attributed: false, reason: 'referrer_inactive' });
   });
 
   test('attributes a genuinely new user and awards the referrer XP once', async () => {
@@ -278,5 +280,68 @@ describe('referralCodeFromClerkMetadata', () => {
     expect(referralCodeFromClerkMetadata(null)).toBeNull();
     expect(referralCodeFromClerkMetadata({ referralCode: 'AB0O1D' })).toBeNull();
     expect(referralCodeFromClerkMetadata({ referralCode: 12 })).toBeNull();
+  });
+});
+
+describe('claimReferral with click_id', () => {
+  const REFERRER = { id: 'ref-user', isDeleted: false, isBanned: false };
+  const NEW_USER = { id: 'new-user', createdAt: new Date('2026-08-08T11:00:00.000Z') };
+
+  test('uses click row code when click_id is valid', async () => {
+    prismaMock.shareWinInviteClick.findUnique.mockResolvedValue({
+      clickId: 'ck_validClick01',
+      referralCode: 'AB23CD',
+      referredUserId: null,
+    });
+    prismaMock.user.findUnique.mockImplementation(({ where }: any) =>
+      where.referralCode ? REFERRER : NEW_USER,
+    );
+    prismaMock.shareWinReferral.findUnique.mockResolvedValue(null);
+    prismaMock.shareWinReferral.create.mockResolvedValue({ id: 'ref-1' });
+    stubActiveCycle();
+
+    const result = await claimReferral({
+      referredUserId: 'new-user',
+      clickId: 'ck_validClick01',
+      source: 'deferred',
+      now: NOW,
+    });
+    expect(result.attributed).toBe(true);
+    expect(prismaMock.shareWinClaimAttempt.create).toHaveBeenCalled();
+  });
+
+  test('falls back to code when click_id is unknown', async () => {
+    prismaMock.shareWinInviteClick.findUnique.mockResolvedValue(null);
+    prismaMock.user.findUnique.mockImplementation(({ where }: any) =>
+      where.referralCode ? REFERRER : NEW_USER,
+    );
+    prismaMock.shareWinReferral.findUnique.mockResolvedValue(null);
+    prismaMock.shareWinReferral.create.mockResolvedValue({ id: 'ref-1' });
+    stubActiveCycle();
+
+    const result = await claimReferral({
+      referredUserId: 'new-user',
+      code: 'AB23CD',
+      clickId: 'ck_missing_____',
+      source: 'manual',
+      now: NOW,
+    });
+    expect(result.attributed).toBe(true);
+  });
+
+  test('idempotent repeat for same user returns attributed', async () => {
+    prismaMock.user.findUnique.mockImplementation(({ where }: any) =>
+      where.referralCode ? REFERRER : NEW_USER,
+    );
+    prismaMock.shareWinReferral.findUnique.mockResolvedValue({
+      id: 'ref-1',
+      referralCode: 'AB23CD',
+      clickId: null,
+    });
+    stubActiveCycle();
+
+    const result = await claimReferral('new-user', 'AB23CD', NOW);
+    expect(result.attributed).toBe(true);
+    expect(result.reason).toBe('attributed');
   });
 });

@@ -12,8 +12,9 @@ import {
     buildReferralLandingPage,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
-import { getClientIp, isPublicIp } from '../utils/client-ip';
-import { isPhoneInviteBrowser, rememberInviteClick } from '../services/share-win-install-click.service';
+import { getClientIp } from '../utils/client-ip';
+import { recordInviteClick } from '../services/share-win-invite-click.service';
+import { logger } from '../utils/logger';
 
 const PRIVACY_PAGE_PATH = resolvePublicFile(__dirname, 'privacy.html');
 const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
@@ -28,45 +29,19 @@ function sendShareLanding(res: Response, html: string, csp: string = SHARE_LANDI
 }
 
 function sendProfileLanding(req: Request, res: Response): void {
-    const raw = ensureString(req.params.username);
-    const username = raw.replace(/^@/, '').trim();
-    if (!/^[a-zA-Z0-9_]{1,64}$/.test(username)) {
-        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Profile not found</p></body></html>');
-        return;
-    }
-
+    const username = ensureString(req.params.username);
     sendShareLanding(res, buildProfileLandingPage(username));
 }
 
-/**
- * GET /support
- * صفحة الدعم — ثيم قانوني موحّد (public/support.html)
- */
-router.get('/support', (_req: Request, res: Response): void => {
-    res.sendFile(SUPPORT_PAGE_PATH, (err) => {
-        if (err) {
-            res.status(500).send('تعذّر تحميل صفحة الدعم');
-        }
-    });
+router.get('/privacy', (_req: Request, res: Response) => {
+    res.sendFile(PRIVACY_PAGE_PATH);
 });
 
-/**
- * GET /privacy
- * صفحة سياسة الخصوصية — ثيم قانوني موحّد (public/privacy.html)
- */
-router.get('/privacy', (_req: Request, res: Response): void => {
-    res.sendFile(PRIVACY_PAGE_PATH, (err) => {
-        if (err) {
-            res.status(500).send('تعذّر تحميل صفحة سياسة الخصوصية');
-        }
-    });
+router.get('/support', (_req: Request, res: Response) => {
+    res.sendFile(SUPPORT_PAGE_PATH);
 });
 
-/**
- * GET /reels/:reelId
- * Reel share — app installed → open reel; otherwise → store
- */
-router.get('/reels/:reelId', (req: Request, res: Response): void => {
+router.get('/reels/:reelId', (req: Request, res: Response) => {
     const reelId = ensureString(req.params.reelId);
     sendShareLanding(res, buildReelLandingPage(reelId));
 });
@@ -74,33 +49,40 @@ router.get('/reels/:reelId', (req: Request, res: Response): void => {
 /**
  * GET /u/:username  (canonical profile share — chat-safe)
  * GET /@:username   (legacy QR / older shares)
- * Profile share — app installed → open profile; otherwise → store
  */
 router.get('/u/:username', sendProfileLanding);
 router.get('/@:username', sendProfileLanding);
 
 /**
  * GET /invite/:code  (alias: /ref/:code)
- * Share & Win referral link — app installed → open with the code; otherwise →
- * store, and the code is picked up on first launch.
+ * Creates a durable click_id, then serves the signup or store landing with it.
  */
-function handleReferralLanding(req: Request, res: Response): void {
+async function handleReferralLanding(req: Request, res: Response): Promise<void> {
     const raw = ensureString(req.params.code).trim().toUpperCase();
     if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(raw)) {
         res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Invite not found</p></body></html>');
         return;
     }
 
-    const ip = getClientIp(req);
     const ua = req.headers['user-agent'];
-    if (isPublicIp(ip) && isPhoneInviteBrowser(typeof ua === 'string' ? ua : undefined)) {
-        void rememberInviteClick(ip, raw);
+    const ip = getClientIp(req);
+
+    let clickId: string | null = null;
+    try {
+        const click = await recordInviteClick({
+            code: raw,
+            userAgent: typeof ua === 'string' ? ua : undefined,
+            ip,
+        });
+        clickId = click?.clickId ?? null;
+    } catch (err) {
+        logger.error('[ShareWin] invite click record failed on landing:', err);
     }
 
     const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY?.trim() || '';
     sendShareLanding(
         res,
-        buildReferralLandingPage(raw, { clerkPublishableKey }),
+        buildReferralLandingPage(raw, { clerkPublishableKey, clickId }),
         clerkPublishableKey ? REFERRAL_SIGNUP_CSP : SHARE_LANDING_CSP,
     );
 }

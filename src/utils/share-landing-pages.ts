@@ -1,6 +1,10 @@
 import { ANDROID_PACKAGE_NAME } from '../config/androidAppLinks';
 import { SHARE_BASE_URL, shareUrl } from '../config/shareLinks';
 import { isValidReferralCode, normalizeReferralCode } from '../services/share-win.service';
+import {
+  buildIosInviteClipboard,
+  buildPlayInviteReferrer,
+} from './share-win-invite-parse';
 
 /** Canonical package from androidAppLinks (same id as front/app.json). */
 const ANDROID_PACKAGE = ANDROID_PACKAGE_NAME;
@@ -12,12 +16,33 @@ export const APP_STORE_URL = 'https://apps.apple.com/us/app/90plus/id6758296989'
 
 /**
  * Play Store listing with an Install Referrer payload for Share & Win.
- * Invalid / unknown codes get the plain store URL (no referrer).
+ * With clickId: invite_CODE_clickId. Without: legacy invite_CODE.
+ * Invalid codes get the plain store URL (no referrer).
  */
-export function buildPlayStoreInviteUrl(code: string): string {
+export function buildPlayStoreInviteUrl(code: string, clickId?: string | null): string {
   const normalized = normalizeReferralCode(code);
   if (!isValidReferralCode(normalized)) return PLAY_STORE_URL;
-  return `${PLAY_STORE_URL}&referrer=${encodeURIComponent(`invite_${normalized}`)}`;
+  const referrer =
+    clickId && /^[A-Za-z0-9_-]{8,64}$/.test(clickId)
+      ? buildPlayInviteReferrer(normalized, clickId)
+      : `invite_${normalized}`;
+  return `${PLAY_STORE_URL}&referrer=${encodeURIComponent(referrer)}`;
+}
+
+/** App Store URL with harmless sw_* query params carrying the invite. */
+export function buildAppStoreInviteUrl(code: string, clickId?: string | null): string {
+  const normalized = normalizeReferralCode(code);
+  if (!isValidReferralCode(normalized)) return APP_STORE_URL;
+  if (!clickId) return APP_STORE_URL;
+  const u = new URL(APP_STORE_URL);
+  u.searchParams.set('sw_code', normalized);
+  u.searchParams.set('sw_click', clickId);
+  return u.toString();
+}
+
+function inviteDeepLink(code: string, clickId?: string | null): string {
+  const base = `ninetyplus://invite/${normalizeReferralCode(code)}`;
+  return clickId ? `${base}?c=${encodeURIComponent(clickId)}` : base;
 }
 
 /** How long we wait before assuming the app did not open, then go to the store. */
@@ -107,13 +132,14 @@ function buildStoreRedirectScript(
    * never runs. Go straight to that Play URL instead.
    */
   androidReferrerFirst: boolean = false,
+  appStoreUrlOverride: string = APP_STORE_URL,
 ): string {
   return `
     (function() {
       var customScheme = ${JSON.stringify(customSchemeUrl)};
       var intentUrl = ${JSON.stringify(intentUrl)};
       var playStoreUrl = ${JSON.stringify(playStoreUrl)};
-      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
+      var appStoreUrl = ${JSON.stringify(appStoreUrlOverride)};
       var iosInvitePayload = ${JSON.stringify(iosInviteClipboardPayload)};
       var androidReferrerFirst = ${androidReferrerFirst ? 'true' : 'false'};
       var ua = navigator.userAgent || '';
@@ -276,6 +302,8 @@ type ContentLandingOptions = {
    * `referrer=invite_CODE`, not on a package intent that strips it.
    */
   androidReferrerFirst?: boolean;
+  /** Optional App Store URL (may carry harmless sw_* query params). */
+  iosStoreUrlOverride?: string;
 };
 
 function buildSmartLandingPage(options: ContentLandingOptions): string {
@@ -284,10 +312,11 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
   const androidReferrerFirst = options.androidReferrerFirst === true;
   const intentUrl = buildAndroidIntentUrl(options.deepPath, androidStoreUrl);
   const iosInviteClipboardPayload = options.iosInviteClipboardPayload ?? null;
+  const iosFinalStoreUrl = options.iosStoreUrlOverride ?? APP_STORE_URL;
   // Valid invite on iOS: href="#" so a pre-JS tap cannot skip clipboard copy.
-  const iosStoreHref = iosInviteClipboardPayload ? '#' : APP_STORE_URL;
+  const iosStoreHref = iosInviteClipboardPayload ? '#' : iosFinalStoreUrl;
   const noscriptAppStore = iosInviteClipboardPayload
-    ? `<noscript><p><a class="btn primary" href="${APP_STORE_URL}">حمّل من App Store</a></p></noscript>`
+    ? `<noscript><p><a class="btn primary" href="${iosFinalStoreUrl}">حمّل من App Store</a></p></noscript>`
     : '';
 
   return `<!DOCTYPE html>
@@ -325,6 +354,7 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
       androidStoreUrl,
       iosInviteClipboardPayload,
       androidReferrerFirst,
+      iosFinalStoreUrl,
     )}
   </script>
 </body>
@@ -399,14 +429,21 @@ export function buildProfileLandingPage(username: string): string {
  * build later tries to remember the link. The new user signs up on this page
  * with the invite code attached, then downloads the app and signs in.
  */
-export function buildReferralContestLandingPage(code: string, clerkPublishableKey: string): string {
-  const playUrl = buildPlayStoreInviteUrl(code);
+export function buildReferralContestLandingPage(
+  code: string,
+  clerkPublishableKey: string,
+  clickId?: string | null,
+): string {
+  const playUrl = buildPlayStoreInviteUrl(code, clickId);
+  const appStoreUrl = buildAppStoreInviteUrl(code, clickId);
+  const openUrl = inviteDeepLink(code, clickId);
   const payload = JSON.stringify({
     code,
+    clickId: clickId || null,
     publishableKey: clerkPublishableKey,
     playUrl,
-    appStoreUrl: APP_STORE_URL,
-    openUrl: `ninetyplus://invite/${code}`,
+    appStoreUrl,
+    openUrl,
   });
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -428,8 +465,8 @@ export function buildReferralContestLandingPage(code: string, clerkPublishableKe
     <div class="download" id="download">
       <p>بعد التسجيل، حمّل التطبيق وادخل بنفس الحساب.</p>
       <a class="btn primary" id="store-android" href="${playUrl.replace(/"/g, '&quot;')}">حمّل من Google Play</a>
-      <a class="btn secondary" id="store-ios" href="${APP_STORE_URL}">حمّل من App Store</a>
-      <a class="btn secondary" id="open-app" href="ninetyplus://invite/${code}">افتح التطبيق</a>
+      <a class="btn secondary" id="store-ios" href="${appStoreUrl.replace(/"/g, '&quot;')}">حمّل من App Store</a>
+      <a class="btn secondary" id="open-app" href="${openUrl.replace(/"/g, '&quot;')}">افتح التطبيق</a>
     </div>
   </div>
   <script>
@@ -450,7 +487,11 @@ export function buildReferralContestLandingPage(code: string, clerkPublishableKe
               Authorization: 'Bearer ' + token,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ code: cfg.code })
+            body: JSON.stringify({
+              code: cfg.code,
+              click_id: cfg.clickId,
+              source: 'web'
+            })
           });
         }).then(function(res) { return res.json(); }).then(function(body) {
           var data = body && body.data;
@@ -474,6 +515,8 @@ export function buildReferralContestLandingPage(code: string, clerkPublishableKe
           showStores();
         });
       }
+      var meta = { referralCode: cfg.code };
+      if (cfg.clickId) meta.clickId = cfg.clickId;
       var script = document.createElement('script');
       script.async = true;
       script.src = 'https://clerk.90plus.pro/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
@@ -487,7 +530,7 @@ export function buildReferralContestLandingPage(code: string, clerkPublishableKe
         if (!clerk) { script.onerror(); return; }
         clerk.load().then(function() {
           if (clerk.user) { claim(); return; }
-          clerk.mountSignUp(slot, { unsafeMetadata: { referralCode: cfg.code } });
+          clerk.mountSignUp(slot, { unsafeMetadata: meta });
           clerk.addListener(function(event) {
             if (event.user) claim();
           });
@@ -506,14 +549,22 @@ export function buildReferralContestLandingPage(code: string, clerkPublishableKe
 /** Share & Win referral invite — carries the code into the app on first open. */
 export function buildReferralLandingPage(
   code: string,
-  options?: { clerkPublishableKey?: string },
+  options?: { clerkPublishableKey?: string; clickId?: string | null },
 ): string {
   const normalized = normalizeReferralCode(code);
   const codeOk = isValidReferralCode(normalized);
   const clerkKey = options?.clerkPublishableKey?.trim() || '';
+  const clickId = options?.clickId?.trim() || null;
   if (codeOk && clerkKey) {
-    return buildReferralContestLandingPage(normalized, clerkKey);
+    return buildReferralContestLandingPage(normalized, clerkKey, clickId);
   }
+  const deep = inviteDeepLink(normalized, clickId);
+  const clipboard =
+    codeOk && clickId
+      ? buildIosInviteClipboard(normalized, clickId)
+      : codeOk
+        ? `90plus-invite:${normalized}`
+        : null;
   return buildSmartLandingPage({
     title: '90Plus — دعوة صديق',
     ogTitle: '90Plus — شارك واربح',
@@ -522,12 +573,10 @@ export function buildReferralLandingPage(
     loadingText: 'جاري فتح الدعوة أو التحويل للمتجر…',
     downloadText: 'حمّل 90Plus وانضم عبر دعوة صديقك',
     deepPath: `invite/${normalized}`,
-    customSchemeUrl: `ninetyplus://invite/${normalized}`,
-    // Android cold-install: Play Install Referrer carries invite_CODE into the app.
-    androidStoreUrl: buildPlayStoreInviteUrl(normalized),
+    customSchemeUrl: deep,
+    androidStoreUrl: buildPlayStoreInviteUrl(normalized, clickId),
     androidReferrerFirst: codeOk,
-    // iOS cold-install safety net: tap "تحميل التطبيق" copies then opens App Store.
-    // Invalid codes get a plain store link with no clipboard write.
-    iosInviteClipboardPayload: codeOk ? `90plus-invite:${normalized}` : null,
+    iosInviteClipboardPayload: clipboard,
+    iosStoreUrlOverride: codeOk ? buildAppStoreInviteUrl(normalized, clickId) : undefined,
   });
 }

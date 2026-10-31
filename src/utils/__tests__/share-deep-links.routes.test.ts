@@ -19,6 +19,13 @@ import express from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 
+jest.mock('../../services/share-win-invite-click.service', () => ({
+  recordInviteClick: jest.fn(async ({ code }: { code: string }) => ({
+    clickId: 'ck_testClick01xx',
+    referralCode: code,
+  })),
+}));
+
 import supportRoutes from '../../routes/support.routes';
 import { buildAppleAppSiteAssociation } from '../../config/appleAppSite';
 import {
@@ -184,14 +191,15 @@ describe('GET /invite/:code — the web fallback', () => {
     expect(html).toContain('ninetyplus://invite/AB23CD');
     expect(html).toContain('mountSignUp');
     expect(html).toContain('referralCode');
-    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
+    expect(html).toContain('ck_testClick01xx');
+    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD', 'ck_testClick01xx'));
     expect(html).not.toContain('location.replace');
     expect(res.headers.get('content-security-policy')).toContain('https://clerk.90plus.pro');
   });
 
   it('offers the stores only after signup, never a link back to this page', async () => {
     const html = await (await get('/invite/AB23CD')).text();
-    const playUrl = buildPlayStoreInviteUrl('AB23CD');
+    const playUrl = buildPlayStoreInviteUrl('AB23CD', 'ck_testClick01xx');
 
     expect(html).toContain(playUrl);
     expect(playUrl.startsWith(PLAY_STORE_URL)).toBe(true);

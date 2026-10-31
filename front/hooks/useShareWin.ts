@@ -29,9 +29,11 @@ import { confirmExternalShare, isCopyShareActivity, watchShareHandoff } from '..
 import { ensureDeferredReferralSettled } from '../utils/deferredReferral';
 import {
   clearPendingReferral,
-  getPendingReferral,
+  getPendingReferralFull,
   hasClaimedReferral,
 } from '../utils/pendingReferral';
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 
 export const SHARE_WIN_QUERY_KEY = ['share-win', 'me'] as const;
 
@@ -181,29 +183,84 @@ export function useShareWin() {
  * their backend account exists. Safe to call repeatedly — a claimed device is
  * short-circuited locally and the backend enforces one referrer per user.
  */
+/** Reasons that permanently clear pending (terminal). */
+const TERMINAL_CLEAR_REASONS = new Set([
+  'attributed',
+  'already_attributed',
+  'invalid_code',
+  'self_referral',
+  'referrer_inactive',
+  'unknown_code',
+]);
+
+function claimAppVersion(): string {
+  const v = Constants.expoConfig?.version ?? Application.nativeApplicationVersion ?? '?';
+  const build =
+    Platform.OS === 'ios'
+      ? Constants.expoConfig?.ios?.buildNumber
+      : Constants.expoConfig?.android?.versionCode;
+  return build != null ? `${v}+${build}` : String(v);
+}
+
 export async function redeemPendingReferral(
   getTokenFn: Parameters<typeof getClerkBearerToken>[0],
 ): Promise<boolean> {
   try {
-    // Wait for Android Install Referrer / iOS clipboard park before reading.
     await ensureDeferredReferralSettled();
 
     if (await hasClaimedReferral()) return false;
 
-    const code = await getPendingReferral();
-    if (!code) return false;
+    const pending = await getPendingReferralFull();
+    if (!pending) return false;
 
     const token = await getClerkBearerToken(getTokenFn);
-    if (!token) return false; // Keep the code parked until we can authenticate.
+    if (!token) return false;
 
-    const result = await claimReferralCode(token, code);
-    if (!result) return false; // Network failure — retry on the next launch.
+    const source =
+      pending.source === 'deeplink'
+        ? 'deeplink'
+        : pending.source === 'clipboard' || pending.source === 'deferred'
+          ? 'deferred'
+          : 'manual';
 
-    // Anything other than a transport failure is final: either it converted, or
-    // it never will (self-referral, existing user, already attributed).
-    await clearPendingReferral(result.attributed);
-    logger.debug(`[Referral] Claim result: ${result.reason}`);
-    return result.attributed;
+    logger.info('[Referral] claim_request', {
+      source,
+      hasClickId: Boolean(pending.clickId),
+      platform: Platform.OS,
+      appVersion: claimAppVersion(),
+    });
+
+    const result = await claimReferralCode(token, pending.code, {
+      clickId: pending.clickId,
+      source,
+      appVersion: claimAppVersion(),
+      platform: Platform.OS,
+    });
+
+    if (!result) {
+      logger.info('[Referral] claim_response', { result: 'network_or_5xx', kept: true });
+      return false;
+    }
+
+    logger.info('[Referral] claim_response', {
+      result: result.reason,
+      attributed: result.attributed,
+      platform: Platform.OS,
+      appVersion: claimAppVersion(),
+    });
+
+    if (result.attributed) {
+      await clearPendingReferral(true);
+      return true;
+    }
+
+    if (TERMINAL_CLEAR_REASONS.has(result.reason)) {
+      await clearPendingReferral(false);
+      return false;
+    }
+
+    // not_a_new_user / invalid_click / error — keep pending and retry.
+    return false;
   } catch (error) {
     logger.warn('[Referral] Claim failed:', error);
     return false;

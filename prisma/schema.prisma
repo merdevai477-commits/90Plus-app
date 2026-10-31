@@ -162,6 +162,8 @@ model User {
   shareWinStandings             ShareWinStanding[]
   shareWinReferralsMade         ShareWinReferral[]        @relation("ShareWinReferrer")
   shareWinReferralReceived      ShareWinReferral?         @relation("ShareWinReferred")
+  shareWinInviteClicksAsReferrer ShareWinInviteClick[]    @relation("ShareWinInviteClickReferrer")
+  shareWinInviteClicksAsReferred ShareWinInviteClick[]    @relation("ShareWinInviteClickReferred")
   matchChatMessages             MatchChatMessage[]
   matchChatReportsFiled         MatchChatReport[]         @relation("MatchChatReporter")
   topScorersFiveSelections      TopScorersFiveSelection[]
@@ -2017,17 +2019,67 @@ model ShareWinReferral {
   referredUserId String                 @unique
   referralCode   String
   cycleId        String
+  /// Optional durable link to the invite click that produced this conversion.
+  clickId        String?                @unique
   status         ShareWinReferralStatus @default(CONVERTED)
   convertedAt    DateTime               @default(now())
   createdAt      DateTime               @default(now())
   referrer       User                   @relation("ShareWinReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
   referred       User                   @relation("ShareWinReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
   cycle          ShareWinCycle          @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  inviteClick    ShareWinInviteClick?   @relation(fields: [clickId], references: [clickId], onDelete: SetNull)
 
   @@index([referrerId, cycleId])
   @@index([cycleId])
   @@index([referralCode])
   @@map("share_win_referrals")
+}
+
+/// One row per invite-link open. Matching key is clickId (+ referral code).
+model ShareWinInviteClick {
+  id             String                 @id @default(uuid())
+  clickId        String                 @unique
+  referralCode   String
+  referrerId     String?
+  platform       ShareWinInvitePlatform @default(other)
+  userAgent      String?
+  /// Abuse analysis only — never used for attribution matching.
+  ipHash         String?
+  createdAt      DateTime               @default(now())
+  installedAt    DateTime?
+  installId      String?
+  appVersion     String?
+  registeredAt   DateTime?
+  referredUserId String?                @unique
+  claimSource    ShareWinClaimSource?
+  referrer       User?                  @relation("ShareWinInviteClickReferrer", fields: [referrerId], references: [id], onDelete: SetNull)
+  referred       User?                  @relation("ShareWinInviteClickReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
+  referral       ShareWinReferral?
+
+  @@index([referralCode])
+  @@index([referrerId])
+  @@index([createdAt])
+  @@map("share_win_invite_clicks")
+}
+
+/// Append-only claim outcomes for funnel debugging.
+model ShareWinClaimAttempt {
+  id           String              @id @default(uuid())
+  userId       String?
+  code         String?
+  clickId      String?
+  source       String              @default("manual")
+  result       ShareWinClaimResult
+  reasonDetail String?
+  appVersion   String?
+  platform     String?
+  createdAt    DateTime            @default(now())
+
+  @@index([createdAt])
+  @@index([result])
+  @@index([userId])
+  @@index([clickId])
+  @@map("share_win_claim_attempts")
 }
 
 /// Per-user, per-cycle aggregate. Ranking reads this single indexed table
@@ -3085,6 +3137,31 @@ enum ShareWinCycleStatus {
 enum ShareWinReferralStatus {
   CONVERTED
   REVOKED
+}
+
+enum ShareWinInvitePlatform {
+  android
+  ios
+  other
+}
+
+enum ShareWinClaimSource {
+  deferred
+  deeplink
+  webhook
+  web
+  manual
+}
+
+enum ShareWinClaimResult {
+  credited
+  already_attributed
+  not_a_new_user
+  self_referral
+  invalid_code
+  invalid_click
+  referrer_inactive
+  error
 }
 
 // ─── Top Scorers Five ("خماسي الهدافين") ─────────────────────────────────────

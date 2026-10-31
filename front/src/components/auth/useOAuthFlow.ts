@@ -18,7 +18,8 @@ import {
   resolveOAuthRedirectUrl,
 } from '@/src/utils/authSession';
 import { completeOAuthMissingRequirements } from '@/src/utils/oauthSignUpCompletion';
-import { getPendingReferral } from '../../../utils/pendingReferral';
+import { getReferralUnsafeMetadata } from '../../../utils/pendingReferral';
+import { logger } from '../../../utils/logger';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
@@ -66,10 +67,13 @@ export function useOAuthFlow({
     ): Promise<void> => {
       try {
         const redirectUrl = resolveOAuthRedirectUrl();
-        const pendingCode = await getPendingReferral();
+        const referralMeta = await getReferralUnsafeMetadata();
+        if (referralMeta) {
+          logger.info('[Referral] signup_stamped', { path: 'oauth' });
+        }
         const result = await flow({
           redirectUrl,
-          ...(pendingCode ? { unsafeMetadata: { referralCode: pendingCode } } : {}),
+          ...(referralMeta ? { unsafeMetadata: referralMeta } : {}),
         });
 
         const sessionId = resolveSessionId(result);

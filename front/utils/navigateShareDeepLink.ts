@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import {
   parseReelIdFromUrl,
   parseProfileUsernameFromUrl,
-  parseReferralCodeFromUrl,
+  parseInviteFromUrl,
 } from '../constants/shareLinks';
 import { capturePendingReferral } from './pendingReferral';
 
@@ -21,8 +21,8 @@ export type ShareDeepLinkRoute =
 
 /** Pure routing decision — used by DeepLinkHandler and unit tests. */
 export function resolveShareDeepLink(url: string, isSignedIn: boolean): ShareDeepLinkRoute {
-  const referralCode = parseReferralCodeFromUrl(url);
-  if (referralCode) {
+  const invite = parseInviteFromUrl(url);
+  if (invite) {
     return {
       kind: 'invite',
       path: isSignedIn ? '/(tabs)/matches' : '/auth',
@@ -47,15 +47,18 @@ export function resolveShareDeepLink(url: string, isSignedIn: boolean): ShareDee
 }
 
 /**
- * Apply a share deep link: park invite codes, then navigate.
+ * Apply a share deep link: park invite codes (+ click_id), then navigate.
  * Returns true when the URL was recognized and handled.
  */
 export function navigateShareDeepLink(url: string, isSignedIn: boolean): boolean {
   const decision = resolveShareDeepLink(url, isSignedIn);
-  const referralCode = parseReferralCodeFromUrl(url);
+  const invite = parseInviteFromUrl(url);
 
-  if (decision.kind === 'invite' && referralCode) {
-    void capturePendingReferral(referralCode).then(() => {
+  if (decision.kind === 'invite' && invite) {
+    void capturePendingReferral(invite.code, {
+      clickId: invite.clickId,
+      source: 'deeplink',
+    }).then(() => {
       router.replace(decision.path);
     });
     return true;

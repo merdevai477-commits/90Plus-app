@@ -51,9 +51,16 @@ const SHARE_DAILY_LIMIT = 200;
 /**
  * A referral only converts if the referred account was created inside this
  * window. This is what stops a long-standing user from pasting a friend's code
- * and being counted as a "new" participant.
+ * and being counted as a "new" participant. There is NO window between click
+ * and registration — only account age at claim time.
  */
-export const REFERRAL_ATTRIBUTION_WINDOW_MS = 48 * 60 * 60 * 1000;
+const SHARE_WIN_CLAIM_WINDOW_HOURS = Math.max(
+  1,
+  Number.parseInt(process.env.SHARE_WIN_CLAIM_WINDOW_HOURS || '48', 10) || 48,
+);
+export const REFERRAL_ATTRIBUTION_WINDOW_MS =
+  SHARE_WIN_CLAIM_WINDOW_HOURS * 60 * 60 * 1000;
+export { SHARE_WIN_CLAIM_WINDOW_HOURS };
 
 // ─── Referral codes ─────────────────────────────────────────────────────────
 
@@ -83,11 +90,29 @@ export function isValidReferralCode(raw: string): boolean {
 
 /** Code stamped on a Clerk sign-up so the contest counts the new account. */
 export function referralCodeFromClerkMetadata(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const raw = (metadata as { referralCode?: unknown }).referralCode;
-  if (typeof raw !== 'string') return null;
-  const code = normalizeReferralCode(raw);
-  return isValidReferralCode(code) ? code : null;
+  return inviteMetaFromClerk(metadata).code;
+}
+
+/** Invite stamps from Clerk unsafe/public metadata. */
+export function inviteMetaFromClerk(metadata: unknown): {
+  code: string | null;
+  clickId: string | null;
+} {
+  if (!metadata || typeof metadata !== 'object') {
+    return { code: null, clickId: null };
+  }
+  const obj = metadata as { referralCode?: unknown; clickId?: unknown };
+  let code: string | null = null;
+  if (typeof obj.referralCode === 'string') {
+    const normalized = normalizeReferralCode(obj.referralCode);
+    code = isValidReferralCode(normalized) ? normalized : null;
+  }
+  let clickId: string | null = null;
+  if (typeof obj.clickId === 'string') {
+    const raw = obj.clickId.trim();
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(raw)) clickId = raw;
+  }
+  return { code, clickId };
 }
 
 /** Public share link for a code. Domain comes from the existing share config. */
@@ -399,92 +424,277 @@ export type ReferralClaimReason =
   | 'unknown_code'
   | 'self_referral'
   | 'already_attributed'
-  | 'not_a_new_user';
+  | 'not_a_new_user'
+  | 'invalid_click'
+  | 'referrer_inactive'
+  | 'error';
+
+export type ReferralClaimSource =
+  | 'deferred'
+  | 'deeplink'
+  | 'webhook'
+  | 'web'
+  | 'manual';
 
 export interface ReferralClaimResult {
   attributed: boolean;
   reason: ReferralClaimReason;
 }
 
-/**
- * Attribute the authenticated (freshly registered) user to a referral code.
- *
- * Rejects, in order: malformed codes, unknown codes, self-referral, users who
- * already have a referrer, and accounts older than the attribution window
- * (i.e. existing users). The final duplicate guard is the unique index, so two
- * simultaneous claims cannot both succeed.
- */
-export async function claimReferral(
-  referredUserId: string,
-  rawCode: string,
-  now = new Date(),
-): Promise<ReferralClaimResult> {
-  const code = normalizeReferralCode(rawCode);
-  if (!isValidReferralCode(code)) return { attributed: false, reason: 'invalid_code' };
+export interface ClaimReferralParams {
+  referredUserId: string;
+  code?: string | null;
+  clickId?: string | null;
+  source?: ReferralClaimSource;
+  appVersion?: string | null;
+  platform?: string | null;
+  now?: Date;
+}
 
-  const [referrer, referred, alreadyAttributed] = await Promise.all([
-    prisma.user.findUnique({
-      where: { referralCode: code },
-      select: { id: true, isDeleted: true, isBanned: true },
-    }),
-    prisma.user.findUnique({
-      where: { id: referredUserId },
-      select: { id: true, createdAt: true },
-    }),
-    prisma.shareWinReferral.findUnique({
-      where: { referredUserId },
-      select: { id: true },
-    }),
-  ]);
-
-  if (!referrer || referrer.isDeleted || referrer.isBanned) {
-    return { attributed: false, reason: 'unknown_code' };
-  }
-  if (!referred) return { attributed: false, reason: 'not_a_new_user' };
-  if (referrer.id === referredUserId) return { attributed: false, reason: 'self_referral' };
-  if (alreadyAttributed) return { attributed: false, reason: 'already_attributed' };
-
-  // Only genuinely new accounts convert — an established user opening a link
-  // is not a participant.
-  if (now.getTime() - referred.createdAt.getTime() > REFERRAL_ATTRIBUTION_WINDOW_MS) {
-    return { attributed: false, reason: 'not_a_new_user' };
-  }
-
-  const cycle = await ensureCurrentCycle(now);
-
+async function writeClaimAttempt(input: {
+  userId: string | null;
+  code: string | null;
+  clickId: string | null;
+  source: string;
+  result: ReferralClaimReason | 'credited';
+  reasonDetail?: string | null;
+  appVersion?: string | null;
+  platform?: string | null;
+}): Promise<void> {
+  const resultMap: Record<string, string> = {
+    attributed: 'credited',
+    credited: 'credited',
+    already_attributed: 'already_attributed',
+    not_a_new_user: 'not_a_new_user',
+    self_referral: 'self_referral',
+    invalid_code: 'invalid_code',
+    invalid_click: 'invalid_click',
+    referrer_inactive: 'referrer_inactive',
+    unknown_code: 'referrer_inactive',
+    error: 'error',
+  };
+  const mapped = resultMap[input.result] ?? 'error';
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.shareWinReferral.create({
-        data: {
-          referrerId: referrer.id,
-          referredUserId,
-          referralCode: code,
-          cycleId: cycle.id,
-          convertedAt: now,
-        },
-      });
-      await syncStanding(tx, cycle.id, referrer.id, now);
+    await prisma.shareWinClaimAttempt.create({
+      data: {
+        userId: input.userId,
+        code: input.code,
+        clickId: input.clickId,
+        source: input.source,
+        result: mapped as any,
+        reasonDetail: input.reasonDetail ?? null,
+        appVersion: input.appVersion?.slice(0, 64) ?? null,
+        platform: input.platform?.slice(0, 32) ?? null,
+      },
     });
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      // Lost a race — the user already has a referrer. Correct outcome.
-      return { attributed: false, reason: 'already_attributed' };
-    }
-    throw err;
+    logger.error('[ShareWin] claim_attempts write failed:', err);
   }
+}
 
-  // Global XP for the referrer, through the existing XP pipeline.
-  // Idempotency key is the referred user, so a retry can never double-award.
-  await awardXp({
-    userId: referrer.id,
-    action: 'REFERRAL_CONVERSION',
-    amount: XP_VALUES.REFERRAL_CONVERSION,
-    timezone: 'UTC',
-    idempotencyKey: `share-win-referral:${referredUserId}`,
-    metadata: { source: 'share_win', cycleId: cycle.id, referralCode: code },
-  }).catch((err) => logger.error('[ShareWin] referral XP award failed:', err));
+/**
+ * Attribute a freshly registered user to a referral.
+ *
+ * Resolution: valid click_id → that click's referral_code; else use code.
+ * One referred user can convert once. Idempotent repeats return already_attributed
+ * (or attributed if replaying the same success).
+ */
+export async function claimReferral(
+  referredUserIdOrParams: string | ClaimReferralParams,
+  rawCode?: string,
+  nowArg?: Date,
+): Promise<ReferralClaimResult> {
+  // Backward-compatible overload: claimReferral(userId, code, now?)
+  const params: ClaimReferralParams =
+    typeof referredUserIdOrParams === 'string'
+      ? {
+          referredUserId: referredUserIdOrParams,
+          code: rawCode,
+          now: nowArg,
+          source: 'manual',
+        }
+      : referredUserIdOrParams;
 
-  return { attributed: true, reason: 'attributed' };
+  const now = params.now ?? new Date();
+  const source = params.source ?? 'manual';
+  const referredUserId = params.referredUserId;
+  let clickId =
+    typeof params.clickId === 'string' && params.clickId.trim()
+      ? params.clickId.trim()
+      : null;
+  let code = params.code ? normalizeReferralCode(params.code) : '';
+
+  const finish = async (
+    result: ReferralClaimResult,
+    detail?: string,
+  ): Promise<ReferralClaimResult> => {
+    await writeClaimAttempt({
+      userId: referredUserId,
+      code: code || null,
+      clickId,
+      source,
+      result: result.attributed ? 'credited' : result.reason,
+      reasonDetail: detail ?? null,
+      appVersion: params.appVersion,
+      platform: params.platform,
+    });
+    return result;
+  };
+
+  try {
+    // Prefer click_id when present.
+    if (clickId) {
+      const click = await prisma.shareWinInviteClick.findUnique({
+        where: { clickId },
+      });
+      if (!click) {
+        // Fall back to code if provided (old clients / partial payloads).
+        if (!code || !isValidReferralCode(code)) {
+          return finish({ attributed: false, reason: 'invalid_click' }, 'click_not_found');
+        }
+        clickId = null;
+      } else if (click.referredUserId && click.referredUserId === referredUserId) {
+        return finish({ attributed: true, reason: 'attributed' }, 'idempotent_click');
+      } else if (click.referredUserId && click.referredUserId !== referredUserId) {
+        return finish({ attributed: false, reason: 'invalid_click' }, 'click_already_used');
+      } else {
+        code = normalizeReferralCode(click.referralCode);
+      }
+    }
+
+    if (!isValidReferralCode(code)) {
+      return finish({ attributed: false, reason: 'invalid_code' });
+    }
+
+    const [referrer, referred, alreadyAttributed] = await Promise.all([
+      prisma.user.findUnique({
+        where: { referralCode: code },
+        select: { id: true, isDeleted: true, isBanned: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: referredUserId },
+        select: { id: true, createdAt: true },
+      }),
+      prisma.shareWinReferral.findUnique({
+        where: { referredUserId },
+        select: { id: true, referralCode: true, clickId: true },
+      }),
+    ]);
+
+    if (alreadyAttributed) {
+      // Idempotent success when replaying the same attribution.
+      if (
+        alreadyAttributed.referralCode === code ||
+        (clickId && alreadyAttributed.clickId === clickId)
+      ) {
+        return finish({ attributed: true, reason: 'attributed' }, 'idempotent_referral');
+      }
+      return finish({ attributed: false, reason: 'already_attributed' });
+    }
+
+    if (!referrer) {
+      return finish({ attributed: false, reason: 'unknown_code' }, 'referrer_missing');
+    }
+    if (referrer.isDeleted || referrer.isBanned) {
+      return finish({ attributed: false, reason: 'referrer_inactive' });
+    }
+    if (!referred) {
+      return finish({ attributed: false, reason: 'not_a_new_user' }, 'user_row_missing');
+    }
+    if (referrer.id === referredUserId) {
+      return finish({ attributed: false, reason: 'self_referral' });
+    }
+    if (now.getTime() - referred.createdAt.getTime() > REFERRAL_ATTRIBUTION_WINDOW_MS) {
+      return finish(
+        { attributed: false, reason: 'not_a_new_user' },
+        `account_older_than_${SHARE_WIN_CLAIM_WINDOW_HOURS}h`,
+      );
+    }
+
+    const cycle = await ensureCurrentCycle(now);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (clickId) {
+          const locked = await tx.shareWinInviteClick.findUnique({
+            where: { clickId },
+          });
+          if (!locked) throw new Error('CLICK_GONE');
+          if (locked.referredUserId && locked.referredUserId !== referredUserId) {
+            throw new Error('CLICK_USED');
+          }
+        }
+
+        await tx.shareWinReferral.create({
+          data: {
+            referrerId: referrer.id,
+            referredUserId,
+            referralCode: code,
+            cycleId: cycle.id,
+            convertedAt: now,
+            clickId: clickId ?? undefined,
+          },
+        });
+
+        if (clickId) {
+          await tx.shareWinInviteClick.update({
+            where: { clickId },
+            data: {
+              registeredAt: now,
+              referredUserId,
+              claimSource: source as any,
+              appVersion: params.appVersion?.slice(0, 64) ?? undefined,
+            },
+          });
+        }
+
+        await syncStanding(tx, cycle.id, referrer.id, now);
+      });
+    } catch (err) {
+      if (err instanceof Error && (err.message === 'CLICK_GONE' || err.message === 'CLICK_USED')) {
+        return finish({ attributed: false, reason: 'invalid_click' }, err.message);
+      }
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        return finish({ attributed: false, reason: 'already_attributed' }, 'unique_race');
+      }
+      throw err;
+    }
+
+    await awardXp({
+      userId: referrer.id,
+      action: 'REFERRAL_CONVERSION',
+      amount: XP_VALUES.REFERRAL_CONVERSION,
+      timezone: 'UTC',
+      idempotencyKey: `share-win-referral:${referredUserId}`,
+      metadata: {
+        source: 'share_win',
+        cycleId: cycle.id,
+        referralCode: code,
+        clickId,
+      },
+    }).catch((err) => logger.error('[ShareWin] referral XP award failed:', err));
+
+    return finish({ attributed: true, reason: 'attributed' });
+  } catch (err) {
+    logger.error('[ShareWin] claimReferral failed:', {
+      referredUserId,
+      code,
+      clickId,
+      source,
+      err,
+    });
+    await writeClaimAttempt({
+      userId: referredUserId,
+      code: code || null,
+      clickId,
+      source,
+      result: 'error',
+      reasonDetail: err instanceof Error ? err.message : 'unknown',
+      appVersion: params.appVersion,
+      platform: params.platform,
+    });
+    return { attributed: false, reason: 'error' };
+  }
 }
 
 // ─── Ranking ────────────────────────────────────────────────────────────────

@@ -69,6 +69,12 @@ jest.mock('../../services/shareWin.service', () => ({
   claimReferralCode: jest.fn(),
   fetchShareWinOverview: jest.fn(),
   recordShareEvent: jest.fn(),
+  reportFirstOpen: jest.fn(async () => true),
+}));
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: { expoConfig: { version: '1.1.4', ios: { buildNumber: '170' }, android: { versionCode: 125 } } },
 }));
 
 jest.mock('../../services/appShare.service', () => ({
@@ -188,12 +194,12 @@ describe('checkDeferredReferral — iOS', () => {
     (Platform as { OS: string }).OS = 'ios';
   });
 
-  it('skips getStringAsync when hasStringAsync is false', async () => {
+  it('skips getStringAsync when hasStringAsync is false and does not lock out', async () => {
     hasString.mockResolvedValue(false);
     await checkDeferredReferral();
     expect(getString).not.toHaveBeenCalled();
     await expect(getPendingReferral()).resolves.toBeNull();
-    expect(await AsyncStorage.getItem('@90plus:deferred_referral_checked')).toBeTruthy();
+    expect(await AsyncStorage.getItem('@90plus:deferred_referral_checked')).toBeNull();
   });
 
   it('parks a matching 90plus-invite payload and clears the clipboard', async () => {
@@ -264,7 +270,11 @@ describe('ensureDeferredReferralSettled + redeemPendingReferral races', () => {
 
     resolveReferrer('invite_AB23CD');
     await expect(redeemPromise).resolves.toBe(true);
-    expect(claim).toHaveBeenCalledWith('test-token', 'AB23CD');
+    expect(claim).toHaveBeenCalledWith(
+      'test-token',
+      'AB23CD',
+      expect.objectContaining({ source: 'deferred' }),
+    );
   });
 
   it('iOS: redeem waits for a slow clipboard read before claiming', async () => {
@@ -285,7 +295,23 @@ describe('ensureDeferredReferralSettled + redeemPendingReferral races', () => {
 
     resolveClip('90plus-invite:AB23CD');
     await expect(redeemPromise).resolves.toBe(true);
-    expect(claim).toHaveBeenCalledWith('test-token', 'AB23CD');
+    expect(claim).toHaveBeenCalledWith(
+      'test-token',
+      'AB23CD',
+      expect.objectContaining({ source: 'deferred' }),
+    );
+  });
+
+  it('keeps pending on not_a_new_user and clears on credited', async () => {
+    getReferrer.mockResolvedValue('invite_AB23CD');
+    await checkDeferredReferral();
+    claim.mockResolvedValueOnce({ attributed: false, reason: 'not_a_new_user' });
+    await expect(redeemPendingReferral(getToken)).resolves.toBe(false);
+    await expect(getPendingReferral()).resolves.toBe('AB23CD');
+
+    claim.mockResolvedValueOnce({ attributed: true, reason: 'attributed' });
+    await expect(redeemPendingReferral(getToken)).resolves.toBe(true);
+    await expect(getPendingReferral()).resolves.toBeNull();
   });
 
   it('Android: referrer throw does not hang redeem and does not set the flag', async () => {

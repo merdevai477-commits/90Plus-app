@@ -212,22 +212,30 @@ export function buildReferralDeepLink(code: string): string {
 
 /** Parse an invite code from the custom scheme or an https invite/ref URL. */
 export function parseReferralCodeFromUrl(url: string): string | null {
+  return parseInviteFromUrl(url)?.code ?? null;
+}
+
+/** Parse code + optional click_id (?c= / click_id=) from invite URLs. */
+export function parseInviteFromUrl(
+  url: string,
+): { code: string; clickId: string | null } | null {
   if (!url) return null;
   const trimmed = url.trim();
 
+  let code: string | null = null;
   const custom = trimmed.match(/ninetyplus:\/\/(?:invite|ref)\/([A-Za-z0-9]+)/i);
-  if (custom?.[1]) {
-    const code = normalizeReferralCode(custom[1]);
-    return isValidReferralCode(code) ? code : null;
+  if (custom?.[1]) code = normalizeReferralCode(custom[1]);
+  if (!code) {
+    const https = trimmed.match(/\/(?:invite|ref)\/([A-Za-z0-9]+)/i);
+    if (https?.[1]) code = normalizeReferralCode(https[1]);
   }
+  if (!code || !isValidReferralCode(code)) return null;
 
-  const https = trimmed.match(/\/(?:invite|ref)\/([A-Za-z0-9]+)/i);
-  if (https?.[1]) {
-    const code = normalizeReferralCode(https[1]);
-    return isValidReferralCode(code) ? code : null;
-  }
+  let clickId: string | null = null;
+  const m = trimmed.match(/[?&](?:c|click_id)=([A-Za-z0-9_-]{8,64})/i);
+  if (m?.[1]) clickId = m[1];
 
-  return null;
+  return { code, clickId };
 }
 
 /**

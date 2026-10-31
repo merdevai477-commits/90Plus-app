@@ -79,12 +79,22 @@ export type ReferralClaimReason =
   | 'unknown_code'
   | 'self_referral'
   | 'already_attributed'
-  | 'not_a_new_user';
+  | 'not_a_new_user'
+  | 'invalid_click'
+  | 'referrer_inactive'
+  | 'error';
 
 export interface ReferralClaimResult {
   attributed: boolean;
   reason: ReferralClaimReason;
 }
+
+export type ReferralClaimSource =
+  | 'deferred'
+  | 'deeplink'
+  | 'webhook'
+  | 'web'
+  | 'manual';
 
 function authHeaders(token: string): Record<string, string> {
   return {
@@ -127,22 +137,58 @@ export async function recordShareEvent(
   }
 }
 
-/** Attach a captured referral code to the freshly registered account. */
+/** Attach a captured referral code / click_id to the freshly registered account. */
 export async function claimReferralCode(
   token: string,
   code: string,
+  options?: {
+    clickId?: string | null;
+    source?: ReferralClaimSource;
+    appVersion?: string | null;
+    platform?: string | null;
+  },
 ): Promise<ReferralClaimResult | null> {
   try {
     const res = await fetchWithTimeout(`${getApiUrl()}/share-win/referral/claim`, {
       method: 'POST',
       headers: authHeaders(token),
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({
+        code,
+        click_id: options?.clickId ?? undefined,
+        source: options?.source ?? 'deferred',
+        app_version: options?.appVersion ?? undefined,
+        platform: options?.platform ?? undefined,
+      }),
     });
     if (!res.ok) return null;
     const json = await res.json();
     return (json?.data as ReferralClaimResult) ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Public first-open stamp for a click_id. Returns false on network failure. */
+export async function reportFirstOpen(input: {
+  clickId: string;
+  installId: string;
+  platform: string;
+  appVersion: string;
+}): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${getApiUrl()}/share-win/referral/first-open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        click_id: input.clickId,
+        install_id: input.installId,
+        platform: input.platform,
+        app_version: input.appVersion,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

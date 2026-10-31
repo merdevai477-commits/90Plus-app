@@ -3,6 +3,8 @@
  * Production requires legal consent; Google/Apple may not supply it automatically.
  */
 
+import { getReferralUnsafeMetadata } from '../../utils/pendingReferral';
+
 type SignUpResource = {
   update: (params: Record<string, unknown>) => Promise<{
     status?: string | null;
@@ -83,8 +85,13 @@ export async function completeOAuthMissingRequirements(
   const legalAccepted = options.legalAccepted ?? false;
   let missing = options.missingFields ?? signUp.missingFields ?? [];
 
+  const referralMeta = await getReferralUnsafeMetadata();
+
   for (let attempt = 0; attempt < 3; attempt++) {
     const patch = buildMissingFieldsPatch(signUp, legalAccepted, missing, options.email);
+    if (referralMeta && attempt === 0) {
+      patch.unsafeMetadata = referralMeta;
+    }
 
     if (Object.keys(patch).length > 0) {
       const updated = await signUp.update(patch);
