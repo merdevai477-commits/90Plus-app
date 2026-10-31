@@ -74,20 +74,23 @@ describe('one week predicate', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  it('null matchDate bucketed identically in history and leaderboard', async () => {
+  it('weekly leaderboard buckets null matchDate by createdAt in the Cairo week', async () => {
     const expected = kingWeekWhere(cairoWeekBounds()).OR;
 
-    await getKingHistory({ clerkUserId: 'c1', mode: 'winner', status: 'all', page: 0, limit: 20 });
-    const historyWhere = mockFindMany.mock.calls[0][0].where;
-
-    mockFindMany.mockClear();
     await getKingLeaderboard({ clerkUserId: 'c1', mode: 'winner', period: 'week', limit: 10 });
     const boardWhere = mockFindMany.mock.calls[0][0].where;
 
-    expect(historyWhere.OR).toEqual(expected);
     expect(boardWhere.OR).toEqual(expected);
     expect(expected).toContainEqual({ matchDate: null, createdAt: { gte: expect.any(Date), lt: expect.any(Date) } });
     expect(iso(expected[0].matchDate!.gte)).toBe('2026-10-24T21:00:00.000Z');
+  });
+
+  it('history is all-time and does not use the week filter', async () => {
+    await getKingHistory({ clerkUserId: 'c1', mode: 'winner', status: 'all', page: 0, limit: 20 });
+    const historyWhere = mockFindMany.mock.calls[0][0].where;
+    expect(historyWhere.OR).toBeUndefined();
+    expect(historyWhere.userId).toBe('u1');
+    expect(historyWhere.predictedHomeScore).toBeNull();
   });
 
   it('all-time leaderboard has no week filter', async () => {

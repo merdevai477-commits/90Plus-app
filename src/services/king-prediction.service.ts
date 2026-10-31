@@ -569,13 +569,11 @@ export async function getKingHistory(params: {
   });
   if (!user) return empty;
 
-  // The King history starts empty every week, on the same Cairo Sunday boundary
-  // and the same predicate as the weekly leaderboard. Rows are kept; the
-  // profile still lists them all.
+  // Full history for this mode — never week-scoped. Weekly wipe was only a
+  // filter; rows stay in the DB. The weekly leaderboard still uses cairoWeekBounds.
   const base = {
     userId: user.id,
     ...modeWhere(params.mode),
-    ...kingWeekWhere(cairoWeekBounds()),
   };
   const where = params.status === 'all' ? base : { ...base, ...STATUS_WHERE[params.status] };
 

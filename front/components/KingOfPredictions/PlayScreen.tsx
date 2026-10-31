@@ -296,18 +296,9 @@ export function KingPlayScreen({
     return 'correct';
   };
 
-  // Skip cards that would only show "predictions closed" — keep open matches
-  // and ones the user already picked (pending / settled).
-  const visibleMatches = useMemo(
-    () =>
-      matches.filter((match) => {
-        if (!isLocked(match)) return true;
-        return savedLabel(match) != null || verdictOf(match) != null;
-      }),
-    // savedLabel / verdictOf close over saved, isGame, teamName, copy
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: recompute when list or picks change
-    [matches, saved, isGame, dayPassed, language, copy.draw],
-  );
+  // Keep every match the API returned for the day, including after kickoff.
+  // Locked cards stay visible (closed / result); only prediction input is blocked.
+  const visibleMatches = matches;
 
   return (
     <View style={styles.root}>
@@ -324,8 +315,6 @@ export function KingPlayScreen({
         </Pressable>
       ) : matches.length === 0 ? (
         <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
-      ) : visibleMatches.length === 0 ? (
-        <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noOpenMatches}</Text>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.cardList, { paddingBottom: listBottom }]}
