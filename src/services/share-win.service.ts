@@ -1,22 +1,22 @@
 /**
  * Share & Win — شارك واربح
  *
- * Weekly referral competition. Every user gets a unique referral code. Sharing
- * it raises their share count (stats only). Each week is ranked by converted
- * referrals (friends who joined via the link) — never by empty share taps,
- * link visits, or XP — and archived independently.
+ * Referral competition in back-to-back 30-day cycles. Every user gets a unique
+ * referral code. Sharing it raises their share count (stats only). Each cycle
+ * is ranked by converted referrals (friends who joined via the link) — never
+ * by empty share taps, link visits, or XP — and archived independently.
  *
  * ── Invariants this module guarantees ────────────────────────────────────────
  *  • The database is the source of truth. Nothing the client sends can change
  *    a share count, participant count or rank directly.
- *  • Weekly rank is converted participant count, then share count as tie-break.
+ *  • Cycle rank is converted participant count, then share count as tie-break.
  *  • A user can be attributed to at most ONE referrer, ever
  *    (`share_win_referrals.referredUserId` is UNIQUE — races lose on the index,
  *    not on a read-then-write check).
  *  • Self-referral, already-attributed users and pre-existing accounts are
  *    rejected before a referral row is written.
  *  • Closing a cycle never deletes anything: standings keep `finalRank` so
- *    "who won week N, with how many invited friends" stays answerable forever.
+ *    "who won cycle N, with how many invited friends" stays answerable forever.
  */
 
 import { Prisma, ShareWinCycleStatus, type ShareWinCycle } from '@prisma/client';
@@ -28,7 +28,7 @@ import { awardXp, XP_VALUES } from './xp.service';
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
-/** Each successful referral conversion is worth +3 weekly points. */
+/** Each successful referral conversion is worth +3 cycle points. */
 export const SCORE_PER_PARTICIPANT = 3;
 /** Share taps do not add points — ranking is by converted friends. */
 export const SCORE_PER_SHARE = 0;
@@ -159,42 +159,41 @@ export async function ensureReferralCode(userId: string): Promise<string> {
   throw new Error('REFERRAL_CODE_GENERATION_FAILED');
 }
 
-// ─── Weekly cycles ──────────────────────────────────────────────────────────
+// ─── Cycles ─────────────────────────────────────────────────────────────────
 
-/** Monday 00:00 UTC of the week containing `date`. */
-function weekStart(date: Date): Date {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayOfWeek = d.getUTCDay(); // 0 = Sunday
-  const daysSinceMonday = (dayOfWeek + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
-  return d;
-}
+export const CYCLE_DAYS = 30;
+const CYCLE_MS = CYCLE_DAYS * 86_400_000;
+/**
+ * Cycles run back to back, 30 days each, the first from 1 Nov 2026 00:00 Cairo
+ * (UTC+2). Before it the contest ran in ISO weeks; those cycles keep their
+ * "2026-W44" keys.
+ */
+const FIRST_CYCLE_START_MS = Date.UTC(2026, 9, 31, 22);
+const CAIRO_UTC_OFFSET_MS = 2 * 3_600_000;
 
-/** ISO-8601 week key, e.g. "2026-W32" — stable and sortable. */
-export function isoWeekKey(date: Date): string {
-  const d = weekStart(date);
-  // ISO weeks are numbered by the Thursday they contain.
-  const thursday = new Date(d);
-  thursday.setUTCDate(thursday.getUTCDate() + 3);
-  const year = thursday.getUTCFullYear();
-  const firstThursday = new Date(Date.UTC(year, 0, 4));
-  const firstWeekMonday = weekStart(firstThursday);
-  const week = Math.round((thursday.getTime() - firstWeekMonday.getTime()) / (7 * 86_400_000)) + 1;
-  return `${year}-W${String(week).padStart(2, '0')}`;
+/** The cycle `date` falls in, keyed by the Cairo date it starts on ("2026-11-01"). */
+export function cycleWindow(date: Date): { key: string; startAt: Date; endAt: Date } {
+  const index = Math.floor((date.getTime() - FIRST_CYCLE_START_MS) / CYCLE_MS);
+  const startAt = new Date(FIRST_CYCLE_START_MS + index * CYCLE_MS);
+  return {
+    key: new Date(startAt.getTime() + CAIRO_UTC_OFFSET_MS).toISOString().slice(0, 10),
+    startAt,
+    endAt: new Date(startAt.getTime() + CYCLE_MS),
+  };
 }
 
 /**
- * The cycle that "now" belongs to, creating it if the week just rolled over.
+ * The cycle that "now" belongs to, creating it when the previous one runs out.
  * Called on every read and write, so cycles advance without a scheduler; the
  * interval job in main.ts only makes the rollover prompt rather than lazy.
  */
 export async function ensureCurrentCycle(now = new Date()): Promise<ShareWinCycle> {
-  const weekKey = isoWeekKey(now);
+  const { key: weekKey, startAt, endAt } = cycleWindow(now);
 
   const existing = await prisma.shareWinCycle.findUnique({ where: { weekKey } });
   if (existing) {
     // A cycle whose window has not passed must never be COMPLETED. If it is
-    // (early manual close, clock skew), reopen it — otherwise this week's
+    // (early manual close, clock skew), reopen it — otherwise this cycle's
     // shares and referrals would land in a closed cycle and never be ranked.
     if (existing.status === ShareWinCycleStatus.COMPLETED && existing.endAt > now) {
       logger.warn(`[ShareWin] Reopening prematurely closed cycle ${weekKey}`);
@@ -205,9 +204,6 @@ export async function ensureCurrentCycle(now = new Date()): Promise<ShareWinCycl
     }
     return existing;
   }
-
-  const startAt = weekStart(now);
-  const endAt = new Date(startAt.getTime() + 7 * 86_400_000);
 
   try {
     const created = await prisma.shareWinCycle.create({
@@ -860,8 +856,8 @@ export interface SharePrize {
 }
 
 /**
- * Prize line-up for a cycle. Stored per cycle so each week can differ and past
- * weeks keep the prizes they actually ran with. Falls back to the default
+ * Prize line-up for a cycle. Stored per cycle so each cycle can differ and past
+ * cycles keep the prizes they actually ran with. Falls back to the default
  * line-up when a cycle has none configured.
  */
 export const DEFAULT_PRIZES: SharePrize[] = [
@@ -983,7 +979,7 @@ export async function getShareWinOverview(
   userId: string,
   options: { leaderboardLimit?: number; now?: Date } = {},
 ): Promise<ShareWinOverview> {
-  // `now` is injectable so verification can run in an isolated week instead of
+  // `now` is injectable so verification can run in an isolated cycle instead of
   // competing with whatever the live cycle contains.
   const now = options.now ?? new Date();
   const [cycle, referralCode] = await Promise.all([
@@ -1030,7 +1026,7 @@ export async function getShareWinOverview(
   };
 }
 
-/** Rank-1 standing of the most recently closed cycle, or null before week one ends. */
+/** Rank-1 standing of the most recently closed cycle, or null before the first one ends. */
 export async function getLastWinner(): Promise<ShareWinOverview['lastWinner']> {
   const cycle = await prisma.shareWinCycle.findFirst({
     where: { status: ShareWinCycleStatus.COMPLETED },
@@ -1119,7 +1115,7 @@ export async function getCycleHistory(limit = 12): Promise<CycleSummary[]> {
   });
 }
 
-/** Resolve a cycle by its week key ("2026-W32") for historical queries. */
+/** Resolve a cycle by its key ("2026-11-01", or "2026-W44" before 30-day cycles) for historical queries. */
 export async function getCycleByWeekKey(weekKey: string) {
   return prisma.shareWinCycle.findUnique({ where: { weekKey } });
 }

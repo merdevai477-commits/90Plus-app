@@ -1306,8 +1306,8 @@ export const ar = {
     wheelSpinningCta: 'جاري اللف...',
     wheelNote: 'لفة واحدة يوميًا فقط',
 
-    // الترتيب الأسبوعي
-    weeklyTitle: 'الترتيب الأسبوعي',
+    // الترتيب الشهري
+    weeklyTitle: 'الترتيب الشهري',
     weeklyEndsIn: 'ينتهي بعد:',
     unitDays: 'أيام',
     unitHours: 'ساعات',
@@ -1315,7 +1315,7 @@ export const ar = {
     unitSeconds: 'ثواني',
     viewFullRanking: 'عرض الترتيب الكامل',
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
-    leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
+    leaderboardCompetitors: '{count} مشارك هذا الشهر',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
     boardUnit: 'صديق',
     close: 'إغلاق',
@@ -1346,13 +1346,13 @@ export const ar = {
     statsFriendsValue: '{count} صديق',
     statsCurrentPoints: 'نقاط الترتيب',
     statsRankingUnit: 'نقاط',
-    statsRankThisWeek: 'ترتيبك هذا الأسبوع',
+    statsRankThisWeek: 'ترتيبك هذا الشهر',
     statsShares: 'مشاركاتك',
 
     // آخر فائز
     lastWinnerTitle: 'آخر فائز',
     lastWinnerViewStory: 'عرض القصة',
-    lastWinnerNone: 'لم يُتوّج فائز بعد — الأسبوع الأول لم ينتهِ',
+    lastWinnerNone: 'لم يُتوّج فائز بعد — الشهر الأول لم ينتهِ',
     timeAgoHours: 'منذ {count} ساعة',
     timeAgoDays: 'منذ {count} يوم',
     timeAgoNow: 'الآن',

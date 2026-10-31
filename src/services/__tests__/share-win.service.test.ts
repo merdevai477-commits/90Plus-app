@@ -3,7 +3,7 @@
  *
  * Prisma is mocked (the same pattern the other service suites use), so these
  * exercise the decision logic: who converts, who is rejected, how score is
- * computed and how weeks are keyed.
+ * computed and how cycles are keyed.
  */
 
 import { Prisma } from '@prisma/client';
@@ -33,14 +33,16 @@ jest.mock('../xp.service', () => ({
 }));
 
 import {
+  CYCLE_DAYS,
   SCORE_PER_PARTICIPANT,
   SCORE_PER_SHARE,
   buildReferralLink,
   claimReferral,
   computeScore,
+  cycleWindow,
+  ensureCurrentCycle,
   isValidReferralCode,
   referralCodeFromClerkMetadata,
-  isoWeekKey,
   normalizeReferralCode,
 } from '../share-win.service';
 
@@ -48,11 +50,12 @@ const NOW = new Date('2026-08-08T12:00:00.000Z');
 
 /** A cycle lookup that always resolves, so claimReferral gets past ensureCurrentCycle. */
 function stubActiveCycle() {
+  const { key, startAt, endAt } = cycleWindow(NOW);
   prismaMock.shareWinCycle.findUnique.mockResolvedValue({
     id: 'cycle-1',
-    weekKey: isoWeekKey(NOW),
-    startAt: new Date('2026-08-03T00:00:00.000Z'),
-    endAt: new Date('2026-08-10T00:00:00.000Z'),
+    weekKey: key,
+    startAt,
+    endAt,
     status: 'ACTIVE',
     prizes: null,
   });
@@ -112,25 +115,41 @@ describe('scoring', () => {
   });
 });
 
-// ─── Weekly cycles ──────────────────────────────────────────────────────────
+// ─── Cycles ─────────────────────────────────────────────────────────────────
 
-describe('weekly cycle keys', () => {
-  test('every day of one ISO week maps to the same key', () => {
-    const monday = isoWeekKey(new Date('2026-08-03T00:00:00Z'));
-    const wednesday = isoWeekKey(new Date('2026-08-05T13:37:00Z'));
-    const sunday = isoWeekKey(new Date('2026-08-09T23:59:59Z'));
-    expect(wednesday).toBe(monday);
-    expect(sunday).toBe(monday);
+describe('30-day cycles', () => {
+  test('the first cycle runs exactly 30 days from 1 Nov 2026 00:00 Cairo', () => {
+    const cycle = cycleWindow(new Date('2026-11-01T01:15:00+02:00'));
+    expect(cycle.key).toBe('2026-11-01');
+    expect(cycle.startAt.toISOString()).toBe('2026-10-31T22:00:00.000Z');
+    expect(cycle.endAt.toISOString()).toBe('2026-11-30T22:00:00.000Z');
+    expect(cycle.endAt.getTime() - cycle.startAt.getTime()).toBe(CYCLE_DAYS * 86_400_000);
   });
 
-  test('the next Monday starts a new key, so week 1 is never overwritten', () => {
-    const week1 = isoWeekKey(new Date('2026-08-09T23:59:59Z'));
-    const week2 = isoWeekKey(new Date('2026-08-10T00:00:00Z'));
-    expect(week2).not.toBe(week1);
+  test('every instant of a cycle maps to it, and its end opens the next one', () => {
+    const first = cycleWindow(new Date('2026-10-31T22:00:00.000Z'));
+    expect(cycleWindow(new Date('2026-11-30T21:59:59.999Z')).key).toBe(first.key);
+    const next = cycleWindow(first.endAt);
+    expect(next.key).toBe('2026-12-01');
+    expect(next.startAt).toEqual(first.endAt);
+    expect(next.endAt.toISOString()).toBe('2026-12-30T22:00:00.000Z');
   });
 
-  test('keys are sortable YYYY-Www strings', () => {
-    expect(isoWeekKey(new Date('2026-01-05T00:00:00Z'))).toMatch(/^\d{4}-W\d{2}$/);
+  test('ensureCurrentCycle opens the cycle with its exact 30-day end', async () => {
+    prismaMock.shareWinCycle.findUnique.mockResolvedValue(null);
+    prismaMock.shareWinCycle.create.mockImplementation(async ({ data }) => ({ id: 'cycle-new', ...data }));
+    prismaMock.shareWinCycle.findMany.mockResolvedValue([]);
+
+    const cycle = await ensureCurrentCycle(new Date('2026-11-01T01:15:00+02:00'));
+    expect(prismaMock.shareWinCycle.create).toHaveBeenCalledWith({
+      data: {
+        weekKey: '2026-11-01',
+        startAt: new Date('2026-10-31T22:00:00.000Z'),
+        endAt: new Date('2026-11-30T22:00:00.000Z'),
+        status: 'ACTIVE',
+      },
+    });
+    expect(cycle.endAt.toISOString()).toBe('2026-11-30T22:00:00.000Z');
   });
 });
 

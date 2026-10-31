@@ -8,7 +8,7 @@
  * silently collapsed the tie-break without erroring.
  *
  * Run against a dev or staging database — NEVER production. It creates and
- * deletes users prefixed `swe2e_`, and drops the current week's cycle:
+ * deletes users prefixed `swe2e_`, and drops the far-future cycle it runs in:
  *
  *     npm run verify:share-win
  */
@@ -18,6 +18,7 @@ import prisma from '../src/lib/prisma';
 import {
   claimReferral,
   closeCycle,
+  cycleWindow,
   ensureCurrentCycle,
   ensureReferralCode,
   getCycleHistory,
@@ -30,7 +31,7 @@ import {
 const TAG = 'swe2e';
 
 /**
- * The whole run happens in a far-future week. Every service call takes an
+ * The whole run happens in a far-future cycle. Every service call takes an
  * injectable `now`, so verification gets a cycle of its own and never competes
  * with seeded or live standings.
  */
@@ -59,10 +60,9 @@ async function makeUser(name: string, createdAt?: Date) {
 async function cleanup() {
   await prisma.user.deleteMany({ where: { username: { startsWith: `${TAG}_` } } });
   await prisma.shareWinCycle.deleteMany({ where: { weekKey: { startsWith: 'TEST-' } } });
-  const { isoWeekKey } = require('../src/services/share-win.service');
-  await prisma.shareWinCycle.deleteMany({ where: { weekKey: isoWeekKey(NOW) } });
+  await prisma.shareWinCycle.deleteMany({ where: { weekKey: cycleWindow(NOW).key } });
   // The live cycle is deliberately left in place — dropping it would cascade
-  // away seeded and real standings. ensureCurrentCycle() reopens the week if a
+  // away seeded and real standings. ensureCurrentCycle() reopens the cycle if a
   // previous run closed it, so re-running this script is safe without it.
 }
 

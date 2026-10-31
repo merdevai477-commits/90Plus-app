@@ -967,9 +967,9 @@ async function startServer() {
                         logger.info('📰 World Cup news cron disabled (WORLD_CUP_NEWS_ENABLED≠true)');
                     }
 
-                    // ✅ Share & Win — archive finished weekly cycles with their final
+                    // ✅ Share & Win — archive finished 30-day cycles with their final
                     // ranks. Rollover is also lazy on every read/write, so this only
-                    // makes it prompt for weeks with no traffic.
+                    // makes it prompt when there is no traffic.
                     const { closeDueCycles, ensureCurrentCycle } = await import(
                         './services/share-win.service'
                     );
@@ -986,7 +986,7 @@ async function startServer() {
                     };
                     runShareWinRollover();
                     setInterval(runShareWinRollover, 15 * 60 * 1000).unref?.();
-                    logger.info('✅ Share & Win weekly cycle rollover scheduled (every 15m)');
+                    logger.info('✅ Share & Win 30-day cycle rollover scheduled (every 15m)');
 
                     // Top Scorers Five scoring reads 365Scores game data only — no
                     // API-Football quota — so it runs on every plan.

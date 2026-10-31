@@ -216,7 +216,7 @@ router.get(
 
 /**
  * GET /api/share-win/leaderboard?weekKey=&limit=&offset=
- * Current cycle by default; pass a weekKey to read an archived week.
+ * Current cycle by default; pass a cycle's weekKey to read an archived one.
  */
 router.get(
   '/leaderboard',
@@ -278,7 +278,7 @@ router.get(
 
 /**
  * GET /api/share-win/cycles
- * Weekly history with each week's winner. Previous cycles are never removed.
+ * Cycle history with each cycle's winner. Previous cycles are never removed.
  */
 router.get(
   '/cycles',

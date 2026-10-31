@@ -274,8 +274,8 @@ export function buildReferralSharePayload(
   const link = buildReferralShareUrl(code);
   const message =
     lang === 'ar'
-      ? `انضم إليّ في 90Plus — أفضل تطبيق لكرة القدم! سجّل من رابطي واربح معي جوائز الأسبوع 🎁\n${link}`
-      : `Join me on 90Plus — the ultimate football app! Sign up with my link and help me win this week's prize 🎁\n${link}`;
+      ? `انضم إليّ في 90Plus — أفضل تطبيق لكرة القدم! سجّل من رابطي واربح معي جوائز الشهر 🎁\n${link}`
+      : `Join me on 90Plus — the ultimate football app! Sign up with my link and help me win this month's prize 🎁\n${link}`;
 
   return { message, title: '90Plus' };
 }

@@ -452,7 +452,7 @@ export function buildReferralLandingPage(
   return buildSmartLandingPage({
     title: '90Plus — دعوة صديق',
     ogTitle: '90Plus — شارك واربح',
-    ogDescription: 'سجّل في 90Plus من هذا الرابط وساعد صديقك على الفوز بالجائزة الأسبوعية',
+    ogDescription: 'سجّل في 90Plus من هذا الرابط وساعد صديقك على الفوز بالجائزة الشهرية',
     ogUrl: shareUrl(`/invite/${normalized}`),
     loadingText: 'جاري فتح الدعوة أو التحويل للمتجر…',
     downloadText: 'حمّل 90Plus وانضم عبر دعوة صديقك',

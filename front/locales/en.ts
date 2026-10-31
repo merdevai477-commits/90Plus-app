@@ -1219,8 +1219,8 @@ export const en = {
     wheelSpinningCta: 'Spinning...',
     wheelNote: 'One spin per day only',
 
-    // Weekly ranking
-    weeklyTitle: 'Weekly Ranking',
+    // Monthly ranking
+    weeklyTitle: 'Monthly Ranking',
     weeklyEndsIn: 'Ends in:',
     unitDays: 'Days',
     unitHours: 'Hours',
@@ -1228,7 +1228,7 @@ export const en = {
     unitSeconds: 'Seconds',
     viewFullRanking: 'View full ranking',
     leaderboardEmpty: 'No ranking yet — be the first to share!',
-    leaderboardCompetitors: '{count} competing this week',
+    leaderboardCompetitors: '{count} competing this month',
     leaderboardEnd: 'You have reached the end',
     boardUnit: 'friends',
     close: 'Close',
@@ -1259,13 +1259,13 @@ export const en = {
     statsFriendsValue: '{count} friends',
     statsCurrentPoints: 'Ranking points',
     statsRankingUnit: 'pts',
-    statsRankThisWeek: 'Your rank this week',
+    statsRankThisWeek: 'Your rank this month',
     statsShares: 'Your shares',
 
     // Last winner
     lastWinnerTitle: 'Latest winner',
     lastWinnerViewStory: 'View story',
-    lastWinnerNone: 'No winner crowned yet — week one is still running',
+    lastWinnerNone: 'No winner crowned yet — the first month is still running',
     timeAgoHours: '{count}h ago',
     timeAgoDays: '{count}d ago',
     timeAgoNow: 'Just now',
