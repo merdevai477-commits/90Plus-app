@@ -76,6 +76,8 @@ export type LiquidWaterSurfaceProps = {
   blurTarget?: React.RefObject<View | null>;
   /** 0…1 opacity of the white top sheen. */
   sheen?: number;
+  /** Blur strength (iOS UIBlurEffect). Higher = more frost over content behind. */
+  blurIntensity?: number;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 };
@@ -88,9 +90,11 @@ export function LiquidWaterSurface({
   scale = 2.2,
   blurTarget,
   sheen = 0.9,
+  blurIntensity,
   style,
   children,
 }: LiquidWaterSurfaceProps) {
+  const frost = blurIntensity ?? (Platform.OS === 'ios' ? 28 : 36);
   const rootRef = useRef<View>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const clock = useClock();
@@ -131,7 +135,8 @@ export function LiquidWaterSurface({
     [ripple, rippleX, rippleY],
   );
 
-  if (isLiquidGlassSupported) {
+  // Explicit blurIntensity (e.g. chat composer) keeps UIBlurView so frost strength is controllable.
+  if (isLiquidGlassSupported && blurIntensity == null) {
     return (
       <LiquidGlassView
         {...({
@@ -155,7 +160,7 @@ export function LiquidWaterSurface({
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
         <BlurView
-          intensity={Platform.OS === 'ios' ? 28 : 36}
+          intensity={frost}
           tint="dark"
           blurMethod="dimezisBlurViewSdk31Plus"
           blurTarget={blurTarget}
