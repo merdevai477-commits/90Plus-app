@@ -3225,18 +3225,21 @@ model TopScorersFivePlayer {
 /// One scoring window per league. Picks lock at `lockAt` (first kickoff of the
 /// window); `status` only ever moves forward.
 model TopScorersFiveGameweek {
-  id          String                       @id @default(uuid())
-  leagueKey   String
+  id              String                       @id @default(uuid())
+  leagueKey       String
   /// Window start date ("2026-10-06") — deterministic, so concurrent rollovers
   /// collide on the unique index instead of creating duplicate weeks.
-  weekKey     String
-  startAt     DateTime
-  endAt       DateTime
-  lockAt      DateTime
-  status      TopScorersFiveGameweekStatus @default(OPEN)
-  completedAt DateTime?
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
+  weekKey         String
+  startAt         DateTime
+  endAt           DateTime
+  lockAt          DateTime
+  status          TopScorersFiveGameweekStatus @default(OPEN)
+  completedAt     DateTime?
+  /// Set once every user's lineup has been carried in from earlier weeks, so
+  /// the copy runs once per gameweek.
+  lineupCarriedAt DateTime?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
 
   selections   TopScorersFiveSelection[]
   fixtures     TopScorersFiveFixture[]

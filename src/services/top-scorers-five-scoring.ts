@@ -344,6 +344,17 @@ export function isTsfFixtureNotStarted(
   return fixture.kickoffAt.getTime() > now.getTime();
 }
 
+/** The fixture has kicked off or been played. Postponed and void ones never did. */
+export function isTsfFixtureKickedOff(
+  fixture: { kickoffAt: Date; status: string | null | undefined },
+  now: Date = new Date(),
+): boolean {
+  const status = String(fixture.status ?? '').toUpperCase();
+  if (STARTED_STATUSES.has(status)) return true;
+  if (isTsfVoidStatus(status) || isTsfPostponedStatus(status)) return false;
+  return fixture.kickoffAt.getTime() <= now.getTime();
+}
+
 /**
  * League-wide picking stays available through LOCKED/LIVE until the window ends
  * — individual players drop out once their own match has started.
@@ -357,15 +368,22 @@ export function isTsfLeaguePickingOpen(
 }
 
 /**
- * A saved pick is final once confirmed. Unconfirmed rows (rare) also lock when
- * the league window is over.
+ * A saved pick is final once confirmed. An unconfirmed one — last week's pick
+ * carried into this week — locks when one of its club's fixtures this week
+ * kicks off, so it can never be swapped once a result is known. Every pick
+ * locks when the league window is over.
  */
 export function isTsfSelectionLocked(
   selection: { confirmedAt: Date | null } | null,
   gameweek: { lockAt: Date; endAt: Date; status: TopScorersFiveGameweekStatus },
   now: Date = new Date(),
+  fixtures: readonly { kickoffAt: Date; status: string }[] = [],
 ): boolean {
-  return selection?.confirmedAt != null || !isTsfLeaguePickingOpen(gameweek, now);
+  return (
+    selection?.confirmedAt != null ||
+    fixtures.some((fixture) => isTsfFixtureKickedOff(fixture, now)) ||
+    !isTsfLeaguePickingOpen(gameweek, now)
+  );
 }
 
 /** The "next 7 days" fixture window, from now. */
@@ -384,7 +402,7 @@ export type TsfRelevantFixtureState = { kickoffAt: Date; status: string; process
 /**
  * Where one league pick stands. Fixtures are the pick's club's fixtures in the
  * gameweek; postponed ones have left the window and are ignored.
- *   PICKING              nothing picked, or a pick not yet confirmed
+ *   PICKING              nothing picked, or a carried-over pick the user can still change
  *   CONFIRMED            locked, no relevant match has kicked off
  *   WAITING_FOR_MATCHES  a relevant match is live or still to come
  *   CALCULATING          every relevant match is over, stats not all stored yet
