@@ -4,7 +4,6 @@
 
 import {
   buildReferralLandingPage,
-  buildReferralContestLandingPage,
   buildPlayStoreInviteUrl,
   PLAY_STORE_URL,
   APP_STORE_URL,
@@ -94,31 +93,21 @@ describe('buildReferralLandingPage — deferred payloads', () => {
   });
 });
 
-describe('buildReferralContestLandingPage', () => {
-  const html = buildReferralContestLandingPage('ABCDEF', 'pk_test_invite');
-
-  it('signs the new account up on the invite page with that code', () => {
-    expect(html).toContain('mountSignUp');
-    expect(html).toContain('referralCode');
-    expect(html).toContain('ABCDEF');
-    expect(html).toContain('/api/share-win/referral/claim');
-    expect(html).toContain('pk_test_invite');
-  });
-
-  it('buildReferralLandingPage uses the contest page only when a Clerk key is passed', () => {
-    expect(buildReferralLandingPage('ABCDEF', { clerkPublishableKey: 'pk_test_invite' })).toContain('mountSignUp');
+describe('buildReferralLandingPage — store-first, no browser Clerk', () => {
+  it('never mounts Clerk signup on the invite landing', () => {
     expect(buildReferralLandingPage('ABCDEF')).not.toContain('mountSignUp');
-    expect(buildReferralLandingPage('AB0O1D', { clerkPublishableKey: 'pk_test_invite' })).not.toContain('mountSignUp');
+    expect(buildReferralLandingPage('ABCDEF')).not.toContain('clerk.90plus.pro');
+    expect(buildReferralLandingPage('AB0O1D')).not.toContain('mountSignUp');
   });
 
-  it('embeds click_id in Play referrer, clipboard, deep link, and claim body', () => {
+  it('embeds click_id in Play referrer, iOS clipboard, and deep link', () => {
     const html = buildReferralLandingPage('ABCDEF', {
-      clerkPublishableKey: 'pk_test_invite',
       clickId: 'ck_testClick01',
     });
     expect(html).toContain('invite_ABCDEF_ck_testClick01');
-    expect(html).toContain('clickId');
     expect(html).toContain('ck_testClick01');
     expect(html).toContain('ninetyplus://invite/ABCDEF?c=ck_testClick01');
+    expect(html).toContain('90plus-invite:ABCDEF:ck_testClick01');
+    expect(html).not.toContain('mountSignUp');
   });
 });

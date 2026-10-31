@@ -166,17 +166,6 @@ describe('GET /u/:username — profile share landing', () => {
 });
 
 describe('GET /invite/:code — the web fallback', () => {
-  const savedClerkKey = process.env.CLERK_PUBLISHABLE_KEY;
-
-  beforeAll(() => {
-    process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_invite';
-  });
-
-  afterAll(() => {
-    if (savedClerkKey === undefined) delete process.env.CLERK_PUBLISHABLE_KEY;
-    else process.env.CLERK_PUBLISHABLE_KEY = savedClerkKey;
-  });
-
   it('serves the landing page instead of redirecting to the website root', async () => {
     const res = await get('/invite/AB23CD');
 
@@ -184,20 +173,23 @@ describe('GET /invite/:code — the web fallback', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 
-  it('keeps the code on the signup page and does not bounce to the store first', async () => {
+  it('keeps the code and sends phones to the store with deferred attribution', async () => {
     const res = await get('/invite/AB23CD');
     const html = await res.text();
+    const playUrl = buildPlayStoreInviteUrl('AB23CD', 'ck_testClick01xx');
 
-    expect(html).toContain('ninetyplus://invite/AB23CD');
-    expect(html).toContain('mountSignUp');
-    expect(html).toContain('referralCode');
+    expect(html).toContain('ninetyplus://invite/AB23CD?c=ck_testClick01xx');
+    expect(html).not.toContain('mountSignUp');
+    expect(html).not.toContain('clerk.90plus.pro');
     expect(html).toContain('ck_testClick01xx');
-    expect(html).toContain(buildPlayStoreInviteUrl('AB23CD', 'ck_testClick01xx'));
-    expect(html).not.toContain('location.replace');
-    expect(res.headers.get('content-security-policy')).toContain('https://clerk.90plus.pro');
+    expect(html).toContain(playUrl);
+    expect(html).toContain('window.location.replace(playStoreUrl)');
+    expect(html).toContain('90plus-invite:AB23CD:ck_testClick01xx');
+    expect(res.headers.get('content-security-policy')).not.toContain('https://clerk.90plus.pro');
+    expect(res.headers.get('content-security-policy')).toContain("script-src 'unsafe-inline'");
   });
 
-  it('offers the stores only after signup, never a link back to this page', async () => {
+  it('offers the platform stores and never links back to this page', async () => {
     const html = await (await get('/invite/AB23CD')).text();
     const playUrl = buildPlayStoreInviteUrl('AB23CD', 'ck_testClick01xx');
 
@@ -205,7 +197,8 @@ describe('GET /invite/:code — the web fallback', () => {
     expect(playUrl.startsWith(PLAY_STORE_URL)).toBe(true);
     expect(playUrl).not.toContain('/invite/');
     expect(html).toContain(APP_STORE_URL);
-    expect(html).toContain('#download { display: none; }');
+    expect(html).toContain('حمّل من Google Play');
+    expect(html).toContain('تحميل التطبيق');
   });
 
   it('accepts the /ref alias the same way', async () => {

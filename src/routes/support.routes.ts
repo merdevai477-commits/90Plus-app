@@ -5,7 +5,6 @@
 
 import { Router, Request, Response } from 'express';
 import {
-    REFERRAL_SIGNUP_CSP,
     SHARE_LANDING_CSP,
     buildProfileLandingPage,
     buildReelLandingPage,
@@ -55,7 +54,8 @@ router.get('/@:username', sendProfileLanding);
 
 /**
  * GET /invite/:code  (alias: /ref/:code)
- * Creates a durable click_id, then serves the signup or store landing with it.
+ * Creates a durable click_id, then serves the store-first landing with it
+ * (Play referrer / iOS clipboard / deep link). No browser Clerk signup.
  */
 async function handleReferralLanding(req: Request, res: Response): Promise<void> {
     const raw = ensureString(req.params.code).trim().toUpperCase();
@@ -79,12 +79,7 @@ async function handleReferralLanding(req: Request, res: Response): Promise<void>
         logger.error('[ShareWin] invite click record failed on landing:', err);
     }
 
-    const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY?.trim() || '';
-    sendShareLanding(
-        res,
-        buildReferralLandingPage(raw, { clerkPublishableKey, clickId }),
-        clerkPublishableKey ? REFERRAL_SIGNUP_CSP : SHARE_LANDING_CSP,
-    );
+    sendShareLanding(res, buildReferralLandingPage(raw, { clickId }), SHARE_LANDING_CSP);
 }
 
 router.get('/invite/:code', handleReferralLanding);
