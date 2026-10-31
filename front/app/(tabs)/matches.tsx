@@ -2005,22 +2005,14 @@ export default function MatchesHubScreenV2() {
   }, []);
 
   const renderCountryAccordion = useCallback(
-    ({ item }: { item: CountryGroup }) => {
-      const hasLive = item.leagues.some((l) =>
-        l.matches.some((m) => m.status === 'live'),
-      );
-      // Expand live countries first so the Live tab shows action without scrolling.
-      // England stays open as the default home league.
-      const defaultExpanded = hasLive || item.country === 'England';
-      return (
-        <CountryAccordion
-          countryGroup={item}
-          renderMatchCard={renderCountryMatchCard}
-          onViewAllLeague={handleViewAllLeague}
-          defaultExpanded={defaultExpanded}
-        />
-      );
-    },
+    ({ item }: { item: CountryGroup }) => (
+      <CountryAccordion
+        countryGroup={item}
+        renderMatchCard={renderCountryMatchCard}
+        onViewAllLeague={handleViewAllLeague}
+        defaultExpanded={false}
+      />
+    ),
     [renderCountryMatchCard, handleViewAllLeague],
   );
 
