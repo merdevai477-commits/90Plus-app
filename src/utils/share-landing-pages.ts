@@ -37,13 +37,29 @@ const LANDING_STYLES = `
      * Buttons stay visible even when CSP / in-app browsers block the opener
      * script — QR scans and WhatsApp previews often land here without JS.
      */
-    .download { display: block; }
+        .download { display: block; }
     body.opening .download { opacity: 0.85; }
     /* JS hides the wrong-platform store so the user only sees their store. */
     .store-btn { display: block; }
 `;
 
 /** Helmet sets script-src 'self'; these pages need an inline opener. Override per response. */
+/** Invite signup widget talks to the production Clerk frontend API. */
+export const REFERRAL_SIGNUP_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' https://clerk.90plus.pro https://challenges.cloudflare.com",
+  "style-src 'unsafe-inline' https://clerk.90plus.pro",
+  "img-src 'self' data: https:",
+  "font-src https://clerk.90plus.pro data:",
+  "connect-src 'self' https://clerk.90plus.pro https://api.clerk.com",
+  "frame-src https://clerk.90plus.pro https://challenges.cloudflare.com",
+  "worker-src blob:",
+  "form-action https://clerk.90plus.pro",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join('; ');
+
 export const SHARE_LANDING_CSP = [
   "default-src 'none'",
   "script-src 'unsafe-inline'",
@@ -378,10 +394,126 @@ export function buildProfileLandingPage(username: string): string {
   });
 }
 
+/**
+ * The contest count is decided when the account is created, not when a store
+ * build later tries to remember the link. The new user signs up on this page
+ * with the invite code attached, then downloads the app and signs in.
+ */
+export function buildReferralContestLandingPage(code: string, clerkPublishableKey: string): string {
+  const playUrl = buildPlayStoreInviteUrl(code);
+  const payload = JSON.stringify({
+    code,
+    publishableKey: clerkPublishableKey,
+    playUrl,
+    appStoreUrl: APP_STORE_URL,
+    openUrl: `ninetyplus://invite/${code}`,
+  });
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>90Plus — دعوة صديق</title>
+  <style>${LANDING_STYLES}
+    #download { display: none; }
+    #download.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>90Plus</h1>
+    <p>صاحبك دعاك. سجّل <b>حساب جديد</b> من هنا عشان الدعوة تتحسب له في المسابقة.</p>
+    <p id="claim-status"></p>
+    <div id="clerk-slot"></div>
+    <div class="download" id="download">
+      <p>بعد التسجيل، حمّل التطبيق وادخل بنفس الحساب.</p>
+      <a class="btn primary" id="store-android" href="${playUrl.replace(/"/g, '&quot;')}">حمّل من Google Play</a>
+      <a class="btn secondary" id="store-ios" href="${APP_STORE_URL}">حمّل من App Store</a>
+      <a class="btn secondary" id="open-app" href="ninetyplus://invite/${code}">افتح التطبيق</a>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var cfg = ${payload};
+      var statusEl = document.getElementById('claim-status');
+      var slot = document.getElementById('clerk-slot');
+      var downloadEl = document.getElementById('download');
+      function say(text) { if (statusEl) statusEl.textContent = text; }
+      function showStores() { if (downloadEl) downloadEl.className = 'download visible'; }
+      function claim() {
+        var clerk = window.Clerk;
+        if (!clerk || !clerk.session) return Promise.resolve();
+        return clerk.session.getToken().then(function(token) {
+          return fetch('/api/share-win/referral/claim', {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + token,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code: cfg.code })
+          });
+        }).then(function(res) { return res.json(); }).then(function(body) {
+          var data = body && body.data;
+          if (data && data.attributed) {
+            say('اتسجل حسابك الجديد، والدعوة اتحسبت لصاحبك. حمّل التطبيق وادخل بنفس الحساب.');
+            showStores();
+          } else if (data && data.reason === 'already_attributed') {
+            say('الدعوة اتحسبت قبل كده. حمّل التطبيق وادخل بنفس الحساب.');
+            showStores();
+          } else if (data && data.reason === 'not_a_new_user') {
+            say('الحساب ده مش جديد. الدعوة بتتحسب لحساب جديد بس.');
+            showStores();
+          } else {
+            say('كمّل تسجيل الحساب الجديد عشان الدعوة تتحسب.');
+          }
+          if (slot && data && (data.attributed || data.reason === 'already_attributed' || data.reason === 'not_a_new_user')) {
+            slot.style.display = 'none';
+          }
+        }).catch(function() {
+          say('التسجيل خلّص. حمّل التطبيق وادخل بنفس الحساب عشان الدعوة تتأكد.');
+          showStores();
+        });
+      }
+      var script = document.createElement('script');
+      script.async = true;
+      script.src = 'https://clerk.90plus.pro/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+      script.setAttribute('data-clerk-publishable-key', cfg.publishableKey);
+      script.onerror = function() {
+        say('لو التسجيل ما ظهرش، حمّل التطبيق وسجّل حساب جديد من أول ما يفتح.');
+        showStores();
+      };
+      script.onload = function() {
+        var clerk = window.Clerk;
+        if (!clerk) { script.onerror(); return; }
+        clerk.load().then(function() {
+          if (clerk.user) { claim(); return; }
+          clerk.mountSignUp(slot, { unsafeMetadata: { referralCode: cfg.code } });
+          clerk.addListener(function(event) {
+            if (event.user) claim();
+          });
+        }).catch(function() {
+          say('سجّل حساب جديد من التطبيق بعد التحميل لو الصفحة ما فتحتش التسجيل.');
+          showStores();
+        });
+      };
+      document.body.appendChild(script);
+    })();
+  </script>
+</body>
+</html>`;
+}
+
 /** Share & Win referral invite — carries the code into the app on first open. */
-export function buildReferralLandingPage(code: string): string {
+export function buildReferralLandingPage(
+  code: string,
+  options?: { clerkPublishableKey?: string },
+): string {
   const normalized = normalizeReferralCode(code);
   const codeOk = isValidReferralCode(normalized);
+  const clerkKey = options?.clerkPublishableKey?.trim() || '';
+  if (codeOk && clerkKey) {
+    return buildReferralContestLandingPage(normalized, clerkKey);
+  }
   return buildSmartLandingPage({
     title: '90Plus — دعوة صديق',
     ogTitle: '90Plus — شارك واربح',

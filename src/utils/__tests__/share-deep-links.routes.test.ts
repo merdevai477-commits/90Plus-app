@@ -159,6 +159,17 @@ describe('GET /u/:username — profile share landing', () => {
 });
 
 describe('GET /invite/:code — the web fallback', () => {
+  const savedClerkKey = process.env.CLERK_PUBLISHABLE_KEY;
+
+  beforeAll(() => {
+    process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_invite';
+  });
+
+  afterAll(() => {
+    if (savedClerkKey === undefined) delete process.env.CLERK_PUBLISHABLE_KEY;
+    else process.env.CLERK_PUBLISHABLE_KEY = savedClerkKey;
+  });
+
   it('serves the landing page instead of redirecting to the website root', async () => {
     const res = await get('/invite/AB23CD');
 
@@ -166,22 +177,27 @@ describe('GET /invite/:code — the web fallback', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 
-  it('keeps the code in every route it offers', async () => {
-    const html = await (await get('/invite/AB23CD')).text();
+  it('keeps the code on the signup page and does not bounce to the store first', async () => {
+    const res = await get('/invite/AB23CD');
+    const html = await res.text();
 
     expect(html).toContain('ninetyplus://invite/AB23CD');
-    expect(html).toContain('var androidReferrerFirst = true');
+    expect(html).toContain('mountSignUp');
+    expect(html).toContain('referralCode');
     expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
+    expect(html).not.toContain('location.replace');
+    expect(res.headers.get('content-security-policy')).toContain('https://clerk.90plus.pro');
   });
 
-  it('sends a phone with no app to a store, never back to itself', async () => {
+  it('offers the stores only after signup, never a link back to this page', async () => {
     const html = await (await get('/invite/AB23CD')).text();
     const playUrl = buildPlayStoreInviteUrl('AB23CD');
 
-    expect(html).toContain(`var playStoreUrl = ${JSON.stringify(playUrl)}`);
+    expect(html).toContain(playUrl);
     expect(playUrl.startsWith(PLAY_STORE_URL)).toBe(true);
     expect(playUrl).not.toContain('/invite/');
     expect(html).toContain(APP_STORE_URL);
+    expect(html).toContain('#download { display: none; }');
   });
 
   it('accepts the /ref alias the same way', async () => {

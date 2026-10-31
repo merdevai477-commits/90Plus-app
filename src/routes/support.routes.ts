@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import {
+    REFERRAL_SIGNUP_CSP,
     SHARE_LANDING_CSP,
     buildProfileLandingPage,
     buildReelLandingPage,
@@ -19,10 +20,10 @@ const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
 
 const router = Router();
 
-function sendShareLanding(res: Response, html: string): void {
+function sendShareLanding(res: Response, html: string, csp: string = SHARE_LANDING_CSP): void {
     // Override Helmet's script-src 'self' so the inline opener (and visible
     // store buttons) actually run when a QR / share link lands in a browser.
-    res.setHeader('Content-Security-Policy', SHARE_LANDING_CSP);
+    res.setHeader('Content-Security-Policy', csp);
     res.type('html').send(html);
 }
 
@@ -96,7 +97,12 @@ function handleReferralLanding(req: Request, res: Response): void {
         void rememberInviteClick(ip, raw);
     }
 
-    sendShareLanding(res, buildReferralLandingPage(raw));
+    const clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY?.trim() || '';
+    sendShareLanding(
+        res,
+        buildReferralLandingPage(raw, { clerkPublishableKey }),
+        clerkPublishableKey ? REFERRAL_SIGNUP_CSP : SHARE_LANDING_CSP,
+    );
 }
 
 router.get('/invite/:code', handleReferralLanding);

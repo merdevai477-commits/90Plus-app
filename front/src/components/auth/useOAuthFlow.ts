@@ -18,6 +18,7 @@ import {
   resolveOAuthRedirectUrl,
 } from '@/src/utils/authSession';
 import { completeOAuthMissingRequirements } from '@/src/utils/oauthSignUpCompletion';
+import { getPendingReferral } from '../../../utils/pendingReferral';
 
 interface OAuthFlowOptions {
   onError?: (message: string) => void;
@@ -65,7 +66,11 @@ export function useOAuthFlow({
     ): Promise<void> => {
       try {
         const redirectUrl = resolveOAuthRedirectUrl();
-        const result = await flow({ redirectUrl });
+        const pendingCode = await getPendingReferral();
+        const result = await flow({
+          redirectUrl,
+          ...(pendingCode ? { unsafeMetadata: { referralCode: pendingCode } } : {}),
+        });
 
         const sessionId = resolveSessionId(result);
         if (sessionId && result.setActive) {

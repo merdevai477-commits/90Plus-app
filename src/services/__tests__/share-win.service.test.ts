@@ -37,6 +37,7 @@ import {
   claimReferral,
   computeScore,
   isValidReferralCode,
+  referralCodeFromClerkMetadata,
   isoWeekKey,
   normalizeReferralCode,
 } from '../share-win.service';
@@ -265,5 +266,17 @@ describe('claimReferral', () => {
     expect(first.attributed).toBe(true);
     expect(second.attributed).toBe(false);
     expect(prismaMock.shareWinReferral.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('referralCodeFromClerkMetadata', () => {
+  test('keeps a real invite code stamped at signup', () => {
+    expect(referralCodeFromClerkMetadata({ referralCode: 'ab23cd' })).toBe('AB23CD');
+  });
+
+  test('drops missing or invalid codes', () => {
+    expect(referralCodeFromClerkMetadata(null)).toBeNull();
+    expect(referralCodeFromClerkMetadata({ referralCode: 'AB0O1D' })).toBeNull();
+    expect(referralCodeFromClerkMetadata({ referralCode: 12 })).toBeNull();
   });
 });

@@ -4,6 +4,7 @@
 
 import {
   buildReferralLandingPage,
+  buildReferralContestLandingPage,
   buildPlayStoreInviteUrl,
   PLAY_STORE_URL,
   APP_STORE_URL,
@@ -90,5 +91,23 @@ describe('buildReferralLandingPage — deferred payloads', () => {
       new RegExp(`id="store-ios" href="${APP_STORE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`),
     );
     expect(bad).not.toContain('<noscript>');
+  });
+});
+
+describe('buildReferralContestLandingPage', () => {
+  const html = buildReferralContestLandingPage('ABCDEF', 'pk_test_invite');
+
+  it('signs the new account up on the invite page with that code', () => {
+    expect(html).toContain('mountSignUp');
+    expect(html).toContain('referralCode');
+    expect(html).toContain('ABCDEF');
+    expect(html).toContain('/api/share-win/referral/claim');
+    expect(html).toContain('pk_test_invite');
+  });
+
+  it('buildReferralLandingPage uses the contest page only when a Clerk key is passed', () => {
+    expect(buildReferralLandingPage('ABCDEF', { clerkPublishableKey: 'pk_test_invite' })).toContain('mountSignUp');
+    expect(buildReferralLandingPage('ABCDEF')).not.toContain('mountSignUp');
+    expect(buildReferralLandingPage('AB0O1D', { clerkPublishableKey: 'pk_test_invite' })).not.toContain('mountSignUp');
   });
 });

@@ -14,6 +14,7 @@ import { generateUsername } from '../utils/username.utils';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import { claimReferral, referralCodeFromClerkMetadata } from '../services/share-win.service';
 
 const router = Router();
 
@@ -38,6 +39,7 @@ interface ClerkWebhookEvent {
         updated_at?: number;
         public_metadata?: Record<string, any>;
         private_metadata?: Record<string, any>;
+        unsafe_metadata?: Record<string, any>;
         external_accounts?: Array<{
             provider: string;
         }>;
@@ -118,7 +120,8 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
     });
 
     if (existingUser) {
-        logger.info('ℹ️ User already exists, skipping:', data.id);
+        logger.info('ℹ️ User already exists, skipping create:', data.id);
+        await attributeInviteFromClerk(existingUser.id, data);
         return;
     }
 
@@ -146,6 +149,7 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
     });
 
     logger.info('✅ User created in database:', user.id, 'username:', username);
+    await attributeInviteFromClerk(user.id, data);
 
     // Update Clerk user metadata with generated username
     try {
@@ -160,6 +164,31 @@ async function handleUserCreated(data: ClerkWebhookEvent['data']): Promise<void>
     } catch (err) {
         logger.error('⚠️ Failed to update Clerk metadata:', err);
         // Don't throw - user is already created in DB
+    }
+}
+
+/**
+ * A new account created from an invite link carries the code in Clerk
+ * metadata. Counting happens here so the contest does not depend on the
+ * store build reading the link after install.
+ */
+async function attributeInviteFromClerk(
+    userId: string,
+    data: ClerkWebhookEvent['data'],
+): Promise<void> {
+    const code =
+        referralCodeFromClerkMetadata(data.unsafe_metadata) ??
+        referralCodeFromClerkMetadata(data.public_metadata);
+    if (!code) return;
+    try {
+        const result = await claimReferral(userId, code);
+        logger.info('[ShareWin] invite counted from signup', {
+            userId,
+            attributed: result.attributed,
+            reason: result.reason,
+        });
+    } catch (err) {
+        logger.error('[ShareWin] invite count from signup failed:', err);
     }
 }
 

@@ -81,6 +81,15 @@ export function isValidReferralCode(raw: string): boolean {
   return CODE_PATTERN.test(normalizeReferralCode(raw));
 }
 
+/** Code stamped on a Clerk sign-up so the contest counts the new account. */
+export function referralCodeFromClerkMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const raw = (metadata as { referralCode?: unknown }).referralCode;
+  if (typeof raw !== 'string') return null;
+  const code = normalizeReferralCode(raw);
+  return isValidReferralCode(code) ? code : null;
+}
+
 /** Public share link for a code. Domain comes from the existing share config. */
 export function buildReferralLink(code: string): string {
   return `${SHARE_BASE_URL}/invite/${code}`;
