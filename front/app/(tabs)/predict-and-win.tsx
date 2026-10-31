@@ -73,6 +73,11 @@ export default function PredictAndWinScreen() {
 
   const goToCreate = useCallback(() => router.push('/predict-and-win/create'), [router]);
 
+  const goBackToRank = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/rank' as never);
+  }, [router]);
+
   const onAddPrizePress = useCallback(() => {
     if (addPrizeVariant === 'add') {
       goToCreate();
@@ -126,6 +131,7 @@ export default function PredictAndWinScreen() {
     <View style={{ flex: 1, backgroundColor: PW.screen }}>
       <PWHeader
         title={t.predictAndWin.title}
+        onBack={goBackToRank}
         onBell={() => router.push('/notifications')}
       />
 
