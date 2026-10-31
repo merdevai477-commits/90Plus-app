@@ -28,6 +28,8 @@ import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardLi
 import type { KingPeriod } from '../../services/predictions.service';
 import { CoachKingBoard } from './CoachKingBoard';
 import { CoachKingCardGrid, type CkPick } from './CoachKingCardGrid';
+import { CoachKingDeadline } from './CoachKingDeadline';
+import { CoachKingInfo } from './CoachKingInfo';
 import { CoachKingLeagueChips } from './CoachKingLeagueChips';
 import { CoachKingMatches } from './CoachKingMatches';
 import { CoachKingMoney } from './CoachKingCoin';
@@ -366,10 +368,7 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          <View style={[styles.hint, { flexDirection: row }]}>
-            <Ionicons name="lock-closed-outline" size={14} color="#C2ABFC" />
-            <Text style={[styles.hintTxt, { fontFamily: fontMed, textAlign: isAr ? 'right' : 'left' }]}>{copy.tapHint}</Text>
-          </View>
+          <CoachKingDeadline />
           {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}
 
           <CoachKingPitch
@@ -447,6 +446,8 @@ export default function CoachKingScreen() {
         </View>
       ) : null}
 
+      {tab === 'info' ? <CoachKingInfo bottomPad={bottomPad} /> : null}
+
       <CoachKingCardGrid
         kind={picker}
         slotKey={picker === 'COACH' ? null : slotKey}
@@ -504,19 +505,6 @@ const styles = StyleSheet.create({
   budget: { rowGap: 4 },
   budgetHint: { color: '#9E9E9E', fontSize: 10 },
   ofRow: { alignItems: 'center', columnGap: 4 },
-  hint: {
-    alignItems: 'center',
-    columnGap: 8,
-    marginHorizontal: 16,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
-    backgroundColor: 'rgba(140,92,245,0.1)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.3)',
-  },
-  hintTxt: { color: '#D8C7FD', fontSize: 12, flex: 1 },
   sectionTitle: {
     color: '#FFFFFF',
     fontSize: 18,
