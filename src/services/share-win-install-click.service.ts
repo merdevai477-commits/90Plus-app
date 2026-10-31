@@ -4,8 +4,8 @@
  * The production Play build (1.1.2, Oct 16) parks an invite only if the https
  * link opens the app. A cold install opens from the Play "Open" button, which
  * carries no URL, and that build does not read Play Install Referrer. The
- * landing page records the phone's public IP when an Android browser opens
- * /invite/:code. A minute after signup, if the app still has not claimed, the
+ * landing page records the phone's public IP when an iPhone or Android browser
+ * opens /invite/:code. A minute after signup, if the app still has not claimed, the
  * same IP is matched to that code.
  *
  * The grace period lets a newer app claim the real code first. One code per
@@ -33,11 +33,11 @@ export const INSTALL_CLICK_CONFLICT = 'CONFLICT';
 const PREVIEW_BOT =
   /facebookexternalhit|facebot|whatsapp\/|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|googlebot|bingbot|applebot|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator/i;
 
-export function isAndroidInviteBrowser(userAgent: string | undefined): boolean {
+export function isPhoneInviteBrowser(userAgent: string | undefined): boolean {
   const ua = userAgent ?? '';
-  if (!/Android/i.test(ua)) return false;
   if (PREVIEW_BOT.test(ua)) return false;
-  return true;
+  if (/Android/i.test(ua)) return true;
+  return /iPhone|iPad|iPod/i.test(ua);
 }
 
 /** Keep one code per IP. A different code invalidates the slot. */

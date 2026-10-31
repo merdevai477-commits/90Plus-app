@@ -182,7 +182,14 @@ function buildStoreRedirectScript(
 
       if (isAndroid) {
         if (androidReferrerFirst) {
-          window.location.replace(playStoreUrl);
+          // Custom scheme opens 90Plus when it is already installed and does
+          // not launch Play by itself. If the page is still visible, the app
+          // is missing: go to the Play URL that carries the invite referrer.
+          window.location.href = customScheme;
+          setTimeout(function() {
+            if (appLikelyOpened()) return;
+            window.location.replace(playStoreUrl);
+          }, fallbackMs);
           return;
         }
         // Intent fallback is Play Store; JS backup covers WebViews that ignore it.

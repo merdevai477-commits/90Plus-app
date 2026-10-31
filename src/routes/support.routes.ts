@@ -12,7 +12,7 @@ import {
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
 import { getClientIp, isPublicIp } from '../utils/client-ip';
-import { isAndroidInviteBrowser, rememberInviteClick } from '../services/share-win-install-click.service';
+import { isPhoneInviteBrowser, rememberInviteClick } from '../services/share-win-install-click.service';
 
 const PRIVACY_PAGE_PATH = resolvePublicFile(__dirname, 'privacy.html');
 const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
@@ -92,7 +92,7 @@ function handleReferralLanding(req: Request, res: Response): void {
 
     const ip = getClientIp(req);
     const ua = req.headers['user-agent'];
-    if (isPublicIp(ip) && isAndroidInviteBrowser(typeof ua === 'string' ? ua : undefined)) {
+    if (isPublicIp(ip) && isPhoneInviteBrowser(typeof ua === 'string' ? ua : undefined)) {
         void rememberInviteClick(ip, raw);
     }
 

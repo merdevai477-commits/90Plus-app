@@ -1,25 +1,28 @@
 import {
   INSTALL_CLICK_CONFLICT,
-  isAndroidInviteBrowser,
+  isPhoneInviteBrowser,
   mergeInstallClick,
   parseInstallClick,
   signupMatchesInstallClick,
 } from '../share-win-install-click.service';
 
-describe('isAndroidInviteBrowser', () => {
-  it('accepts a real Android browser', () => {
+describe('isPhoneInviteBrowser', () => {
+  it('accepts a real Android or iPhone browser', () => {
     expect(
-      isAndroidInviteBrowser(
+      isPhoneInviteBrowser(
         'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
       ),
     ).toBe(true);
+    expect(
+      isPhoneInviteBrowser('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'),
+    ).toBe(true);
   });
 
-  it('rejects iOS, empty, and link-preview crawlers', () => {
-    expect(isAndroidInviteBrowser('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe(false);
-    expect(isAndroidInviteBrowser(undefined)).toBe(false);
-    expect(isAndroidInviteBrowser('WhatsApp/2.23.20.0')).toBe(false);
-    expect(isAndroidInviteBrowser('facebookexternalhit/1.1')).toBe(false);
+  it('rejects empty, desktop, and link-preview crawlers', () => {
+    expect(isPhoneInviteBrowser(undefined)).toBe(false);
+    expect(isPhoneInviteBrowser('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe(false);
+    expect(isPhoneInviteBrowser('WhatsApp/2.23.20.0')).toBe(false);
+    expect(isPhoneInviteBrowser('facebookexternalhit/1.1')).toBe(false);
   });
 });
 
