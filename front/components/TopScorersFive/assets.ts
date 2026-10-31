@@ -45,6 +45,16 @@ export const TSF_HUB_LOGO = {
 export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.webp');
 
 /**
+ * Filled pitch-slot card chrome (Figma 1545:6240) — 9×9 stat glyphs and the
+ * 24×24 remove control. Keep the SVG root width/height; scale via Image style.
+ */
+export const TSF_PITCH_CARD_ART = {
+  football: require('../../assets/images/top-scorers-five/pitch-card-football.svg') as number,
+  cleat: require('../../assets/images/top-scorers-five/pitch-card-cleat.svg') as number,
+  remove: require('../../assets/images/top-scorers-five/pitch-card-remove.svg') as number,
+};
+
+/**
  * Picker card frame, Figma 1302:15248, flattened into the two layers that sit
  * under and over the player's photo: rails, crown, sparkle and the body's
  * light streaks below; the body's black fade, gradient stroke and bars above.

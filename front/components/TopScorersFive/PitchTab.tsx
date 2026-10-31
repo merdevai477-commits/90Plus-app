@@ -1,6 +1,6 @@
 /**
  * "خماسي الهدافين" pitch tab — Figma `iPhone 14 Plus - 56` (node 1263:10333)
- * and its filled state `iPhone 14 Plus - 58` (node 1275:11412).
+ * and the filled slot card Frame 794 (node 1545:6240).
  *
  * One card per league laid out on the pitch; tapping a card opens that league's
  * players. Every element is positioned with the design-frame coordinates
@@ -9,7 +9,7 @@
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,14 +22,15 @@ import {
   TSF_LEAGUE_LOGO,
   TSF_LIGUE1_CREST_ASPECT,
   TSF_LOGO_TINT_ON_DARK,
+  TSF_PITCH_CARD_ART,
   type TsfLeagueKey,
 } from './assets';
 import { tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
 
 const PURPLE = '#8B5CF6';
 const PURPLE_SOFT = '#A78BFA';
-const CARD_BG = '#08050F';
-const CARD_STROKE = '#B896FC';
+const CARD_BG = '#09060F';
+const CARD_STROKE = '#B698FD';
 const CARD_LABEL = '#CF9BFC';
 
 /** Design frame minus its 62pt status bar, down to 16pt below the tab bar. */
@@ -38,8 +39,17 @@ export const TSF_PITCH_DESIGN_HEIGHT = 855 - DESIGN_STATUS_BAR + 16;
 
 /** Frame 802 — the formation block. */
 const FORMATION = { left: 42, top: 248 - DESIGN_STATUS_BAR };
-/** Frame 794 card inside each Group, plus the crown that overlaps its top edge. */
-const CARD = { width: 107, height: 136, top: 10.47 };
+/**
+ * Frame 794 filled card (1545:6240). Empty slots keep the same box; the crown
+ * only hangs above empty cards. Photo crop matches the design's 79×67 window.
+ */
+const CARD = { width: 107, height: 138.85, top: 10.47 };
+const FILLED = {
+  photo: { left: 14, top: 11.42, width: 79, height: 67 },
+  name: { top: 86.42, height: 23, fontSize: 19 },
+  stats: { top: 117.42, height: 10, gap: 11, icon: 9, fontSize: 8 },
+  remove: { size: 24, right: -4, top: -4.93 },
+};
 
 type Slot = {
   readonly key: TsfLeagueKey;
@@ -238,19 +248,25 @@ export function PitchTab({
                   <>
                     <View
                       style={[
-                        styles.avatar,
-                        { top: s(16), width: s(68), height: s(68), borderRadius: s(34) },
+                        styles.photo,
+                        {
+                          left: s(FILLED.photo.left),
+                          top: s(FILLED.photo.top),
+                          width: s(FILLED.photo.width),
+                          height: s(FILLED.photo.height),
+                        },
                       ]}
                     >
                       {player.photo ? (
                         <Image
                           source={{ uri: player.photo }}
-                          style={[StyleSheet.absoluteFill, { borderRadius: s(34) }]}
+                          style={StyleSheet.absoluteFill}
                           contentFit="cover"
                           contentPosition="top"
+                          transition={0}
                         />
                       ) : (
-                        <Text style={[styles.avatarText, { fontFamily: fontBold, fontSize: s(22) }]}>
+                        <Text style={[styles.photoText, { fontFamily: fontBold, fontSize: s(22) }]}>
                           {tsfInitials(player)}
                         </Text>
                       )}
@@ -260,39 +276,113 @@ export function PitchTab({
                       style={[
                         styles.cardLabel,
                         styles.cardName,
-                        { top: s(94), height: s(23), fontSize: s(15), fontFamily: fontBold },
+                        {
+                          top: s(FILLED.name.top),
+                          height: s(FILLED.name.height),
+                          fontSize: s(FILLED.name.fontSize),
+                          fontFamily: fontSemi,
+                        },
                       ]}
                       maxFontSizeMultiplier={1.1}
                     >
                       {tsfShortName(player)}
                     </Text>
-                    {player.points != null ? (
-                      <View
-                        accessible
-                        accessibilityLabel={[
-                          pickCopy.goalsA11y.replace('{count}', String(player.goals)),
-                          pickCopy.assistsA11y.replace('{count}', String(player.assists)),
-                          pickCopy.pointsA11y.replace('{count}', String(player.points)),
-                        ].join('. ')}
-                        style={[styles.cardStats, { top: s(117), height: s(14), columnGap: s(6) }]}
-                      >
-                        <View style={[styles.cardStat, { columnGap: s(2) }]}>
-                          <Ionicons name="football" size={s(10)} color="#FFFFFF" />
-                          <Text style={[styles.cardStatText, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
-                            {player.goals}
-                          </Text>
-                        </View>
-                        <View style={[styles.cardStat, { columnGap: s(2) }]}>
-                          <MaterialCommunityIcons name="shoe-cleat" size={s(10)} color="#FFFFFF" />
-                          <Text style={[styles.cardStatText, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
-                            {player.assists}
-                          </Text>
-                        </View>
-                        <Text style={[styles.cardPoints, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
-                          {`${player.points} ${pickCopy.pointsShort}`}
+                    <View
+                      accessible
+                      accessibilityLabel={[
+                        pickCopy.goalsA11y.replace('{count}', String(player.goals)),
+                        pickCopy.assistsA11y.replace('{count}', String(player.assists)),
+                        pickCopy.pointsA11y.replace('{count}', String(player.points ?? 0)),
+                      ].join('. ')}
+                      style={[
+                        styles.cardStats,
+                        {
+                          top: s(FILLED.stats.top),
+                          height: s(FILLED.stats.height),
+                          columnGap: s(FILLED.stats.gap),
+                        },
+                      ]}
+                    >
+                      <View style={[styles.cardStat, { columnGap: s(1) }]}>
+                        <Image
+                          source={TSF_PITCH_CARD_ART.football}
+                          style={{ width: s(FILLED.stats.icon), height: s(FILLED.stats.icon) }}
+                          contentFit="fill"
+                          transition={0}
+                        />
+                        <Text
+                          style={[
+                            styles.cardStatText,
+                            { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                          ]}
+                          allowFontScaling={false}
+                        >
+                          {player.goals}
                         </Text>
                       </View>
-                    ) : null}
+                      <View style={[styles.cardStat, { columnGap: s(1) }]}>
+                        <Image
+                          source={TSF_PITCH_CARD_ART.cleat}
+                          style={{ width: s(FILLED.stats.icon), height: s(FILLED.stats.icon) }}
+                          contentFit="fill"
+                          transition={0}
+                        />
+                        <Text
+                          style={[
+                            styles.cardStatText,
+                            { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                          ]}
+                          allowFontScaling={false}
+                        >
+                          {player.assists}
+                        </Text>
+                      </View>
+                      <View style={[styles.cardStat, { columnGap: s(1) }]}>
+                        {isAr ? (
+                          <>
+                            <Text
+                              style={[
+                                styles.cardStatText,
+                                { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                              ]}
+                              allowFontScaling={false}
+                            >
+                              {pickCopy.pointsShort}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.cardStatText,
+                                { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                              ]}
+                              allowFontScaling={false}
+                            >
+                              {player.points ?? 0}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text
+                              style={[
+                                styles.cardStatText,
+                                { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                              ]}
+                              allowFontScaling={false}
+                            >
+                              {player.points ?? 0}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.cardStatText,
+                                { fontFamily: fontSemi, fontSize: s(FILLED.stats.fontSize) },
+                              ]}
+                              allowFontScaling={false}
+                            >
+                              {pickCopy.pointsShort}
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
                   </>
                 ) : (
                   <>
@@ -329,9 +419,11 @@ export function PitchTab({
                 )}
               </TouchableOpacity>
 
-              <View pointerEvents="none" style={[styles.crown, { width: s(CARD.width) }]}>
-                <FontAwesome5 name="crown" size={s(17)} color={PURPLE_SOFT} />
-              </View>
+              {player ? null : (
+                <View pointerEvents="none" style={[styles.crown, { width: s(CARD.width) }]}>
+                  <FontAwesome5 name="crown" size={s(17)} color={PURPLE_SOFT} />
+                </View>
+              )}
 
               {slotLocked ? (
                 <TouchableOpacity
@@ -348,11 +440,11 @@ export function PitchTab({
                     styles.remove,
                     styles.locked,
                     {
-                      right: -s(3.5),
-                      top: s(CARD.top - 4.5),
-                      width: s(24),
-                      height: s(24),
-                      borderRadius: s(12),
+                      right: s(FILLED.remove.right),
+                      top: s(CARD.top + FILLED.remove.top),
+                      width: s(FILLED.remove.size),
+                      height: s(FILLED.remove.size),
+                      borderRadius: s(FILLED.remove.size / 2),
                     },
                   ]}
                 >
@@ -365,18 +457,20 @@ export function PitchTab({
                   activeOpacity={0.75}
                   accessibilityRole="button"
                   accessibilityLabel={pickCopy.removePlayer.replace('{name}', player.name)}
-                  style={[
-                    styles.remove,
-                    {
-                      right: -s(3.5),
-                      top: s(CARD.top - 4.5),
-                      width: s(24),
-                      height: s(24),
-                      borderRadius: s(12),
-                    },
-                  ]}
+                  style={{
+                    position: 'absolute',
+                    right: s(FILLED.remove.right),
+                    top: s(CARD.top + FILLED.remove.top),
+                    width: s(FILLED.remove.size),
+                    height: s(FILLED.remove.size),
+                  }}
                 >
-                  <Ionicons name="close" size={s(15)} color="#FFFFFF" />
+                  <Image
+                    source={TSF_PITCH_CARD_ART.remove}
+                    style={{ width: s(FILLED.remove.size), height: s(FILLED.remove.size) }}
+                    contentFit="fill"
+                    transition={0}
+                  />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -491,7 +585,7 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: CARD_STROKE,
     overflow: 'hidden',
-    boxShadow: '0px 1px 13.2px rgba(163,77,245,0.62)',
+    boxShadow: '0px 1px 6.6px rgba(162,77,244,0.62)',
   },
   cardLabel: {
     position: 'absolute',
@@ -501,15 +595,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cardName: { color: '#FFFFFF' },
-  avatar: {
+  photo: {
     position: 'absolute',
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2E146A',
-    borderWidth: 1.5,
-    borderColor: PURPLE_SOFT,
   },
-  avatarText: { color: '#FFFFFF' },
+  photoText: { color: '#FFFFFF' },
   cardStats: {
     position: 'absolute',
     left: 1,
@@ -520,15 +613,14 @@ const styles = StyleSheet.create({
   },
   cardStat: { flexDirection: 'row', alignItems: 'center' },
   cardStatText: { color: '#FFFFFF' },
-  cardPoints: { color: CARD_LABEL },
   crown: { position: 'absolute', top: 0, left: 0, alignItems: 'center' },
   remove: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1A1033',
-    borderWidth: 1,
-    borderColor: '#9CA3AF',
+    backgroundColor: CARD_BG,
+    borderWidth: 1.5,
+    borderColor: '#828282',
   },
   locked: { backgroundColor: PURPLE, borderColor: PURPLE_SOFT },
 });
