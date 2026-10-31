@@ -361,6 +361,30 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.short).toBe('SUSP');
   });
 
+  it('maps a 365 "To Be Resumed" match to SUSP, not NS', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 2, statusText: 'To Be Resumed', shortStatusText: 'To Be Resumed', gameTime: 45 }),
+    );
+    expect(result.short).toBe('SUSP');
+    expect(result.elapsed).toBe(45);
+  });
+
+  it('maps half-time still showing hours after kickoff to SUSP', () => {
+    const at = (minutesAgo: number) =>
+      classifyScores365MatchStatus(
+        game({
+          statusGroup: 3,
+          statusText: 'Halftime',
+          shortStatusText: 'HT',
+          gameTime: 45,
+          gameTimeDisplay: "45'",
+          startTime: new Date(Date.now() - minutesAgo * 60 * 1000).toISOString(),
+        }),
+      ).short;
+    expect(at(55)).toBe('HT');
+    expect(at(12 * 60)).toBe('SUSP');
+  });
+
   it('maps interrupted matches to INT', () => {
     const result = classifyScores365MatchStatus(
       game({ statusGroup: 3, statusText: 'Interrupted', shortStatusText: 'Int.', gameTime: 71 }),

@@ -34,6 +34,7 @@ import { resolveVenueImage } from './stadium-image.service';
 import {
   MAX_PLAUSIBLE_STOPPAGE,
   STALE_2H_AGE_MIN,
+  STALE_HALFTIME_AGE_MIN,
   coerceAllScoresLiveStatus,
   parseStoppageFromDisplay as parse365StoppageExtra,
   resolve365InPlayHalf,
@@ -1351,7 +1352,11 @@ export function classifyScores365MatchStatus(
   }
 
   // Suspended — halted, may resume later (also kept polling).
-  if (has('suspend', 'معلق', 'موقوف') || shortCode === 'susp' || shortCode === 'sus') {
+  if (
+    has('suspend', 'معلق', 'موقوف', 'to be resumed') ||
+    shortCode === 'susp' ||
+    shortCode === 'sus'
+  ) {
     return withExtra('SUSP', 'Match Suspended', minute, stoppageFromDisplay);
   }
 
@@ -1448,6 +1453,13 @@ export function classifyScores365MatchStatus(
     text.includes('half-time') ||
     shortCode === 'ht'
   ) {
+    // 365 can keep a match suspended at the break on HT for the rest of the day.
+    if (
+      Number.isFinite(kickoffMs) &&
+      Date.now() - kickoffMs >= STALE_HALFTIME_AGE_MIN * 60 * 1000
+    ) {
+      return withExtra('SUSP', 'Match Suspended', 45);
+    }
     return withExtra('HT', 'Halftime', 45);
   }
 

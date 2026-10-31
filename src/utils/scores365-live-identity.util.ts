@@ -68,6 +68,8 @@ export const MAX_PLAUSIBLE_STOPPAGE = 20;
 export const STALE_2H_AGE_MIN = 170;
 /** Wall-clock net when LIVE/ET is past regulation — includes both ET periods + stoppage. */
 export const STALE_ET_AGE_MIN = 230;
+/** Half-time this long after kickoff is a suspended match, not a break. */
+export const STALE_HALFTIME_AGE_MIN = 180;
 /** 45 + 15 HT is the earliest a second half can start after the listed kickoff. */
 const EARLIEST_2H_AGE_MIN = 55;
 const REGULAR_MAX_STOPPAGE = MAX_PLAUSIBLE_STOPPAGE;
