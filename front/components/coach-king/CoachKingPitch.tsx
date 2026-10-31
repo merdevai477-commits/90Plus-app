@@ -35,7 +35,7 @@ type Props = {
   coachLabel: string;
   formation: string;
   isAr: boolean;
-  /** Opponent view: no taps on the cards, points on each one. */
+  /** Opponent view: no taps on the cards. */
   readOnly?: boolean;
   closed?: boolean;
   onSlot?: (slotKey: string) => void;
@@ -119,10 +119,16 @@ const SlotCard = memo(function SlotCard({ slotKey, slot, s, readOnly, closed, fo
   const locked = slot?.locked === true;
   const cardW = s(97);
   const face = s(52);
+  const ptsH = s(18);
+  const ptsGap = s(4);
+  // Room above the face so the week-points pill sits over the player photo.
+  const ptsBand = player ? ptsH + ptsGap : 0;
+  const faceTop = ptsBand;
+  const showPoints = Boolean(player) && slot?.points != null;
   return (
     <Pressable
       style={({ pressed }) => [
-        { width: cardW, height: s(80) + face / 2, alignItems: 'center' },
+        { width: cardW, height: s(80) + face / 2 + ptsBand, alignItems: 'center' },
         pressed && !readOnly ? { opacity: 0.88, transform: [{ scale: 0.97 }] } : null,
       ]}
       onPress={() => onPress?.(slotKey)}
@@ -131,11 +137,27 @@ const SlotCard = memo(function SlotCard({ slotKey, slot, s, readOnly, closed, fo
       accessibilityRole="button"
       accessibilityLabel={player ? `${LABELS[slotKey]} ${player.name}` : LABELS[slotKey]}
     >
+      {showPoints ? (
+        <View
+          style={[
+            styles.points,
+            {
+              top: 0,
+              height: ptsH,
+              paddingHorizontal: s(7),
+              borderRadius: s(9),
+            },
+          ]}
+          testID={`ck-slot-points-${slotKey}`}
+        >
+          <Text style={[styles.pointsTxt, { fontFamily: fontSemi, fontSize: s(10) }]}>{slot!.points}</Text>
+        </View>
+      ) : null}
       <View
         style={[
           styles.card,
           {
-            marginTop: face / 2,
+            marginTop: faceTop + face / 2,
             width: cardW,
             height: s(80),
             borderRadius: s(16),
@@ -152,7 +174,13 @@ const SlotCard = memo(function SlotCard({ slotKey, slot, s, readOnly, closed, fo
           <Text style={[styles.posTxt, { fontFamily: fontSemi, fontSize: s(9) }]}>{LABELS[slotKey]}</Text>
         </View>
       </View>
-      <View style={[styles.face, { width: face, height: face, borderRadius: face / 2 }, locked && { borderColor: GOLD }]}>
+      <View
+        style={[
+          styles.face,
+          { top: faceTop, width: face, height: face, borderRadius: face / 2 },
+          locked && { borderColor: GOLD },
+        ]}
+      >
         {player?.photo ? (
           <Image source={{ uri: player.photo }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" cachePolicy="memory-disk" recyclingKey={player.id} />
         ) : (
@@ -160,18 +188,13 @@ const SlotCard = memo(function SlotCard({ slotKey, slot, s, readOnly, closed, fo
         )}
       </View>
       {player?.shirtNumber != null ? (
-        <View style={[styles.number, { top: face * 0.62, left: s(14), minWidth: s(18), height: s(18), borderRadius: s(9) }]}>
+        <View style={[styles.number, { top: faceTop + face * 0.62, left: s(14), minWidth: s(18), height: s(18), borderRadius: s(9) }]}>
           <Text style={[styles.numberTxt, { fontFamily: fontSemi, fontSize: s(9) }]}>{player.shirtNumber}</Text>
         </View>
       ) : null}
       {locked && !readOnly ? (
-        <View style={{ position: 'absolute', top: face * 0.52, right: s(12) }}>
+        <View style={{ position: 'absolute', top: faceTop + face * 0.52, right: s(12) }}>
           <LockBadge size={s(18)} />
-        </View>
-      ) : null}
-      {readOnly && player && slot?.points != null ? (
-        <View style={[styles.points, { top: face * 0.5, right: s(8), height: s(18), paddingHorizontal: s(6), borderRadius: s(9) }]}>
-          <Text style={[styles.pointsTxt, { fontFamily: fontSemi, fontSize: s(10) }]}>{slot.points}</Text>
         </View>
       ) : null}
     </Pressable>
@@ -266,9 +289,13 @@ const styles = StyleSheet.create({
   },
   points: {
     position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 2,
     backgroundColor: '#8C5CF5',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   pointsTxt: { color: '#fff' },
 });
