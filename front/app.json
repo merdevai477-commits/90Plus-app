@@ -85,7 +85,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 125,
+      "versionCode": 128,
       "softwareKeyboardLayoutMode": "resize",
       "intentFilters": [
         {
