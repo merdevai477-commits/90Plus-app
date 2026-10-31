@@ -186,13 +186,7 @@ enum LiveMinuteFormat {
     guard let elapsed else { return nil }
 
     if s == "ET" {
-      if elapsed > 120 || (elapsed >= 120 && (extra ?? 0) > 0) {
-        return "\(stoppage(base: 120, elapsed: elapsed, extra: extra)) (ET)"
-      }
-      if elapsed > 90 {
-        return "\(stoppage(base: 90, elapsed: elapsed, extra: extra)) (ET)"
-      }
-      return "\(elapsed)' (ET)"
+      return "\(extraTimeMinute(elapsed: elapsed, extra: extra)) (ET)"
     }
 
     if s == "1H" || s == "2H" || s == "LIVE" || s == "INT" {
@@ -211,6 +205,15 @@ enum LiveMinuteFormat {
     if elapsed > base { return "\(base)+\(clampStoppage(elapsed - base))'" }
     if let extra, extra > 0, elapsed >= base {
       return "\(base)+\(clampStoppage(extra))'"
+    }
+    return "\(elapsed)'"
+  }
+
+  /// Extra time counts on (98', 113'); only 105' and 120' take stoppage.
+  private static func extraTimeMinute(elapsed: Int, extra: Int?) -> String {
+    if elapsed > 120 { return "120+\(clampStoppage(elapsed - 120))'" }
+    if let extra, extra > 0, elapsed >= 105 {
+      return "\(elapsed >= 120 ? 120 : 105)+\(clampStoppage(extra))'"
     }
     return "\(elapsed)'"
   }

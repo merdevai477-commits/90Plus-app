@@ -27,6 +27,19 @@ export const formatStoppageMinute = (
 };
 
 /**
+ * Extra time keeps counting the match clock (`98'`, `113'`). Only the ends of
+ * its two periods take stoppage: `105+2'` (the feed clock may already read 106–107)
+ * and `120+3'`.
+ */
+const formatExtraTimeMinute = (elapsed: number, extra?: number | null): string => {
+  if (elapsed > 120) return `120+${clampStoppage(elapsed - 120)}'`;
+  if (extra != null && extra > 0 && elapsed >= 105) {
+    return `${elapsed >= 120 ? 120 : 105}+${clampStoppage(extra)}'`;
+  }
+  return `${elapsed}'`;
+};
+
+/**
  * Live minute label shared by list cards and match-details header.
  * Always prefers clear stoppage form: `90+4'` / `45+2'` (not bare `90'`).
  */
@@ -42,11 +55,7 @@ export const formatLiveMinuteDisplay = (
   if (status === 'BT') return 'BT';
 
   if (status === 'ET' && elapsed != null) {
-    if (elapsed > 120 || (elapsed >= 120 && extra != null && extra > 0)) {
-      return `${formatStoppageMinute(120, elapsed, extra)} (ET)`;
-    }
-    if (elapsed > 90) return `${formatStoppageMinute(90, elapsed, extra)} (ET)`;
-    return `${elapsed}' (ET)`;
+    return `${formatExtraTimeMinute(elapsed, extra)} (ET)`;
   }
 
   if ((status === '1H' || status === '2H' || status === 'LIVE') && elapsed != null) {

@@ -300,13 +300,7 @@ internal object LiveMinuteFormat {
     if (s == "BT") return "BT"
     if (elapsed == null) return null
 
-    if (s == "ET") {
-      if (elapsed > 120 || (elapsed >= 120 && (extra ?: 0) > 0)) {
-        return "${stoppage(120, elapsed, extra)} (ET)"
-      }
-      if (elapsed > 90) return "${stoppage(90, elapsed, extra)} (ET)"
-      return "$elapsed' (ET)"
-    }
+    if (s == "ET") return "${extraTimeMinute(elapsed, extra)} (ET)"
 
     if (s == "1H" || s == "2H" || s == "LIVE" || s == "INT") {
       val base = periodBase(s, elapsed)
@@ -331,6 +325,15 @@ internal object LiveMinuteFormat {
   private fun stoppage(base: Int, elapsed: Int, extra: Int?): String {
     if (elapsed > base) return "$base+${clamp(elapsed - base)}'"
     if (extra != null && extra > 0 && elapsed >= base) return "$base+${clamp(extra)}'"
+    return "$elapsed'"
+  }
+
+  /** Extra time counts on (98', 113'); only 105' and 120' take stoppage. */
+  private fun extraTimeMinute(elapsed: Int, extra: Int?): String {
+    if (elapsed > 120) return "120+${clamp(elapsed - 120)}'"
+    if (extra != null && extra > 0 && elapsed >= 105) {
+      return "${if (elapsed >= 120) 120 else 105}+${clamp(extra)}'"
+    }
     return "$elapsed'"
   }
 

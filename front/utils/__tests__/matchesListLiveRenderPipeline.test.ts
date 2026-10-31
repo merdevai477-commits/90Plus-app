@@ -411,6 +411,21 @@ describe('list live minute authority', () => {
     expect(formatLiveMinuteDisplay('FT', 90)).toBeUndefined();
   });
 
+  it('counts extra-time minutes on instead of folding them into 90+N', () => {
+    expect(formatLiveMinuteDisplay('ET', 98)).toBe("98' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 105)).toBe("105' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 115)).toBe("115' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 105, 2)).toBe("105+2' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 107, 2)).toBe("105+2' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 120, 3)).toBe("120+3' (ET)");
+    expect(formatLiveMinuteDisplay('ET', 122)).toBe("120+2' (ET)");
+  });
+
+  it('shows a plain period-end minute when the feed sends no stoppage', () => {
+    expect(formatLiveMinuteDisplay('1H', 45, null)).toBe("45'");
+    expect(formatLiveMinuteDisplay('2H', 90, null)).toBe("90'");
+  });
+
   it('elapsed wins over a stale baked minute string', () => {
     expect(
       displayedListLiveMinute({
