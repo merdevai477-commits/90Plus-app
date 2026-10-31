@@ -75,6 +75,7 @@ export default function CommunityScreen() {
           onWrite={() => router.push('/community/compose')}
           onPhoto={() => router.push({ pathname: '/community/compose', params: { photo: '1' } })}
           onPoll={() => router.push({ pathname: '/community/compose', params: { poll: '1' } })}
+          onAvatarPress={() => router.push('/(tabs)/profile' as never)}
         />
         <TrendingChips isAr={isAr} fontFamily={fonts.semibold} label={s.trending} />
       </View>

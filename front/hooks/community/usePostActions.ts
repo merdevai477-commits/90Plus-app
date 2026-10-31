@@ -11,6 +11,7 @@ import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
 import { FollowService } from '../../src/services/authService';
 import { getClerkBearerToken } from '../../utils/clerkAuthToken';
+import { navigateUserProfile } from '../../utils/navigateUserProfile';
 import { communityErrorMessage, fillTemplate } from '../../components/community/format';
 import { findPost, removePostEverywhere, updateAuthorFollowingEverywhere, updatePostEverywhere } from './communityCache';
 import { useCommunityToken } from './useCommunityFeed';
@@ -188,7 +189,8 @@ export function usePostActions() {
 
   const openProfile = useCallback(
     (username: string) => {
-      router.push({ pathname: '/user/[username]', params: { username } });
+      // Own avatar/name on a post → profile tab; others → public profile.
+      navigateUserProfile(router, username);
     },
     [router],
   );

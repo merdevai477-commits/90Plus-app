@@ -60,6 +60,7 @@ import { ReportSystem } from '../../components/common/ReportSystem';
 import { useReelReport } from '../../hooks/useReportSystem';
 import { useReelEvents } from '../../hooks/useWebSocket';
 import { ReelsFeedErrorBoundary } from '../../components/common/ReelsFeedErrorBoundary';
+import { navigateUserProfile } from '../../utils/navigateUserProfile';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -1462,22 +1463,16 @@ const ReelsFeed: React.FC = () => {
     }
   }).current;
 
-  // Navigate to user profile
+  // Navigate to user profile (own reel/author → profile tab)
   const handleUserPress = useCallback((username: string) => {
     haptic.trigger('light');
-    router.push({
-      pathname: '/user/[username]',
-      params: { username }
-    });
+    navigateUserProfile(router, username);
   }, [haptic]);
 
   // Navigate to user profile from mention
   const handleMentionPress = useCallback((username: string) => {
     haptic.trigger('light');
-    router.push({
-      pathname: '/user/[username]',
-      params: { username: username.replace('@', '') }
-    });
+    navigateUserProfile(router, username);
   }, [haptic]);
 
   // Use global follow store

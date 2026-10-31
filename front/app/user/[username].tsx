@@ -40,6 +40,7 @@ import {
 import { useFollowStore } from '../../src/store/useFollowStore';
 import { useToast } from '../../contexts/ToastContext';
 import { globalState } from '../../globalState';
+import { isCurrentUserUsername } from '../../utils/navigateUserProfile';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import { BlockService } from '../../services/blockService';
@@ -173,9 +174,10 @@ function UserProfileScreen() {
       return;
     }
 
-    const isOwn =
-      globalState.userProfile?.username?.toLowerCase() === username.toLowerCase();
-    if (isOwn) { router.replace('/(tabs)/profile'); return; }
+    if (isCurrentUserUsername(username)) {
+      router.replace('/(tabs)/profile');
+      return;
+    }
 
     // Cache-first: paint cached profile instantly while we revalidate.
     const cacheKey = `${USER_PROFILE_CACHE}_${username.toLowerCase()}`;

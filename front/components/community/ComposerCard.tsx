@@ -17,6 +17,8 @@ interface Props {
   onWrite: () => void;
   onPhoto: () => void;
   onPoll?: () => void;
+  /** Avatar tap — usually opens the signed-in user's profile. */
+  onAvatarPress?: () => void;
 }
 
 /**
@@ -35,13 +37,14 @@ export const ComposerCard = memo(function ComposerCard({
   onWrite,
   onPhoto: _onPhoto,
   onPoll,
+  onAvatarPress,
 }: Props) {
   const row = isAr ? ('row-reverse' as const) : ('row' as const);
 
   return (
     <View style={styles.card}>
       <View style={[styles.top, { flexDirection: row }]}>
-        <CommunityAvatar uri={avatar} name={name} size={41} ring />
+        <CommunityAvatar uri={avatar} name={name} size={41} ring onPress={onAvatarPress} />
         <Pressable
           onPress={onWrite}
           style={[styles.input, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
