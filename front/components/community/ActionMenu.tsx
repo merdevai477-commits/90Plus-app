@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   AtSign,
   Ban,
+  Check,
   Copy,
   Flag,
   ImagePlus,
@@ -32,6 +33,8 @@ export interface ActionMenuItem {
   label: string;
   icon?: React.ReactNode;
   destructive?: boolean;
+  /** Marks the current choice when the sheet is used as a picker. */
+  selected?: boolean;
   onPress: () => void;
 }
 
@@ -172,6 +175,7 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
                   pressed && (item.destructive ? styles.rowPressedDanger : styles.rowPressed),
                 ]}
                 accessibilityRole="button"
+                accessibilityState={item.selected === undefined ? undefined : { selected: item.selected }}
               >
                 {item.resolvedIcon ? (
                   <View style={[styles.iconWrap, item.destructive && styles.iconWrapDanger]}>{item.resolvedIcon}</View>
@@ -183,11 +187,13 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
                     styles.label,
                     { fontFamily, textAlign: isRtl ? 'right' : 'left' },
                     item.destructive && styles.destructive,
+                    item.selected && styles.selected,
                   ]}
                   numberOfLines={2}
                 >
                   {item.label}
                 </Text>
+                {item.selected && <Check size={18} color={C.accentSoft} strokeWidth={2.6} />}
               </Pressable>
             ))}
           </View>
@@ -310,6 +316,9 @@ const styles = StyleSheet.create({
   },
   destructive: {
     color: '#FCA5A5',
+  },
+  selected: {
+    color: C.accentSoft,
   },
   cancel: {
     marginTop: 10,

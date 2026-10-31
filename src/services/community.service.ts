@@ -33,11 +33,14 @@ import {
 import {
     COMMENT_MAX_LENGTH,
     decodeCursor,
+    decodeRankedCursor,
     encodeCursor,
+    encodeRankedCursor,
     extractHashtags,
     extractMentions,
     normalizeCommunityText,
     POST_MAX_LENGTH,
+    type RankedFeedSort,
 } from './community-text';
 
 // ─── Errors ───────────────────────────────────────────────────────────────
@@ -466,6 +469,51 @@ export async function getFeed(viewerId: string, cursor: unknown, limit = FEED_PA
         void redisCacheService.set(FIRST_PAGE_CACHE_KEY, toCache, FIRST_PAGE_TTL_MS).catch(() => undefined);
     }
     return finishPostPage(rows, viewerId, nextCursor);
+}
+
+const RANKED_SCORE_SQL: Record<RankedFeedSort, Prisma.Sql> = {
+    top: Prisma.sql`(p."likesCount" + p."pollVotesA" + p."pollVotesB" + 2 * p."commentsCount" + 3 * p."sharesCount")`,
+    likes: Prisma.sql`p."likesCount"`,
+    comments: Prisma.sql`p."commentsCount"`,
+};
+
+/** All-time ranking; ties fall back to newest first. Keyset on (score, createdAt, id) so pages never overlap. */
+export async function getRankedFeed(
+    viewerId: string,
+    sort: RankedFeedSort,
+    cursorRaw: unknown,
+    limit = FEED_PAGE_SIZE,
+): Promise<FeedPage<CommunityPostDto>> {
+    const score = RANKED_SCORE_SQL[sort];
+    const cursor = decodeRankedCursor(sort, cursorRaw);
+    // createdAt is `timestamp without time zone` holding UTC; casting the ISO text keeps the wall time as-is.
+    const after = cursor
+        ? Prisma.sql`AND (${score}, p."createdAt", p.id) < (${cursor.score}, ${cursor.createdAt.toISOString()}::timestamp, ${cursor.id})`
+        : Prisma.empty;
+    const ranked = await prisma.$queryRaw<{ id: string; score: number; createdAt: Date }[]>`
+        SELECT p.id, ${score} AS score, p."createdAt"
+        FROM community_posts p
+        JOIN users u ON u.id = p."userId"
+        WHERE p.status = 'ACTIVE' AND u."isDeleted" = false ${after}
+        ORDER BY ${score} DESC, p."createdAt" DESC, p.id DESC
+        LIMIT ${limit + 1}
+    `;
+    const hasMore = ranked.length > limit;
+    const page = hasMore ? ranked.slice(0, limit) : ranked;
+    const rows = page.length
+        ? await prisma.communityPost.findMany({
+              where: { id: { in: page.map((r) => r.id) }, status: 'ACTIVE' },
+              select: postSelect,
+          })
+        : [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = page.flatMap((r) => byId.get(r.id) ?? []);
+    const last = page[page.length - 1];
+    const nextCursor =
+        hasMore && last
+            ? encodeRankedCursor(sort, { score: Number(last.score), createdAt: last.createdAt, id: last.id })
+            : null;
+    return finishPostPage(ordered, viewerId, nextCursor);
 }
 
 /** Tiny head check for the "new posts" pill — no viewer hydration, no full DTO. */

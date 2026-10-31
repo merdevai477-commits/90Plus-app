@@ -30,10 +30,14 @@ import {
   buildReferralLandingPage,
   buildReelLandingPage,
   buildProfileLandingPage,
+  buildCommunityPostLandingPage,
   buildPlayStoreInviteUrl,
+  isValidCommunityPostId,
   PLAY_STORE_URL,
   APP_STORE_URL,
 } from '../share-landing-pages';
+
+const POST_ID = '11111111-2222-3333-4444-555555555555';
 
 /** Every https path pattern the referral share can produce. */
 const REFERRAL_PATHS = ['/invite/*', '/ref/*'];
@@ -49,6 +53,10 @@ describe('iOS Universal Links (AASA)', () => {
     expect(AASA_ACTIVE_PATHS).toContain('/reels/*');
     expect(AASA_ACTIVE_PATHS).toContain('/u/*');
     expect(AASA_ACTIVE_PATHS).toContain('/@*');
+  });
+
+  it('claims shared community posts', () => {
+    expect(AASA_ACTIVE_PATHS).toContain('/community/post/*');
   });
 
   it('serves them as AASA components under the real app id', () => {
@@ -99,6 +107,10 @@ describe('Android App Links (front/app.json intent filters)', () => {
   it('declares the referral prefixes', () => {
     expect(prefixes).toContain('/invite');
     expect(prefixes).toContain('/ref');
+  });
+
+  it('declares the community post prefix', () => {
+    expect(prefixes).toContain('/community/post/');
   });
 
   it('auto-verifies every https filter, or the link opens a chooser instead of the app', () => {
@@ -194,6 +206,7 @@ describe('the other share landing pages keep the same store fallback', () => {
   const pages: Array<[string, string]> = [
     ['reel', buildReelLandingPage('11111111-2222-3333-4444-555555555555')],
     ['profile', buildProfileLandingPage('omar')],
+    ['community post', buildCommunityPostLandingPage(POST_ID)],
   ];
 
   it.each(pages)('%s page never loops back to itself', (_name, html) => {
@@ -211,5 +224,22 @@ describe('the other share landing pages keep the same store fallback', () => {
     expect(html).toContain(PLAY_STORE_URL);
     expect(html).toContain(buildPlayStoreInviteUrl('AB23CD'));
     expect(html).toContain(APP_STORE_URL);
+  });
+});
+
+describe('community post landing page', () => {
+  it('opens the same post route the app uses', () => {
+    const html = buildCommunityPostLandingPage(POST_ID);
+    expect(html).toContain(`ninetyplus://community/post/${POST_ID}`);
+    expect(html).toContain(`intent://community/post/${POST_ID}#Intent`);
+    expect(html).toContain(`90plus.pro/community/post/${POST_ID}`);
+  });
+
+  it('only accepts uuid post ids, so nothing else is written into the page', () => {
+    expect(isValidCommunityPostId(POST_ID)).toBe(true);
+    expect(isValidCommunityPostId(POST_ID.toUpperCase())).toBe(true);
+    expect(isValidCommunityPostId('post_1')).toBe(false);
+    expect(isValidCommunityPostId(`${POST_ID}"><script>`)).toBe(false);
+    expect(isValidCommunityPostId('')).toBe(false);
   });
 });

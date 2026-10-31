@@ -5,11 +5,19 @@
  */
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
-import type { CommunityComment, CommunityPage, CommunityPost } from '../../services/community.api';
+import type {
+  CommunityComment,
+  CommunityFeedSort,
+  CommunityPage,
+  CommunityPost,
+} from '../../services/community.api';
 
 export const communityKeys = {
   all: ['community'] as const,
   feed: ['community', 'feed'] as const,
+  /** Latest keeps the bare `feed` key the prefetch, new-post prepend and pill already use. */
+  feedSorted: (sort: CommunityFeedSort) =>
+    sort === 'latest' ? (['community', 'feed'] as const) : (['community', 'feed', sort] as const),
   trending: ['community', 'trending'] as const,
   tag: (tag: string) => ['community', 'tag', tag.toLowerCase()] as const,
   user: (username: string) => ['community', 'user', username.toLowerCase()] as const,

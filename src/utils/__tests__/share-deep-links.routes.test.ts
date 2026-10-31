@@ -110,6 +110,7 @@ describe('GET /.well-known/apple-app-site-association', () => {
 
     expect(claimed).toContain('/invite/*');
     expect(claimed).toContain('/ref/*');
+    expect(claimed).toContain('/community/post/*');
   });
 
   it('is also reachable at the legacy root path iOS still probes', async () => {
@@ -162,6 +163,29 @@ describe('GET /u/:username — profile share landing', () => {
     const res = await get('/@omar');
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('ninetyplus://user/omar');
+  });
+});
+
+describe('GET /community/post/:postId — community post share landing', () => {
+  const POST_ID = '11111111-2222-3333-4444-555555555555';
+
+  it('serves the post opener with the inline script allowed', async () => {
+    const res = await get(`/community/post/${POST_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    expect(res.headers.get('content-security-policy') ?? '').toContain("script-src 'unsafe-inline'");
+  });
+
+  it('opens the same post in the app', async () => {
+    const html = await (await get(`/community/post/${POST_ID}`)).text();
+    expect(html).toContain(`ninetyplus://community/post/${POST_ID}`);
+    expect(html).toContain(`intent://community/post/${POST_ID}#Intent`);
+  });
+
+  it('404s anything that is not a post id instead of echoing it into the page', async () => {
+    const res = await get('/community/post/%3Cscript%3Ealert(1)%3C%2Fscript%3E');
+    expect(res.status).toBe(404);
+    expect(await res.text()).not.toContain('<script>');
   });
 });
 

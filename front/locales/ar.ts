@@ -3910,6 +3910,13 @@ export const ar = {
     pollNeedTeams: 'أدخل اسمي الفريقين',
     voteFailed: 'تعذر تسجيل تصويتك',
     followFailed: 'تعذر تحديث المتابعة',
+    feedSort: {
+      title: 'ترتيب المنشورات',
+      latest: 'الأحدث',
+      top: 'الأكثر تفاعلاً',
+      likes: 'الأكثر إعجاباً',
+      comments: 'الأكثر تعليقاً',
+    },
   },
 
   coachKingGame: {

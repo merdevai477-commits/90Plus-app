@@ -6,6 +6,7 @@ import { BootSplashScreen } from '../components/splash/BootSplashScreen';
 import { globalState } from '../globalState';
 import { logger } from '../services/logger';
 import {
+  parseCommunityPostIdFromUrl,
   parseProfileUsernameFromUrl,
   parseReelIdFromUrl,
   parseReferralCodeFromUrl,
@@ -22,7 +23,8 @@ function isShareDeepLink(url: string | null | undefined): boolean {
   return Boolean(
     parseProfileUsernameFromUrl(url) ||
       parseReelIdFromUrl(url) ||
-      parseReferralCodeFromUrl(url),
+      parseReferralCodeFromUrl(url) ||
+      parseCommunityPostIdFromUrl(url),
   );
 }
 

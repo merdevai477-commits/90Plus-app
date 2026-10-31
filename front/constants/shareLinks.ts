@@ -114,6 +114,31 @@ export function buildProfileDeepLink(username: string): string {
   return `ninetyplus://user/${clean}`;
 }
 
+/* ── Community posts ───────────────────────────────────────────────────── */
+
+const COMMUNITY_POST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * HTTPS post link. The path mirrors the in-app route `/community/post/[id]`,
+ * so App Links / Universal Links land straight on the post screen.
+ */
+export function buildCommunityPostShareUrl(postId: string): string {
+  const id = postId?.trim() ?? '';
+  if (!COMMUNITY_POST_ID_PATTERN.test(id)) return SHARE_BASE_URL;
+  return `${SHARE_BASE_URL}/community/post/${id}`;
+}
+
+/** Parse a post id from `ninetyplus://community/post/<id>` or the https share URL. */
+export function parseCommunityPostIdFromUrl(url: string): string | null {
+  if (!url) return null;
+  const match = url
+    .trim()
+    .match(/^(?:ninetyplus:\/\/|https?:\/\/[^/?#]+\/)community\/post\/([^/?#]+)/i);
+  const id = match?.[1];
+  return id && COMMUNITY_POST_ID_PATTERN.test(id) ? id : null;
+}
+
 /**
  * Public link included when inviting friends to install 90Plus.
  * Android → Play Store listing (direct install).

@@ -11,10 +11,10 @@ import ImageViewerModal from '../common/ImageViewerModal';
 import { communityApi, type CommunityPost } from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
-import { useCommunityPosts, useCommunityToken } from '../../hooks/community/useCommunityFeed';
+import { useCommunityPosts, useCommunityToken, type CommunityFeedSource } from '../../hooks/community/useCommunityFeed';
 import { REPORT_REASONS, usePostActions } from '../../hooks/community/usePostActions';
 import { discardPending, retryPending, usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
-import { findPost } from '../../hooks/community/communityCache';
+import { communityKeys, findPost } from '../../hooks/community/communityCache';
 import { ActionMenu, type ActionMenuItem } from './ActionMenu';
 import { ConfirmSheet } from './ConfirmSheet';
 import { CommentsSheet } from './CommentsSheet';
@@ -23,8 +23,6 @@ import { GhostPostCard } from './GhostPostCard';
 import { IMAGE_ASPECT, PostCard } from './PostCard';
 import { communityErrorMessage, formatRelativeTime, isContentRejection, isImageRejected } from './format';
 import { C } from './theme';
-
-type FeedSource = { kind: 'feed' } | { kind: 'tag'; tag: string } | { kind: 'user'; username: string };
 
 type Row = { type: 'ghost'; key: string; pending: PendingPost } | { type: 'post'; key: string; post: CommunityPost };
 
@@ -44,7 +42,7 @@ export function useFeedMetrics() {
 }
 
 interface Props {
-  source: FeedSource;
+  source: CommunityFeedSource;
   header?: React.ReactElement | null;
   showPending?: boolean;
   topPadding?: number;
@@ -106,20 +104,23 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
     return out;
   }, [feed.posts, pending, showPending]);
 
+  const feedSort = source.kind === 'feed' ? (source.sort ?? 'latest') : null;
+  // Ranked feeds don't start with the newest post, so the "new posts" check only makes sense on latest.
+  const isLatestFeed = feedSort === 'latest';
   const newest = feed.posts[0];
   const peek = useQuery({
     queryKey: ['community', 'peek'],
     queryFn: () => communityApi.feedPeek(getToken),
-    enabled: source.kind === 'feed' && !!newest,
+    enabled: isLatestFeed && !!newest,
     refetchInterval: 45_000,
     refetchIntervalInBackground: false,
     staleTime: 40_000,
   });
   const hasNewPosts = useMemo(() => {
     const top = peek.data;
-    if (!top || !newest || top.id === newest.id || top.isMine) return false;
+    if (!isLatestFeed || !top || !newest || top.id === newest.id || top.isMine) return false;
     return new Date(top.createdAt).getTime() > new Date(newest.createdAt).getTime();
-  }, [newest, peek.data]);
+  }, [isLatestFeed, newest, peek.data]);
 
   const showNewPosts = useCallback(async () => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -129,12 +130,12 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (source.kind === 'feed') await qc.resetQueries({ queryKey: ['community', 'feed'], exact: true });
+      if (feedSort) await qc.resetQueries({ queryKey: communityKeys.feedSorted(feedSort), exact: true });
       else await feed.refetch();
     } finally {
       setRefreshing(false);
     }
-  }, [feed, qc, source.kind]);
+  }, [feed, feedSort, qc]);
 
   const onEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage && !feed.isError) void feed.fetchNextPage();

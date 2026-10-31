@@ -71,3 +71,35 @@ export function decodeCursor(raw: unknown): FeedCursor | null {
         return null;
     }
 }
+
+export const FEED_SORTS = ['latest', 'top', 'likes', 'comments'] as const;
+export type FeedSort = (typeof FEED_SORTS)[number];
+export type RankedFeedSort = Exclude<FeedSort, 'latest'>;
+
+/** Unknown or missing values fall back to the chronological feed. */
+export function parseFeedSort(raw: unknown): FeedSort {
+    return FEED_SORTS.find((sort) => sort === raw) ?? 'latest';
+}
+
+export interface RankedFeedCursor extends FeedCursor {
+    score: number;
+}
+
+export function encodeRankedCursor(sort: RankedFeedSort, c: RankedFeedCursor): string {
+    return Buffer.from(`${sort}|${c.score}|${c.createdAt.toISOString()}|${c.id}`, 'utf8').toString('base64url');
+}
+
+/** A cursor minted for a different sort is rejected, so the page restarts instead of skipping posts. */
+export function decodeRankedCursor(sort: RankedFeedSort, raw: unknown): RankedFeedCursor | null {
+    if (typeof raw !== 'string' || !raw) return null;
+    try {
+        const [tag, scoreRaw, iso, id] = Buffer.from(raw, 'base64url').toString('utf8').split('|');
+        const createdAt = new Date(iso);
+        if (tag !== sort || !id || !/^-?\d{1,15}$/.test(scoreRaw ?? '') || Number.isNaN(createdAt.getTime())) {
+            return null;
+        }
+        return { score: Number(scoreRaw), createdAt, id };
+    } catch {
+        return null;
+    }
+}

@@ -75,6 +75,9 @@ export interface CommunityMedia {
 
 export type ReportReason = 'SPAM' | 'HARASSMENT' | 'INAPPROPRIATE' | 'FAKE_INFO' | 'OTHER';
 
+/** `top` ranks by all interactions; the ranked sorts are all-time. */
+export type CommunityFeedSort = 'latest' | 'top' | 'likes' | 'comments';
+
 export class CommunityApiError extends Error {
   constructor(
     public status: number,
@@ -124,8 +127,11 @@ const json = (body: unknown): RequestInit => ({
 });
 
 export const communityApi = {
-  feed: (getToken: GetTokenFn, cursor?: string | null) =>
-    request<CommunityPage<CommunityPost>>(getToken, `/feed${qs({ cursor })}`),
+  feed: (getToken: GetTokenFn, cursor?: string | null, sort: CommunityFeedSort = 'latest') =>
+    request<CommunityPage<CommunityPost>>(
+      getToken,
+      `/feed${qs({ cursor, sort: sort === 'latest' ? null : sort })}`,
+    ),
 
   /** Lightweight head check — id + createdAt only (for the "new posts" pill). */
   feedPeek: (getToken: GetTokenFn) =>

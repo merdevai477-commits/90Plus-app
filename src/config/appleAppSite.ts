@@ -33,6 +33,7 @@ export const AASA_ACTIVE_PATHS = [
   '/@*',
   '/invite/*',
   '/ref/*',
+  '/community/post/*',
 ] as const;
 
 export interface AppleAppSiteAssociation {

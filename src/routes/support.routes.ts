@@ -6,9 +6,11 @@
 import { Router, Request, Response } from 'express';
 import {
     SHARE_LANDING_CSP,
+    buildCommunityPostLandingPage,
     buildProfileLandingPage,
     buildReelLandingPage,
     buildReferralLandingPage,
+    isValidCommunityPostId,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
 import { getClientIp } from '../utils/client-ip';
@@ -43,6 +45,16 @@ router.get('/support', (_req: Request, res: Response) => {
 router.get('/reels/:reelId', (req: Request, res: Response) => {
     const reelId = ensureString(req.params.reelId);
     sendShareLanding(res, buildReelLandingPage(reelId));
+});
+
+/** GET /community/post/:postId — same path as the in-app post screen. */
+router.get('/community/post/:postId', (req: Request, res: Response) => {
+    const postId = ensureString(req.params.postId).trim();
+    if (!isValidCommunityPostId(postId)) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Post not found</p></body></html>');
+        return;
+    }
+    sendShareLanding(res, buildCommunityPostLandingPage(postId));
 });
 
 /**

@@ -4001,6 +4001,13 @@ export const en = {
     pollNeedTeams: 'Enter both team names',
     voteFailed: "Couldn't register your vote",
     followFailed: "Couldn't update follow",
+    feedSort: {
+      title: 'Sort posts',
+      latest: 'Newest',
+      top: 'Most popular',
+      likes: 'Most liked',
+      comments: 'Most commented',
+    },
   },
 
   coachKingGame: {

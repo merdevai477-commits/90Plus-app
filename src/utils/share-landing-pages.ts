@@ -408,6 +408,26 @@ export function buildProfileLandingPage(username: string): string {
   });
 }
 
+const COMMUNITY_POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidCommunityPostId(postId: string): boolean {
+  return COMMUNITY_POST_ID_RE.test(postId);
+}
+
+/** Callers must pass an id that passed {@link isValidCommunityPostId} — it is written into HTML/JS. */
+export function buildCommunityPostLandingPage(postId: string): string {
+  return buildSmartLandingPage({
+    title: '90Plus — منشور',
+    ogTitle: '90Plus — منشور في المجتمع',
+    ogDescription: 'افتح المنشور في مجتمع 90Plus',
+    ogUrl: shareUrl(`/community/post/${postId}`),
+    loadingText: 'جاري فتح المنشور أو التحويل للمتجر…',
+    downloadText: 'حمّل 90Plus لمشاهدة هذا المنشور',
+    deepPath: `community/post/${postId}`,
+    customSchemeUrl: `ninetyplus://community/post/${postId}`,
+  });
+}
+
 /**
  * Share & Win referral invite.
  *

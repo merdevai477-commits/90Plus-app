@@ -12,6 +12,7 @@ import { lenientLimiter, writeLimiter } from '../middleware/rateLimit.middleware
 import { logger } from '../utils/logger';
 import * as community from '../services/community.service';
 import { CommunityError, resolveActor, type CommunityActor } from '../services/community.service';
+import { parseFeedSort } from '../services/community-text';
 
 const router = Router();
 
@@ -52,7 +53,17 @@ const param = (req: Request, key: string) => String(req.params[key] ?? '');
 
 // ─── Feed ─────────────────────────────────────────────────────────────────
 
-router.get('/feed', requireAuth, lenientLimiter, handle((req, _res, actor) => community.getFeed(actor.id, req.query.cursor)));
+router.get(
+    '/feed',
+    requireAuth,
+    lenientLimiter,
+    handle((req, _res, actor) => {
+        const sort = parseFeedSort(req.query.sort);
+        return sort === 'latest'
+            ? community.getFeed(actor.id, req.query.cursor)
+            : community.getRankedFeed(actor.id, sort, req.query.cursor);
+    }),
+);
 
 router.get('/feed/peek', requireAuth, lenientLimiter, handle((_req, _res, actor) => community.peekFeedHead(actor.id)));
 

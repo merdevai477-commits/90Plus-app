@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { communityApi, type CommunityPage, type CommunityPost } from '../../services/community.api';
+import {
+  communityApi,
+  type CommunityFeedSort,
+  type CommunityPage,
+  type CommunityPost,
+} from '../../services/community.api';
 import type { GetTokenFn } from '../../utils/clerkAuthToken';
 import { communityKeys } from './communityCache';
 
@@ -26,18 +31,18 @@ export function prefetchCommunityFeed(qc: QueryClient, getToken: GetTokenFn) {
   });
 }
 
-type FeedSource =
-  | { kind: 'feed' }
+export type CommunityFeedSource =
+  | { kind: 'feed'; sort?: CommunityFeedSort }
   | { kind: 'tag'; tag: string }
   | { kind: 'user'; username: string };
 
-function keyFor(source: FeedSource) {
+function keyFor(source: CommunityFeedSource) {
   if (source.kind === 'tag') return communityKeys.tag(source.tag);
   if (source.kind === 'user') return communityKeys.user(source.username);
-  return communityKeys.feed;
+  return communityKeys.feedSorted(source.sort ?? 'latest');
 }
 
-export function useCommunityPosts(source: FeedSource) {
+export function useCommunityPosts(source: CommunityFeedSource) {
   const { isLoaded, isSignedIn } = useAuth();
   const getToken = useCommunityToken();
 
@@ -52,7 +57,7 @@ export function useCommunityPosts(source: FeedSource) {
     queryFn: ({ pageParam }) => {
       if (source.kind === 'tag') return communityApi.hashtagPosts(getToken, source.tag, pageParam);
       if (source.kind === 'user') return communityApi.userPosts(getToken, source.username, pageParam);
-      return communityApi.feed(getToken, pageParam);
+      return communityApi.feed(getToken, pageParam, source.sort);
     },
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,

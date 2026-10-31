@@ -1,20 +1,68 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TrendingUp } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { ArrowDownUp, ChevronDown, Clock, Flame, Heart, MessageCircle, TrendingUp } from 'lucide-react-native';
 
+import { ActionMenu } from '../../components/community/ActionMenu';
 import { CommunityFeedList } from '../../components/community/CommunityFeedList';
 import { CommunityHeader, useCommunityHeaderOffset } from '../../components/community/CommunityHeader';
 import { ComposerCard } from '../../components/community/ComposerCard';
 import { C } from '../../components/community/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
+import { usePublishStore } from '../../hooks/community/publishQueue';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
-import { usePrefetchCommunityFeed, useTrendingHashtags } from '../../hooks/community/useCommunityFeed';
+import {
+  usePrefetchCommunityFeed,
+  useTrendingHashtags,
+  type CommunityFeedSource,
+} from '../../hooks/community/useCommunityFeed';
+import type { CommunityFeedSort } from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 
-const FEED_SOURCE = { kind: 'feed' } as const;
+const SORT_OPTIONS: readonly CommunityFeedSort[] = ['latest', 'top', 'likes', 'comments'];
+
+function SortIcon({ sort }: { sort: CommunityFeedSort }) {
+  const props = { size: 18, color: C.accentSoft, strokeWidth: 2.2 };
+  if (sort === 'top') return <Flame {...props} />;
+  if (sort === 'likes') return <Heart {...props} />;
+  if (sort === 'comments') return <MessageCircle {...props} />;
+  return <Clock {...props} />;
+}
+
+function FeedSortButton({
+  isAr,
+  fontFamily,
+  label,
+  title,
+  onPress,
+}: {
+  isAr: boolean;
+  fontFamily: string;
+  label: string;
+  title: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${label}`}
+      style={({ pressed }) => [
+        styles.sortBtn,
+        { flexDirection: isAr ? 'row-reverse' : 'row', alignSelf: isAr ? 'flex-end' : 'flex-start' },
+        pressed && styles.sortBtnPressed,
+      ]}
+    >
+      <ArrowDownUp size={15} color={C.accentSoft} strokeWidth={2.4} />
+      <Text style={[styles.sortLabel, { fontFamily }]}>{label}</Text>
+      <ChevronDown size={15} color={C.muted} strokeWidth={2.4} />
+    </Pressable>
+  );
+}
 
 function TrendingChips({ isAr, fontFamily, label }: { isAr: boolean; fontFamily: string; label: string }) {
   const router = useRouter();
@@ -60,6 +108,36 @@ export default function CommunityScreen() {
     [language],
   );
 
+  const [sort, setSort] = useState<CommunityFeedSort>('latest');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const source = useMemo<CommunityFeedSource>(() => ({ kind: 'feed', sort }), [sort]);
+  const openSortMenu = useCallback(() => setSortMenuOpen(true), []);
+
+  // A freshly published post (ghost first, then the real one) only lands in the
+  // latest feed, so jump back there whenever a new post starts publishing.
+  const pendingCount = usePublishStore((st) => st.pending.length);
+  const prevPendingCount = useRef(pendingCount);
+  useEffect(() => {
+    if (pendingCount > prevPendingCount.current) setSort('latest');
+    prevPendingCount.current = pendingCount;
+  }, [pendingCount]);
+
+  const sortItems = useMemo(
+    () =>
+      SORT_OPTIONS.map((key) => ({
+        key,
+        label: s.feedSort[key],
+        icon: <SortIcon sort={key} />,
+        selected: key === sort,
+        onPress: () => {
+          if (key === sort) return;
+          void Haptics.selectionAsync();
+          setSort(key);
+        },
+      })),
+    [s, sort],
+  );
+
   const header = useMemo(
     () => (
       <View style={styles.listHeader}>
@@ -78,9 +156,16 @@ export default function CommunityScreen() {
           onAvatarPress={() => router.push('/(tabs)/profile' as never)}
         />
         <TrendingChips isAr={isAr} fontFamily={fonts.semibold} label={s.trending} />
+        <FeedSortButton
+          isAr={isAr}
+          fontFamily={fonts.semibold}
+          label={s.feedSort[sort]}
+          title={s.feedSort.title}
+          onPress={openSortMenu}
+        />
       </View>
     ),
-    [fonts, isAr, me.avatar, me.displayName, me.username, router, s],
+    [fonts, isAr, me.avatar, me.displayName, me.username, openSortMenu, router, s, sort],
   );
 
   const onBack = useCallback(() => {
@@ -97,11 +182,19 @@ export default function CommunityScreen() {
         onBell={() => router.push('/notifications')}
       />
       <CommunityFeedList
-        source={FEED_SOURCE}
+        source={source}
         header={header}
-        showPending
+        showPending={sort === 'latest'}
         topPadding={headerOffset}
         bottomPadding={insets.bottom + TAB_BAR_HEIGHT + 36}
+      />
+      <ActionMenu
+        visible={sortMenuOpen}
+        title={s.feedSort.title}
+        items={sortItems}
+        cancelLabel={s.cancel}
+        onClose={() => setSortMenuOpen(false)}
+        fontFamily={fonts.semibold}
       />
     </View>
   );
@@ -144,6 +237,24 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: C.accentSoft,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sortBtn: {
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(183,154,248,0.18)',
+  },
+  sortBtnPressed: {
+    backgroundColor: 'rgba(167,139,250,0.12)',
+  },
+  sortLabel: {
+    color: C.text,
     fontSize: 13,
     fontWeight: '600',
   },

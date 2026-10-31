@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import { useNavigationContainerRef } from 'expo-router';
 import { navigateShareDeepLink } from '../utils/navigateShareDeepLink';
 import {
   setPendingDeepLink,
@@ -15,6 +16,12 @@ function isAuthCallback(url: string): boolean {
   return /auth-callback/i.test(url);
 }
 
+function openPostIdOf(route: { name: string; params?: object } | undefined): string | null {
+  if (route?.name !== 'community/post/[id]') return null;
+  const id = (route.params as { id?: unknown } | undefined)?.id;
+  return typeof id === 'string' ? id : null;
+}
+
 /**
  * Owns share / QR / universal-link opens. Lives under BootReady + Clerk so it
  * can wait until navigation will stick, then route to the profile/reel/invite
@@ -23,6 +30,7 @@ function isAuthCallback(url: string): boolean {
 export function DeepLinkHandler() {
   const { navigationReady } = useBootReady();
   const { isLoaded, isSignedIn } = useAuth();
+  const navigationRef = useNavigationContainerRef();
   const [pendingUrl, setPendingUrl] = useState<string | null>(peekPendingDeepLink);
   const handledUrls = useRef(new Set<string>());
 
@@ -71,13 +79,17 @@ export function DeepLinkHandler() {
       }
       handledUrls.current.add(pending);
       logger.debug('[DeepLink] Navigating:', pending, { isSignedIn: Boolean(isSignedIn) });
-      navigateShareDeepLink(pending, Boolean(isSignedIn));
+      navigateShareDeepLink(
+        pending,
+        Boolean(isSignedIn),
+        openPostIdOf(navigationRef.getCurrentRoute()),
+      );
       // Clear on next tick after router.replace is scheduled.
       setTimeout(() => consumePendingDeepLink(), 0);
     });
 
     return () => cancelAnimationFrame(timer);
-  }, [navigationReady, isLoaded, isSignedIn, pendingUrl]);
+  }, [navigationReady, isLoaded, isSignedIn, pendingUrl, navigationRef]);
 
   return null;
 }

@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
-import { buildAppShareUrl } from '../../constants/shareLinks';
+import { buildCommunityPostShareUrl } from '../../constants/shareLinks';
 import { communityApi, type CommunityPost, type ReportReason } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
@@ -112,10 +112,11 @@ export function usePostActions() {
     async (post: CommunityPost) => {
       const name = post.author.displayName || post.author.username;
       const body = post.content || '';
+      const postUrl = buildCommunityPostShareUrl(post.id);
       try {
         const result = await Share.share({
-          message: `${fillTemplate(s.shareMessage, { name, content: body })}\n\n${buildAppShareUrl()}`,
-          ...(post.image ? { url: post.image.url } : {}),
+          message: `${fillTemplate(s.shareMessage, { name, content: body }).trim()}\n\n${postUrl}`,
+          url: postUrl,
         });
         if (result.action !== Share.sharedAction) return;
         updatePostEverywhere(qc, post.id, (p) => ({ ...p, sharesCount: p.sharesCount + 1 }));
