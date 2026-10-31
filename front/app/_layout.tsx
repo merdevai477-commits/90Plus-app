@@ -68,7 +68,7 @@ import {
   resumeDeviceSession,
 } from "../utils/deviceSession";
 import * as Sentry from '@sentry/react-native';
-import { AppMetrics, AppMetricsRoot } from 'expo-observe';
+import { AppMetrics, AppMetricsRoot } from '../utils/expoObserveSafe';
 import { captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";

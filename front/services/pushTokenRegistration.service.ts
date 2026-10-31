@@ -155,9 +155,9 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         enableVibrate: true,
         showBadge: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        // Channel sound must be a string (NotificationChannelInput). Empty =
-        // platform default ringtone without treating "default" as a custom asset.
-        sound: '',
+        // Platform default ringtone. Empty string is treated as a custom asset
+        // name and throws "Custom sound '' not found" from expo-notifications.
+        sound: 'default',
     };
 
     await Notifications.setNotificationChannelAsync('default', {
