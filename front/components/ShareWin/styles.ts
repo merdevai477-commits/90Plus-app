@@ -1289,12 +1289,6 @@ function buildStyles(scale: DesignScale, language: string) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    pageBellButton: {
-      width: s(32),
-      height: s(32),
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     lbListContent: {
       width: s(371),
       alignSelf: 'center',

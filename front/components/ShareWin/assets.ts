@@ -22,7 +22,7 @@ export const SW_ASSET = {
   dividerVertical: require('../../assets/images/share-win/divider-vertical.svg'),
   bell: require('../../assets/images/share-win/icon-bell.svg'),
 
-  // Section rules flanking "الجوائز الأسبوعية"
+  // Section rules flanking "الجوائز الشهرية"
   ruleLeft: require('../../assets/images/share-win/rule-left.svg'),
   ruleRight: require('../../assets/images/share-win/rule-right.svg'),
 

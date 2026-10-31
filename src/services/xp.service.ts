@@ -71,7 +71,7 @@ export const XP_VALUES: Record<XpActionType, number> = {
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE
   /** One valid share of the app. */
   APP_SHARE: 1,
-  REFERRAL_CONVERSION: 50, // Share & Win — a referred friend completed registration
+  REFERRAL_CONVERSION: 1, // Share & Win — a referred friend completed registration
 
   ADMIN_ADJUSTMENT: 0,
   STREAK_FREEZE_USED: 0,

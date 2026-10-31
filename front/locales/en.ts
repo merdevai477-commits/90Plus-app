@@ -1234,9 +1234,9 @@ export const en = {
     close: 'Close',
     backToRank: 'Back to Rank',
 
-    // Weekly prizes
-    prizesTitle: 'Weekly Prizes',
-    prizesSubtitleLine1: 'A new prize every week!',
+    // Monthly prizes
+    prizesTitle: 'Monthly Prizes',
+    prizesSubtitleLine1: 'A new prize every month!',
     prizesSubtitleLine2: ' Share now to be the winner',
     remainingMonthsTitle: 'More winners',
 
@@ -1248,7 +1248,7 @@ export const en = {
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
     referralHintLead: 'Every friend who signs up via your link gives you ',
-    referralHintXp: '50 XP',
+    referralHintXp: '1 XP',
     linkCopied: 'Link copied',
     linkCopiedDetail: 'Paste it in a chat — rank rises when they join',
     copyFailed: 'Could not copy the link',

@@ -9,7 +9,7 @@
  * ── COMPOSITION MAP ──────────────────────────────────────────────────────────
  *   Figma 758:1880 ("iPhone 14 Plus - 27").
  *   <View>                            screen shell (safe area via insets)
- *     <pageHeader/>                   back · title · notifications
+ *     <pageHeader/>                   back (left) · title
  *     <ScrollView>
  *       <HeroHeader/>                 "شارك واربح" + every-share XP line
  *       <ShareCard/>                  referral link, copy, channels, hint
@@ -123,7 +123,7 @@ export default function ShareWinScreen() {
     router.replace('/(tabs)/rank');
   }, [isSignedIn, router]);
 
-  /** Same header on every state — loading, error and ready. */
+  /** Same header on every state — loading, error and ready. Back stays on the left; no bell. */
   const pageHeader = (
     <View
       style={[
@@ -133,7 +133,7 @@ export default function ShareWinScreen() {
           paddingBottom: s(10),
           paddingLeft: Math.max(insets.left, s(24)),
           paddingRight: Math.max(insets.right, s(24)),
-          flexDirection: language === 'ar' ? 'row-reverse' : 'row',
+          flexDirection: 'row',
         },
       ]}
     >
@@ -151,7 +151,8 @@ export default function ShareWinScreen() {
             width: s(24),
             height: s(24),
             tintColor: '#FFFFFF',
-            transform: [{ scaleX: language === 'ar' ? 1 : -1 }],
+            // Always point left — back sits on the left in both languages.
+            transform: [{ scaleX: -1 }],
           }}
           contentFit="contain"
           transition={0}
@@ -162,21 +163,8 @@ export default function ShareWinScreen() {
         {`${copy.titleHighlight}${copy.titleRest}`}
       </Text>
 
-      <Pressable
-        onPress={() => router.push('/notifications')}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel="Notifications"
-        testID="share-win-notifications"
-        style={({ pressed }) => [sw.pageBellButton, pressed && { opacity: 0.7 }]}
-      >
-        <Image
-          source={SW_ASSET.bell}
-          style={{ width: s(32), height: s(32) }}
-          contentFit="contain"
-          transition={0}
-        />
-      </Pressable>
+      {/* Spacer keeps the title centered after removing the bell. */}
+      <View style={sw.pageBackButton} pointerEvents="none" />
     </View>
   );
 

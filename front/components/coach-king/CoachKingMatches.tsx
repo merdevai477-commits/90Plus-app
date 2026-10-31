@@ -17,7 +17,7 @@ type Props = {
   statusLabel: (status: string) => string;
 };
 
-export function CoachKingMatches({ fixtures, isAr, language, vsLabel, statusLabel }: Props) {
+export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: Props) {
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
   const fontMed = useAppFont(500);
@@ -54,13 +54,15 @@ export function CoachKingMatches({ fixtures, isAr, language, vsLabel, statusLabe
               ) : null}
             </View>
 
-            <View style={[styles.teams, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            {/* Keep home | score | away in visual LTR order so the score string
+                (homeScore - awayScore) always lines up with the team logos. */}
+            <View style={[styles.teams, { flexDirection: 'row' }]}>
               <Team
                 name={fixture.homeName}
                 logo={fixture.homeLogo}
                 fontSemi={fontSemi}
                 fontBold={fontBold}
-                align={isAr ? 'right' : 'left'}
+                align="left"
               />
 
               <View style={[styles.center, live && !scored && styles.centerLive]}>
@@ -82,7 +84,7 @@ export function CoachKingMatches({ fixtures, isAr, language, vsLabel, statusLabe
                 logo={fixture.awayLogo}
                 fontSemi={fontSemi}
                 fontBold={fontBold}
-                align={isAr ? 'left' : 'right'}
+                align="right"
               />
             </View>
           </View>

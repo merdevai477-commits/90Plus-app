@@ -26,10 +26,10 @@ jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
-const awardXpMock = jest.fn().mockResolvedValue({ awarded: 50 });
+const awardXpMock = jest.fn().mockResolvedValue({ awarded: 1 });
 jest.mock('../xp.service', () => ({
   awardXp: (...args: unknown[]) => awardXpMock(...args),
-  XP_VALUES: { REFERRAL_CONVERSION: 50 },
+  XP_VALUES: { REFERRAL_CONVERSION: 1 },
 }));
 
 import {

@@ -1321,9 +1321,9 @@ export const ar = {
     close: 'إغلاق',
     backToRank: 'رجوع للرانك',
 
-    // الجوائز الأسبوعية
-    prizesTitle: 'الجوائز الأسبوعية',
-    prizesSubtitleLine1: 'جائزة جديدة كل أسبوع!',
+    // الجوائز الشهرية
+    prizesTitle: 'الجوائز الشهرية',
+    prizesSubtitleLine1: 'جائزة جديدة كل شهر!',
     prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
     remainingMonthsTitle: 'باقي الفائزين',
 
@@ -1335,7 +1335,7 @@ export const ar = {
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
     referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
-    referralHintXp: '50 XP',
+    referralHintXp: '1 XP',
     linkCopied: 'تم نسخ الرابط',
     linkCopiedDetail: 'الصقه في محادثة — الترتيب يزيد لما صاحبك ينضم',
     copyFailed: 'تعذّر نسخ الرابط',
