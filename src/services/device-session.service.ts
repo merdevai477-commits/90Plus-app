@@ -7,9 +7,12 @@ import { logger } from '../utils/logger';
  * Long-lived per-device keys that let the app silently restore a Clerk session
  * after Clerk's fixed 7-day maximum session lifetime (Hobby plan) ends it.
  *
- * Only a SHA-256 hash of the key is stored. Keys rotate on every resume; a
- * rotated key being presented again is treated as theft and revokes every key
- * the user has.
+ * Only a SHA-256 hash of the key is stored. Keys rotate on every resume.
+ *
+ * Concurrent resumes with the same key (app remount / double effect) used to
+ * treat the loser as theft and wipe every key for the user — that forced mass
+ * logouts. Rotation is now claimed atomically; a key revoked within the grace
+ * window returns `already_rotated` without wiping siblings.
  */
 
 const DEVICE_KEY_TTL_MS = 180 * 24 * 60 * 60 * 1000;
@@ -17,6 +20,11 @@ const SIGN_IN_TICKET_TTL_SECONDS = 5 * 60;
 const MAX_ACTIVE_KEYS_PER_USER = 10;
 /** Rotated keys are kept this long so a replayed old key can still be detected. */
 const REVOKED_KEY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * If two resume calls race, the loser sees a just-revoked key. Inside this
+ * window we treat that as concurrency, not theft.
+ */
+export const CONCURRENT_ROTATION_GRACE_MS = 60_000;
 
 export interface DeviceKeyMeta {
   deviceInfo?: string | null;
@@ -31,7 +39,10 @@ export interface IssuedDeviceKey {
 
 export type ResumeResult =
   | { ok: true; ticket: string; deviceKey: string; expiresAt: Date }
-  | { ok: false; reason: 'invalid' | 'expired' | 'reused' | 'user_unavailable' };
+  | {
+      ok: false;
+      reason: 'invalid' | 'expired' | 'reused' | 'already_rotated' | 'user_unavailable';
+    };
 
 function hashKey(rawKey: string): string {
   return crypto.createHash('sha256').update(rawKey).digest('hex');
@@ -87,17 +98,47 @@ export async function issueDeviceKey(userId: string, meta: DeviceKeyMeta): Promi
   return { deviceKey, expiresAt };
 }
 
+/**
+ * True when a revoked key was rotated moments ago (concurrent resume), not a
+ * stale replay that should trigger theft lockdown.
+ */
+export function isRecentConcurrentRotation(
+  lastUsedAt: Date | null | undefined,
+  nowMs = Date.now(),
+  graceMs = CONCURRENT_ROTATION_GRACE_MS,
+): boolean {
+  if (!lastUsedAt) return false;
+  const age = nowMs - lastUsedAt.getTime();
+  return age >= 0 && age < graceMs;
+}
+
 export async function resumeWithDeviceKey(rawKey: string, meta: DeviceKeyMeta): Promise<ResumeResult> {
+  const hashed = hashKey(rawKey);
+
   const record = await prisma.refreshToken.findUnique({
-    where: { token: hashKey(rawKey) },
+    where: { token: hashed },
     include: {
-      user: { select: { id: true, clerkUserId: true, isBanned: true, isDeleted: true, deletionRequestedAt: true } },
+      user: {
+        select: {
+          id: true,
+          clerkUserId: true,
+          isBanned: true,
+          isDeleted: true,
+          deletionRequestedAt: true,
+        },
+      },
     },
   });
 
   if (!record) return { ok: false, reason: 'invalid' };
 
   if (record.isRevoked) {
+    if (isRecentConcurrentRotation(record.lastUsedAt)) {
+      logger.info('[DeviceSession] Concurrent resume of recently rotated key — ignoring', {
+        userId: record.userId,
+      });
+      return { ok: false, reason: 'already_rotated' };
+    }
     logger.warn('[DeviceSession] Rotated device key reused — revoking all keys for user', {
       userId: record.userId,
     });
@@ -134,29 +175,60 @@ export async function resumeWithDeviceKey(rawKey: string, meta: DeviceKeyMeta): 
 
   const deviceKey = generateRawKey();
   const expiresAt = new Date(Date.now() + DEVICE_KEY_TTL_MS);
-  await prisma.$transaction([
-    prisma.refreshToken.deleteMany({
-      where: {
-        userId: user.id,
-        OR: [
-          { expiresAt: { lt: new Date() } },
-          { isRevoked: true, lastUsedAt: { lt: new Date(Date.now() - REVOKED_KEY_RETENTION_MS) } },
-        ],
-      },
-    }),
-    prisma.refreshToken.update({
-      where: { id: record.id },
-      data: { isRevoked: true, lastUsedAt: new Date() },
-    }),
-    prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: hashKey(deviceKey),
-        expiresAt,
-        ...trimMeta({ ...meta, deviceInfo: meta.deviceInfo ?? record.deviceInfo }),
-      },
-    }),
-  ]);
+  const claimedAt = new Date();
+
+  // Atomic claim: only one concurrent winner rotates this row.
+  const claimed = await prisma.refreshToken.updateMany({
+    where: { id: record.id, isRevoked: false },
+    data: { isRevoked: true, lastUsedAt: claimedAt },
+  });
+
+  if (claimed.count === 0) {
+    logger.info('[DeviceSession] Lost rotation race after ticket issue — ignoring', {
+      userId: user.id,
+    });
+    return { ok: false, reason: 'already_rotated' };
+  }
+
+  try {
+    await prisma.$transaction([
+      prisma.refreshToken.deleteMany({
+        where: {
+          userId: user.id,
+          OR: [
+            { expiresAt: { lt: new Date() } },
+            {
+              isRevoked: true,
+              lastUsedAt: { lt: new Date(Date.now() - REVOKED_KEY_RETENTION_MS) },
+              NOT: { id: record.id },
+            },
+          ],
+        },
+      }),
+      prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: hashKey(deviceKey),
+          expiresAt,
+          ...trimMeta({ ...meta, deviceInfo: meta.deviceInfo ?? record.deviceInfo }),
+        },
+      }),
+    ]);
+  } catch (error) {
+    // Claim succeeded but we failed to persist the replacement key — restore
+    // the claimed row so the client can retry with the same device key.
+    logger.error('[DeviceSession] Failed to persist rotated key — restoring claim', {
+      userId: user.id,
+      error,
+    });
+    await prisma.refreshToken
+      .update({
+        where: { id: record.id },
+        data: { isRevoked: false, lastUsedAt: record.lastUsedAt },
+      })
+      .catch(() => {});
+    throw error;
+  }
 
   return { ok: true, ticket, deviceKey, expiresAt };
 }

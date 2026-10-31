@@ -1,16 +1,16 @@
 /**
  * useOAuthFlow
  *
- * Wraps Clerk's `useOAuth` hook for the two strategies the app exposes
- * (Google + Apple) and returns a single `start()` callback per strategy
- * that drives the in-app browser, sets the active session on success, and
- * navigates to the home tab. Errors are surfaced via Alert and the optional
- * `onError` callback so the caller can also reset its `isSubmitting` state.
+ * Wraps Clerk's `useSSO` hook for Google + Apple. Prefer `useSSO` over the
+ * older `useOAuth`: the latter crashes with
+ * `Cannot read property 'toString' of null` when Clerk returns no redirect URL
+ * (network blip / incomplete sign-in). `useSSO` null-checks and throws a
+ * clear error we surface via Alert.
  */
 
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
-import { useAuth, useOAuth } from '@clerk/clerk-expo';
+import { useAuth, useSSO } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { navigateAfterAuth } from '@/src/utils/postAuthNavigation';
 import {
@@ -36,6 +36,8 @@ interface OAuthFlowReturn {
   startApple: () => Promise<void>;
 }
 
+type OAuthStrategy = 'oauth_google' | 'oauth_apple';
+
 function resolveSessionId(result: {
   createdSessionId?: string | null;
   signIn?: { createdSessionId?: string | null; status?: string | null };
@@ -57,21 +59,18 @@ export function useOAuthFlow({
 }: OAuthFlowOptions = {}): OAuthFlowReturn {
   const router = useRouter();
   const { getToken } = useAuth();
-  const { startOAuthFlow: startGoogleFlow } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startAppleFlow } = useOAuth({ strategy: 'oauth_apple' });
+  const { startSSOFlow } = useSSO();
 
   const handle = useCallback(
-    async (
-      flow: typeof startGoogleFlow,
-      providerLabel: string,
-    ): Promise<void> => {
+    async (strategy: OAuthStrategy, providerLabel: string): Promise<void> => {
       try {
         const redirectUrl = resolveOAuthRedirectUrl();
         const referralMeta = await getReferralUnsafeMetadata();
         if (referralMeta) {
           logger.info('[Referral] signup_stamped', { path: 'oauth' });
         }
-        const result = await flow({
+        const result = await startSSOFlow({
+          strategy,
           redirectUrl,
           ...(referralMeta ? { unsafeMetadata: referralMeta } : {}),
         });
@@ -144,20 +143,35 @@ export function useOAuthFlow({
       } catch (err: unknown) {
         if (isOAuthUserCancelled(err)) return;
 
-        const error = err as { errors?: Array<{ longMessage?: string }>; message?: string };
-        const msg =
+        const error = err as {
+          errors?: Array<{ longMessage?: string; message?: string }>;
+          message?: string;
+        };
+        const raw =
           error?.errors?.[0]?.longMessage ||
+          error?.errors?.[0]?.message ||
           error?.message ||
-          `${providerLabel} sign-in failed`;
+          '';
+        const looksLikeMissingRedirect =
+          /external verification redirect|toString|of null/i.test(raw);
+        const msg = looksLikeMissingRedirect
+          ? 'Could not start Google/Apple sign-in. Check your connection and try again.'
+          : raw || `${providerLabel} sign-in failed`;
         onError?.(msg);
         Alert.alert(`${providerLabel} sign-in error`, msg);
       }
     },
-    [router, onError, beforeNavigate, getToken, legalAccepted, onEmailVerificationNeeded],
+    [router, onError, beforeNavigate, getToken, legalAccepted, onEmailVerificationNeeded, startSSOFlow],
   );
 
-  const startGoogle = useCallback(() => handle(startGoogleFlow, 'Google'), [handle, startGoogleFlow]);
-  const startApple = useCallback(() => handle(startAppleFlow, 'Apple'), [handle, startAppleFlow]);
+  const startGoogle = useCallback(
+    () => handle('oauth_google', 'Google'),
+    [handle],
+  );
+  const startApple = useCallback(
+    () => handle('oauth_apple', 'Apple'),
+    [handle],
+  );
 
   return { startGoogle, startApple };
 }

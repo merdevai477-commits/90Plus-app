@@ -26,6 +26,8 @@ type SetActive = (params: { session: string }) => Promise<void>;
 export type ResumeOutcome = 'resumed' | 'no_key' | 'rejected' | 'failed';
 
 let cachedHasKey: boolean | null = null;
+/** Single-flight: concurrent remounts must not race the same device key. */
+let resumeInFlight: Promise<ResumeOutcome> | null = null;
 
 /** Synchronous hint; `null` until SecureStore has been read once this launch. */
 export function peekHasDeviceKey(): boolean | null {
@@ -53,6 +55,20 @@ async function clearStoredDeviceKey(): Promise<void> {
     await SecureStore.deleteItemAsync(DEVICE_KEY_STORE_KEY, SECURE_STORE_OPTIONS);
   } catch {
     /* best effort */
+  }
+}
+
+/**
+ * Clear the stored key only if it is still the one we presented. A concurrent
+ * winner may have already written the rotated key — wiping that would log the
+ * user out permanently.
+ */
+async function clearStoredDeviceKeyIfUnchanged(presentedKey: string): Promise<void> {
+  const current = await getStoredDeviceKey();
+  if (current === presentedKey || current == null) {
+    await clearStoredDeviceKey();
+  } else {
+    logger.info('[DeviceSession] Skipping clear — key already rotated by peer resume');
   }
 }
 
@@ -99,8 +115,7 @@ export async function ensureDeviceSessionRegistered(
   }
 }
 
-/** Silently create a new Clerk session from the stored device key. */
-export async function resumeDeviceSession(
+async function resumeDeviceSessionOnce(
   signIn: TicketSignIn,
   setActive: SetActive,
 ): Promise<ResumeOutcome> {
@@ -113,17 +128,30 @@ export async function resumeDeviceSession(
       deviceKey,
       deviceInfo: deviceInfo(),
     });
+
+    let body: { ticket?: string; deviceKey?: string; reason?: string } = {};
+    try {
+      body = (await res.json()) as typeof body;
+    } catch {
+      /* empty / non-json */
+    }
+
     if (res.status === 401 || res.status === 400) {
-      await clearStoredDeviceKey();
+      // Peer resume already rotated this key — keep whatever is in SecureStore
+      // (the winner may have written the new key).
+      if (body.reason === 'already_rotated') {
+        logger.info('[DeviceSession] Resume lost rotation race — keeping local key');
+        return 'failed';
+      }
+      await clearStoredDeviceKeyIfUnchanged(deviceKey);
       return 'rejected';
     }
     if (!res.ok) return 'failed';
 
-    const data = (await res.json()) as { ticket?: string; deviceKey?: string };
-    if (!data.ticket || !data.deviceKey) return 'failed';
+    if (!body.ticket || !body.deviceKey) return 'failed';
     // The old key is revoked server-side as soon as the response is sent.
-    await storeDeviceKey(data.deviceKey);
-    ticket = data.ticket;
+    await storeDeviceKey(body.deviceKey);
+    ticket = body.ticket;
   } catch (err) {
     logger.warn('[DeviceSession] Resume request failed', err);
     return 'failed';
@@ -142,6 +170,18 @@ export async function resumeDeviceSession(
     logger.warn('[DeviceSession] Ticket sign-in failed', err);
     return 'failed';
   }
+}
+
+/** Silently create a new Clerk session from the stored device key. */
+export async function resumeDeviceSession(
+  signIn: TicketSignIn,
+  setActive: SetActive,
+): Promise<ResumeOutcome> {
+  if (resumeInFlight) return resumeInFlight;
+  resumeInFlight = resumeDeviceSessionOnce(signIn, setActive).finally(() => {
+    resumeInFlight = null;
+  });
+  return resumeInFlight;
 }
 
 /** Must run BEFORE Clerk signOut on explicit logout, or the session would be restored. */
