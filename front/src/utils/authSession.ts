@@ -1,18 +1,22 @@
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 
 /** Must match Clerk Dashboard → Redirect URLs / Native allowlist */
 export const OAUTH_REDIRECT_URL = 'ninetyplus://auth-callback';
 
 /**
- * OAuth redirect for Google/Apple. Normalizes accidental `scheme:///path` (triple slash).
- * Release builds always use the custom scheme; dev client uses Expo Linking URL.
+ * OAuth redirect for Google/Apple.
+ * Prefer the production custom scheme everywhere the native binary owns
+ * `ninetyplus://` (standalone + dev client). Only Expo Go needs `exp://…`,
+ * and those URLs must be allowlisted in Clerk or OAuth returns no redirect.
  */
 export function resolveOAuthRedirectUrl(): string {
-  if (!__DEV__) {
-    return OAUTH_REDIRECT_URL;
+  // Expo Go only — custom/dev/store builds all have the app scheme.
+  if (Constants.appOwnership === 'expo') {
+    const url = Linking.createURL('auth-callback');
+    return url.replace(':///', '://');
   }
-  const url = Linking.createURL('auth-callback');
-  return url.replace(':///', '://');
+  return OAUTH_REDIRECT_URL;
 }
 
 /** Clerk session JWT is sometimes unavailable immediately after setActive(). */

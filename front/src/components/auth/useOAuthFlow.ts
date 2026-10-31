@@ -152,11 +152,15 @@ export function useOAuthFlow({
           error?.errors?.[0]?.message ||
           error?.message ||
           '';
-        const looksLikeMissingRedirect =
-          /external verification redirect|toString|of null/i.test(raw);
-        const msg = looksLikeMissingRedirect
-          ? 'Could not start Google/Apple sign-in. Check your connection and try again.'
+        const lower = raw.toLowerCase();
+        const looksLikeNetwork =
+          /network|failed to fetch|network_error|network request failed|offline|aborted/i.test(
+            lower,
+          ) || /external verification redirect|toString|of null/i.test(lower);
+        const msg = looksLikeNetwork
+          ? 'Could not reach sign-in servers. Check your internet connection and try again.'
           : raw || `${providerLabel} sign-in failed`;
+        logger.warn('[OAuth] sign-in failed', { provider: providerLabel, raw });
         onError?.(msg);
         Alert.alert(`${providerLabel} sign-in error`, msg);
       }
