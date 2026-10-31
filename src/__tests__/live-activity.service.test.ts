@@ -87,7 +87,40 @@ describe('activityState', () => {
       },
       NOW_SEC,
     );
-    expect(state).toEqual({ homeScore: 1, awayScore: 0, status: 'live', minute: 60, clockStart: NOW_SEC - 3600 });
+    expect(state).toEqual({
+      homeScore: 1,
+      awayScore: 0,
+      status: 'live',
+      minute: 60,
+      statusShort: '2H',
+      extra: null,
+      clockStart: NOW_SEC - 3600,
+    });
+  });
+
+  it('does not fold stoppage into minute or free-run past 45/90', () => {
+    const firstHalfStoppage = activityState(
+      {
+        fixtureId: 1, status: 'live', statusShort: '1H', kickoffTs: 0, elapsed: 45, extra: 5,
+        home: { id: 1, name: 'H', logo: null }, away: { id: 2, name: 'A', logo: null },
+        score: { home: 0, away: 0 }, league: { id: 1, name: 'L', logo: null },
+      },
+      NOW_SEC,
+    );
+    expect(firstHalfStoppage.minute).toBe(45);
+    expect(firstHalfStoppage.extra).toBe(5);
+    expect(firstHalfStoppage.clockStart).toBeNull();
+
+    const secondHalfStoppage = activityState(
+      {
+        fixtureId: 1, status: 'live', statusShort: '2H', kickoffTs: 0, elapsed: 90, extra: 4,
+        home: { id: 1, name: 'H', logo: null }, away: { id: 2, name: 'A', logo: null },
+        score: { home: 0, away: 0 }, league: { id: 1, name: 'L', logo: null },
+      },
+      NOW_SEC,
+    );
+    expect(secondHalfStoppage.minute).toBe(90);
+    expect(secondHalfStoppage.clockStart).toBeNull();
   });
 });
 

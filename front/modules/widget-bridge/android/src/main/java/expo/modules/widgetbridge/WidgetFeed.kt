@@ -1,5 +1,6 @@
 package expo.modules.widgetbridge
 
+import java.util.Locale
 import org.json.JSONObject
 
 /** Mirrors `WidgetFeedPayload` from the backend `widget-feed.service.ts`. */
@@ -283,4 +284,55 @@ internal data class WidgetFeed(
       )
     }
   }
+}
+
+/** Mirrors front `formatLiveMinuteDisplay` — `45+2'` / `90+4'`, never bare 50' in 1H. */
+internal object LiveMinuteFormat {
+  private const val MAX_STOPPAGE = 20
+
+  fun label(match: FeedMatch): String? =
+    label(match.statusShort, match.elapsed, match.extra)
+
+  fun label(statusShort: String, elapsed: Int?, extra: Int?): String? {
+    val s = statusShort.trim().uppercase(Locale.US)
+    if (s == "FT" || s == "AET" || s == "PEN" || s == "P") return null
+    if (s == "HT") return "HT"
+    if (s == "BT") return "BT"
+    if (elapsed == null) return null
+
+    if (s == "ET") {
+      if (elapsed > 120 || (elapsed >= 120 && (extra ?: 0) > 0)) {
+        return "${stoppage(120, elapsed, extra)} (ET)"
+      }
+      if (elapsed > 90) return "${stoppage(90, elapsed, extra)} (ET)"
+      return "$elapsed' (ET)"
+    }
+
+    if (s == "1H" || s == "2H" || s == "LIVE" || s == "INT") {
+      val base = periodBase(s, elapsed)
+      val useExtra = if (s == "1H" || elapsed >= base) extra else null
+      return stoppage(base, elapsed, useExtra)
+    }
+    return null
+  }
+
+  private fun periodBase(statusShort: String, elapsed: Int): Int {
+    val s = statusShort.trim().uppercase(Locale.US)
+    if (s == "1H") return 45
+    if (s == "ET") return if (elapsed >= 120) 120 else 90
+    if (s == "LIVE" || s == "INT") {
+      if (elapsed <= 45) return 45
+      if (elapsed <= 90) return 90
+      return if (elapsed >= 120) 120 else 90
+    }
+    return 90
+  }
+
+  private fun stoppage(base: Int, elapsed: Int, extra: Int?): String {
+    if (elapsed > base) return "$base+${clamp(elapsed - base)}'"
+    if (extra != null && extra > 0 && elapsed >= base) return "$base+${clamp(extra)}'"
+    return "$elapsed'"
+  }
+
+  private fun clamp(n: Int): Int = n.coerceIn(1, MAX_STOPPAGE)
 }

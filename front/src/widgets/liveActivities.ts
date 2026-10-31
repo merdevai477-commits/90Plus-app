@@ -18,6 +18,7 @@ interface FeedSide {
 interface FeedMatch {
   fixtureId: number;
   status: 'live' | 'ht' | 'upcoming' | 'ft' | 'off';
+  statusShort?: string;
   elapsed: number | null;
   extra: number | null;
   home: FeedSide;
@@ -26,15 +27,53 @@ interface FeedMatch {
   league: { name: string } | null;
 }
 
+function periodEndMin(statusShort: string, elapsed: number): number {
+  const s = statusShort.trim().toUpperCase();
+  if (s === '1H') return 45;
+  if (s === 'ET') return elapsed >= 120 ? 120 : 90;
+  if (s === 'LIVE' || s === 'INT') {
+    if (elapsed <= 45) return 45;
+    if (elapsed <= 90) return 90;
+    return elapsed >= 120 ? 120 : 90;
+  }
+  return 90;
+}
+
+function isActivityStoppage(
+  statusShort: string,
+  elapsed: number | null,
+  extra: number | null,
+): boolean {
+  const s = statusShort.trim().toUpperCase();
+  const hasExtra = extra != null && extra > 0;
+  if (elapsed == null) return hasExtra;
+  if (s === '1H') return hasExtra || elapsed > 45;
+  if (s === '2H' || s === 'LIVE' || s === 'INT') {
+    return hasExtra || elapsed > periodEndMin(s, elapsed);
+  }
+  if (s === 'ET') return hasExtra || elapsed > 120;
+  return false;
+}
+
 function toState(match: FeedMatch, nowSec: number): MatchActivityState {
   const status = match.status === 'off' ? 'ft' : match.status;
-  const minute = match.elapsed != null ? match.elapsed + (match.extra ?? 0) : null;
+  const elapsed = match.elapsed;
+  const extra = match.extra;
+  const statusShort = match.statusShort ?? 'LIVE';
+  const stoppage = isActivityStoppage(statusShort, elapsed, extra);
+  const canTick =
+    status === 'live' &&
+    elapsed != null &&
+    !stoppage &&
+    elapsed < periodEndMin(statusShort, elapsed);
   return {
     homeScore: match.score?.home ?? 0,
     awayScore: match.score?.away ?? 0,
     status,
-    minute,
-    clockStart: status === 'live' && minute != null ? nowSec - minute * 60 : null,
+    minute: elapsed,
+    statusShort,
+    extra,
+    clockStart: canTick ? nowSec - elapsed * 60 : null,
   };
 }
 

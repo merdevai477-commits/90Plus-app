@@ -45,8 +45,15 @@ export interface MatchActivityState {
   awayScore: number;
   status: 'live' | 'ht' | 'ft' | 'upcoming';
   minute: number | null;
-  /** Unix seconds at which the match clock read 0' — the device renders a running timer from it. */
+  /**
+   * Unix seconds at which the match clock read 0' — only set mid-period (not stoppage).
+   * The device caps the timer at the period end so it never invents 50'/129' injury time.
+   */
   clockStart: number | null;
+  /** Provider period for `45+N'` / `90+N'` formatting on device. */
+  statusShort?: string | null;
+  /** Announced stoppage when elapsed is pinned at 45/90/120. */
+  extra?: number | null;
 }
 
 /** Must stay in sync with Swift `MatchActivityAttributes` (app module + widget target). */
@@ -64,19 +71,63 @@ function copyFor(language: string) {
   return language.startsWith('ar') ? COPY.ar : COPY.en;
 }
 
+function periodEndMin(statusShort: string, elapsed: number): number {
+  const s = statusShort.trim().toUpperCase();
+  if (s === '1H') return 45;
+  if (s === 'ET') return elapsed >= 120 ? 120 : 90;
+  if (s === 'LIVE' || s === 'INT') {
+    if (elapsed <= 45) return 45;
+    if (elapsed <= 90) return 90;
+    return elapsed >= 120 ? 120 : 90;
+  }
+  return 90;
+}
+
+function isActivityStoppage(
+  statusShort: string,
+  elapsed: number | null,
+  extra: number | null,
+): boolean {
+  const s = statusShort.trim().toUpperCase();
+  const hasExtra = extra != null && extra > 0;
+  if (elapsed == null) return hasExtra;
+  if (s === '1H') return hasExtra || elapsed > 45;
+  if (s === '2H' || s === 'LIVE' || s === 'INT') {
+    return hasExtra || elapsed > periodEndMin(s, elapsed);
+  }
+  if (s === 'ET') return hasExtra || elapsed > 120;
+  return false;
+}
+
 export function activityState(match: WidgetMatch, nowSec: number): MatchActivityState {
   const status = match.status === 'off' ? 'ft' : match.status;
-  const minute = match.elapsed != null ? match.elapsed + (match.extra ?? 0) : null;
+  const elapsed = match.elapsed;
+  const extra = match.extra;
+  const statusShort = match.statusShort;
+  const stoppage = isActivityStoppage(statusShort, elapsed, extra);
+  const canTick =
+    status === 'live' &&
+    elapsed != null &&
+    !stoppage &&
+    elapsed < periodEndMin(statusShort, elapsed);
   return {
     homeScore: match.score?.home ?? 0,
     awayScore: match.score?.away ?? 0,
     status,
-    minute,
-    clockStart: status === 'live' && minute != null ? nowSec - minute * 60 : null,
+    // Elapsed only — never fold `extra` into the minute (that turned 45+5 into 50').
+    minute: elapsed,
+    statusShort,
+    extra,
+    clockStart: canTick ? nowSec - elapsed * 60 : null,
   };
 }
 
 function stateKey(state: MatchActivityState): string {
+  // Mid-period the device ticks from clockStart; only score/status need pushes.
+  // In stoppage the label is static — include minute/extra so 90+N / 45+N updates land.
+  if (state.clockStart == null && state.status === 'live') {
+    return `${state.homeScore}-${state.awayScore}-${state.status}-${state.minute ?? ''}-${state.extra ?? ''}`;
+  }
   return `${state.homeScore}-${state.awayScore}-${state.status}`;
 }
 

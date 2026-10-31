@@ -635,10 +635,7 @@ internal object WidgetRenderer {
   }
 
   private fun badgeText(match: FeedMatch, labels: WidgetLabels): String = when (match.status) {
-    "live" -> match.elapsed?.let { elapsed ->
-      val extra = match.extra?.takeIf { it > 0 }?.let { "+$it" } ?: ""
-      "$elapsed$extra\u2019"
-    } ?: labels.live
+    "live" -> LiveMinuteFormat.label(match)?.replace('\'', '\u2019') ?: labels.live
     "ht" -> labels.halftime
     "ft" -> labels.finished
     "off" -> labels.postponed

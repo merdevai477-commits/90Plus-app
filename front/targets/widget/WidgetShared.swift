@@ -141,6 +141,81 @@ struct FeedMatch: Codable, Hashable {
   var deepLink: URL? { URL(string: "ninetyplus://match-details?fixtureId=\(fixtureId)") }
 }
 
+/// Live minute labels for WidgetKit + Live Activities.
+/// Mirrors `formatLiveMinuteDisplay` — never free-runs past 45/90/120 into invented stoppage.
+enum LiveMinuteFormat {
+  /// Longest announced stoppage still shown (matches `MAX_PLAUSIBLE_STOPPAGE`).
+  static let maxStoppage = 20
+
+  static func clampStoppage(_ n: Int) -> Int {
+    min(max(n, 1), maxStoppage)
+  }
+
+  static func periodBase(statusShort: String, elapsed: Int) -> Int {
+    let s = statusShort.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    if s == "1H" { return 45 }
+    if s == "ET" { return elapsed > 120 || elapsed >= 120 ? 120 : 90 }
+    if s == "LIVE" || s == "INT" {
+      if elapsed <= 45 { return 45 }
+      if elapsed <= 90 { return 90 }
+      return elapsed >= 120 ? 120 : 90
+    }
+    return 90
+  }
+
+  static func isStoppage(statusShort: String, elapsed: Int?, extra: Int?) -> Bool {
+    let s = statusShort.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    let hasExtra = (extra ?? 0) > 0
+    guard let elapsed else { return hasExtra }
+    if s == "1H" { return hasExtra || elapsed > 45 }
+    if s == "2H" || s == "LIVE" || s == "INT" {
+      let base = periodBase(statusShort: s, elapsed: elapsed)
+      return hasExtra || elapsed > base
+    }
+    if s == "ET" { return hasExtra || elapsed > 120 }
+    return false
+  }
+
+  /// `45+2'` / `90+4'` / `67'` — nil when the status is not an in-play minute clock.
+  static func label(statusShort: String, elapsed: Int?, extra: Int?) -> String? {
+    let s = statusShort.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    if s == "FT" || s == "AET" || s == "PEN" || s == "P" { return nil }
+    if s == "HT" { return "HT" }
+    if s == "BT" { return "BT" }
+
+    guard let elapsed else { return nil }
+
+    if s == "ET" {
+      if elapsed > 120 || (elapsed >= 120 && (extra ?? 0) > 0) {
+        return "\(stoppage(base: 120, elapsed: elapsed, extra: extra)) (ET)"
+      }
+      if elapsed > 90 {
+        return "\(stoppage(base: 90, elapsed: elapsed, extra: extra)) (ET)"
+      }
+      return "\(elapsed)' (ET)"
+    }
+
+    if s == "1H" || s == "2H" || s == "LIVE" || s == "INT" {
+      let base = periodBase(statusShort: s, elapsed: elapsed)
+      let useExtra = s == "1H" || elapsed >= base ? extra : nil
+      return stoppage(base: base, elapsed: elapsed, extra: useExtra)
+    }
+    return nil
+  }
+
+  static func label(for match: FeedMatch) -> String? {
+    label(statusShort: match.statusShort, elapsed: match.elapsed, extra: match.extra)
+  }
+
+  private static func stoppage(base: Int, elapsed: Int, extra: Int?) -> String {
+    if elapsed > base { return "\(base)+\(clampStoppage(elapsed - base))'" }
+    if let extra, extra > 0, elapsed >= base {
+      return "\(base)+\(clampStoppage(extra))'"
+    }
+    return "\(elapsed)'"
+  }
+}
+
 struct FeedTeam: Codable, Hashable {
   let teamId: Int
   let name: String

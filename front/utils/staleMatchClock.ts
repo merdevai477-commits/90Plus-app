@@ -9,6 +9,11 @@
 export const MAX_PLAUSIBLE_STOPPAGE = 20;
 /** 15 late + 45+20 + 20 HT + 45+20 ≈ 165 — only beyond this is a 90'+ clock stuck. */
 export const STALE_2H_AGE_MIN = 170;
+/**
+ * Extra time after a delayed KO: ~15 late + 45+20 + 20 HT + 45+20 + BT + 15+10 + 15+10.
+ * Do not FT a LIVE/ET clock at regulation age while ET is still running.
+ */
+export const STALE_ET_AGE_MIN = 230;
 
 export function isStaleInPlayClock(opts: {
   statusShort: string | null | undefined;
@@ -18,14 +23,21 @@ export function isStaleInPlayClock(opts: {
   nowMs?: number;
 }): boolean {
   const s = (opts.statusShort ?? '').trim().toUpperCase();
-  if (s !== '1H' && s !== '2H' && s !== 'LIVE') return false;
+  if (s !== '1H' && s !== '2H' && s !== 'LIVE' && s !== 'ET') return false;
 
   const elapsed = opts.elapsed;
   const extra = opts.extra;
 
   if (s === '1H' && elapsed != null && elapsed > 45 + MAX_PLAUSIBLE_STOPPAGE) return true;
 
-  if (s === '2H' || s === 'LIVE') {
+  // LIVE past 90 is often ET with a LIVE label — never FT at 110' mid-ET.
+  const inEt = s === 'ET' || (s === 'LIVE' && elapsed != null && elapsed > 90);
+  if (inEt) {
+    if (elapsed != null && elapsed >= 120 + MAX_PLAUSIBLE_STOPPAGE) return true;
+    if (elapsed != null && elapsed >= 120 && extra != null && extra >= MAX_PLAUSIBLE_STOPPAGE) {
+      return true;
+    }
+  } else if (s === '2H' || s === 'LIVE') {
     if (elapsed != null && elapsed >= 90 + MAX_PLAUSIBLE_STOPPAGE) return true;
     if (elapsed != null && elapsed >= 90 && extra != null && extra >= MAX_PLAUSIBLE_STOPPAGE) {
       return true;
@@ -36,6 +48,10 @@ export function isStaleInPlayClock(opts: {
   const kick = Date.parse(opts.kickoffIso);
   if (!Number.isFinite(kick)) return false;
   const ageMin = ((opts.nowMs ?? Date.now()) - kick) / 60_000;
+
+  if (inEt) {
+    return ageMin >= STALE_ET_AGE_MIN && elapsed != null && elapsed >= 120;
+  }
 
   // Only use wall-clock when the feed is already in second-half stoppage.
   // Delayed kickoffs stay 1H/early 2H long after the listed start time.

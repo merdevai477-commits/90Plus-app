@@ -73,8 +73,7 @@ internal object LiveNotifier {
     val status = when {
       match.status == "ht" -> labels.halftime
       match.status == "ft" -> labels.finished
-      match.elapsed != null -> "${match.elapsed + (match.extra ?: 0)}'"
-      else -> labels.live
+      else -> LiveMinuteFormat.label(match) ?: labels.live
     }
     val detail = listOf(status, match.leagueName).filter { it.isNotBlank() }.joinToString(" · ")
 

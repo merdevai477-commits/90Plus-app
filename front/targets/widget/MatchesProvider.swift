@@ -75,7 +75,8 @@ struct MatchesProvider: TimelineProvider {
   }
 
   private static let rotationHorizon: TimeInterval = 15 * 60
-  private static let liveReload: TimeInterval = 3 * 60
+  /// Live minutes come from the feed (no free-running timer); refresh often near 45'/90'/ET.
+  private static let liveReload: TimeInterval = 60
   private static let idleReload: TimeInterval = 15 * 60
 
   static func build(family: WidgetFamily, rotate: Bool) async -> (entries: [MatchesEntry], reloadAt: Date) {

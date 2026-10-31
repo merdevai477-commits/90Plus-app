@@ -52,4 +52,13 @@ describe('isStaleInPlayClock', () => {
       }),
     ).toBe(true);
   });
+
+  it('keeps LIVE extra time (110–120) alive — do not FT mid-ET', () => {
+    expect(isStaleInPlayClock({ statusShort: 'LIVE', elapsed: 105 })).toBe(false);
+    expect(isStaleInPlayClock({ statusShort: 'LIVE', elapsed: 110 })).toBe(false);
+    expect(isStaleInPlayClock({ statusShort: 'LIVE', elapsed: 118 })).toBe(false);
+    expect(isStaleInPlayClock({ statusShort: 'ET', elapsed: 115 })).toBe(false);
+    expect(isStaleInPlayClock({ statusShort: 'LIVE', elapsed: 140 })).toBe(true);
+    expect(isStaleInPlayClock({ statusShort: 'ET', elapsed: 120, extra: 20 })).toBe(true);
+  });
 });

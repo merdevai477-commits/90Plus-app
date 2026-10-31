@@ -66,6 +66,8 @@ export const MAX_PLAUSIBLE_STOPPAGE = 20;
  * sooner can still be stoppage time with goals to come.
  */
 export const STALE_2H_AGE_MIN = 170;
+/** Wall-clock net when LIVE/ET is past regulation — includes both ET periods + stoppage. */
+export const STALE_ET_AGE_MIN = 230;
 /** 45 + 15 HT is the earliest a second half can start after the listed kickoff. */
 const EARLIEST_2H_AGE_MIN = 55;
 const REGULAR_MAX_STOPPAGE = MAX_PLAUSIBLE_STOPPAGE;
@@ -183,11 +185,20 @@ export function isStaleMappedInPlayClock(opts: {
   nowMs?: number;
 }): boolean {
   const s = (opts.statusShort ?? '').trim().toUpperCase();
-  if (s !== '1H' && s !== '2H' && s !== 'LIVE' && s !== 'FT') return false;
+  if (s !== '1H' && s !== '2H' && s !== 'LIVE' && s !== 'ET' && s !== 'FT') return false;
   const elapsed = opts.elapsed;
   const extra = opts.extra;
   if (s === '1H' && elapsed != null && elapsed > 45 + REGULAR_MAX_STOPPAGE) return true;
-  if (s === '2H' || s === 'LIVE' || s === 'FT') {
+
+  // LIVE past 90 is often ET — do not tombstone at 110' while extra time is live.
+  const inEt =
+    s === 'ET' || ((s === 'LIVE' || s === 'FT') && elapsed != null && elapsed > 90);
+  if (inEt) {
+    if (elapsed != null && elapsed >= 120 + REGULAR_MAX_STOPPAGE) return true;
+    if (elapsed != null && elapsed >= 120 && extra != null && extra >= REGULAR_MAX_STOPPAGE) {
+      return true;
+    }
+  } else if (s === '2H' || s === 'LIVE' || s === 'FT') {
     if (elapsed != null && elapsed >= 90 + REGULAR_MAX_STOPPAGE) return true;
     if (elapsed != null && elapsed >= 90 && extra != null && extra >= REGULAR_MAX_STOPPAGE) {
       return true;
@@ -197,6 +208,9 @@ export function isStaleMappedInPlayClock(opts: {
   const kick = Date.parse(opts.kickoffIso);
   if (!Number.isFinite(kick)) return false;
   const ageMin = ((opts.nowMs ?? Date.now()) - kick) / 60_000;
+  if (inEt) {
+    return ageMin >= STALE_ET_AGE_MIN && elapsed != null && elapsed >= 120;
+  }
   return (
     (s === '2H' || s === 'LIVE' || s === 'FT') &&
     ageMin >= STALE_2H_AGE_MIN &&

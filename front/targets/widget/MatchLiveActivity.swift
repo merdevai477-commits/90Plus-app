@@ -201,17 +201,50 @@ private struct StatusPill: View {
     case "ft":
       Text(copy.fullTime)
     default:
-      if let clockStart = state.clockStart {
-        let start = Date(timeIntervalSince1970: clockStart)
-        Text(timerInterval: start...start.addingTimeInterval(150 * 60), countsDown: false, showsHours: false)
-          .multilineTextAlignment(.center)
+      if let formatted = LiveMinuteFormat.label(
+        statusShort: state.statusShort ?? inferredShort,
+        elapsed: state.minute,
+        extra: state.extra
+      ), LiveMinuteFormat.isStoppage(
+        statusShort: state.statusShort ?? inferredShort,
+        elapsed: state.minute,
+        extra: state.extra
+      ) || state.clockStart == nil {
+        Text(formatted)
           .lineLimit(1)
-          .frame(width: 50)
+      } else if let clockStart = state.clockStart, let elapsed = state.minute {
+        let start = Date(timeIntervalSince1970: clockStart)
+        let endMin = LiveMinuteFormat.periodBase(
+          statusShort: state.statusShort ?? inferredShort,
+          elapsed: elapsed
+        )
+        Text(
+          timerInterval: start...start.addingTimeInterval(Double(endMin) * 60),
+          countsDown: false,
+          showsHours: false
+        )
+        .multilineTextAlignment(.center)
+        .lineLimit(1)
+        .frame(width: 50)
+      } else if let formatted = LiveMinuteFormat.label(
+        statusShort: state.statusShort ?? inferredShort,
+        elapsed: state.minute,
+        extra: state.extra
+      ) {
+        Text(formatted)
       } else if let minute = state.minute {
         Text("\(minute)'")
       } else {
         Text(copy.live)
       }
     }
+  }
+
+  /// Older pushes omit `statusShort`; infer the half from the last known minute.
+  private var inferredShort: String {
+    guard let minute = state.minute else { return "LIVE" }
+    if minute <= 45 { return "1H" }
+    if minute <= 90 { return "2H" }
+    return "ET"
   }
 }

@@ -70,6 +70,8 @@ export interface MatchActivityState {
   status: 'live' | 'ht' | 'ft' | 'upcoming';
   minute: number | null;
   clockStart: number | null;
+  statusShort?: string | null;
+  extra?: number | null;
 }
 
 const androidBridge =

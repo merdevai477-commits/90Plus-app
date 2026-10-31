@@ -191,11 +191,10 @@ private enum KickoffText {
   }
 }
 
-/// Live minute keeps ticking between reloads via a system timer; other states are static labels.
+/// Live minute from the feed (`45+2'` / `90+4'`). No free-running timer — that invented 50' in 1H and 129'.
 private struct StatusBadge: View {
   let match: FeedMatch
   let labels: WidgetLabels
-  let asOf: Date
   let arabic: Bool
   var fontSize: CGFloat = 12
   /// Swaps the minute for "GOAL!" while a fresh goal is on the feed.
@@ -225,10 +224,8 @@ private struct StatusBadge: View {
   private var status: some View {
     switch match.status {
     case "live":
-      if let elapsed = match.elapsed {
-        let start = asOf.addingTimeInterval(-Double(elapsed) * 60)
-        Text(timerInterval: start...start.addingTimeInterval(150 * 60), countsDown: false, showsHours: false)
-          .multilineTextAlignment(.center)
+      if let minute = LiveMinuteFormat.label(for: match) {
+        Text(minute)
       } else {
         Text(labels.live)
       }
@@ -441,7 +438,7 @@ private struct MatchCard: View {
     HStack(spacing: 16) {
       TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: crest, spacing: 9)
       VStack(spacing: 8) {
-        StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, goal: entry.hasFreshGoal(match))
+        StatusBadge(match: match, labels: entry.labels, arabic: entry.isArabic, goal: entry.hasFreshGoal(match))
         if match.score != nil {
           ScoreText(match: match, size: 23)
         } else {
@@ -496,7 +493,7 @@ private struct MiniScoreHeader: View {
       ScoreText(match: match, size: 12)
       Crest(image: entry.image(match.away.logo), size: 16)
       StatusBadge(
-        match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic,
+        match: match, labels: entry.labels, arabic: entry.isArabic,
         fontSize: 9, goal: markGoal && entry.hasFreshGoal(match)
       )
     }
@@ -1212,7 +1209,7 @@ private struct SmallMatchCard: View {
           .minimumScaleFactor(0.7)
       }
       StatusBadge(
-        match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic,
+        match: match, labels: entry.labels, arabic: entry.isArabic,
         fontSize: 11, goal: entry.hasFreshGoal(match)
       )
     }
@@ -1261,9 +1258,8 @@ private struct RectangularView: View {
   private func statusLine(_ match: FeedMatch) -> some View {
     switch match.status {
     case "live":
-      if let elapsed = match.elapsed {
-        let start = entry.asOf.addingTimeInterval(-Double(elapsed) * 60)
-        Text(timerInterval: start...start.addingTimeInterval(150 * 60), countsDown: false, showsHours: false)
+      if let minute = LiveMinuteFormat.label(for: match) {
+        Text(minute)
       } else {
         Text(entry.labels.live)
       }
