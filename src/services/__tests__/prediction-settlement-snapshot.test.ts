@@ -67,6 +67,39 @@ describe('loadAuthoritativeSettlementFixture', () => {
     expect(mockFetch365).not.toHaveBeenCalled();
   });
 
+  describe('fresh native 365 final (kickoff under 4h ago)', () => {
+    const kickoffAgo = (min: number) => ({ matchDate: new Date(Date.now() - min * 60_000) });
+
+    it('stays pending while 365 still shows the game in play (FT cached at 90\')', async () => {
+      mockFindUnique.mockResolvedValue({ ...cacheRow('FT', 1, 1), ...kickoffAgo(110) });
+      mockSnap365.mockResolvedValue({ status: '2H', homeScore: 1, awayScore: 1, penaltyHome: null, penaltyAway: null });
+      const r = await loadAuthoritativeSettlementFixture(NATIVE);
+      expect(mockFetch365).toHaveBeenCalledWith(NATIVE, { language: 'en' });
+      expect(r?.status).toBe('2H');
+    });
+
+    it('settles on the 365 final, including a stoppage-time goal', async () => {
+      mockFindUnique.mockResolvedValue({ ...cacheRow('FT', 1, 1), ...kickoffAgo(118) });
+      mockSnap365.mockResolvedValue({ status: 'FT', homeScore: 2, awayScore: 1, penaltyHome: null, penaltyAway: null });
+      const r = await loadAuthoritativeSettlementFixture(NATIVE);
+      expect(r).toMatchObject({ status: 'FT', homeScore: 2, awayScore: 1 });
+    });
+
+    it('falls back to the cached final when 365 cannot be reached', async () => {
+      mockFindUnique.mockResolvedValue({ ...cacheRow('FT', 2, 1), ...kickoffAgo(118) });
+      mockFetch365.mockResolvedValue(null);
+      const r = await loadAuthoritativeSettlementFixture(NATIVE);
+      expect(r).toMatchObject({ status: 'FT', homeScore: 2, awayScore: 1 });
+    });
+
+    it('trusts an older cached final without a 365 round-trip', async () => {
+      mockFindUnique.mockResolvedValue({ ...cacheRow('FT', 2, 1), ...kickoffAgo(5 * 60) });
+      const r = await loadAuthoritativeSettlementFixture(NATIVE);
+      expect(r).toMatchObject({ status: 'FT', homeScore: 2, awayScore: 1 });
+      expect(mockFetch365).not.toHaveBeenCalled();
+    });
+  });
+
   it('PEN cache row missing the shootout → asks 365 (A10, the 4857309 case)', async () => {
     mockFindUnique.mockResolvedValue(cacheRow('PEN', 1, 1));
     mockSnap365.mockResolvedValue({ status: 'PEN', homeScore: 1, awayScore: 1, penaltyHome: 3, penaltyAway: 4 });

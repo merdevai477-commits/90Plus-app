@@ -51,6 +51,19 @@ export function fromCacheRow(row: CacheRow): SettlementFixtureInput {
 const FINAL_STATUSES = new Set(['FT', 'AET', 'PEN']);
 const NO_RESULT_STATUSES = new Set(['ABD', 'CANC', 'AWD', 'WO']);
 
+/**
+ * The live pipeline can cache FT before the final whistle (a misread 90' clock,
+ * a 365 feed gap), so a native 365 final this close to kickoff settles only
+ * once 365 itself stops showing the game in play. Past the window the cached
+ * final is trusted as-is, so a 365 clock stuck in play cannot block settlement.
+ */
+const CONFIRM_FRESH_FINAL_MS = 4 * 60 * 60_000;
+
+function isFreshKickoff(matchDate: Date | null | undefined, nowMs = Date.now()): boolean {
+  const kick = matchDate ? new Date(matchDate).getTime() : Number.NaN;
+  return Number.isFinite(kick) && nowMs - kick < CONFIRM_FRESH_FINAL_MS;
+}
+
 const isScore = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
@@ -94,7 +107,8 @@ async function from365(
 /**
  * Load the fixture used for settlement:
  * 1. API-Football (non-365 ids) when it returns a complete final.
- * 2. cached_fixtures when complete.
+ * 2. cached_fixtures when complete (a native 365 final near kickoff must not
+ *    be contradicted by 365 still showing the game in play).
  * 3. 365 via the shared classifier + team alignment (native id, or the
  *    `_scores365GameId` mapping) — never by passing an API-Football id to 365.
  * 4. Whatever incomplete snapshot we have (the gate keeps it pending).
@@ -123,11 +137,15 @@ export async function loadAuthoritativeSettlementFixture(
 
   const cached = await prisma.cachedFixture.findUnique({
     where: { fixtureId: apiMatchId },
-    select: { status: true, homeScore: true, awayScore: true, fullData: true },
+    select: { status: true, homeScore: true, awayScore: true, fullData: true, matchDate: true },
   });
+  let confirmCachedFinal = false;
   if (cached?.status) {
     const snap = fromCacheRow(cached);
-    if (isCompleteFinalSnapshot(snap)) return snap;
+    if (isCompleteFinalSnapshot(snap)) {
+      confirmCachedFinal = isNative365FixtureId(apiMatchId) && isFreshKickoff(cached.matchDate);
+      if (!confirmCachedFinal) return snap;
+    }
     fallback = fallback ?? snap;
   }
 
@@ -153,6 +171,19 @@ export async function loadAuthoritativeSettlementFixture(
       if (isCompleteFinalSnapshot(snap) || !fallback) return snap;
       // A stale non-final cache row (e.g. NS) loses to 365's current status.
       if (!FINAL_STATUSES.has(String(fallback.status))) return snap;
+      // A fresh cached final that 365 still shows in play was written early.
+      if (confirmCachedFinal && !FINAL_STATUSES.has(String(snap.status))) {
+        recordSettleMetric('SETTLE_CACHED_FINAL_UNCONFIRMED');
+        logger.warn(
+          JSON.stringify({
+            event: 'SETTLE_CACHED_FINAL_UNCONFIRMED',
+            apiMatchId,
+            cachedStatus: fallback.status,
+            providerStatus: snap.status,
+          }),
+        );
+        return snap;
+      }
     }
   }
 
