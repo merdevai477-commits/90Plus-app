@@ -1,6 +1,15 @@
 # Use Node.js 20
 FROM node:20-slim
 
+# Keep glibc from retaining freed pages in per-thread arenas and huge pages.
+# Railway reports RSS; without this the process climbs toward 2GB while the
+# V8 heap stays near 200MB. Production on Railpack gets the same values from
+# the service variables, because this image is not the live builder.
+ENV MALLOC_ARENA_MAX=2 \
+    MALLOC_TRIM_THRESHOLD_=131072 \
+    MALLOC_MMAP_THRESHOLD_=131072 \
+    GLIBC_TUNABLES=glibc.malloc.arena_max=2:glibc.malloc.trim_threshold=131072:glibc.malloc.mmap_threshold=131072:glibc.malloc.hugetlb=0
+
 # Set working directory
 WORKDIR /app
 

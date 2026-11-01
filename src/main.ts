@@ -22,6 +22,10 @@ import {
     buildAssetLinksJson,
 } from './config/androidAppLinks';
 import { buildAppleAppSiteAssociation } from './config/appleAppSite';
+import { startNativeHeapRelease, stopNativeHeapRelease } from './utils/native-heap';
+
+// Opt out of transparent huge pages before request traffic extends the malloc heap.
+startNativeHeapRelease();
 
 // Fix: BigInt cannot be serialized by JSON.stringify by default
 // This adds a global toJSON so any BigInt field is safely converted to Number
@@ -1165,13 +1169,6 @@ async function startServer() {
                     });
                     logger.info('✅ Mux asset headroom cron scheduled (hourly at :15)');
 
-                    // ✅ Daily ranking badges (views, shares, comments, predictions)
-                    cron.schedule('0 4 * * *', async () => {
-                        const { runRankingBadgesJob } = await import('./services/ranking-badges-cron.service');
-                        await runRankingBadgesJob();
-                    });
-                    logger.info('✅ Ranking Badges Cron Job scheduled (daily at 4 AM UTC)');
-                    
                     // ✅ OPTIMIZATION 4: Start background preload service
                     backgroundPreloadService.start();
                     logger.info('✅ Background preload service started');
@@ -1243,6 +1240,7 @@ const SETTLE_DRAIN_MS = 20_000;
 
 process.on('SIGINT', async () => {
     logger.info('\n👋 Shutting down gracefully...');
+    stopNativeHeapRelease();
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);
@@ -1270,6 +1268,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
     logger.info('\n👋 Shutting down gracefully...');
+    stopNativeHeapRelease();
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);
