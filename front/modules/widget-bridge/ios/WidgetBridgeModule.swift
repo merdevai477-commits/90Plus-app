@@ -45,13 +45,15 @@ public class WidgetBridgeModule: Module {
       guard #available(iOS 16.2, *) else {
         return ["deviceId": "", "tokens": [] as [[String: Any]]]
       }
-      let center = LiveActivityCenter.shared
-      let tokens: [[String: Any]] = center.currentTokens().map { snap in
+      // LiveActivityCenter is @MainActor — hop onto it before reading tokens/deviceId.
+      let snapshots = await LiveActivityCenter.shared.currentTokens()
+      let deviceId = await LiveActivityCenter.shared.registrationDeviceId
+      let tokens: [[String: Any]] = snapshots.map { snap in
         var row: [String: Any] = ["kind": snap.kind, "token": snap.token]
         if let fixtureId = snap.fixtureId { row["fixtureId"] = fixtureId }
         return row
       }
-      return ["deviceId": center.registrationDeviceId, "tokens": tokens]
+      return ["deviceId": deviceId, "tokens": tokens]
     }
 
     AsyncFunction("liveActivityDiagnostics") { () async -> [String: Any] in
