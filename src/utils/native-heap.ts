@@ -30,7 +30,11 @@ function bindLibc(): void {
       };
     };
     const libc = koffi.load('libc.so.6');
-    const prctl = libc.func('int prctl(int option, ...)');
+    // Fixed prototype: a variadic declaration makes koffi treat the numeric
+    // arguments as type names and throw before prctl runs.
+    const prctl = libc.func(
+      'int prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5)',
+    );
     const rc = prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0);
     if (rc === 0) {
       logger.info('[Memory] transparent huge pages disabled for this process');
