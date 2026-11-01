@@ -12,7 +12,8 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { readLiveFixtureById } from './live-fixture-cache.service';
+import { readLiveFixtureById, readTerminalFixtureById } from './live-fixture-cache.service';
+import { matchCacheService } from './match-cache.service';
 import { resolveTeamMatch, toWidgetMatch, type WidgetMatch, type WidgetTeam } from './widget-feed.service';
 import { isApnsConfigured, isDeadToken, sendLiveActivityPush, closeApnsSessions } from './apns.service';
 import { withSyncLeaderLease } from './football-sync-leader.service';
@@ -34,6 +35,8 @@ const STARTED_HISTORY = 30;
 const FINAL_DISMISS_AFTER_SEC = 20 * 60;
 const STALE_AFTER_SEC = 15 * 60;
 const SEND_CONCURRENCY = 20;
+/** If the live cache has nothing for this fixture this long after the last successful push, end the card. */
+const MISSING_FIXTURE_END_AFTER_MS = 3 * 60_000;
 
 const COPY: Record<'ar' | 'en', { goal: string; kickoff: string }> = {
   en: { goal: 'Goal!', kickoff: 'Kick-off' },
@@ -110,6 +113,8 @@ export function activityState(match: WidgetMatch, nowSec: number): MatchActivity
     elapsed != null &&
     !stoppage &&
     elapsed < periodEndMin(statusShort, elapsed);
+  // Snap "now" to the minute so re-pushes with the same elapsed do not jitter the on-device timer.
+  const clockStart = canTick ? Math.floor(nowSec / 60) * 60 - elapsed! * 60 : null;
   return {
     homeScore: match.score?.home ?? 0,
     awayScore: match.score?.away ?? 0,
@@ -118,7 +123,7 @@ export function activityState(match: WidgetMatch, nowSec: number): MatchActivity
     minute: elapsed,
     statusShort,
     extra,
-    clockStart: canTick ? nowSec - elapsed * 60 : null,
+    clockStart,
   };
 }
 
@@ -155,6 +160,43 @@ async function inBatches<T>(items: T[], run: (item: T) => Promise<void>): Promis
   }
 }
 
+async function resolveFixtureForActivity(fixtureId: number) {
+  const live = await readLiveFixtureById(fixtureId).catch(() => null);
+  if (live?.fixture?.status) return live;
+  const terminal = await readTerminalFixtureById(fixtureId).catch(() => null);
+  if (terminal?.fixture?.status) return terminal;
+  const row = await prisma.cachedFixture.findUnique({ where: { fixtureId } }).catch(() => null);
+  if (!row) return null;
+  try {
+    return matchCacheService.convertDbMatchToApiFormat(row);
+  } catch {
+    return null;
+  }
+}
+
+function syntheticFinishedMatch(fixtureId: number, row: {
+  lastState: string | null;
+}): WidgetMatch {
+  const parts = (row.lastState ?? '0-0-ft').split('-');
+  const home = Number.parseInt(parts[0] ?? '0', 10);
+  const away = Number.parseInt(parts[1] ?? '0', 10);
+  return {
+    fixtureId,
+    status: 'ft',
+    statusShort: 'FT',
+    kickoffTs: 0,
+    elapsed: 90,
+    extra: null,
+    home: { id: 0, name: '', logo: null },
+    away: { id: 0, name: '', logo: null },
+    score: {
+      home: Number.isFinite(home) ? home : 0,
+      away: Number.isFinite(away) ? away : 0,
+    },
+    league: { id: 0, name: '', logo: null },
+  };
+}
+
 // MARK: - Registration
 
 export async function registerLiveActivityToken(input: {
@@ -166,17 +208,55 @@ export async function registerLiveActivityToken(input: {
   language: string;
 }): Promise<void> {
   const { kind, token, deviceId, fixtureId, teamIds, language } = input;
-  // Tokens rotate; the previous one for the same activity / device is dead weight.
+
+  if (kind === 'update') {
+    // Tokens rotate; the previous one for the same activity is dead weight.
+    // Keep other update tokens for the same device (other fixtures) intact.
+    await prisma.liveActivityToken.deleteMany({
+      where: { kind, deviceId, fixtureId, token: { not: token } },
+    });
+    await prisma.liveActivityToken.upsert({
+      where: { token },
+      create: { token, kind, deviceId, fixtureId, teamIds, language },
+      update: { kind, deviceId, fixtureId, teamIds, language },
+    });
+    return;
+  }
+
+  // Start-token rotation must carry startedFixtureIds / sandbox across so we do not
+  // re-open cards the device already saw under the previous token.
+  const previous = await prisma.liveActivityToken.findFirst({
+    where: { kind: 'start', deviceId, token: { not: token } },
+    orderBy: { updatedAt: 'desc' },
+  });
   await prisma.liveActivityToken.deleteMany({
-    where:
-      kind === 'update'
-        ? { kind, deviceId, fixtureId, token: { not: token } }
-        : { kind, deviceId, token: { not: token } },
+    where: { kind: 'start', deviceId, token: { not: token } },
   });
   await prisma.liveActivityToken.upsert({
     where: { token },
-    create: { token, kind, deviceId, fixtureId, teamIds, language },
-    update: { kind, deviceId, fixtureId, teamIds, language },
+    create: {
+      token,
+      kind,
+      deviceId,
+      fixtureId: null,
+      teamIds,
+      language,
+      startedFixtureIds: previous?.startedFixtureIds ?? [],
+      sandbox: previous?.sandbox ?? null,
+    },
+    update: {
+      kind,
+      deviceId,
+      fixtureId: null,
+      teamIds,
+      language,
+      ...(previous
+        ? {
+            startedFixtureIds: previous.startedFixtureIds,
+            sandbox: previous.sandbox,
+          }
+        : {}),
+    },
   });
 }
 
@@ -205,10 +285,20 @@ export async function runUpdateCycle(now: number): Promise<void> {
   }
 
   for (const [fixtureId, tokens] of byFixture) {
-    const fixture = await readLiveFixtureById(fixtureId).catch(() => null);
-    if (!fixture?.fixture?.status) continue;
-    const match = toWidgetMatch(fixture);
-    if (match.status === 'upcoming') continue;
+    const fixture = await resolveFixtureForActivity(fixtureId);
+    let match: WidgetMatch | null = fixture?.fixture?.status ? toWidgetMatch(fixture) : null;
+
+    if (!match || match.status === 'upcoming') {
+      // Fixture dropped out of live cache without a terminal snapshot — end after a short grace
+      // so a brief Redis miss does not wipe an in-play card.
+      const oldestPush = Math.min(
+        ...tokens.map((t) => t.lastPushAt?.getTime() ?? t.createdAt.getTime()),
+      );
+      if (now - oldestPush < MISSING_FIXTURE_END_AFTER_MS) continue;
+      match = syntheticFinishedMatch(fixtureId, tokens[0]);
+      logger.info(`[LiveActivity] ending ${fixtureId} — fixture missing from live cache`);
+    }
+
     const state = activityState(match, nowSec);
     const key = stateKey(state);
     const finished = state.status === 'ft';
@@ -232,7 +322,7 @@ export async function runUpdateCycle(now: number): Promise<void> {
       if (!finished && before != null && state.homeScore + state.awayScore > before) {
         aps.alert = {
           title: copyFor(row.language).goal,
-          body: `${match.home.name} ${state.homeScore} - ${state.awayScore} ${match.away.name}`,
+          body: `${match!.home.name} ${state.homeScore} - ${state.awayScore} ${match!.away.name}`,
         };
       }
 
@@ -240,7 +330,14 @@ export async function runUpdateCycle(now: number): Promise<void> {
         priority: changed || finished ? 10 : 5,
         sandbox: row.sandbox,
       });
-      if (finished || isDeadToken(result)) {
+      if (isDeadToken(result)) {
+        logger.warn(
+          `[LiveActivity] dead update token for fixture ${fixtureId}: ${result.status} ${result.reason ?? ''}`,
+        );
+        await removeLiveActivityToken(row.token);
+        return;
+      }
+      if (finished) {
         await removeLiveActivityToken(row.token);
         return;
       }
@@ -308,6 +405,8 @@ export async function runStartCycle(now: number): Promise<void> {
           attributes: activityAttributes(match, row.language),
           'content-state': state,
           'stale-date': nowSec + STALE_AFTER_SEC,
+          // iOS 18+: ask APNs to deliver a fresh update token so the app can register it.
+          'input-push-token': 1,
           alert: {
             title: copyFor(row.language).kickoff,
             body: `${match.home.name} ${state.homeScore} - ${state.awayScore} ${match.away.name}`,
@@ -316,6 +415,9 @@ export async function runStartCycle(now: number): Promise<void> {
         { priority: 10, sandbox },
       );
       if (isDeadToken(result)) {
+        logger.warn(
+          `[LiveActivity] dead start token for device ${row.deviceId.slice(0, 8)}: ${result.status} ${result.reason ?? ''}`,
+        );
         dead = true;
       } else if (result.status === 200) {
         opened += 1;

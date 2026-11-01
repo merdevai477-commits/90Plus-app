@@ -39,7 +39,11 @@ private extension MatchActivityAttributes {
 struct MatchLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: MatchActivityAttributes.self) { context in
-      LockScreenMatchView(attributes: context.attributes, state: context.state)
+      LockScreenMatchView(
+        attributes: context.attributes,
+        state: context.state,
+        isStale: context.isStale
+      )
         .activityBackgroundTint(ActivityPalette.background.opacity(0.82))
         .activitySystemActionForegroundColor(.white)
         .widgetURL(context.attributes.deepLink)
@@ -58,7 +62,11 @@ struct MatchLiveActivity: Widget {
         DynamicIslandExpandedRegion(.center) {
           VStack(spacing: 4) {
             ScoreLine(state: state, size: 26)
-            StatusPill(state: state, copy: ActivityCopy(language: attributes.language))
+            StatusPill(
+              state: state,
+              copy: ActivityCopy(language: attributes.language),
+              isStale: context.isStale
+            )
           }
           .environment(\.layoutDirection, attributes.direction)
         }
@@ -93,6 +101,7 @@ struct MatchLiveActivity: Widget {
 private struct LockScreenMatchView: View {
   let attributes: MatchActivityAttributes
   let state: MatchActivityAttributes.ContentState
+  var isStale = false
 
   var body: some View {
     VStack(spacing: 10) {
@@ -110,7 +119,11 @@ private struct LockScreenMatchView: View {
         TeamBadge(name: attributes.homeName, logo: attributes.homeLogo, crest: 40)
           .frame(maxWidth: .infinity)
         VStack(spacing: 6) {
-          StatusPill(state: state, copy: ActivityCopy(language: attributes.language))
+          StatusPill(
+            state: state,
+            copy: ActivityCopy(language: attributes.language),
+            isStale: isStale
+          )
           ScoreLine(state: state, size: 30)
         }
         TeamBadge(name: attributes.awayName, logo: attributes.awayLogo, crest: 40)
@@ -180,6 +193,7 @@ private struct ScoreLine: View {
 private struct StatusPill: View {
   let state: MatchActivityAttributes.ContentState
   let copy: ActivityCopy
+  var isStale = false
 
   var body: some View {
     label
@@ -201,7 +215,10 @@ private struct StatusPill: View {
     case "ft":
       Text(copy.fullTime)
     default:
-      if let formatted = LiveMinuteFormat.label(
+      // Stale cards must never free-run a timer into invented stoppage (50:06 / 115:54).
+      if isStale {
+        staticMinuteLabel
+      } else if let formatted = LiveMinuteFormat.label(
         statusShort: state.statusShort ?? inferredShort,
         elapsed: state.minute,
         extra: state.extra
@@ -226,17 +243,24 @@ private struct StatusPill: View {
         .multilineTextAlignment(.center)
         .lineLimit(1)
         .frame(width: 50)
-      } else if let formatted = LiveMinuteFormat.label(
-        statusShort: state.statusShort ?? inferredShort,
-        elapsed: state.minute,
-        extra: state.extra
-      ) {
-        Text(formatted)
-      } else if let minute = state.minute {
-        Text("\(minute)'")
       } else {
-        Text(copy.live)
+        staticMinuteLabel
       }
+    }
+  }
+
+  @ViewBuilder
+  private var staticMinuteLabel: some View {
+    if let formatted = LiveMinuteFormat.label(
+      statusShort: state.statusShort ?? inferredShort,
+      elapsed: state.minute,
+      extra: state.extra
+    ) {
+      Text(formatted)
+    } else if let minute = state.minute {
+      Text("\(minute)'")
+    } else {
+      Text(copy.live)
     }
   }
 

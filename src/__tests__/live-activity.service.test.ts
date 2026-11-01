@@ -3,9 +3,13 @@ jest.mock('../lib/prisma', () => ({
   default: {
     liveActivityToken: {
       findMany: jest.fn(),
+      findFirst: jest.fn(async () => null),
       deleteMany: jest.fn(async () => ({ count: 0 })),
       update: jest.fn(async () => ({})),
       upsert: jest.fn(async () => ({})),
+    },
+    cachedFixture: {
+      findUnique: jest.fn(async () => null),
     },
   },
 }));
@@ -19,6 +23,7 @@ jest.mock('../services/apns.service', () => ({
 
 jest.mock('../services/live-fixture-cache.service', () => ({
   readLiveFixtureById: jest.fn(async () => null),
+  readTerminalFixtureById: jest.fn(async () => null),
 }));
 
 jest.mock('../services/football-data-cache.service', () => ({ footballDataCacheService: {} }));
@@ -37,7 +42,7 @@ jest.mock('../services/widget-feed.service', () => ({
 
 import prisma from '../lib/prisma';
 import { sendLiveActivityPush } from '../services/apns.service';
-import { readLiveFixtureById } from '../services/live-fixture-cache.service';
+import { readLiveFixtureById, readTerminalFixtureById } from '../services/live-fixture-cache.service';
 import { resolveTeamMatch } from '../services/widget-feed.service';
 import { activityState, runStartCycle, runUpdateCycle } from '../services/live-activity.service';
 
@@ -172,6 +177,42 @@ describe('runUpdateCycle', () => {
 
     expect(tokens.deleteMany).toHaveBeenCalledWith({ where: { token: 'aa'.repeat(32) } });
     expect(tokens.update).not.toHaveBeenCalled();
+  });
+
+  it('ends the activity when the fixture disappears from the live cache', async () => {
+    tokens.findMany.mockResolvedValueOnce([
+      updateRow({
+        lastState: '2-1-live',
+        lastPushAt: new Date(NOW - 4 * 60_000),
+        createdAt: new Date(NOW - 10 * 60_000),
+      }),
+    ]);
+    (readLiveFixtureById as jest.Mock).mockResolvedValueOnce(null);
+    (readTerminalFixtureById as jest.Mock).mockResolvedValueOnce(null);
+
+    await runUpdateCycle(NOW);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const [, aps] = send.mock.calls[0];
+    expect(aps.event).toBe('end');
+    expect(aps['content-state']).toMatchObject({ status: 'ft', homeScore: 2, awayScore: 1 });
+    expect(tokens.deleteMany).toHaveBeenCalledWith({ where: { token: 'aa'.repeat(32) } });
+  });
+
+  it('waits a short grace before ending a momentarily missing fixture', async () => {
+    tokens.findMany.mockResolvedValueOnce([
+      updateRow({
+        lastState: '1-0-live',
+        lastPushAt: new Date(NOW - 30_000),
+        createdAt: new Date(NOW - 30_000),
+      }),
+    ]);
+    (readLiveFixtureById as jest.Mock).mockResolvedValueOnce(null);
+    (readTerminalFixtureById as jest.Mock).mockResolvedValueOnce(null);
+
+    await runUpdateCycle(NOW);
+
+    expect(send).not.toHaveBeenCalled();
   });
 });
 

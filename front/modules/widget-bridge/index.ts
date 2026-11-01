@@ -45,12 +45,28 @@ type AndroidWidgetBridge = {
   reload(): void;
 };
 
+export type LiveActivityTokenKind = 'start' | 'update';
+
+export interface LiveActivityTokenRow {
+  kind: LiveActivityTokenKind;
+  token: string;
+  fixtureId?: number;
+}
+
+export interface LiveActivityTokenBundle {
+  deviceId: string;
+  tokens: LiveActivityTokenRow[];
+}
+
 type IosLiveActivityBridge = {
   areLiveActivitiesEnabled(): Promise<boolean>;
   activeMatchActivities(): Promise<number[]>;
   startMatchActivity(json: string): Promise<boolean>;
   endMatchActivity(fixtureId: number): Promise<void>;
+  endMatchActivitiesExcept?(fixtureIds: number[]): Promise<void>;
   refreshLiveActivityRegistration(): Promise<void>;
+  currentLiveActivityTokens?(): Promise<LiveActivityTokenBundle>;
+  liveActivityDiagnostics?(): Promise<Record<string, unknown>>;
 };
 
 /** Must match Swift `MatchActivityAttributes` and the backend's live-activity.service.ts. */
@@ -100,6 +116,11 @@ export const liveActivities = {
   start: (attributes: MatchActivityAttributes, state: MatchActivityState) =>
     iosBridge?.startMatchActivity(JSON.stringify({ attributes, state })) ?? Promise.resolve(false),
   end: (fixtureId: number) => iosBridge?.endMatchActivity(fixtureId) ?? Promise.resolve(),
+  endExcept: (fixtureIds: number[]) =>
+    iosBridge?.endMatchActivitiesExcept?.(fixtureIds) ?? Promise.resolve(),
   /** Re-sends the push-to-start token so the server knows the current followed teams. */
   refreshRegistration: () => iosBridge?.refreshLiveActivityRegistration() ?? Promise.resolve(),
+  currentTokens: () =>
+    iosBridge?.currentLiveActivityTokens?.() ?? Promise.resolve({ deviceId: '', tokens: [] }),
+  diagnostics: () => iosBridge?.liveActivityDiagnostics?.() ?? Promise.resolve({}),
 };

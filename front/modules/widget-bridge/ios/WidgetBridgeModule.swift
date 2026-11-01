@@ -29,9 +29,34 @@ public class WidgetBridgeModule: Module {
       await LiveActivityCenter.shared.end(fixtureId: fixtureId)
     }
 
+    AsyncFunction("endMatchActivitiesExcept") { (fixtureIds: [Int]) async in
+      guard #available(iOS 16.2, *) else { return }
+      await LiveActivityCenter.shared.endExcept(fixtureIds: Set(fixtureIds))
+    }
+
     AsyncFunction("refreshLiveActivityRegistration") { () async in
       guard #available(iOS 16.2, *) else { return }
       await LiveActivityCenter.shared.refreshStartRegistration()
+    }
+
+    /// Current ActivityKit tokens + deviceId so JS can POST them via fetch (native URLSession
+    /// has been observed to never deliver tokens to the backend in production).
+    AsyncFunction("currentLiveActivityTokens") { () async -> [String: Any] in
+      guard #available(iOS 16.2, *) else {
+        return ["deviceId": "", "tokens": [] as [[String: Any]]]
+      }
+      let center = LiveActivityCenter.shared
+      let tokens: [[String: Any]] = center.currentTokens().map { snap in
+        var row: [String: Any] = ["kind": snap.kind, "token": snap.token]
+        if let fixtureId = snap.fixtureId { row["fixtureId"] = fixtureId }
+        return row
+      }
+      return ["deviceId": center.registrationDeviceId, "tokens": tokens]
+    }
+
+    AsyncFunction("liveActivityDiagnostics") { () async -> [String: Any] in
+      guard #available(iOS 16.2, *) else { return [:] }
+      return await LiveActivityCenter.shared.diagnostics()
     }
   }
 }
