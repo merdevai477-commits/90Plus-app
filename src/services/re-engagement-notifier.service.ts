@@ -41,7 +41,6 @@ const TIER_MIN_GAP_MS: Record<ReEngagementTier, number> = {
 type Screen =
     | '/(tabs)/matches'
     | '/(tabs)/predict-and-win'
-    | '/(tabs)/quiz'
     | '/(tabs)/rank'
     | '/(tabs)/reels';
 
@@ -68,18 +67,6 @@ const VARIANTS: Record<ReEngagementTier, Variant[]> = {
             en: { title: '🎯 Got a prediction, {name}?', body: 'Matches kick off soon — lock in your call before the whistle and earn points.' },
         },
         {
-            id: 'quiz',
-            screen: '/(tabs)/quiz',
-            ar: { title: '🧠 كويز النهارده مستنيك يا {name}', body: 'أسئلة جديدة نزلت — جاوب صح واكسب عملات وXP.' },
-            en: { title: "🧠 Today's quiz is waiting, {name}", body: 'Fresh questions just dropped — answer right and earn coins and XP.' },
-        },
-        {
-            id: 'leaderboard',
-            screen: '/(tabs)/rank',
-            ar: { title: '🏆 الترتيب بيتغير يا {name}', body: 'ادخل شوف مركزك في لوحة الصدارة واتنافس على القمة.' },
-            en: { title: '🏆 The leaderboard is moving, {name}', body: 'Check your rank and push for the top spot.' },
-        },
-        {
             id: 'reels',
             screen: '/(tabs)/reels',
             ar: { title: '🎬 فاتك جديد الريلز يا {name}', body: 'مهارات وأهداف جديدة من المجتمع — شوفها دلوقتي.' },
@@ -104,12 +91,6 @@ const VARIANTS: Record<ReEngagementTier, Variant[]> = {
             screen: '/(tabs)/predict-and-win',
             ar: { title: '🎯 رجّع مستواك في التوقعات يا {name}', body: 'كل توقع صح بيكسبك نقط وعملات — مباريات جديدة مستنية توقعك.' },
             en: { title: '🎯 Back to predicting, {name}?', body: 'Every correct call earns points and coins — new matches need your pick.' },
-        },
-        {
-            id: 'challenge',
-            screen: '/(tabs)/quiz',
-            ar: { title: '🔥 جاهز للتحدي يا {name}؟', body: 'كويزات جديدة كل يوم — وريهم إنك أكتر واحد فاهم كورة.' },
-            en: { title: '🔥 Ready for a challenge, {name}?', body: 'New quizzes every day — prove you know football best.' },
         },
     ],
     comeback: [

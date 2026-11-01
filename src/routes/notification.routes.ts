@@ -628,14 +628,6 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
                 data: { type: 'COOLDOWN_EXPIRED', cooldownType: 'reel', screen: '/(tabs)/profile' },
             });
         }
-        if (type === 'all' || type === 'quiz_renewal') {
-            tests.push({
-                type: 'QUIZ_RENEWAL',
-                title: '🧠 اختبار جديد جاهز!',
-                body: 'اختبار اليوم في انتظارك. اثبت معرفتك بالكرة واكسب XP!',
-                data: { type: 'QUIZ_RENEWAL', screen: '/(tabs)/quiz' },
-            });
-        }
         if (type === 'all' || type === 'lucky_wheel') {
             tests.push({
                 type: 'LUCKY_WHEEL',

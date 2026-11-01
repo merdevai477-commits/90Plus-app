@@ -24,7 +24,6 @@ import { LiquidWaterSurface } from '../chat/LiquidWaterSurface';
 import { useTranslation } from '../../src/i18n';
 import { useXp } from '../../contexts/XpContext';
 import { useMyProfileBasics } from '../../hooks/useMyProfileBasics';
-import { useUserRank } from '../../hooks/useUserRank';
 
 const ACCENT = '#A855F7';
 const CARD_RADIUS = 22;
@@ -59,7 +58,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   const { t } = useTranslation();
   const xpCtx = useXp();
   const { data: profile, refetch: refetchProfile } = useMyProfileBasics();
-  const { rankData } = useUserRank();
 
   useFocusEffect(
     useCallback(() => {
@@ -89,14 +87,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     if (ratio > 1) return 100;
     return ratio * 100;
   }, [xpInLevel, xpForNextLevel]);
-
-  const rankLabel = useMemo(() => {
-    const global = rankData?.globalXpRank;
-    if (global != null) {
-      return `${t.rank.yourRank}: #${global}`;
-    }
-    return t.rank.rankNotRanked;
-  }, [rankData?.globalXpRank, t]);
 
   const handlePress = () => {
     router.push('/(tabs)/profile' as never);
@@ -139,9 +129,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 {resolvedName}
               </Text>
             </View>
-            <Text style={s.rankLabel} numberOfLines={1}>
-              {rankLabel}
-            </Text>
 
             <View style={s.xpRow}>
               <View style={s.lvlBadge}>
@@ -200,12 +187,6 @@ const s = StyleSheet.create({
   profileInfo: { flex: 1, gap: 10 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   username: { color: '#fff', fontSize: 18, fontWeight: '800', flexShrink: 1 },
-  rankLabel: {
-    color: 'rgba(255,255,255,0.62)',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: -4,
-  },
   xpRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   lvlBadge: {
     backgroundColor: ACCENT,

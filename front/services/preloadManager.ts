@@ -29,13 +29,12 @@ import {
   NotificationService,
 } from '../src/services/authService';
 import { ApiFootballService } from './apiFootball';
-import rankingsService from './rankingsService';
 import { logger } from './logger';
 import { preloadVideo, preloadVideos, isVideoPreloaded, clearPreloadedVideos } from '../utils/videoPreloader';
 import { setProfileMemoryCache } from '../hooks/useProfileCache';
 
 // Screen names that can be preloaded
-export type ScreenName = 'profile' | 'reels' | 'notifications' | 'matches' | 'rankings';
+export type ScreenName = 'profile' | 'reels' | 'notifications' | 'matches';
 
 // Preload configuration
 export interface PreloadConfig {
@@ -46,7 +45,7 @@ export interface PreloadConfig {
 
 // Default configuration - OPTIMIZED for faster loading
 const DEFAULT_CONFIG: PreloadConfig = {
-  screens: ['profile', 'reels', 'notifications', 'matches', 'rankings'],
+  screens: ['profile', 'reels', 'notifications', 'matches'],
   reelsCount: 5,
   refreshInterval: 10 * 60 * 1000, // 10 minutes (reduce background traffic)
 };
@@ -65,7 +64,6 @@ const PRELOAD_CACHE_KEYS = {
   reels: CACHE_KEYS.REELS_FEED,
   notifications: CACHE_KEYS.NOTIFICATIONS,
   matches: CACHE_KEYS.MATCHES,
-  rankings: 'rankings_all',
 } as const;
 
 // Preload status tracking
@@ -172,11 +170,10 @@ class PreloadManagerClass {
     ]);
   }
 
-  /** Tier 3: background data — notifications + rankings */
+  /** Tier 3: background data — notifications */
   private async loadTier3(): Promise<void> {
     await Promise.allSettled([
       this.preloadScreen('notifications'),
-      this.preloadScreen('rankings'),
     ]);
   }
 
@@ -216,7 +213,6 @@ class PreloadManagerClass {
     logger.debug('[PreloadManager] Priority 4: Preloading other screens in parallel...');
     await Promise.allSettled([
       this.preloadScreen('notifications'),
-      this.preloadScreen('rankings'),
       // matches excluded from periodic refresh - data is cached per date and refreshed on demand
     ]);
     
@@ -265,9 +261,6 @@ class PreloadManagerClass {
           break;
         case 'matches':
           await this.preloadMatches();
-          break;
-        case 'rankings':
-          await this.preloadRankings(token);
           break;
       }
 
@@ -639,28 +632,6 @@ class PreloadManagerClass {
   }
 
   /**
-   * Preload rankings data
-   * ✅ NEW: Preloads all rankings (views, shares, predictions, commenters, players)
-   */
-  private async preloadRankings(token: string): Promise<void> {
-    try {
-      const [allRankings, topPlayersWeekly, topPlayersMonthly] = await Promise.all([
-        rankingsService.getAllRankings(token, 10),
-        rankingsService.getTopPlayers(token, 11, 'weekly'),
-        rankingsService.getTopPlayers(token, 11, 'monthly'),
-      ]);
-
-      await cacheService.set('rankings_all', allRankings, 5 * 60 * 1000);
-      await cacheService.set('rankings_players_weekly', topPlayersWeekly, 5 * 60 * 1000);
-      await cacheService.set('rankings_players_monthly', topPlayersMonthly, 5 * 60 * 1000);
-
-      logger.debug('[PreloadManager] Rankings preloaded successfully');
-    } catch (error) {
-      logger.warn('[PreloadManager] Failed to preload rankings:', error);
-    }
-  }
-
-  /**
    * Start periodic refresh of cached data
    * Requirement 8.5
    */
@@ -674,7 +645,6 @@ class PreloadManagerClass {
       // Keep periodic refresh lightweight: avoid profile + aggressive reels video preloading.
       Promise.allSettled([
         this.preloadScreen('notifications'),
-        this.preloadScreen('rankings'),
       ]).catch(() => {});
     }, this.config.refreshInterval);
   }
