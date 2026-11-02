@@ -18,6 +18,8 @@ type CacheRow = {
   status: string;
   homeScore: number | null;
   awayScore: number | null;
+  homeTeamName?: string | null;
+  awayTeamName?: string | null;
   fullData: unknown;
 };
 
@@ -45,6 +47,8 @@ export function fromCacheRow(row: CacheRow): SettlementFixtureInput {
     awayScore: away,
     penaltyHome: pen.home ?? fullData?.score?.penalty?.home ?? null,
     penaltyAway: pen.away ?? fullData?.score?.penalty?.away ?? null,
+    homeTeamName: row.homeTeamName ?? null,
+    awayTeamName: row.awayTeamName ?? null,
   };
 }
 
@@ -137,7 +141,15 @@ export async function loadAuthoritativeSettlementFixture(
 
   const cached = await prisma.cachedFixture.findUnique({
     where: { fixtureId: apiMatchId },
-    select: { status: true, homeScore: true, awayScore: true, fullData: true, matchDate: true },
+    select: {
+      status: true,
+      homeScore: true,
+      awayScore: true,
+      homeTeamName: true,
+      awayTeamName: true,
+      fullData: true,
+      matchDate: true,
+    },
   });
   let confirmCachedFinal = false;
   if (cached?.status) {

@@ -78,13 +78,29 @@ describe('settlementSnapshotFrom365Game', () => {
       homeCompetitor: { id: 8100, name: 'Zamalek', score: 1, penaltyScore: 4 },
       awayCompetitor: { id: 8200, name: 'Pyramids', score: 0, penaltyScore: 3 },
     } as Partial<Game>), AF_ID);
-    expect(snap).toEqual({ status: 'PEN', homeScore: 0, awayScore: 1, penaltyHome: 3, penaltyAway: 4 });
+    expect(snap).toEqual({
+      status: 'PEN',
+      homeScore: 0,
+      awayScore: 1,
+      penaltyHome: 3,
+      penaltyAway: 4,
+      homeTeamName: 'Pyramids',
+      awayTeamName: 'Zamalek',
+    });
   });
 
   it('direct alignment keeps sides', async () => {
     mockFindUnique.mockResolvedValue(dbRow('Zamalek', 'Pyramids'));
     const snap = await settlementSnapshotFrom365Game(game(), AF_ID);
-    expect(snap).toEqual({ status: 'PEN', homeScore: 2, awayScore: 2, penaltyHome: 4, penaltyAway: 3 });
+    expect(snap).toEqual({
+      status: 'PEN',
+      homeScore: 2,
+      awayScore: 2,
+      penaltyHome: 4,
+      penaltyAway: 3,
+      homeTeamName: 'Zamalek',
+      awayTeamName: 'Pyramids',
+    });
   });
 
   it('mapped fixture whose teams do not match → null (no guessed alignment)', async () => {
@@ -114,7 +130,15 @@ describe('settlementSnapshotFrom365Game', () => {
       homeCompetitor: { id: 8100, name: 'Zamalek', score: 3 },
       awayCompetitor: { id: 8200, name: 'Pyramids', score: 2 },
     } as Partial<Game>), AF_ID);
-    expect(snap).toEqual({ status: 'AET', homeScore: 3, awayScore: 2, penaltyHome: null, penaltyAway: null });
+    expect(snap).toEqual({
+      status: 'AET',
+      homeScore: 3,
+      awayScore: 2,
+      penaltyHome: null,
+      penaltyAway: null,
+      homeTeamName: 'Zamalek',
+      awayTeamName: 'Pyramids',
+    });
   });
 
   it('365 "After ET" (statusId 154, seen on 4730724) → AET, not FT', async () => {

@@ -81,7 +81,7 @@ function hasScoreline(prediction: ScoredPrediction): boolean {
   return prediction.predictedHomeScore != null && prediction.predictedAwayScore != null;
 }
 
-function isPredictionCorrect(prediction: ScoredPrediction, settled: SettlementOk): boolean {
+function isPredictionCorrect(prediction: ScoredPrediction, settled: SettlementOk): boolean | null {
   return judgePrediction(prediction, settled);
 }
 
@@ -256,7 +256,20 @@ export class PredictionResolverService {
         break;
       }
       const prediction = predictions[index];
-      const isCorrect = isPredictionCorrect(prediction, settled);
+      const judged = isPredictionCorrect(prediction, settled);
+      if (judged == null) {
+        // Team labels don't match either order. Leave the row pending instead of marking it wrong.
+        recordSettleMetric('SETTLE_ORIENTATION_UNKNOWN');
+        logger.warn(
+          JSON.stringify({
+            event: 'SETTLE_ORIENTATION_UNKNOWN',
+            apiMatchId,
+            predictionId: prediction.id,
+          }),
+        );
+        continue;
+      }
+      const isCorrect = judged;
       const xpAction = predictionXpAction(prediction);
       const points = isCorrect ? XP_VALUES[xpAction] : 0;
 

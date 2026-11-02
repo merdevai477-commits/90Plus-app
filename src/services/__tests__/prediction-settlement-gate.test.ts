@@ -1,9 +1,11 @@
 import {
   isExactPredictionCorrect,
   isWinnerPredictionCorrect,
+  judgePrediction,
   resetSettlementGateCounters,
   resolveSettlementInput,
   settlementGateCounters,
+  type SettlementOk,
 } from '../prediction-settlement-gate';
 
 beforeEach(() => {
@@ -128,5 +130,112 @@ describe('winner / exact grading', () => {
   it('AET exact compares against post-ET goals', () => {
     expect(isExactPredictionCorrect(2, 1, 2, 1)).toBe(true);
     expect(isExactPredictionCorrect(1, 1, 2, 1)).toBe(false);
+  });
+});
+
+function settled(partial: Partial<SettlementOk> & Pick<SettlementOk, 'winner' | 'homeScore' | 'awayScore'>): SettlementOk {
+  return {
+    ok: true,
+    status: 'FT',
+    exactHomeScore: partial.homeScore,
+    exactAwayScore: partial.awayScore,
+    homeTeamName: null,
+    awayTeamName: null,
+    ...partial,
+  };
+}
+
+describe('winner pick follows the team the user chose', () => {
+  const nassrAway = {
+    predictionType: 'away',
+    predictedHomeScore: null,
+    predictedAwayScore: null,
+    homeTeam: 'Pakhtakor',
+    awayTeam: 'Al Nassr',
+  };
+
+  it('away win with the scoreline flipped still counts when the away name is the real winner', () => {
+    // User saw Pakhtakor at home and picked Al Nassr. The feed stored Nassr as home, 6-2.
+    const line = settled({
+      winner: 'home',
+      homeScore: 6,
+      awayScore: 2,
+      homeTeamName: 'Al Nassr',
+      awayTeamName: 'Pakhtakor',
+    });
+    expect(isWinnerPredictionCorrect('away', 'home', 'FT')).toBe(false);
+    expect(judgePrediction(nassrAway, line)).toBe(true);
+  });
+
+  it('aligned teams keep the raw home/away compare', () => {
+    const line = settled({
+      winner: 'away',
+      homeScore: 2,
+      awayScore: 6,
+      homeTeamName: 'Pakhtakor',
+      awayTeamName: 'Al-Nassr FC',
+    });
+    expect(judgePrediction(nassrAway, line)).toBe(true);
+    expect(judgePrediction({ ...nassrAway, predictionType: 'home' }, line)).toBe(false);
+  });
+
+  it('names that match neither order are not flipped and still settle', () => {
+    const line = settled({
+      winner: 'home',
+      homeScore: 1,
+      awayScore: 0,
+      homeTeamName: 'Pyramids',
+      awayTeamName: 'Zamalek',
+    });
+    expect(judgePrediction(nassrAway, line)).toBe(false);
+    expect(judgePrediction({ ...nassrAway, predictionType: 'home' }, line)).toBe(true);
+  });
+
+  it('a draw does not flip when the teams are swapped', () => {
+    const line = settled({
+      winner: 'draw',
+      homeScore: 1,
+      awayScore: 1,
+      homeTeamName: 'Al Nassr',
+      awayTeamName: 'Pakhtakor',
+    });
+    expect(judgePrediction({ ...nassrAway, predictionType: 'draw' }, line)).toBe(true);
+    expect(judgePrediction(nassrAway, line)).toBe(false);
+  });
+
+  it('an exact scoreline ignores a swapped team order', () => {
+    const line = settled({
+      winner: 'home',
+      homeScore: 6,
+      awayScore: 2,
+      exactHomeScore: 6,
+      exactAwayScore: 2,
+      homeTeamName: 'Al Nassr',
+      awayTeamName: 'Pakhtakor',
+    });
+    expect(
+      judgePrediction(
+        {
+          predictionType: 'away',
+          predictedHomeScore: 2,
+          predictedAwayScore: 6,
+          homeTeam: 'Pakhtakor',
+          awayTeam: 'Al Nassr',
+        },
+        line,
+      ),
+    ).toBe(false);
+    expect(
+      judgePrediction(
+        {
+          predictionType: 'home',
+          predictedHomeScore: 6,
+          predictedAwayScore: 2,
+          homeTeam: 'Pakhtakor',
+          awayTeam: 'Al Nassr',
+        },
+        line,
+      ),
+    ).toBe(true);
   });
 });

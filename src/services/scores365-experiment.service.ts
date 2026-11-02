@@ -2108,6 +2108,9 @@ export type Scores365SettlementSnapshot = {
   awayScore: number | null;
   penaltyHome: number | null;
   penaltyAway: number | null;
+  /** Names in the same orientation as the returned scores (the base fixture's sides). */
+  homeTeamName: string | null;
+  awayTeamName: string | null;
 };
 
 /**
@@ -2122,11 +2125,18 @@ export async function settlementSnapshotFrom365Game(
   // A mapped (non-native) fixture must align against its stored teams; the
   // synthetic-base fallback would silently assume "not swapped".
   let alignment: Scores365TeamAlignment | null;
+  let homeTeamName: string | null = null;
+  let awayTeamName: string | null = null;
   if (isNative365FixtureId(fixtureId)) {
-    alignment = (await resolve365BaseAndAlignment(game, fixtureId))?.alignment ?? null;
+    const resolved = await resolve365BaseAndAlignment(game, fixtureId);
+    alignment = resolved?.alignment ?? null;
+    homeTeamName = resolved?.base.teams.home.name ?? null;
+    awayTeamName = resolved?.base.teams.away.name ?? null;
   } else {
     const base = await loadBaseFixture(fixtureId);
     alignment = base ? detect365TeamAlignment(game, base) : null;
+    homeTeamName = base?.teams.home.name ?? null;
+    awayTeamName = base?.teams.away.name ?? null;
   }
   if (!alignment) return null;
   const classified = classifyScores365MatchStatus(game).short;
@@ -2140,6 +2150,8 @@ export async function settlementSnapshotFrom365Game(
     awayScore: goals.away,
     penaltyHome: penalty?.home ?? null,
     penaltyAway: penalty?.away ?? null,
+    homeTeamName,
+    awayTeamName,
   };
 }
 

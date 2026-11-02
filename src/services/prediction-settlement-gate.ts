@@ -1,3 +1,5 @@
+import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
+
 /**
  * Single settlement gate for King predictions (winner + exact).
  *
@@ -24,6 +26,9 @@ export type SettlementFixtureInput = {
   /** Shootout tallies when status is PEN. */
   penaltyHome?: number | null | undefined;
   penaltyAway?: number | null | undefined;
+  /** Side that owns `homeScore` / `awayScore`. Missing names keep the legacy home/away compare. */
+  homeTeamName?: string | null;
+  awayTeamName?: string | null;
 };
 
 export type SettlementOk = {
@@ -35,6 +40,9 @@ export type SettlementOk = {
   /** Line used for exact-score grading (same as home/away goals — never pens). */
   exactHomeScore: number;
   exactAwayScore: number;
+  /** Same orientation as `homeScore` / `awayScore`. */
+  homeTeamName: string | null;
+  awayTeamName: string | null;
 };
 
 export type SettlementFail = {
@@ -120,6 +128,8 @@ export function resolveSettlementInput(fixture: SettlementFixtureInput): Settlem
       winner,
       exactHomeScore: homeScore,
       exactAwayScore: awayScore,
+      homeTeamName: fixture.homeTeamName ?? null,
+      awayTeamName: fixture.awayTeamName ?? null,
     };
   }
 
@@ -140,6 +150,8 @@ export function resolveSettlementInput(fixture: SettlementFixtureInput): Settlem
     winner: winnerFromScores(homeScore, awayScore),
     exactHomeScore: homeScore,
     exactAwayScore: awayScore,
+    homeTeamName: fixture.homeTeamName ?? null,
+    awayTeamName: fixture.awayTeamName ?? null,
   };
 }
 
@@ -173,10 +185,51 @@ export type JudgeablePrediction = {
   predictionType: string;
   predictedHomeScore: number | null;
   predictedAwayScore: number | null;
+  /** Teams as the user saw them when they picked. Winner mode is graded against these. */
+  homeTeam?: string | null;
+  awayTeam?: string | null;
 };
 
-/** A row with a scoreline is a King of Results pick; otherwise a winner pick. */
-export function judgePrediction(prediction: JudgeablePrediction, settled: SettlementOk): boolean {
+export type TeamOrientation = 'aligned' | 'swapped' | 'unknown';
+
+/**
+ * Which way the stored pick faces the scoreline.
+ * Missing names stay `aligned` (legacy home/away compare) — a blank label is not
+ * evidence of a swap. Names that match neither way are `unknown`: the caller
+ * keeps the raw home/away compare instead of blocking settlement.
+ */
+export function winnerTeamOrientation(
+  prediction: { homeTeam?: string | null; awayTeam?: string | null },
+  fixture: { homeTeamName?: string | null; awayTeamName?: string | null },
+): TeamOrientation {
+  const predHome = prediction.homeTeam;
+  const predAway = prediction.awayTeam;
+  const fixHome = fixture.homeTeamName;
+  const fixAway = fixture.awayTeamName;
+  if (!predHome || !predAway || !fixHome || !fixAway) return 'aligned';
+
+  const direct = teamNamesLooselyMatch(predHome, fixHome) && teamNamesLooselyMatch(predAway, fixAway);
+  const swapped = teamNamesLooselyMatch(predHome, fixAway) && teamNamesLooselyMatch(predAway, fixHome);
+  if (direct && !swapped) return 'aligned';
+  if (swapped && !direct) return 'swapped';
+  return 'unknown';
+}
+
+/** Flip a home/away winner onto the pick's team order. A draw does not flip. Unknown stays unset. */
+export function orientWinner(winner: SettlementWinner, orientation: TeamOrientation): SettlementWinner | null {
+  if (orientation === 'unknown') return null;
+  if (orientation === 'aligned' || winner === 'draw') return winner;
+  return winner === 'home' ? 'away' : 'home';
+}
+
+/**
+ * A row with a scoreline is a King of Results pick (numbers only).
+ * A winner pick is graded on the team the user chose.
+ * A positive swap flips home/away. Names that match neither way (Arabic cache
+ * vs English pick, or a suffix the matcher does not strip) are not evidence of
+ * a swap, so the raw home/away compare stands and the row still settles.
+ */
+export function judgePrediction(prediction: JudgeablePrediction, settled: SettlementOk): boolean | null {
   if (prediction.predictedHomeScore != null && prediction.predictedAwayScore != null) {
     return isExactPredictionCorrect(
       prediction.predictedHomeScore,
@@ -185,7 +238,10 @@ export function judgePrediction(prediction: JudgeablePrediction, settled: Settle
       settled.exactAwayScore,
     );
   }
-  return isWinnerPredictionCorrect(prediction.predictionType, settled.winner, settled.status);
+  const orientation = winnerTeamOrientation(prediction, settled);
+  const winner = orientation === 'swapped' ? orientWinner(settled.winner, orientation) : settled.winner;
+  if (winner == null) return null;
+  return isWinnerPredictionCorrect(prediction.predictionType, winner, settled.status);
 }
 
 export type StoredVerdictBucket = 'wrongToCorrect' | 'correctToWrong' | 'unchanged';
@@ -196,6 +252,8 @@ export function classifyStoredVerdict(
   settled: SettlementOk,
 ): { bucket: StoredVerdictBucket; computed: boolean } {
   const computed = judgePrediction(prediction, settled);
+  // Unclear team order: leave the stored verdict. Do not guess a correction.
+  if (computed == null) return { bucket: 'unchanged', computed: prediction.isCorrect };
   if (!prediction.isCorrect && computed) return { bucket: 'wrongToCorrect', computed };
   if (prediction.isCorrect && !computed) return { bucket: 'correctToWrong', computed };
   return { bucket: 'unchanged', computed };
@@ -218,6 +276,7 @@ export function snapshotFromApiFootballFixture(match: {
   fixture?: { status?: { short?: string } };
   goals?: { home?: number | null; away?: number | null };
   score?: { penalty?: { home?: number | null; away?: number | null } };
+  teams?: { home?: { name?: string | null }; away?: { name?: string | null } };
 }): SettlementFixtureInput {
   return {
     status: match.fixture?.status?.short ?? null,
@@ -225,5 +284,7 @@ export function snapshotFromApiFootballFixture(match: {
     awayScore: match.goals?.away ?? null,
     penaltyHome: match.score?.penalty?.home ?? null,
     penaltyAway: match.score?.penalty?.away ?? null,
+    homeTeamName: match.teams?.home?.name ?? null,
+    awayTeamName: match.teams?.away?.name ?? null,
   };
 }
