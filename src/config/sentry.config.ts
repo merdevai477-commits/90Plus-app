@@ -9,7 +9,7 @@
 
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
-import { Application } from 'express';
+import type { Application } from 'express';
 import { logger } from '../utils/logger';
 
 /**
@@ -123,13 +123,12 @@ function beforeSendHook(event: Sentry.ErrorEvent, _hint?: Sentry.EventHint): Sen
 
 /**
  * Initializes Sentry for the Backend application
- * Configures error tracking, performance monitoring, and Express integration
+ * Configures error tracking and performance monitoring. Runs from
+ * src/instrument.ts, before express is loaded.
  * 
- * Requirements: 1.4, 1.6, 1.7, 1.8, 1.9, 1.12, 5.14
- * 
- * @param app - Express application instance
+ * Requirements: 1.4, 1.6, 1.7, 1.8, 1.9, 5.14
  */
-export function initializeSentry(app: Application): void {
+export function initializeSentry(): void {
   const dsn = process.env.SENTRY_DSN;
   
   // Validate DSN
@@ -172,11 +171,6 @@ export function initializeSentry(app: Application): void {
       ],
     });
     
-    // Setup Express error handler (combines request handler, tracing handler, and error handler)
-    // This must be called after Sentry.init() and will add the necessary middleware
-    // Requirements: 1.12 - Request handler, tracing handler, and error handler
-    Sentry.setupExpressErrorHandler(app);
-    
     logger.info(`✅ Sentry initialized for Backend (${environment}, traces: ${tracesSampleRate * 100}%, profiling: ${profilesSampleRate * 100}%)`);
   } catch (error) {
     logger.error('Failed to initialize Sentry:', error);
@@ -184,16 +178,26 @@ export function initializeSentry(app: Application): void {
 }
 
 /**
+ * Registers Sentry's Express error handler. Express only passes errors to
+ * handlers registered after the routes, so call this after all routes and
+ * before any other error middleware.
+ * 
+ * Requirements: 1.12
+ */
+export function setupSentryErrorHandler(app: Application): void {
+  if (!Sentry.isInitialized()) return;
+  Sentry.setupExpressErrorHandler(app);
+}
+
+/**
  * Gets the Sentry error handler middleware
  * This should be added after all routes but before other error handlers
- * Note: In Sentry v8+, this is handled automatically by setupExpressErrorHandler
  * This function is kept for backward compatibility but is no longer needed
  * 
  * @returns Express error handler middleware
- * @deprecated Use setupExpressErrorHandler in initializeSentry instead
+ * @deprecated Use setupSentryErrorHandler instead
  */
 export function getSentryErrorHandler() {
-  // In Sentry v8+, setupExpressErrorHandler handles this automatically
   // Return a no-op middleware for backward compatibility
   return (_req: any, _res: any, next: any) => next();
 }

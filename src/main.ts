@@ -1,3 +1,4 @@
+import './instrument';
 import express, { Application, Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
@@ -22,6 +23,7 @@ import {
     buildAssetLinksJson,
 } from './config/androidAppLinks';
 import { buildAppleAppSiteAssociation } from './config/appleAppSite';
+import { setupSentryErrorHandler } from './config/sentry.config';
 import { startNativeHeapRelease, stopNativeHeapRelease } from './utils/native-heap';
 
 // Opt out of transparent huge pages before request traffic extends the malloc heap.
@@ -42,14 +44,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 const app: Application = express();
 const PORT = Number(process.env.PORT) || 3000;
 const API_PREFIX = process.env.API_PREFIX || '/api';
-
-// ============================================
-// SENTRY INITIALIZATION
-// ============================================
-// Initialize Sentry for error tracking and performance monitoring
-// Must be called early, before other middleware
-import { initializeSentry } from './config/sentry.config';
-initializeSentry(app);
 
 // Trust proxy - Required for Railway and other reverse proxies
 // This allows Express to correctly identify the client's IP from X-Forwarded-For header
@@ -709,7 +703,7 @@ app.use((req: Request, res: Response) => {
     });
 });
 
-// Note: Sentry error handler is automatically added by setupExpressErrorHandler in initializeSentry
+setupSentryErrorHandler(app);
 
 // ✅ ZERO TRUST: Production-safe error handler with sanitization
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
