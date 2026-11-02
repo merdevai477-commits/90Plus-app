@@ -1,7 +1,7 @@
 /**
  * Squad selection countdown.
- * Counts toward the gameweek close (Tuesday 00:00 UTC). Days are split out
- * so the hours box never rolls past 23.
+ * Hidden while picks are open. Shown only after the gameweek locks, counting
+ * to Tuesday 00:00 UTC when the next round opens.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -71,6 +71,8 @@ export function CoachKingDeadline({ startAt, endAt, locked = false }: DeadlinePr
   const headline = phase === 'open' ? copy.closesIn : copy.opensIn;
   const tip = phase === 'open' ? copy.tipOpen : copy.tipClosed;
   const row = isAr ? 'row-reverse' : 'row';
+
+  if (phase === 'open') return null;
 
   return (
     <View style={styles.card} testID="ck-deadline">
