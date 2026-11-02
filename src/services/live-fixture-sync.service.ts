@@ -68,6 +68,9 @@ class LiveFixtureSyncService {
     private warmedLiveIds = new Set<number>();
     /** Throttle non-score event WS pushes (cards/subs) — max one delta / 8s per fixture. */
     private lastEventPushAt = new Map<number, number>();
+    /** Clock kicks add ticks; favourite re-ingest keeps the configured interval. */
+    private lastFavoriteIngestAt = new Map<number, number>();
+    private favoriteIngestGapMs = 4_500;
     private lastLiveStatePruneAt = 0;
 
     start(): void {
@@ -83,6 +86,7 @@ class LiveFixtureSyncService {
         );
 
         this.running = true;
+        this.favoriteIngestGapMs = intervalMs - 500;
         logWorldCupOnlyModeStartup();
         logger.info(`🔴 Live fixture sync started (every ${intervalMs / 1000}s, leader-elected)${isWorldCupOnlyMode() ? ' [World Cup only]' : ''}`);
 
@@ -105,6 +109,7 @@ class LiveFixtureSyncService {
         this.finishingInFlight.clear();
         this.warmedLiveIds.clear();
         this.lastEventPushAt.clear();
+        this.lastFavoriteIngestAt.clear();
         this.lastLiveStatePruneAt = 0;
         logger.info('🔴 Live fixture sync stopped');
     }
@@ -567,9 +572,13 @@ class LiveFixtureSyncService {
                 }
             }
 
-            // Re-ingest favorited live fixtures every tick so cards/VAR are
+            // Re-ingest favorited live fixtures once per interval so cards/VAR are
             // detected without waiting for a score or status change.
-            if (favoritedLiveIds.has(id)) {
+            if (
+                favoritedLiveIds.has(id) &&
+                nowMs - (this.lastFavoriteIngestAt.get(id) ?? 0) >= this.favoriteIngestGapMs
+            ) {
+                this.lastFavoriteIngestAt.set(id, nowMs);
                 LiveMatchIngestorService.triggerFixtureIngest(id);
             }
         }
@@ -585,6 +594,16 @@ class LiveFixtureSyncService {
 
         logger.debug(`[LiveFixtureSync] Quota pause — processing ${cached.length} cached live fixture(s)`);
         await this.processLiveFixtures(cached);
+    }
+
+    /**
+     * Run a tick right after fresh 365 clocks land instead of waiting up to one
+     * interval. Cached mode only, so a kick never spends API-Football quota.
+     */
+    requestCachedSync(): void {
+        if (!this.running) return;
+        if (!isFootballQuotaExhausted() && isPurposeAllowed('live-sync')) return;
+        this.syncOnce().catch((err) => logger.warn('Live fixture sync kick failed:', err));
     }
 
     private async syncOnce(): Promise<void> {
@@ -620,6 +639,9 @@ class LiveFixtureSyncService {
         // Throttle stamps are only written beside a snapshot; FT clears the snapshot alone.
         for (const id of this.lastEventPushAt.keys()) {
             if (!this.lastSnapshots.has(id)) this.lastEventPushAt.delete(id);
+        }
+        for (const id of this.lastFavoriteIngestAt.keys()) {
+            if (!this.lastSnapshots.has(id)) this.lastFavoriteIngestAt.delete(id);
         }
     }
 

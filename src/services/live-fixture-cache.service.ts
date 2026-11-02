@@ -9,6 +9,7 @@ import { lagAudit } from '../utils/lag-audit';
 import { clearEmptyUpstreamBackoff } from './empty-upstream-backoff.service';
 import {
   FOOTBALL_365_LIVE_ABSENT_KEY_PREFIX,
+  FOOTBALL_365_LIVE_CLOCK_KEY,
   FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX,
   FOOTBALL_365_LIVE_MATCHES_KEY,
   FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX,
@@ -48,6 +49,8 @@ const SCORES365_LIVE_ABSENCE_GRACE_MS = 180_000;
 const SCORES365_LIVE_ABSENCE_MIN_MISSES = 3;
 /** Refreshed on each accepted miss. Longer than the grace window, so a 20s tick cannot expire it. */
 const SCORES365_LIVE_ABSENCE_TTL_SEC = 15 * 60;
+/** Outlives a couple of missed clock ticks; after that reads fall back to the allscores rows. */
+const SCORES365_LIVE_CLOCK_TTL_MS = 15_000;
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -148,6 +151,114 @@ function parseFixtureList(raw: string | null): FixtureFromAPI[] {
   if (!raw) return [];
   const parsed = JSON.parse(raw) as FixtureFromAPI[];
   return Array.isArray(parsed) ? parsed : [];
+}
+
+type LiveClock = {
+  status: FixtureFromAPI['fixture']['status'];
+  goals: FixtureFromAPI['goals'];
+  fulltime: FixtureFromAPI['score']['fulltime'];
+  extratime: FixtureFromAPI['score']['extratime'];
+  penalty: FixtureFromAPI['score']['penalty'];
+};
+type LiveClockMap = Record<string, LiveClock>;
+
+const LIVE_PERIOD_RANK: Record<string, number> = { '1H': 1, HT: 2, '2H': 3, ET: 4, BT: 5, P: 6 };
+
+function parseLiveClocks(raw: string | null): LiveClockMap | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as LiveClockMap;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function clockMinute(status: FixtureFromAPI['fixture']['status'] | undefined): number {
+  return (status?.elapsed ?? 0) + (status?.extra ?? 0);
+}
+
+function goalsTotal(goals: FixtureFromAPI['goals'] | undefined): number {
+  return (goals?.home ?? 0) + (goals?.away ?? 0);
+}
+
+/**
+ * The clock may have been read just before a newer REPLACE, so it only ever moves
+ * a row forward: a later period, an extra goal, or a later minute.
+ */
+function clockMovesRowForward(row: FixtureFromAPI, clock: LiveClock): boolean {
+  const rowShort = row.fixture.status.short;
+  const clockShort = clock.status.short;
+  if (rowShort !== clockShort) {
+    const rowRank = LIVE_PERIOD_RANK[rowShort];
+    const clockRank = LIVE_PERIOD_RANK[clockShort];
+    return rowRank != null && clockRank != null && clockRank > rowRank;
+  }
+  const rowGoals = goalsTotal(row.goals);
+  const clockGoals = goalsTotal(clock.goals);
+  if (clockGoals !== rowGoals) return clockGoals > rowGoals;
+  return clockMinute(clock.status) >= clockMinute(row.fixture.status);
+}
+
+function applyLiveClock(row: FixtureFromAPI, clocks: LiveClockMap | null): FixtureFromAPI {
+  const id = row?.fixture?.id;
+  if (!clocks || id == null) return row;
+  const clock = clocks[id];
+  // Native 365 rows only: linked API-Football rows may carry swapped home/away.
+  if (!clock || (row as { _scores365GameId?: number })._scores365GameId !== id) return row;
+  if (!LIVE_STATUSES_SET.has(row.fixture.status?.short ?? '')) return row;
+  if (!LIVE_STATUSES_SET.has(clock.status?.short ?? '')) return row;
+  if (!clockMovesRowForward(row, clock)) return row;
+  return {
+    ...row,
+    fixture: { ...row.fixture, status: { ...clock.status } },
+    goals: { ...clock.goals },
+    score: {
+      ...row.score,
+      fulltime: clock.fulltime,
+      extratime: clock.extratime,
+      penalty: clock.penalty,
+    },
+  };
+}
+
+/**
+ * Publish fresh 365 clocks. Never touches the live lists: membership and FT stay
+ * owned by the allscores REPLACE, so a stalled clock feed cannot strand a row.
+ */
+export async function write365LiveClocks(fixtures: FixtureFromAPI[]): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  const clocks: LiveClockMap = {};
+  for (const fixture of fixtures) {
+    const id = fixture?.fixture?.id;
+    const status = fixture?.fixture?.status;
+    if (id == null || !status || !LIVE_STATUSES_SET.has(status.short)) continue;
+    clocks[id] = {
+      status: {
+        long: status.long,
+        short: status.short,
+        elapsed: status.elapsed ?? null,
+        extra: status.extra ?? null,
+      },
+      goals: { home: fixture.goals?.home ?? null, away: fixture.goals?.away ?? null },
+      fulltime: fixture.score?.fulltime ?? { home: null, away: null },
+      extratime: fixture.score?.extratime ?? { home: null, away: null },
+      penalty: fixture.score?.penalty ?? { home: null, away: null },
+    };
+  }
+
+  try {
+    await redis.set(
+      FOOTBALL_365_LIVE_CLOCK_KEY,
+      JSON.stringify(clocks),
+      'PX',
+      SCORES365_LIVE_CLOCK_TTL_MS,
+    );
+  } catch (err) {
+    logger.warn('[LiveFixtureCache] write365LiveClocks failed:', err);
+  }
 }
 
 function terminalFixtureKey(fixtureId: number): string {
@@ -754,18 +865,20 @@ export async function readLiveFixturesList(): Promise<FixtureFromAPI[] | null> {
   if (!redis) return null;
 
   try {
-    const [legacyRaw, apiRaw, scores365Raw] = await Promise.all([
+    const [legacyRaw, apiRaw, scores365Raw, clockRaw] = await Promise.all([
       redis.get(FOOTBALL_LIVE_MATCHES_KEY),
       redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
       redis.get(FOOTBALL_365_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_365_LIVE_CLOCK_KEY),
     ]);
     if (!legacyRaw && !apiRaw && !scores365Raw) return null;
     // Provider keys override the legacy compatibility snapshot on duplicate ids.
+    const clocks = parseLiveClocks(clockRaw);
     const merged = mergeFixtureLists(
       parseFixtureList(legacyRaw),
       parseFixtureList(apiRaw),
       parseFixtureList(scores365Raw),
-    );
+    ).map((fixture) => applyLiveClock(fixture, clocks));
     const keepLiveIds = new Set(
       parseFixtureList(scores365Raw)
         .filter((fixture) => LIVE_STATUSES_SET.has(fixture?.fixture?.status?.short ?? ''))
@@ -784,17 +897,18 @@ export async function readLiveFixtureById(fixtureId: number): Promise<FixtureFro
   if (!redis) return null;
 
   try {
-    const [terminalRaw, scores365Raw, apiRaw, legacyRaw] = await Promise.all([
+    const [terminalRaw, scores365Raw, apiRaw, legacyRaw, clockRaw] = await Promise.all([
       redis.get(terminalFixtureKey(fixtureId)),
       redis.get(providerLiveFixtureKey('365', fixtureId)),
       redis.get(providerLiveFixtureKey('api-football', fixtureId)),
       redis.get(liveFixtureKey(fixtureId)),
+      redis.get(FOOTBALL_365_LIVE_CLOCK_KEY),
     ]);
     if (isAuthoritativeTerminalRaw(terminalRaw) && terminalRaw) {
       return stripTerminalMeta(JSON.parse(terminalRaw) as TerminalFixturePayload);
     }
     if (scores365Raw) {
-      return JSON.parse(scores365Raw) as FixtureFromAPI;
+      return applyLiveClock(JSON.parse(scores365Raw) as FixtureFromAPI, parseLiveClocks(clockRaw));
     }
     if (terminalRaw) {
       const list = await readLiveFixturesList();

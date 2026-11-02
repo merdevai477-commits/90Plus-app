@@ -14,6 +14,7 @@
  *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: every 10 min)
  *   OTHER_LEAGUES_365_LIVE_CRON  — cron for 365 per-game live overlay refresh (default: every 2 min)
  *   SCORES365_ALLSCORES_LIVE_MS  — hot allscores live tick that REPLACES Redis live list (default: 20s)
+ *   SCORES365_LIVE_CLOCK_MS      — light /games/current/ clock overlay for live rows (default: 5s)
  */
 
 import cron from 'node-cron';
@@ -67,9 +68,10 @@ function isAllScoresEnabled(): boolean {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, allScoresLive: false, catalog: false, fixturesBatch: false };
+const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, allScoresLive: false, liveClock: false, catalog: false, fixturesBatch: false };
 let scores365FavoriteHotTimer: ReturnType<typeof setInterval> | null = null;
 let scores365AllScoresLiveTimer: ReturnType<typeof setInterval> | null = null;
+let scores365LiveClockTimer: ReturnType<typeof setInterval> | null = null;
 
 /** App-calendar YYYY-MM-DD offset by `days` from today (Cairo by default). */
 function dateKeyOffset(days: number): string {
@@ -220,6 +222,33 @@ async function run365AllScoresLiveTick(): Promise<void> {
     logger.error(`[${WORKER}][365allscores-live] tick fatal (recovered):`, (err as Error)?.message);
   } finally {
     isRunning.allScoresLive = false;
+  }
+}
+
+// ─── 365 live clock tick (light /games/current/ overlay) ─────────────────────
+
+async function run365LiveClockTick(): Promise<void> {
+  if (!isAllScoresEnabled()) return;
+  if (isRunning.liveClock) return;
+  isRunning.liveClock = true;
+
+  try {
+    const lease = await withSyncLeaderLease('365-live-clock', async ({ signal }) => {
+      signal.throwIfAborted();
+      const published = await threeSixFiveScoresService.syncLiveClocksFromCurrent('en');
+      signal.throwIfAborted();
+      if (published) {
+        const { liveFixtureSyncService } = await import('../services/live-fixture-sync.service');
+        liveFixtureSyncService.requestCachedSync();
+      }
+    }, { ttlSec: 30 });
+    if (!lease.acquired) {
+      logger.debug(`[${WORKER}][365clock] distributed lease busy — skipping`);
+    }
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][365clock] tick fatal (recovered):`, (err as Error)?.message);
+  } finally {
+    isRunning.liveClock = false;
   }
 }
 
@@ -400,6 +429,16 @@ export function startOtherLeaguesSyncWorker(): void {
       scores365AllScoresLiveTimer.unref?.();
       void run365AllScoresLiveTick();
     }
+    if (!scores365LiveClockTimer) {
+      const clockTickMs = Math.max(
+        3_000,
+        parseInt(process.env.SCORES365_LIVE_CLOCK_MS || '5000', 10) || 5_000,
+      );
+      scores365LiveClockTimer = setInterval(() => {
+        void run365LiveClockTick();
+      }, clockTickMs);
+      scores365LiveClockTimer.unref?.();
+    }
     // Boot-time force syncs (catalog / allscores / 365live / fixtures) — gated.
     // With STARTUP_SYNC_DISABLED=true these are skipped; crons above still run.
     if (isStartupSyncDisabled()) {
@@ -426,6 +465,6 @@ export function startOtherLeaguesSyncWorker(): void {
   }
 
   logger.info(
-    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}", catalog="${catalogCron}", fixtures="${fixturesBatchCron}", liveTick=${process.env.SCORES365_ALLSCORES_LIVE_MS || '20000'}ms)` : 'off'}`,
+    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}", catalog="${catalogCron}", fixtures="${fixturesBatchCron}", liveTick=${process.env.SCORES365_ALLSCORES_LIVE_MS || '20000'}ms, clockTick=${process.env.SCORES365_LIVE_CLOCK_MS || '5000'}ms)` : 'off'}`,
   );
 }

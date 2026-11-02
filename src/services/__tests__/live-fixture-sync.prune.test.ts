@@ -40,8 +40,11 @@ jest.mock('../synthetic-goals.service', () => ({
     reconcileSyntheticGoals: jest.fn().mockResolvedValue(undefined),
 }));
 
+import prisma from '../../lib/prisma';
 import { liveFixtureSyncService } from '../live-fixture-sync.service';
 import { WebSocketService } from '../websocket.service';
+import { withSyncLeaderLease } from '../football-sync-leader.service';
+import LiveMatchIngestorService from '../live-match-ingestor.service';
 
 const MINUTE = 60_000;
 
@@ -121,5 +124,48 @@ describe('live fixture sync state pruning', () => {
 
         svc.pruneStaleLiveState(start + 30.6 * MINUTE);
         expect(svc.getLiveStateSizes().snapshots).toBe(0);
+    });
+});
+
+describe('live fixture sync clock kicks', () => {
+    let now = Date.parse('2026-10-08T18:00:00Z');
+
+    beforeEach(() => {
+        svc.stop();
+        now = Date.parse('2026-10-08T18:00:00Z');
+        jest.spyOn(Date, 'now').mockImplementation(() => now);
+        (LiveMatchIngestorService.triggerFixtureIngest as jest.Mock).mockClear();
+        (withSyncLeaderLease as jest.Mock).mockClear();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('re-ingests a favourite once per interval however many ticks run', async () => {
+        const findMany = prisma.favoriteMatch.findMany as jest.Mock;
+        findMany.mockResolvedValue([{ apiMatchId: 6 }]);
+        try {
+            await svc.processLiveFixtures([liveFixture(6, 50)]);
+            now += 1_000;
+            await svc.processLiveFixtures([liveFixture(6, 50)]);
+            expect(LiveMatchIngestorService.triggerFixtureIngest).toHaveBeenCalledTimes(1);
+
+            now += 4_000;
+            await svc.processLiveFixtures([liveFixture(6, 51)]);
+            expect(LiveMatchIngestorService.triggerFixtureIngest).toHaveBeenCalledTimes(2);
+        } finally {
+            findMany.mockResolvedValue([]);
+        }
+    });
+
+    it('never kicks a tick that would call API-Football', () => {
+        (svc as unknown as { running: boolean }).running = true;
+        try {
+            (svc as unknown as { requestCachedSync(): void }).requestCachedSync();
+            expect(withSyncLeaderLease).not.toHaveBeenCalled();
+        } finally {
+            svc.stop();
+        }
     });
 });

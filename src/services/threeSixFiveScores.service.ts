@@ -1255,6 +1255,39 @@ export class ThreeSixFiveScoresService {
   }
 
   /**
+   * Fast clock tick: /games/current/ is ~8x lighter than the 3-day allscores call
+   * and CDN-cached for 3s (vs 12s), so live minutes/scores land seconds after 365
+   * instead of waiting for the next REPLACE. Publishes clocks only — membership
+   * and FT stay owned by syncLiveSnapshotFromAllScores. Returns null on upstream failure.
+   */
+  async syncLiveClocksFromCurrent(language?: string | null): Promise<number | null> {
+    if (!this.isEnabled()) return null;
+
+    const langId = resolveScores365LangId(language);
+    const payload = await this.fetchJson<AllScoresPayload>(
+      `/web/games/current/?${this.commonParams(langId)}&sports=1`,
+      `games-current:${langId}`,
+      0,
+      true,
+      8_000,
+    );
+    if (!payload) return null;
+
+    const competitionMeta = this.buildCompetitionMeta(payload);
+    const liveFixtures: FixtureFromAPI[] = [];
+    for (const game of payload.games ?? []) {
+      const item = this.toFixtureItem(game);
+      if (!isAllScoresLiveItem(item)) continue;
+      const mapped = await this.mapAllScoresItemToLiveFixture(item, competitionMeta);
+      if (mapped) liveFixtures.push(mapped);
+    }
+
+    const { write365LiveClocks } = await import('./live-fixture-cache.service');
+    await write365LiveClocks(liveFixtures);
+    return liveFixtures.length;
+  }
+
+  /**
    * Fill upcoming gaps for a calendar day via per-competition /fixtures/ feed.
    * allscores often omits scheduled lower-tier games (e.g. Brasileirão Série B).
    */

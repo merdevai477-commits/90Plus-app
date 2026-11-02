@@ -5,6 +5,8 @@
 export const FOOTBALL_LIVE_MATCHES_KEY = 'football:live_matches';
 export const FOOTBALL_API_LIVE_MATCHES_KEY = 'football:live_matches:api-football';
 export const FOOTBALL_365_LIVE_MATCHES_KEY = 'football:live_matches:365';
+/** Fresh 365 clocks (status/minute/score) keyed by fixture id, overlaid on live rows at read time. */
+export const FOOTBALL_365_LIVE_CLOCK_KEY = 'football:live_clock:365';
 export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:api-football:';
 export const FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:365:';

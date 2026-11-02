@@ -1,6 +1,8 @@
 import { getRedisClient } from '../../lib/redis';
 import {
   FOOTBALL_365_LIVE_ABSENT_KEY_PREFIX,
+  FOOTBALL_365_LIVE_CLOCK_KEY,
+  FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX,
   FOOTBALL_365_LIVE_MATCHES_KEY,
   FOOTBALL_API_LIVE_MATCHES_KEY,
   FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX,
@@ -17,6 +19,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
   shouldRescueLiveListFromApiFootball,
+  write365LiveClocks,
   writeLiveFixturesSnapshot,
   writeTerminalFixtureSnapshot,
 } from '../live-fixture-cache.service';
@@ -94,6 +97,10 @@ function redisHarness(initial: Record<string, string> = {}) {
         const exAt = args.indexOf('EX');
         if (exAt >= 0 && typeof args[exAt + 1] === 'number') {
           ttls.set(key, args[exAt + 1] as number);
+        }
+        const pxAt = args.indexOf('PX');
+        if (pxAt >= 0 && typeof args[pxAt + 1] === 'number') {
+          ttls.set(key, (args[pxAt + 1] as number) / 1000);
         }
         return 'OK';
       }),
@@ -899,5 +906,111 @@ describe('365 live absence grace', () => {
     await expect(redis.client.hget(absentKey(id), 'since')).resolves.toBe(String(T0));
     expect(redis.values.has(tombKey(id))).toBe(false);
     expect(redis.values.has(latchKey(id))).toBe(false);
+  });
+});
+
+describe('365 live clock overlay', () => {
+  function native365(
+    id: number,
+    short: string,
+    elapsed: number | null,
+    home: number,
+    away: number,
+    extra: number | null = null,
+  ): any {
+    return {
+      fixture: { id, status: { long: short, short, elapsed, extra } },
+      league: { id: 10_000_123 },
+      goals: { home, away },
+      score: {
+        halftime: { home: null, away: null },
+        fulltime: { home, away },
+        extratime: { home: null, away: null },
+        penalty: { home: null, away: null },
+      },
+      _scores365GameId: id,
+    };
+  }
+
+  async function harnessWithClocks(rows: any[], clockRows: any[]) {
+    const redis = redisHarness({
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify(rows),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+    await write365LiveClocks(clockRows);
+    return redis;
+  }
+
+  beforeEach(() => {
+    mockedGetRedisClient.mockReset();
+  });
+
+  it('moves live rows forward to the fresher clock without adding rows', async () => {
+    await harnessWithClocks(
+      [native365(4_900_001, '1H', 30, 0, 0), native365(4_900_002, '1H', 44, 1, 0)],
+      [
+        native365(4_900_001, '1H', 31, 1, 0),
+        native365(4_900_002, 'HT', 45, 1, 0),
+        native365(4_900_003, '2H', 60, 2, 2),
+      ],
+    );
+
+    const list = await readLiveFixturesList();
+
+    expect(list?.map((f) => f.fixture.id)).toEqual([4_900_001, 4_900_002]);
+    expect(list?.[0]).toMatchObject({
+      fixture: { status: { short: '1H', elapsed: 31 } },
+      goals: { home: 1, away: 0 },
+      score: { fulltime: { home: 1, away: 0 } },
+    });
+    expect(list?.[1].fixture.status.short).toBe('HT');
+  });
+
+  it('never rewinds a row the REPLACE already moved past the clock', async () => {
+    const rows = [
+      native365(4_900_011, '2H', 47, 0, 0),
+      native365(4_900_012, '2H', 70, 1, 0),
+      native365(4_900_013, '1H', 20, 2, 0),
+    ];
+    await harnessWithClocks(rows, [
+      native365(4_900_011, 'HT', 45, 0, 0),
+      native365(4_900_012, '2H', 69, 1, 0),
+      native365(4_900_013, '1H', 25, 1, 0),
+    ]);
+
+    await expect(readLiveFixturesList()).resolves.toEqual(rows);
+  });
+
+  it('only patches native 365 rows', async () => {
+    const linked = { ...native365(4_900_021, '1H', 10, 0, 0), _scores365GameId: 8_123 };
+    await harnessWithClocks([linked], [native365(4_900_021, '1H', 12, 0, 1)]);
+
+    await expect(readLiveFixturesList()).resolves.toEqual([linked]);
+  });
+
+  it('publishes only live clocks with a short TTL', async () => {
+    const redis = await harnessWithClocks(
+      [],
+      [native365(4_900_031, '2H', 88, 3, 1, 2), native365(4_900_032, 'FT', 90, 0, 0)],
+    );
+
+    const stored = JSON.parse(redis.values.get(FOOTBALL_365_LIVE_CLOCK_KEY) ?? '{}');
+    expect(Object.keys(stored)).toEqual(['4900031']);
+    expect(stored['4900031'].status).toEqual({ long: '2H', short: '2H', elapsed: 88, extra: 2 });
+    expect(redis.ttls.get(FOOTBALL_365_LIVE_CLOCK_KEY)).toBe(15);
+  });
+
+  it('applies the clock to the per-id 365 snapshot', async () => {
+    const id = 4_900_041;
+    const redis = redisHarness({
+      [`${FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX}${id}`]: JSON.stringify(native365(id, '2H', 60, 0, 0)),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+    await write365LiveClocks([native365(id, '2H', 62, 0, 1)]);
+
+    await expect(readLiveFixtureById(id)).resolves.toMatchObject({
+      fixture: { status: { elapsed: 62 } },
+      goals: { home: 0, away: 1 },
+    });
   });
 });
