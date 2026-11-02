@@ -48,11 +48,11 @@ import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { DeepLinkHandler } from '../components/DeepLinkHandler';
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { logger } from "../services/logger";
+import { clerkTokenCache } from "../services/clerkTokenCache";
 import { preloadManager } from "../services/preloadManager";
 import { cacheService, CACHE_KEYS } from "../services/cacheService";
 
@@ -178,56 +178,6 @@ const layoutStyles = StyleSheet.create({
     paddingHorizontal: 32,
   },
 });
-
-// Token cache for Clerk — AFTER_FIRST_UNLOCK keeps session across device lock/reboot.
-const CLERK_SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
-  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
-};
-
-async function secureGetWithRetry(key: string): Promise<string | null> {
-  const maxAttempts = 3;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      return await SecureStore.getItemAsync(key, CLERK_SECURE_STORE_OPTIONS);
-    } catch (err) {
-      if (attempt === maxAttempts - 1) {
-        logger.warn('SecureStore getToken error (giving up):', err);
-        try {
-          captureException(err instanceof Error ? err : new Error(String(err)), {
-            tags: { area: 'clerk_token_cache', op: 'getToken' },
-          });
-        } catch {
-          /* Sentry optional */
-        }
-        return null;
-      }
-      await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
-    }
-  }
-  return null;
-}
-
-const tokenCache = {
-  async getToken(key: string) {
-    return secureGetWithRetry(key);
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      return await SecureStore.setItemAsync(key, value, CLERK_SECURE_STORE_OPTIONS);
-    } catch (err) {
-      logger.warn('SecureStore saveToken error:', err);
-      return;
-    }
-  },
-  async clearToken(key: string) {
-    try {
-      return await SecureStore.deleteItemAsync(key, CLERK_SECURE_STORE_OPTIONS);
-    } catch (err) {
-      logger.warn('SecureStore clearToken error:', err);
-      return;
-    }
-  },
-};
 
 const STACK_SCREEN_OPTIONS = {
   headerBackTitle: "Back" as const,
@@ -842,7 +792,7 @@ function RootLayout() {
       {!clerkPublishableKey ? (
         <ClerkKeyMissingScreen />
       ) : (
-        <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
+        <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={clerkTokenCache}>
           <ErrorBoundary onError={handleError} onGoHome={handleGoHome}>
             <TamaguiProvider config={config} defaultTheme="dark">
               <BootReadyProvider>
