@@ -15,9 +15,9 @@ const T0 = Date.parse('2026-09-10T10:00:00.000Z');
 const liveInput = {
   fixtureId: '4812183',
   statusShort: '1H' as string | null,
-  elapsed: 44 as number | null,
+  elapsed: 45 as number | null,
   extra: null as number | null,
-  fallbackLabel: "44'",
+  fallbackLabel: "45'",
 };
 
 describe('useLiveDisplayClock HT lifecycle', () => {
@@ -87,6 +87,10 @@ describe('useLiveDisplayClock HT lifecycle', () => {
         },
       },
     );
+    expect(result.current).toBe('44:00');
+    act(() => {
+      jest.advanceTimersByTime(60_000);
+    });
     expect(result.current).toBe('45:00');
     rerender({
       ...liveInput,
@@ -146,13 +150,13 @@ describe('useLiveDisplayClock HT lifecycle', () => {
       elapsed: 46,
       fallbackLabel: "46'",
     });
-    expect(result.current).toBe('46:00');
+    expect(result.current).toBe('45:00');
     expect(getSharedSecondTickerListenerCount()).toBe(1);
 
     act(() => {
       jest.advanceTimersByTime(1_000);
     });
-    expect(result.current).toBe('46:01');
+    expect(result.current).toBe('45:01');
   });
 
   it('TEST F — HT resolve does not mutate the Match object', () => {

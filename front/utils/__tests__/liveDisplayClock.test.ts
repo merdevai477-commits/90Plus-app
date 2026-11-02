@@ -35,21 +35,45 @@ function clock(partial: {
 }
 
 describe('liveDisplayClock presentation', () => {
-  it('TEST 1 — basic ticking 51:00 → 51:03', () => {
-    expect(clock({ nowMs: T0, anchorMs: T0 }).label).toBe('51:00');
-    expect(clock({ nowMs: T0 + 3_000, anchorMs: T0 }).label).toBe('51:03');
+  it('TEST 1 — basic ticking 50:00 → 50:03', () => {
+    expect(clock({ nowMs: T0, anchorMs: T0 }).label).toBe('50:00');
+    expect(clock({ nowMs: T0 + 3_000, anchorMs: T0 }).label).toBe('50:03');
   });
 
-  it('TEST 2 — 51:59 + 1s = 52:00, never 51:60', () => {
-    expect(clock({ nowMs: T0 + 59_000, anchorMs: T0 }).label).toBe('51:59');
-    expect(clock({ nowMs: T0 + 60_000, anchorMs: T0 }).label).toBe('52:00');
+  it('TEST 2 — 50:59 + 1s = 51:00, never 50:60', () => {
+    expect(clock({ nowMs: T0 + 59_000, anchorMs: T0 }).label).toBe('50:59');
+    expect(clock({ nowMs: T0 + 60_000, anchorMs: T0 }).label).toBe('51:00');
     expect(formatMmSs(51 * 60 + 60)).toBe('52:00');
     expect(formatMmSs(51 * 60 + 59)).not.toBe('51:60');
   });
 
-  it('TEST 3 — server elapsed 52 re-anchors to 52:00', () => {
+  it("shows the match clock: 77' is 76:00–76:59", () => {
+    expect(clock({ elapsed: 77, nowMs: T0, anchorMs: T0 }).label).toBe('76:00');
+    expect(clock({ elapsed: 77, nowMs: T0 + 59_000, anchorMs: T0 }).label).toBe('76:59');
+  });
+
+  it("never starts before the half: 1' is 0:00, 2H 45'/46' is 45:00", () => {
+    expect(clock({ statusShort: '1H', elapsed: 1, nowMs: T0, anchorMs: T0 }).label).toBe('0:00');
+    expect(clock({ statusShort: '1H', elapsed: 0, nowMs: T0, anchorMs: T0 }).label).toBe('0:00');
+    expect(clock({ statusShort: '2H', elapsed: 46, nowMs: T0, anchorMs: T0 }).label).toBe('45:00');
+    expect(clock({ statusShort: '2H', elapsed: 45, nowMs: T0, anchorMs: T0 }).label).toBe('45:00');
+    expect(clock({ statusShort: 'LIVE', elapsed: 46, nowMs: T0, anchorMs: T0 }).label).toBe(
+      '45:00',
+    );
+  });
+
+  it("ticks through 45' and 90' instead of freezing at 45:00 / 90:00", () => {
+    expect(
+      clock({ statusShort: '1H', elapsed: 45, nowMs: T0 + 30_000, anchorMs: T0 }).label,
+    ).toBe('44:30');
+    expect(
+      clock({ statusShort: '2H', elapsed: 90, nowMs: T0 + 30_000, anchorMs: T0 }).label,
+    ).toBe('89:30');
+  });
+
+  it('TEST 3 — server elapsed 52 re-anchors to 51:00', () => {
     const local = clock({ elapsed: 51, nowMs: T0 + 42_000, anchorMs: T0 });
-    expect(local.label).toBe('51:42');
+    expect(local.label).toBe('50:42');
     const identityAfter = liveDisplayClockIdentity({
       fixtureId: '4812183',
       statusShort: '2H',
@@ -70,12 +94,12 @@ describe('liveDisplayClock presentation', () => {
     });
     expect(next.reanchored).toBe(true);
     expect(clock({ elapsed: 52, nowMs: next.anchorMs, anchorMs: next.anchorMs }).label).toBe(
-      '52:00',
+      '51:00',
     );
   });
 
-  it('TEST 4 — server correction 57:30 → elapsed 56 becomes 56:00', () => {
-    expect(clock({ elapsed: 57, nowMs: T0 + 30_000, anchorMs: T0 }).label).toBe('57:30');
+  it('TEST 4 — server correction 56:30 → elapsed 56 becomes 55:00', () => {
+    expect(clock({ elapsed: 57, nowMs: T0 + 30_000, anchorMs: T0 }).label).toBe('56:30');
     const next = nextLiveDisplayAnchorMs({
       identity: liveDisplayClockIdentity({
         fixtureId: '1',
@@ -93,7 +117,7 @@ describe('liveDisplayClock presentation', () => {
       nowMs: T0 + 30_000,
     });
     expect(clock({ elapsed: 56, nowMs: next.anchorMs, anchorMs: next.anchorMs }).label).toBe(
-      '56:00',
+      '55:00',
     );
   });
 
@@ -122,8 +146,8 @@ describe('liveDisplayClock presentation', () => {
     expect(
       clock({
         statusShort: '1H',
-        elapsed: 44,
-        fallbackLabel: "44'",
+        elapsed: 45,
+        fallbackLabel: "45'",
         nowMs: T0 + 59_000,
         anchorMs: T0,
       }).label,
@@ -147,7 +171,7 @@ describe('liveDisplayClock presentation', () => {
         statusShort: 'LIVE',
         elapsed: 45,
         fallbackLabel: "45'",
-        nowMs: T0,
+        nowMs: T0 + 60_000,
         anchorMs: T0,
       }).label,
     ).toBe('45:00');
@@ -155,7 +179,7 @@ describe('liveDisplayClock presentation', () => {
       statusShort: 'HT',
       elapsed: 45,
       fallbackLabel: "45'",
-      nowMs: T0 + 1_000,
+      nowMs: T0 + 61_000,
       anchorMs: T0,
     });
     expect(ht.label).toBe('HT');
@@ -223,7 +247,7 @@ describe('liveDisplayClock presentation', () => {
         nowMs: next.anchorMs,
         anchorMs: next.anchorMs,
       }).label,
-    ).toBe('46:00');
+    ).toBe('45:00');
     expect(
       clock({
         statusShort: '2H',
@@ -232,7 +256,7 @@ describe('liveDisplayClock presentation', () => {
         nowMs: next.anchorMs + 1_000,
         anchorMs: next.anchorMs,
       }).label,
-    ).toBe('46:01');
+    ).toBe('45:01');
     expect(
       clock({
         statusShort: '2H',
@@ -241,7 +265,7 @@ describe('liveDisplayClock presentation', () => {
         nowMs: next.anchorMs + 3_000,
         anchorMs: next.anchorMs,
       }).label,
-    ).toBe('46:03');
+    ).toBe('45:03');
   });
 
   it('TEST 7 — FT does not tick', () => {
@@ -291,8 +315,8 @@ describe('liveDisplayClock presentation', () => {
   it('TEST 9 — background gap is derived from timestamps, no replay', () => {
     const at10 = clock({ elapsed: 51, nowMs: T0 + 10_000, anchorMs: T0 });
     const at30 = clock({ elapsed: 51, nowMs: T0 + 30_000, anchorMs: T0 });
-    expect(at10.label).toBe('51:10');
-    expect(at30.label).toBe('51:30');
+    expect(at10.label).toBe('50:10');
+    expect(at30.label).toBe('50:30');
   });
 
   it('TEST 10 — FlashList recycle does not leak fixture A seconds into B', () => {
@@ -302,7 +326,7 @@ describe('liveDisplayClock presentation', () => {
       nowMs: T0 + 20_000,
       anchorMs: T0,
     });
-    expect(a.label).toBe('51:20');
+    expect(a.label).toBe('50:20');
     const recycle = nextLiveDisplayAnchorMs({
       identity: liveDisplayClockIdentity({
         fixtureId: 'B',
@@ -328,7 +352,7 @@ describe('liveDisplayClock presentation', () => {
         nowMs: bNow + 10_000,
         anchorMs: bNow,
       }).label,
-    ).toBe('72:10');
+    ).toBe('71:10');
     expect(
       clock({
         fixtureId: 'B',
@@ -336,7 +360,7 @@ describe('liveDisplayClock presentation', () => {
         nowMs: bNow,
         anchorMs: bNow,
       }).label,
-    ).not.toBe('51:20');
+    ).not.toBe('50:20');
   });
 
   it('TEST 13 — local clock does not mutate canonical match fields', () => {

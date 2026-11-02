@@ -58,6 +58,13 @@ function periodCapSeconds(status: string, elapsed: number | null | undefined): n
   return null;
 }
 
+function periodStartSeconds(status: string, elapsed: number | null | undefined): number {
+  if (status === '2H' || (status === 'LIVE' && elapsed != null && elapsed > 45)) {
+    return 45 * 60;
+  }
+  return 0;
+}
+
 export function formatMmSs(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const minute = Math.floor(safe / 60);
@@ -170,7 +177,11 @@ export function resolveLiveDisplayClock(
   }
 
   const elapsedMin = Math.floor(input.elapsed as number);
-  const baseSeconds = elapsedMin * 60;
+  // Providers send the minute in progress: 77' while the match clock reads 76:xx.
+  const baseSeconds = Math.max(
+    periodStartSeconds(status, input.elapsed),
+    (elapsedMin - 1) * 60,
+  );
   const deltaSec = Math.max(0, Math.floor((input.nowMs - input.anchorMs) / 1000));
   let totalSeconds = baseSeconds + deltaSec;
 
