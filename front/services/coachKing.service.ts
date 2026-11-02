@@ -107,7 +107,7 @@ export interface CkHome {
     balanceLabel: string;
     remainingLabel: string;
   };
-  gameweek: { id: string; status: string; locked: boolean; endAt?: string };
+  gameweek: { id: string; status: string; locked: boolean; startAt?: string; endAt?: string };
   squad: CkSquad;
 }
 

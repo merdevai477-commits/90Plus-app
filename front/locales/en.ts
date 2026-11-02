@@ -4121,11 +4121,12 @@ export const en = {
       currentRound: 'Current round',
       closesIn: 'Squad closes in',
       opensIn: 'Picks open in',
+      days: 'Days',
       hours: 'Hours',
       minutes: 'Mins',
       seconds: 'Secs',
       tipOpen: 'Pick your players before time runs out to lock your squad',
-      tipClosed: 'Picks open on Monday — build your squad Monday through Friday',
+      tipClosed: 'This round is closed. Picks open again on Tuesday',
     },
     info: {
       pointsTitle: 'Points system',

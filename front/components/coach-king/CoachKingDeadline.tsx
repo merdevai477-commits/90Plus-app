@@ -1,7 +1,7 @@
 /**
- * Squad selection countdown — Figma 1569:2861.
- * Counts toward Saturday close while picks are open (Mon–Fri),
- * or toward Monday open while the weekend lockout runs (Sat→Mon).
+ * Squad selection countdown.
+ * Counts toward the gameweek close (Tuesday 00:00 UTC). Days are split out
+ * so the hours box never rolls past 23.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -32,7 +32,15 @@ function UnitBox({ value, label }: { value: string; label: string }) {
   );
 }
 
-export function CoachKingDeadline() {
+type DeadlineProps = {
+  /** Server gameweek bounds. When set, they win over the local Tuesday window. */
+  startAt?: string | null;
+  endAt?: string | null;
+  /** Server says this gameweek no longer accepts picks. */
+  locked?: boolean;
+};
+
+export function CoachKingDeadline({ startAt, endAt, locked = false }: DeadlineProps) {
   const { t, language } = useTranslation();
   const copy = t.coachKingGame.deadline;
   const isAr = language === 'ar';
@@ -45,14 +53,23 @@ export function CoachKingDeadline() {
     return () => clearInterval(id);
   }, []);
 
-  // Recompute the window at most once a minute so midnight flips cleanly.
+  // Recompute the fallback window at most once a minute so midnight flips cleanly.
   const windowMs = now - (now % 60_000);
-  const window = useSelectionWindow(windowMs);
+  const fallback = useSelectionWindow(windowMs);
+  const targetAt = endAt || fallback.targetAt;
+  const windowStartAt = startAt || fallback.windowStartAt;
+  const phase = locked ? 'closed' : 'open';
+  const window: CkSelectionWindow = {
+    phase,
+    targetAt,
+    windowStartAt,
+    windowEndAt: targetAt,
+  };
   const remaining = Math.max(0, new Date(window.targetAt).getTime() - now);
   const parts = splitCkCountdown(remaining);
   const progress = ckSelectionProgress(window, new Date(now));
-  const headline = window.phase === 'open' ? copy.closesIn : copy.opensIn;
-  const tip = window.phase === 'open' ? copy.tipOpen : copy.tipClosed;
+  const headline = phase === 'open' ? copy.closesIn : copy.opensIn;
+  const tip = phase === 'open' ? copy.tipOpen : copy.tipClosed;
   const row = isAr ? 'row-reverse' : 'row';
 
   return (
@@ -62,7 +79,7 @@ export function CoachKingDeadline() {
           <Text style={[styles.badgeTxt, { fontFamily: fontSemi }]}>{copy.currentRound}</Text>
         </View>
         <View style={[styles.headline, { flexDirection: row }]}>
-          <Ionicons name="lock-closed" size={16} color="#F8C94A" />
+          <Ionicons name={phase === 'open' ? 'lock-open' : 'lock-closed'} size={16} color="#F8C94A" />
           <Text style={[styles.headlineTxt, { fontFamily: fontReg }]}>{headline}</Text>
         </View>
       </View>
@@ -73,6 +90,12 @@ export function CoachKingDeadline() {
         <UnitBox value={parts.minutes} label={copy.minutes} />
         <Text style={styles.colon}>:</Text>
         <UnitBox value={parts.hours} label={copy.hours} />
+        {parts.showDays ? (
+          <>
+            <Text style={styles.colon}>:</Text>
+            <UnitBox value={parts.days} label={copy.days} />
+          </>
+        ) : null}
       </View>
 
       <View style={styles.track}>

@@ -368,7 +368,11 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          <CoachKingDeadline />
+          <CoachKingDeadline
+            startAt={shown.gameweek.startAt}
+            endAt={shown.gameweek.endAt}
+            locked={closed}
+          />
           {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}
 
           <CoachKingPitch
