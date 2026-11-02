@@ -376,17 +376,7 @@ class FootballCacheService {
    * Prefetch multiple images in background
    */
   private prefetchImages(urls: string[]): void {
-    const validUrls = urls.filter(url => url && url.length > 0);
-    if (validUrls.length === 0) return;
-
-    // Prefetch in batches to avoid overwhelming the network
-    const batchSize = 10;
-    for (let i = 0; i < validUrls.length; i += batchSize) {
-      const batch = validUrls.slice(i, i + batchSize);
-      Image.prefetch(batch).catch(() => {
-        // Silently fail
-      });
-    }
+    for (const url of urls) this.prefetchImage(url);
   }
 
   /**

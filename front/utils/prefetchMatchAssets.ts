@@ -1,6 +1,6 @@
 import { Match } from '../components/Matches/matchCardUtils';
-import { Image } from 'expo-image';
 import { getCountryFlagUri } from './countryFlagUri';
+import { prefetchImages } from './prefetchImages';
 
 /**
  * Warming dozens of images at once starves the concurrent data requests on the
@@ -12,7 +12,7 @@ function prefetchInBatches(urls: string[]): void {
   if (urls.length === 0) return;
   void (async () => {
     for (let i = 0; i < urls.length; i += PREFETCH_BATCH_SIZE) {
-      await Image.prefetch(urls.slice(i, i + PREFETCH_BATCH_SIZE), 'memory-disk').catch(() => {});
+      await prefetchImages(urls.slice(i, i + PREFETCH_BATCH_SIZE), 'memory-disk');
       if (i + PREFETCH_BATCH_SIZE < urls.length) {
         await new Promise<void>((r) => setTimeout(r, 50));
       }
@@ -36,7 +36,7 @@ export function prefetchHomeMatchLogos(
 export function prefetchVideoThumbnails(thumbnails: string[]): void {
   const list = thumbnails.filter(Boolean).slice(0, 12);
   if (list.length > 0) {
-    Image.prefetch(list, 'memory-disk').catch(() => {});
+    void prefetchImages(list, 'memory-disk');
   }
 }
 

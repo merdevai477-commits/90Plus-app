@@ -17,7 +17,6 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import * as Network from 'expo-network';
-import { Image as ExpoImage } from 'expo-image';
 import {
   Heart,
   Eye,
@@ -52,6 +51,7 @@ import { useReelsAudioManager, markVideoAsLoaded, markVideoAsUnloaded, clearLoad
 // useVideoReplayLimit is handled in UnifiedVideoPlayer component
 import { globalState } from '../../globalState';
 import { logger } from '../../utils/logger';
+import { prefetchImages } from '../../utils/prefetchImages';
 import { addReelsBreadcrumb } from '../../services/sentry.service';
 import { SkeletonLoader } from '../../components/common/SkeletonLoader';
 import { ErrorDisplay } from '../../components/common/ErrorDisplay';
@@ -83,7 +83,7 @@ function prefetchReelThumbnails(items: Array<{ thumbnail?: string }>, from = 0, 
     .map((r) => r.thumbnail)
     .filter((u): u is string => Boolean(u && u.startsWith('http')));
   if (urls.length === 0) return;
-  void ExpoImage.prefetch(urls);
+  void prefetchImages(urls);
 }
 
 const ANIMATIONS = {

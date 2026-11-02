@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -11,6 +10,7 @@ import ImageViewerModal from '../common/ImageViewerModal';
 import { communityApi, type CommunityPost } from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
+import { prefetchImages } from '../../utils/prefetchImages';
 import { useCommunityPosts, useCommunityToken, type CommunityFeedSource } from '../../hooks/community/useCommunityFeed';
 import { REPORT_REASONS, usePostActions } from '../../hooks/community/usePostActions';
 import { discardPending, retryPending, usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
@@ -79,7 +79,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
       .slice(0, 5)
       .map((p) => p.image?.url)
       .filter((u): u is string => !!u);
-    if (urls.length) void Image.prefetch(urls);
+    if (urls.length) void prefetchImages(urls);
   }, [feed.posts]);
 
   useFocusEffect(
