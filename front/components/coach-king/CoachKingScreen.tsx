@@ -368,11 +368,11 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          {closed ? (
+          {(typeof shown.gameweek.showTimer === 'boolean' ? shown.gameweek.showTimer : closed) ? (
             <CoachKingDeadline
               startAt={shown.gameweek.startAt}
               endAt={shown.gameweek.endAt}
-              locked
+              locked={closed}
             />
           ) : null}
           {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}

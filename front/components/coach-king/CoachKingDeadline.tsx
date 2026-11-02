@@ -1,7 +1,7 @@
 /**
  * Squad selection countdown.
- * Hidden while picks are open. Shown only after the gameweek locks, counting
- * to Tuesday 00:00 UTC when the next round opens.
+ * The home payload's `showTimer` decides whether this card is mounted.
+ * `locked` only changes the copy: time until close, or time until the next open.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -71,8 +71,6 @@ export function CoachKingDeadline({ startAt, endAt, locked = false }: DeadlinePr
   const headline = phase === 'open' ? copy.closesIn : copy.opensIn;
   const tip = phase === 'open' ? copy.tipOpen : copy.tipClosed;
   const row = isAr ? 'row-reverse' : 'row';
-
-  if (phase === 'open') return null;
 
   return (
     <View style={styles.card} testID="ck-deadline">

@@ -33,6 +33,7 @@ import {
   refreshCoachKingPoolIfStale,
   syncCoachKingPool,
 } from './coach-king-pool.service';
+import { coachKingTimerVisible } from './coach-king-timer';
 import { redisCacheService } from './redis-cache.service';
 
 export type CkErrorCode =
@@ -213,6 +214,7 @@ function pickingOpen(gameweek: CoachKingGameweek, now: Date): boolean {
   if (now >= gameweek.endAt) return false;
   return gameweek.status !== 'CALCULATING' && gameweek.status !== 'COMPLETED';
 }
+
 
 async function startedTeamIds(teamIds: number[], gameweek: CoachKingGameweek, now: Date): Promise<Set<number>> {
   const ids = [...new Set(teamIds)];
@@ -530,6 +532,7 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
   ]);
   const reserved = squadCost(squad);
   const remaining = coachKingRemainingMilli(wallet.balanceMilli, reserved);
+  const picksOpen = pickingOpen(gameweek, now);
 
   return {
     user: {
@@ -552,7 +555,8 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
       startAt: gameweek.startAt.toISOString(),
       endAt: gameweek.endAt.toISOString(),
       status: gameweek.status,
-      locked: !pickingOpen(gameweek, now),
+      locked: !picksOpen,
+      showTimer: coachKingTimerVisible(picksOpen),
     },
     squad: squadDto(squad, gameweek, lang, scores),
   };
