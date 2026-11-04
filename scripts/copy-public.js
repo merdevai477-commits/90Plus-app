@@ -48,7 +48,7 @@ for (const entry of fs.readdirSync(webDist)) {
 console.log('✅ Website (web/dist) overlaid onto dist/public');
 
 // tsc does not copy non-TS assets; TermsService reads
-// dist/src/data/terms-of-service-v1.0.md at runtime (see GET /api/terms/latest).
+// dist/src/data/terms-of-service-v2.0.md at runtime (see GET /api/terms/latest).
 const dataSrc = path.join(root, 'src', 'data');
 const dataDest = path.join(root, 'dist', 'src', 'data');
 if (fs.existsSync(dataSrc)) {

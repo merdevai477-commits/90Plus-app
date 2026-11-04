@@ -13,6 +13,7 @@ import {
     isValidCommunityPostId,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
+import { sendLegalPage } from '../utils/legal-page';
 import { getClientIp } from '../utils/client-ip';
 import { recordInviteClick } from '../services/share-win-invite-click.service';
 import { logger } from '../utils/logger';
@@ -34,8 +35,8 @@ function sendProfileLanding(req: Request, res: Response): void {
     sendShareLanding(res, buildProfileLandingPage(username));
 }
 
-router.get('/privacy', (_req: Request, res: Response) => {
-    res.sendFile(PRIVACY_PAGE_PATH);
+router.get('/privacy', (req: Request, res: Response) => {
+    sendLegalPage(req, res, PRIVACY_PAGE_PATH);
 });
 
 router.get('/support', (_req: Request, res: Response) => {

@@ -704,7 +704,7 @@ export const updateConsent = async (req: Request, res: Response) => {
         granted,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        version: '1.0', // Privacy policy version
+        version: '2026-11-04', // Privacy policy version (public page /privacy)
       },
     });
 

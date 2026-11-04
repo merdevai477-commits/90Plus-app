@@ -1,223 +1,429 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr" data-lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="title-ar" content="سياسة الخصوصية | 90Plus" />
     <meta name="title-en" content="Privacy Policy | 90Plus" />
-    <title>سياسة الخصوصية | 90Plus</title>
-    <meta name="description" content="سياسة الخصوصية لتطبيق 90Plus — كيف نجمع ونحمي بياناتك." />
+    <meta name="title-ar" content="سياسة الخصوصية | 90Plus" />
+    <title>Privacy Policy | 90Plus</title>
+    <meta name="description" content="Privacy Policy for 90Plus. What the app collects, why, and the choices you have. Last updated 4 November 2026." />
+    <meta name="desc-en" content="Privacy Policy for 90Plus. What the app collects, why, and the choices you have. Last updated 4 November 2026." />
+    <meta name="desc-ar" content="سياسة الخصوصية لتطبيق 90Plus. ما الذي نجمعه ولماذا، والخيارات المتاحة لك. آخر تحديث 4 نوفمبر 2026." />
+    <link rel="canonical" href="https://90plus.pro/privacy" />
+    <link rel="alternate" hreflang="en" href="https://90plus.pro/privacy?lang=en" />
+    <link rel="alternate" hreflang="ar" href="https://90plus.pro/privacy?lang=ar" />
+    <link rel="alternate" hreflang="x-default" href="https://90plus.pro/privacy" />
+    <meta property="og:title" content="Privacy Policy | 90Plus" />
+    <meta property="og:description" content="How 90Plus handles account data, content, notifications, and diagnostics." />
+    <meta property="og:url" content="https://90plus.pro/privacy" />
+    <meta property="og:type" content="website" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#07051a" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/legal/legal-theme.css" />
+    <script src="/legal/legal-boot.js"></script>
   </head>
-  <body>
+  <body class="legal-doc">
+    <a class="skip" href="#en-introduction">Skip to content</a>
     <div class="page">
-      <div class="grain"></div>
-      <header>
-        <div class="brand">90Plus</div>
+      <header class="site-header">
+        <a class="brand" href="https://90plus.pro">90Plus</a>
         <div class="header-end">
-          <nav class="locale-ar">
-            <a href="/terms">الشروط</a>
-            <a class="active" href="/privacy">الخصوصية</a>
-            <a href="/support">الدعم</a>
-          </nav>
-          <nav class="locale-en" hidden>
+          <nav class="locale-en" aria-label="Primary">
             <a href="/terms">Terms</a>
-            <a class="active" href="/privacy">Privacy</a>
+            <a class="active" href="/privacy" aria-current="page">Privacy</a>
             <a href="/support">Support</a>
           </nav>
+          <nav class="locale-ar" aria-label="التنقل">
+            <a href="/terms">الشروط</a>
+            <a class="active" href="/privacy" aria-current="page">الخصوصية</a>
+            <a href="/support">الدعم</a>
+          </nav>
           <div class="lang-switch" role="group" aria-label="Language">
-            <button type="button" data-lang-btn="ar" class="active">عربي</button>
-            <button type="button" data-lang-btn="en">EN</button>
+            <a href="/privacy?lang=en" data-lang-btn="en" hreflang="en" lang="en">EN</a>
+            <a href="/privacy?lang=ar" data-lang-btn="ar" hreflang="ar" lang="ar">العربية</a>
           </div>
         </div>
       </header>
 
-      <div class="locale-ar">
-      <main>
-        <section class="hero reveal">
-          <div class="eyebrow">قانوني</div>
-          <h1>سياسة الخصوصية</h1>
-          <p class="lead">
-            نحن في 90Plus نقدر خصوصيتك ونلتزم بحماية معلوماتك الشخصية. توضح هذه السياسة كيفية جمع
-            واستخدام وحماية بياناتك عند استخدام تطبيقنا.
-          </p>
-          <div class="meta">
-            <span>آخر تحديث: يناير 2024</span>
-          </div>
-          <div class="toc">
-            <a href="#intro">مقدمة</a>
-            <a href="#collect">المعلومات</a>
-            <a href="#use">الاستخدام</a>
-            <a href="#share">المشاركة</a>
-            <a href="#security">الأمان</a>
-            <a href="#rights">حقوقك</a>
-            <a href="#cookies">الكوكيز</a>
-            <a href="#children">الأطفال</a>
-            <a href="#updates">التحديثات</a>
-            <a href="#contact">تواصل</a>
+      <div class="locale-en" lang="en">
+        <section class="legal-hero">
+          <p class="eyebrow">Privacy</p>
+          <h1>Privacy Policy</h1>
+          <p class="lead">This policy explains what 90Plus actually collects, how that information is used, and the choices you have. It is written from the current app and server, not from a generic template.</p>
+          <p class="updated">Last updated: 4 November 2026</p>
+          <div class="notice">
+            <p><strong>Who we are.</strong> 90Plus is operated by its individual developer. The product does not record a registered company name, registration number, or legal address. This policy describes our practices. It is not a certificate of GDPR, UK GDPR, CCPA, or any other law.</p>
           </div>
         </section>
-
-        <section id="intro" class="card reveal delay-1">
-          <div class="pill">ملخص</div>
-          <h2>مقدمة</h2>
-          <p>
-            نحن في 90Plus نقدر خصوصيتك ونلتزم بحماية معلوماتك الشخصية. توضح هذه السياسة كيفية جمع
-            واستخدام وحماية بياناتك عند استخدام تطبيقنا.
-          </p>
-          <div class="callout">
-            <strong>باختصار:</strong> لا نبيع بياناتك الشخصية، ويمكنك طلب حذف حسابك في أي وقت من
-            إعدادات التطبيق.
-          </div>
-        </section>
-
-        <section id="collect" class="card reveal delay-2">
-          <h2>المعلومات التي نجمعها</h2>
-          <ul>
-            <li><strong>معلومات الحساب:</strong> الاسم، البريد الإلكتروني، اسم المستخدم</li>
-            <li><strong>معلومات الاستخدام:</strong> نشاطك في التطبيق، النقاط، الإنجازات</li>
-            <li><strong>المحتوى:</strong> الفيديوهات والصور التي ترفعها</li>
-            <li><strong>معلومات الجهاز:</strong> نوع الجهاز، نظام التشغيل، معرف الجهاز</li>
-            <li><strong>معلومات الموقع:</strong> (اختيارية) لتخصيص المحتوى المحلي</li>
-          </ul>
-        </section>
-
-        <section id="use" class="card reveal delay-2">
-          <h2>كيف نستخدم معلوماتك</h2>
-          <ul>
-            <li>تقديم وتحسين خدمات التطبيق</li>
-            <li>تخصيص تجربتك وعرض محتوى مناسب</li>
-            <li>إرسال إشعارات مهمة حول التطبيق</li>
-            <li>منع الاحتيال وضمان أمان التطبيق</li>
-            <li>تحليل الاستخدام لتحسين الخدمات</li>
-            <li>التواصل معك للدعم الفني</li>
-          </ul>
-        </section>
-
-        <section id="share" class="card reveal delay-3">
-          <h2>مشاركة المعلومات</h2>
-          <p>نحن لا نبيع أو نؤجر معلوماتك الشخصية لأطراف ثالثة. قد نشارك معلوماتك في الحالات التالية:</p>
-          <ul>
-            <li>مع موافقتك الصريحة</li>
-            <li>لتقديم الخدمات المطلوبة (مثل خدمات الدفع)</li>
-            <li>للامتثال للقوانين أو الأوامر القضائية</li>
-            <li>لحماية حقوقنا أو حقوق المستخدمين الآخرين</li>
-          </ul>
-        </section>
-
-        <section id="security" class="card reveal delay-3">
-          <h2>أمان البيانات</h2>
-          <p>نتخذ إجراءات أمنية متقدمة لحماية معلوماتك:</p>
-          <ul>
-            <li>تشفير البيانات أثناء النقل والتخزين</li>
-            <li>خوادم آمنة ومحمية</li>
-            <li>مراقبة مستمرة للأنشطة المشبوهة</li>
-            <li>تحديثات أمنية منتظمة</li>
-            <li>وصول محدود للموظفين المخولين فقط</li>
-          </ul>
-        </section>
-
-        <section id="rights" class="card reveal delay-3">
-          <h2>حقوقك</h2>
-          <p>لديك الحق في:</p>
-          <ul>
-            <li>الوصول إلى معلوماتك الشخصية</li>
-            <li>تصحيح أو تحديث معلوماتك</li>
-            <li>حذف حسابك ومعلوماتك</li>
-            <li>تقييد معالجة بياناتك</li>
-            <li>نقل بياناتك إلى خدمة أخرى</li>
-            <li>الاعتراض على معالجة معينة لبياناتك</li>
-          </ul>
-        </section>
-
-        <section id="cookies" class="card reveal delay-3">
-          <h2>ملفات تعريف الارتباط</h2>
-          <p>
-            نستخدم ملفات تعريف الارتباط وتقنيات مشابهة لتحسين تجربتك، تذكر تفضيلاتك، وتحليل استخدام
-            التطبيق. يمكنك التحكم في هذه الإعدادات من خلال إعدادات جهازك.
-          </p>
-        </section>
-
-        <section id="children" class="card reveal delay-3">
-          <h2>خصوصية الأطفال</h2>
-          <p>
-            تطبيقنا مخصص للمستخدمين الذين تبلغ أعمارهم 13 عاماً أو أكثر. نحن لا نجمع عمداً معلومات
-            شخصية من الأطفال دون سن 13 عاماً.
-          </p>
-        </section>
-
-        <section id="updates" class="card reveal delay-4">
-          <h2>التحديثات</h2>
-          <p>
-            قد نحدث هذه السياسة من وقت لآخر. سنخطرك بأي تغييرات مهمة عبر التطبيق أو البريد
-            الإلكتروني. استمرار استخدامك للتطبيق يعني موافقتك على السياسة المحدثة.
-          </p>
-        </section>
-
-        <section id="contact" class="card reveal delay-4">
-          <h2>تواصل معنا</h2>
-          <p>إذا كان لديك أي أسئلة حول سياسة الخصوصية هذه، يمكنك التواصل معنا:</p>
-          <ul>
-            <li><strong>البريد الإلكتروني:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
-            <li><strong>الهاتف:</strong> +220 76 30 953</li>
-            <li><strong>الدعم:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
-            <li><strong>العنوان:</strong> 90Plus App Support Team</li>
-          </ul>
-        </section>
-      </main>
-      <footer class="locale-ar">90Plus — سياسة الخصوصية</footer>
+        <div class="legal-shell">
+          <nav class="legal-toc" aria-label="On this page">
+            <p class="toc-label">On this page</p>
+            <ol>
+              <li><a href="#en-introduction">1. What we collect</a></li>
+              <li><a href="#en-you-provide">2. What you provide</a></li>
+              <li><a href="#en-automatic">3. Collected automatically</a></li>
+              <li><a href="#en-use">4. How we use it</a></li>
+              <li><a href="#en-bases">5. Legal bases</a></li>
+              <li><a href="#en-sharing">6. Sharing</a></li>
+              <li><a href="#en-transfers">7. International transfers</a></li>
+              <li><a href="#en-retention">8. Retention</a></li>
+              <li><a href="#en-security">9. Security</a></li>
+              <li><a href="#en-rights">10. Your rights</a></li>
+              <li><a href="#en-gdpr">11. European users</a></li>
+              <li><a href="#en-uk">12. UK users</a></li>
+              <li><a href="#en-children">13. Children</a></li>
+              <li><a href="#en-ads">14. Sponsors and analytics</a></li>
+              <li><a href="#en-push">15. Notifications</a></li>
+              <li><a href="#en-deletion">16. Deletion</a></li>
+              <li><a href="#en-changes">17. Changes</a></li>
+              <li><a href="#en-contact">18. Contact</a></li>
+            </ol>
+          </nav>
+          <article class="legal-prose">
+            <section id="en-introduction" data-section="introduction">
+              <h2>1. Information we collect</h2>
+              <p>We collect information in three ways: you give it to us, your device sends it when you use a feature, and our servers record limited technical data needed to run the Service. We do not sell your personal information.</p>
+              <p>The Service is the 90Plus app and the website at <a href="https://90plus.pro">https://90plus.pro</a>. The public pages on that website, including this one, do not require an account. The app interface is available in Arabic and English.</p>
+            </section>
+            <section id="en-you-provide" data-section="you-provide">
+              <h2>2. Information you provide</h2>
+              <ul>
+                <li><strong>Account.</strong> Email address, Clerk user id, username, and the sign-in method you choose (email, Google, or Apple). Google and Apple passwords are handled by those providers and by Clerk. We do not ask the app to store a copy of them.</li>
+                <li><strong>Profile.</strong> Display name, photo, cover image, bio, favorite team, country, and optional football details such as position, height, weight, preferred foot, and social links. Some of these are optional.</li>
+                <li><strong>Age.</strong> An age or date of birth so we can apply the minimum age of 13. If you are 13 to 17, we may store a parent or guardian email address and whether consent was confirmed, together with the IP address and user agent of that request.</li>
+                <li><strong>Content.</strong> Community posts, comments, polls, images, reels, match-chat messages, likes, follows, blocks, and reports.</li>
+                <li><strong>Play.</strong> Predictions, quiz answers, coin and XP activity, achievements, referral codes, and sponsor-competition entries.</li>
+                <li><strong>Sponsor store.</strong> If you create a store, we store the name, description, logo, address, delivery choice, country, phone number, and social links you submit.</li>
+                <li><strong>Assistant.</strong> The messages you send to the football assistant, and a voice recording if you use transcription. The recording is sent to the configured transcription provider so it can be turned into text.</li>
+                <li><strong>Support.</strong> Anything you send to <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>.</li>
+              </ul>
+              <p>Camera and photo-library access are used for profile photos, covers, reels, and images you choose to upload. The microphone is used for voice messages to the assistant. Face ID, where you turn it on, stays on your device to protect sign-in. We do not receive your fingerprint or face template.</p>
+            </section>
+            <section id="en-automatic" data-section="automatic">
+              <h2>3. Information collected automatically</h2>
+              <ul>
+                <li><strong>IP address and user agent</strong> on terms acceptance, consent changes, data-export requests, account-deletion requests, parental-consent requests, device-session restore keys, and invite-link clicks. The server also uses the IP address to route traffic and apply rate limits.</li>
+                <li><strong>Device session.</strong> A hash of a long-lived device key, plus a short device description, so the app can restore a session. We store the hash, not the raw key.</li>
+                <li><strong>Push.</strong> An Expo push token and the platform (iOS or Android) if you allow notifications. On iOS, a Live Activity token, a device id, the match and teams you follow for that activity, and the language may be stored so the lock-screen score can update.</li>
+                <li><strong>Diagnostics.</strong> If Sentry is configured, crash reports and a sample of performance data are sent to Sentry. The server is set to remove authorization headers and cookies from those events, and to drop password, token, secret, and API-key fields. Sentry can still receive the app version, operating system, and the error context.</li>
+                <li><strong>Usage inside the product.</strong> Counts such as profile views, reel views, quiz results, and your own video statistics. These are part of the app, not a separate marketing-analytics product.</li>
+              </ul>
+              <p><strong>Location.</strong> We do not collect background location, and we do not build a location history of ordinary users. If you create a sponsor store and use the map, the app may ask for foreground location to place a pin and fill an address. We store the address and country you confirm. Google receives the map request when the map is shown. You can refuse the permission and type an address instead.</p>
+              <p><strong>Cookies and the website.</strong> The marketing site and these legal pages do not use an analytics cookie or an advertising pixel. The language you pick is stored in local storage on your device. The API can set a cookie for its own admin review screen and can issue a security token for authenticated API calls. If you open the Clerk account portal, Clerk may set its own cookies under its terms. We did not find a Google Analytics, Meta, or similar tag on the public site.</p>
+            </section>
+            <section id="en-use" data-section="use">
+              <h2>4. How we use information</h2>
+              <ul>
+                <li>To create and secure your account, and to show your profile and content.</li>
+                <li>To run scores, news, quizzes, predictions, coins, referrals, notifications, and the assistant.</li>
+                <li>To moderate content, investigate abuse, and enforce the <a href="/terms">Terms of Service</a>.</li>
+                <li>To send a push notification you have allowed, such as a match, a social action, or a reminder.</li>
+                <li>To fix crashes and understand which requests fail.</li>
+                <li>To answer a support message, a data export, or a deletion request.</li>
+              </ul>
+              <p>We do not use your information to sell advertising profiles. Sponsor stores are shown because they are part of Predict &amp; Win, not because we sell your data to an ad network.</p>
+            </section>
+            <section id="en-bases" data-section="bases">
+              <h2>5. Legal bases for processing</h2>
+              <p>Where a law such as the GDPR or UK GDPR applies, we rely on the following bases. This is an explanation of how the product is built, not a completed legal assessment.</p>
+              <ul>
+                <li><strong>Contract.</strong> Providing the account and the features you ask for.</li>
+                <li><strong>Legitimate interests.</strong> Keeping the Service secure, preventing abuse, moderating content, and fixing faults. These interests are weighed against your rights.</li>
+                <li><strong>Consent.</strong> Push notifications, optional foreground location for a store address, and parental consent for a teen account. You can withdraw a consent you gave. The in-app switches for analytics, email, and data sharing are stored. What they do today is described in section 14.</li>
+                <li><strong>Legal obligation.</strong> Where we must keep or disclose information to comply with a law that actually applies to the operator.</li>
+              </ul>
+            </section>
+            <section id="en-sharing" data-section="sharing">
+              <h2>6. Sharing and processors</h2>
+              <p>We share personal information with service providers that process it for us, and when you deliberately publish something. We do not sell personal information.</p>
+              <ul>
+                <li><strong>Other users</strong> see the profile and content you publish, and a sponsor’s store details if you publish a store.</li>
+                <li><strong>Clerk</strong> processes sign-in. Google or Apple process sign-in if you choose them.</li>
+                <li><strong>Expo</strong> delivers push notifications. Apple delivers Live Activity updates on iOS.</li>
+                <li><strong>Sentry</strong> receives crash and performance events when it is configured.</li>
+                <li><strong>Cloudflare R2</strong> stores media and data-export files. <strong>Mux</strong> processes reel video.</li>
+                <li><strong>Railway</strong> hosts the production API. The database is PostgreSQL and the cache is Redis.</li>
+                <li><strong>API-Football and 365Scores</strong> supply match data. We send requests for fixtures and statistics, not your profile, in the ordinary score flow.</li>
+                <li><strong>NewsAPI</strong> supplies World Cup headlines to our server. <strong>Google Maps</strong> is used in the sponsor address picker.</li>
+                <li><strong>Google Gemini, Amazon Bedrock, and OpenRouter</strong> (or another OpenAI-compatible endpoint) may receive assistant messages, quiz prompts, voice audio, or content submitted for a safety check, when those keys are configured. A safety check can include the text of a post or comment and, for images, the image.</li>
+              </ul>
+              <p>We may also disclose information if the law requires it, or if it is reasonably necessary to protect a person, investigate abuse, or defend a legal claim. A setting in the app is labelled “data sharing” and defaults to off. In the current code, turning it on does not start a sale of your data to partners.</p>
+            </section>
+            <section id="en-transfers" data-section="transfers">
+              <h2>7. International transfers</h2>
+              <p>90Plus is used in more than one country. Our providers operate in their own countries, which may include the United States and other countries outside your own. Match data, media, crash reports, and assistant messages can therefore be processed outside the country where you live.</p>
+              <p>The product does not publish a transfer tool such as Standard Contractual Clauses, and it does not name an EU or UK representative. If you are in the EEA or the UK, that is a gap a lawyer should close before this policy is treated as a completed transfer arrangement. You can still contact us about a transfer using the email below.</p>
+            </section>
+            <section id="en-retention" data-section="retention">
+              <h2>8. How long we keep information</h2>
+              <ul>
+                <li><strong>Account data</strong> is kept while the account is open.</li>
+                <li><strong>In-app deletion</strong> is scheduled for 30 days. You can cancel it during that time. After the date, the anonymization job replaces the email, username, and display name, clears the bio and photos, and removes notifications, follows, likes, and sessions. Captions and comments can be replaced with a deletion notice. Prediction and coin rows may remain without your name.</li>
+                <li><strong>Direct account deletion</strong> (the API that marks the account deleted immediately) removes the Clerk sign-in and, about 30 days later, deletes the user record and queues deletion of stored media files we can match to the account.</li>
+                <li><strong>Data exports</strong> are stored for about 7 days and then the file is removed.</li>
+                <li><strong>Invite clicks</strong> keep an IP address and user agent so a referral can be attributed.</li>
+                <li><strong>Moderation and security logs</strong> may be kept after deletion so we can prevent abuse and handle a dispute. The product does not configure a single published retention period for those logs.</li>
+              </ul>
+              <p>Backups and provider logs can take additional time to fall away. We do not claim that every copy disappears on the same day.</p>
+            </section>
+            <section id="en-security" data-section="security">
+              <h2>9. Security</h2>
+              <p>The public site and the API are served over HTTPS. Sign-in tokens are handled by Clerk. Device restore keys are stored as hashes. Sentry events are filtered for passwords, tokens, and cookies before they are sent. Access to the production systems is limited to the people who operate them.</p>
+              <p>No service is perfectly secure. If you believe your account was accessed without permission, email us. Please do not send your password or a one-time code in that email.</p>
+            </section>
+            <section id="en-rights" data-section="rights">
+              <h2>10. Your privacy rights</h2>
+              <p>Depending on where you live, you may have the right to access, correct, delete, or export your information, to object to or restrict a use, and to withdraw a consent. You can edit much of your profile in the app. You can turn notifications off in the device settings and in the app. You can block users and delete content you posted, using the controls the app provides.</p>
+              <p>Privacy &amp; Data in the app can request a JSON export and can schedule deletion. The export currently includes your profile, reels, reel comments, likes, match predictions, quiz attempts, coin history, achievements, follows, notifications, and consent records. It does not include every feature. Community posts and match chat are examples of data the export job does not currently collect. The screen says an email will be sent when the file is ready. The server saves the file for about 7 days and does not currently send that email. If you do not receive a link, email us and we will help you get your copy.</p>
+              <p>We will not discriminate against you for making a privacy request. We may refuse a request that we cannot verify, or that the law allows us to refuse. We do not promise a response time that the product does not implement.</p>
+            </section>
+            <section id="en-gdpr" data-section="gdpr">
+              <h2>11. European users</h2>
+              <p>If the GDPR applies to you, you may have the right to access, rectify, erase, restrict, and port your personal data, to object to processing based on legitimate interests, and to withdraw consent. You may lodge a complaint with a supervisory authority. We do not name an EU representative in the product, and we do not treat this page as a finding that every GDPR duty has been met.</p>
+              <p>To use these rights, email <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>. We may need to confirm that the request comes from you. The in-app export and deletion tools are the product’s current self-service path for access and erasure. They have the limits described above.</p>
+            </section>
+            <section id="en-uk" data-section="uk">
+              <h2>12. United Kingdom users</h2>
+              <p>If the UK GDPR applies to you, you have the same kinds of rights against the operator: access, rectification, erasure, restriction, portability, objection, and withdrawal of consent. You may complain to the Information Commissioner’s Office. The product does not name a UK representative. This page does not certify UK GDPR compliance.</p>
+            </section>
+            <section id="en-children" data-section="children">
+              <h2>13. Children</h2>
+              <p>90Plus is not for children under 13. We block an account that declares an age under 13. We do not knowingly ask a child under 13 for personal information. If you believe a child under 13 has an account, email us and we will delete it.</p>
+              <p>For ages 13 to 17, the app can ask for a parent or guardian email and store the consent request. The product prepares a consent message, but the current server code does not connect an email provider, so that message may not be delivered. Do not rely on an email arriving. A parent who wants an account removed can email us directly.</p>
+            </section>
+            <section id="en-ads" data-section="ads">
+              <h2>14. Sponsors, advertising, and analytics</h2>
+              <p>Predict &amp; Win shows sponsor names, logos, store details, and prize competitions. That is sponsored content inside the app. The public website does not run an analytics or advertising pixel. <a href="https://90plus.pro/app-ads.txt">app-ads.txt</a> authorizes Google to sell advertising inventory for this app. The application code reviewed for this policy does not include an advertising SDK that requests ads inside the app, and it does not send your profile to Google for that purpose. We do not sell personal information. If in-app ads are turned on later, Google may receive an advertising request under its own policy, and this section will be updated.</p>
+              <p>The app has an analytics switch described as helping us improve the app. The switch is saved on your account. The current code does not connect it to a product-analytics SDK, and it does not turn Sentry crash reports on or off. Crash reports are described in section 3.</p>
+              <p>The email switch is saved. The current server does not run a marketing-email programme from that switch. The data-sharing switch is saved and defaults to off. Turning it on does not, in the current code, send your profile to a partner.</p>
+            </section>
+            <section id="en-push" data-section="push">
+              <h2>15. Push notifications</h2>
+              <p>If you allow notifications, we store an Expo push token and your platform so we can send match alerts, social alerts, and similar messages. A push-consent flag is stored on the account. You can withdraw permission in the system settings, and you can turn the in-app push switch off. Live Activities on iOS use a separate token so a followed match can appear on the lock screen. Turning notifications off does not delete the rest of your account.</p>
+            </section>
+            <section id="en-deletion" data-section="deletion">
+              <h2>16. Account deletion</h2>
+              <p>You can schedule deletion in the app under Privacy &amp; Data, use <a href="/delete-account">https://90plus.pro/delete-account</a>, or email <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>. The in-app request waits 30 days and can be cancelled while it is scheduled. At the end of that period we anonymize the account as section 8 describes. The request stores the IP address and user agent.</p>
+              <p>There is a second path that deletes the Clerk user immediately and permanently deletes the database row and matched media about 30 days later. Email us if you need to know which path ran for your account. Deletion does not remove content that other people have already copied, and it does not remove every security or moderation record.</p>
+            </section>
+            <section id="en-changes" data-section="changes">
+              <h2>17. Changes to this policy</h2>
+              <p>We will update this page when our practices change, and we will change the date at the top. If a change is material, we will take a reasonable step to tell you in the app or on this page. The previous pages that described location tracking for local content, or payment providers, do not describe the current Service and are withdrawn.</p>
+            </section>
+            <section id="en-contact" data-section="contact">
+              <h2>18. Contact</h2>
+              <p>Privacy requests go to the individual developer who operates 90Plus. There is no separate privacy office on file.</p>
+              <ul>
+                <li>Email: <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
+                <li>Support: <a href="https://90plus.pro/support">https://90plus.pro/support</a></li>
+                <li>Support phone published on that page: <a href="tel:+2207630953">+220 76 30 953</a>. This is a support number, not a registered office.</li>
+                <li>Website: <a href="https://90plus.pro">https://90plus.pro</a></li>
+                <li>Terms of Service: <a href="/terms">https://90plus.pro/terms</a></li>
+              </ul>
+            </section>
+          </article>
+        </div>
+        <footer class="legal-footer">
+          <span>90Plus · Privacy Policy · 4 November 2026</span>
+          <nav aria-label="Footer">
+            <a href="/terms">Terms of Service</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/support">Contact</a>
+            <a href="https://90plus.pro">90plus.pro</a>
+          </nav>
+        </footer>
       </div>
 
-      <div class="locale-en" hidden>
-      <main>
-        <section class="hero reveal">
-          <div class="eyebrow">Legal</div>
-          <h1>Privacy Policy</h1>
-          <p class="lead">At 90Plus we value your privacy. This policy explains how we collect, use, and protect your data.</p>
-          <div class="meta"><span>Last updated: January 2024</span></div>
+      <div class="locale-ar" lang="ar">
+        <section class="legal-hero">
+          <p class="eyebrow">الخصوصية</p>
+          <h1>سياسة الخصوصية</h1>
+          <p class="lead">توضح هذه السياسة ما الذي يجمعه 90Plus فعلاً، وكيف تُستخدم هذه المعلومات، والخيارات المتاحة لك. كُتبت من التطبيق والخادم الحاليين، لا من نموذج عام.</p>
+          <p class="updated">آخر تحديث: 4 نوفمبر 2026</p>
+          <div class="notice">
+            <p><strong>من نحن.</strong> يشغّل 90Plus مطوّره بصفته فرداً. لا يسجّل المنتج اسماً لشركة ولا رقم سجل ولا عنواناً قانونياً. تصف هذه السياسة ممارساتنا. وهي ليست شهادة بتوافق مع GDPR أو UK GDPR أو CCPA أو أي قانون آخر.</p>
+          </div>
         </section>
-        <section class="card reveal delay-1">
-          <div class="pill">Summary</div>
-          <h2>Introduction</h2>
-          <p>We protect your personal information when you use our app.</p>
-          <div class="callout"><strong>In short:</strong> We do not sell your data; you can delete your account from settings.</div>
-        </section>
-        <section class="card reveal delay-2"><h2>Information we collect</h2><ul>
-          <li><strong>Account:</strong> name, email, username</li>
-          <li><strong>Usage:</strong> activity, points, achievements</li>
-          <li><strong>Content:</strong> videos and images you upload</li>
-          <li><strong>Device:</strong> device type, OS, device ID</li>
-          <li><strong>Location:</strong> optional, for local content</li>
-        </ul></section>
-        <section class="card reveal delay-2"><h2>How we use data</h2><ul>
-          <li>Provide and improve the app</li>
-          <li>Personalize your experience</li>
-          <li>Send important notifications</li>
-          <li>Prevent fraud and ensure security</li>
-          <li>Analytics and support</li>
-        </ul></section>
-        <section class="card reveal delay-3"><h2>Sharing</h2><p>We do not sell your data. We may share with consent, providers, legal compliance, or to protect rights.</p></section>
-        <section class="card reveal delay-3"><h2>Security</h2><ul>
-          <li>Encryption in transit and at rest</li>
-          <li>Secured servers and monitoring</li>
-          <li>Limited staff access</li>
-        </ul></section>
-        <section class="card reveal delay-3"><h2>Your rights</h2><p>Access, correct, delete, restrict, port, or object to processing where applicable.</p></section>
-        <section class="card reveal delay-3"><h2>Cookies</h2><p>We use cookies to improve experience; control via device settings.</p></section>
-        <section class="card reveal delay-3"><h2>Children</h2><p>For users 13+. We do not knowingly collect data from children under 13.</p></section>
-        <section class="card reveal delay-4"><h2>Updates</h2><p>We may update this policy and notify you via the app or email.</p></section>
-        <section class="card reveal delay-4"><h2>Contact</h2><ul>
-          <li><strong>Email:</strong> <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
-          <li><strong>Phone:</strong> +220 76 30 953</li>
-        </ul></section>
-      </main>
-      <footer class="locale-en">90Plus — Privacy Policy</footer>
+        <div class="legal-shell">
+          <nav class="legal-toc" aria-label="في هذه الصفحة">
+            <p class="toc-label">في هذه الصفحة</p>
+            <ol>
+              <li><a href="#ar-introduction">١. ما نجمعه</a></li>
+              <li><a href="#ar-you-provide">٢. ما تقدمه أنت</a></li>
+              <li><a href="#ar-automatic">٣. ما يُجمع تلقائياً</a></li>
+              <li><a href="#ar-use">٤. كيف نستخدمه</a></li>
+              <li><a href="#ar-bases">٥. الأسس النظامية</a></li>
+              <li><a href="#ar-sharing">٦. المشاركة</a></li>
+              <li><a href="#ar-transfers">٧. النقل الدولي</a></li>
+              <li><a href="#ar-retention">٨. مدة الاحتفاظ</a></li>
+              <li><a href="#ar-security">٩. الأمان</a></li>
+              <li><a href="#ar-rights">١٠. حقوقك</a></li>
+              <li><a href="#ar-gdpr">١١. المستخدمون في أوروبا</a></li>
+              <li><a href="#ar-uk">١٢. المستخدمون في المملكة المتحدة</a></li>
+              <li><a href="#ar-children">١٣. الأطفال</a></li>
+              <li><a href="#ar-ads">١٤. الرعاة والتحليلات</a></li>
+              <li><a href="#ar-push">١٥. الإشعارات</a></li>
+              <li><a href="#ar-deletion">١٦. حذف الحساب</a></li>
+              <li><a href="#ar-changes">١٧. التغييرات</a></li>
+              <li><a href="#ar-contact">١٨. التواصل</a></li>
+            </ol>
+          </nav>
+          <article class="legal-prose">
+            <section id="ar-introduction" data-section="introduction">
+              <h2>١. المعلومات التي نجمعها</h2>
+              <p>نجمع المعلومات بثلاث طرق: ما تعطينا إياه، وما يرسله جهازك عند استخدام ميزة، وما يسجله الخادم من بيانات تقنية محدودة لتشغيل الخدمة. لا نبيع معلوماتك الشخصية.</p>
+              <p>الخدمة هي تطبيق 90Plus والموقع <a href="https://90plus.pro">https://90plus.pro</a>. الصفحات العامة في هذا الموقع، بما فيها هذه الصفحة، لا تحتاج إلى حساب. واجهة التطبيق متاحة بالعربية والإنجليزية.</p>
+            </section>
+            <section id="ar-you-provide" data-section="you-provide">
+              <h2>٢. المعلومات التي تقدمها</h2>
+              <ul>
+                <li><strong>الحساب.</strong> البريد الإلكتروني، ومعرّف Clerk، واسم المستخدم، وطريقة الدخول التي تختارها (البريد أو Google أو Apple). كلمات مرور Google وApple تتولاها تلك الجهات وClerk. لا نطلب من التطبيق الاحتفاظ بنسخة منها.</li>
+                <li><strong>الملف.</strong> الاسم الظاهر، والصورة، وصورة الغلاف، والنبذة، والفريق المفضل، والدولة، وتفاصيل كروية اختيارية مثل المركز والطول والوزن والقدم المفضلة وروابط التواصل. بعض هذه الحقول اختياري.</li>
+                <li><strong>السن.</strong> العمر أو تاريخ الميلاد حتى نطبّق الحد الأدنى وهو 13 عاماً. إذا كان عمرك بين 13 و17 فقد نخزّن بريد ولي الأمر وما إذا تم تأكيد الموافقة، مع عنوان IP ووكيل المستخدم لذلك الطلب.</li>
+                <li><strong>المحتوى.</strong> منشورات المجتمع، والتعليقات، والاستطلاعات، والصور، والمقاطع، ورسائل دردشة المباراة، والإعجابات، والمتابعات، وعمليات الحظر، والبلاغات.</li>
+                <li><strong>اللعب.</strong> التوقعات، وإجابات الاختبارات، ونشاط العملات ونقاط الخبرة، والإنجازات، ورموز الإحالة، واشتراكات مسابقات الرعاة.</li>
+                <li><strong>متجر الراعي.</strong> إذا أنشأت متجراً نخزّن الاسم والوصف والشعار والعنوان وخيار التوصيل والدولة ورقم الهاتف وروابط التواصل التي ترسلها.</li>
+                <li><strong>المساعد.</strong> الرسائل التي ترسلها إلى المساعد الكروي، وتسجيلاً صوتياً إذا استخدمت التفريغ. يُرسل التسجيل إلى مزود التفريغ المهيأ حتى يتحول إلى نص.</li>
+                <li><strong>الدعم.</strong> أي شيء ترسله إلى <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>.</li>
+              </ul>
+              <p>تُستخدم الكاميرا ومكتبة الصور لصور الملف والغلاف والمقاطع والصور التي تختار رفعها. يُستخدم الميكروفون لرسائل صوتية إلى المساعد. يبقى Face ID، إذا فعّلته، على جهازك لحماية الدخول. لا نستلم قالب بصمة إصبعك ولا وجهك.</p>
+            </section>
+            <section id="ar-automatic" data-section="automatic">
+              <h2>٣. المعلومات التي تُجمع تلقائياً</h2>
+              <ul>
+                <li><strong>عنوان IP ووكيل المستخدم</strong> عند قبول الشروط، وتغيير الموافقات، وطلبات تصدير البيانات، وطلبات حذف الحساب، وطلبات موافقة ولي الأمر، ومفاتيح استعادة جلسة الجهاز، ونقرات روابط الدعوة. يستخدم الخادم عنوان IP أيضاً لتوجيه الحركة وتطبيق حدود المعدل.</li>
+                <li><strong>جلسة الجهاز.</strong> تجزئة لمفتاح جهاز طويل الأمد، مع وصف قصير للجهاز، حتى يستطيع التطبيق استعادة الجلسة. نخزّن التجزئة لا المفتاح الخام.</li>
+                <li><strong>الإشعارات.</strong> رمز Expo للمنصة (iOS أو Android) إذا سمحت بالإشعارات. على iOS قد يُخزَّن رمز Live Activity ومعرّف جهاز والمباراة والفرق التي تتابعها لهذه الميزة واللغة، حتى يتحدث نتيجة شاشة القفل.</li>
+                <li><strong>التشخيص.</strong> إذا كان Sentry مهيأً، تُرسل تقارير الأعطال وعينة من بيانات الأداء إلى Sentry. الخادم مضبوط لإزالة ترويسات التفويض وملفات تعريف الارتباط من هذه الأحداث، ولحذف حقول كلمة المرور والرمز والسر ومفتاح الواجهة. قد يتلقى Sentry مع ذلك إصدار التطبيق ونظام التشغيل وسياق الخطأ.</li>
+                <li><strong>الاستخدام داخل المنتج.</strong> أعداد مثل مشاهدات الملف ومشاهدات المقاطع ونتائج الاختبارات وإحصاءاتك على فيديوهاتك. هذه جزء من التطبيق، وليست منتج تحليلات تسويقية منفصلاً.</li>
+              </ul>
+              <p><strong>الموقع.</strong> لا نجمع الموقع في الخلفية، ولا نبني سجلاً لمواقع المستخدمين العاديين. إذا أنشأت متجر راعٍ واستخدمت الخريطة، فقد يطلب التطبيق إذن الموقع أثناء الاستخدام لوضع الدبوس وملء العنوان. نخزّن العنوان والدولة اللذين تؤكدهما. تتلقى Google طلب الخريطة عند عرضها. يمكنك رفض الإذن وكتابة العنوان.</p>
+              <p><strong>ملفات تعريف الارتباط والموقع.</strong> الموقع التسويقي وهذه الصفحات القانونية لا تستخدم كعكاً للتحليلات ولا بكسل إعلانات. اللغة التي تختارها تُحفظ في التخزين المحلي على جهازك. يمكن للواجهة البرمجية أن تضع ملفاً لشاشة المراجعة الإدارية الخاصة بها، وأن تصدر رمزاً أمنياً للطلبات المصدّق عليها. إذا فتحت بوابة حساب Clerk فقد تضع Clerk ملفاتها وفق شروطها. لم نجد وسم Google Analytics أو Meta أو ما شابههما على الموقع العام.</p>
+            </section>
+            <section id="ar-use" data-section="use">
+              <h2>٤. كيف نستخدم المعلومات</h2>
+              <ul>
+                <li>لإنشاء حسابك وتأمينه، وإظهار ملفك ومحتواك.</li>
+                <li>لتشغيل النتائج والأخبار والاختبارات والتوقعات والعملات والإحالات والإشعارات والمساعد.</li>
+                <li>للإشراف على المحتوى والتحقيق في الإساءة وتطبيق <a href="/terms">شروط الخدمة</a>.</li>
+                <li>لإرسال إشعار سمحت به، مثل مباراة أو تفاعل أو تذكير.</li>
+                <li>لإصلاح الأعطال ومعرفة الطلبات التي تفشل.</li>
+                <li>للرد على رسالة دعم أو طلب تصدير أو طلب حذف.</li>
+              </ul>
+              <p>لا نستخدم معلوماتك لبيع ملفات إعلانية. تظهر متاجر الرعاة لأنها جزء من «توقع واربح»، لا لأننا نبيع بياناتك لشبكة إعلانات.</p>
+            </section>
+            <section id="ar-bases" data-section="bases">
+              <h2>٥. الأسس النظامية للمعالجة</h2>
+              <p>حيث ينطبق قانون مثل GDPR أو UK GDPR، نعتمد الأسس التالية. هذا شرح لطريقة بناء المنتج، وليس تقييماً قانونياً مكتملاً.</p>
+              <ul>
+                <li><strong>العقد.</strong> تقديم الحساب والميزات التي تطلبها.</li>
+                <li><strong>المصالح المشروعة.</strong> إبقاء الخدمة آمنة، ومنع الإساءة، والإشراف على المحتوى، وإصلاح الأعطال. تُوازن هذه المصالح مع حقوقك.</li>
+                <li><strong>الموافقة.</strong> الإشعارات، والموقع الأمامي الاختياري لعنوان متجر، وموافقة ولي الأمر لحساب مراهق. يمكنك سحب موافقة منحتها. مفاتيح التحليلات والبريد ومشاركة البيانات داخل التطبيق تُحفظ. ما تفعله اليوم موضح في البند 14.</li>
+                <li><strong>الالتزام القانوني.</strong> حيث يجب علينا الاحتفاظ بمعلومات أو الإفصاح عنها امتثالاً لقانون ينطبق فعلاً على المشغّل.</li>
+              </ul>
+            </section>
+            <section id="ar-sharing" data-section="sharing">
+              <h2>٦. المشاركة والجهات المعالجة</h2>
+              <p>نشارك المعلومات الشخصية مع مزودي خدمة يعالجونها لحسابنا، وعندما تنشر شيئاً عمداً. لا نبيع المعلومات الشخصية.</p>
+              <ul>
+                <li><strong>المستخدمون الآخرون</strong> يرون الملف والمحتوى الذي تنشره، وتفاصيل متجر الراعي إذا نشرت متجراً.</li>
+                <li><strong>Clerk</strong> تعالج تسجيل الدخول. تعالج Google أو Apple الدخول إذا اخترتهما.</li>
+                <li><strong>Expo</strong> تسلّم الإشعارات. تسلّم Apple تحديثات Live Activity على iOS.</li>
+                <li><strong>Sentry</strong> يتلقى أحداث الأعطال والأداء عندما يكون مهيأً.</li>
+                <li><strong>Cloudflare R2</strong> يخزّن الوسائط وملفات تصدير البيانات. <strong>Mux</strong> تعالج فيديو المقاطع.</li>
+                <li><strong>Railway</strong> تستضيف الواجهة البرمجية في الإنتاج. قاعدة البيانات PostgreSQL والذاكرة المؤقتة Redis.</li>
+                <li><strong>API-Football و365Scores</strong> يقدمان بيانات المباريات. نرسل طلبات عن المباريات والإحصاءات لا عن ملفك، في مسار النتيجة العادي.</li>
+                <li><strong>NewsAPI</strong> تقدم عناوين كأس العالم إلى خادمنا. تُستخدم <strong>Google Maps</strong> في منتقي عنوان الراعي.</li>
+                <li>قد تتلقى <strong>Google Gemini وAmazon Bedrock وOpenRouter</strong> (أو نقطة متوافقة مع OpenAI) رسائل المساعد أو مطالب الاختبار أو الصوت أو المحتوى المقدم لفحص سلامة، عندما تكون المفاتيح مهيأة. قد يشمل فحص السلامة نص منشور أو تعليق، والصورة في حالة الصور.</li>
+              </ul>
+              <p>قد نفصح عن معلومات أيضاً إذا أوجب القانون ذلك، أو إذا كان ذلك لازماً بصورة معقولة لحماية شخص أو للتحقيق في إساءة أو للدفاع عن مطالبة قانونية. يوجد في التطبيق إعداد بعنوان «مشاركة البيانات» وهو مغلق افتراضياً. في الكود الحالي، تشغيله لا يبدأ بيع بياناتك لشركاء.</p>
+            </section>
+            <section id="ar-transfers" data-section="transfers">
+              <h2>٧. النقل الدولي للبيانات</h2>
+              <p>يُستخدم 90Plus في أكثر من دولة. يعمل مزودونا في دولهم، وقد تشمل الولايات المتحدة ودولاً أخرى خارج دولتك. لذلك قد تُعالَج بيانات المباريات والوسائط وتقارير الأعطال ورسائل المساعد خارج البلد الذي تعيش فيه.</p>
+              <p>لا ينشر المنتج أداة نقل مثل البنود التعاقدية القياسية، ولا يسمي ممثلاً في الاتحاد الأوروبي أو المملكة المتحدة. إذا كنت في المنطقة الاقتصادية الأوروبية أو المملكة المتحدة، فهذه فجوة ينبغي أن يغلقها محامٍ قبل اعتبار هذه السياسة ترتيباً مكتملاً للنقل. يمكنك مع ذلك مراسلتنا بشأن النقل على البريد أدناه.</p>
+            </section>
+            <section id="ar-retention" data-section="retention">
+              <h2>٨. مدة الاحتفاظ بالمعلومات</h2>
+              <ul>
+                <li><strong>بيانات الحساب</strong> تبقى ما دام الحساب مفتوحاً.</li>
+                <li><strong>الحذف من التطبيق</strong> يُجدول بعد 30 يوماً. يمكنك إلغاءه خلال هذه المدة. بعد التاريخ تستبدل مهمة إخفاء الهوية البريد واسم المستخدم والاسم الظاهر، وتمسح النبذة والصور، وتزيل الإشعارات والمتابعات والإعجابات والجلسات. قد تُستبدل التعليقات والنصوص بإشعار حذف. قد تبقى صفوف التوقعات والعملات من غير اسمك.</li>
+                <li><strong>الحذف المباشر للحساب</strong> (الواجهة التي تعلّم الحساب محذوفاً فوراً) تزيل دخول Clerk، وبعد نحو 30 يوماً تحذف سجل المستخدم وتجدول حذف ملفات الوسائط التي نستطيع ربطها بالحساب.</li>
+                <li><strong>صادرات البيانات</strong> تُحفظ نحو 7 أيام ثم يُزال الملف.</li>
+                <li><strong>نقرات الدعوة</strong> تحتفظ بعنوان IP ووكيل المستخدم حتى تُنسب الإحالة.</li>
+                <li>قد تُحفظ <strong>سجلات الإشراف والأمان</strong> بعد الحذف لمنع الإساءة ومعالجة النزاع. لا يضبط المنتج مدة احتفاظ واحدة منشورة لهذه السجلات.</li>
+              </ul>
+              <p>قد تستغرق النسخ الاحتياطية وسجلات المزودين وقتاً إضافياً لتزول. لا ندّعي أن كل نسخة تختفي في اليوم نفسه.</p>
+            </section>
+            <section id="ar-security" data-section="security">
+              <h2>٩. أمان البيانات</h2>
+              <p>يُقدَّم الموقع العام والواجهة البرمجية عبر HTTPS. تتولى Clerk رموز الدخول. تُخزَّن مفاتيح استعادة الجهاز بصيغة تجزئة. تُصفّى أحداث Sentry من كلمات المرور والرموز وملفات تعريف الارتباط قبل إرسالها. الوصول إلى أنظمة الإنتاج مقصور على من يشغّلها.</p>
+              <p>لا توجد خدمة آمنة على نحو كامل. إذا ظننت أن حسابك استُخدم بغير إذن، فراسلنا. لا ترسل كلمة المرور ولا رمز المرة الواحدة في تلك الرسالة.</p>
+            </section>
+            <section id="ar-rights" data-section="rights">
+              <h2>١٠. حقوقك في الخصوصية</h2>
+              <p>بحسب مكان إقامتك، قد يكون لك الحق في الوصول إلى معلوماتك أو تصحيحها أو حذفها أو تصديرها، وفي الاعتراض على استخدام أو تقييده، وفي سحب موافقة. يمكنك تعديل كثير من ملفك داخل التطبيق. يمكنك إيقاف الإشعارات من إعدادات الجهاز ومن التطبيق. يمكنك حظر المستخدمين وحذف محتوى نشرته، باستخدام أدوات التطبيق.</p>
+              <p>يمكن من «الخصوصية والبيانات» طلب تصدير JSON وجدولة الحذف. يشمل التصدير حالياً ملفك والمقاطع وتعليقات المقاطع والإعجابات وتوقعات المباريات ومحاولات الاختبار وسجل العملات والإنجازات والمتابعات والإشعارات وسجلات الموافقة. لا يشمل كل الميزات. منشورات المجتمع ودردشة المباراة مثالان على بيانات لا تجمعها مهمة التصدير حالياً. تقول الشاشة إن بريداً سيصلك عندما يجهز الملف. الخادم يحفظ الملف نحو 7 أيام ولا يرسل هذا البريد حالياً. إذا لم يصلك رابط، فراسلنا وسنساعدك في الحصول على نسختك.</p>
+              <p>لن نميز ضدك لأنك قدمت طلب خصوصية. قد نرفض طلباً لا نستطيع التحقق منه، أو يسمح القانون برفضه. لا نعد بمدة رد لا ينفذها المنتج.</p>
+            </section>
+            <section id="ar-gdpr" data-section="gdpr">
+              <h2>١١. المستخدمون في أوروبا</h2>
+              <p>إذا انطبق عليك GDPR، فقد يكون لك الحق في الوصول والتصحيح والمحو والتقييد ونقل بياناتك، وفي الاعتراض على المعالجة القائمة على المصالح المشروعة، وفي سحب الموافقة. يجوز لك تقديم شكوى إلى جهة إشراف. لا يسمي المنتج ممثلاً في الاتحاد الأوروبي، ولا نعد هذه الصفحة قراراً بأن كل واجب في GDPR قد استُوفي.</p>
+              <p>لممارسة هذه الحقوق، راسل <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>. قد نحتاج إلى التأكد من أن الطلب صادر عنك. أداتا التصدير والحذف داخل التطبيق هما مسار الخدمة الذاتية الحالي للوصول والمحو. ولهما الحدود الموضحة أعلاه.</p>
+            </section>
+            <section id="ar-uk" data-section="uk">
+              <h2>١٢. المستخدمون في المملكة المتحدة</h2>
+              <p>إذا انطبق عليك UK GDPR، فلك الحقوق ذاتها في مواجهة المشغّل: الوصول والتصحيح والمحو والتقييد والنقل والاعتراض وسحب الموافقة. يجوز لك الشكوى إلى مكتب مفوض المعلومات. لا يسمي المنتج ممثلاً في المملكة المتحدة. هذه الصفحة لا تشهد بالتوافق مع UK GDPR.</p>
+            </section>
+            <section id="ar-children" data-section="children">
+              <h2>١٣. خصوصية الأطفال</h2>
+              <p>90Plus ليس للأطفال دون 13 عاماً. نمنع الحساب الذي يصرّح بأن عمر صاحبه أقل من 13. لا نطلب عن علم معلومات شخصية من طفل دون 13. إذا ظننت أن طفلاً دون 13 يملك حساباً، فراسلنا وسنحذفه.</p>
+              <p>للأعمار من 13 إلى 17، يستطيع التطبيق طلب بريد ولي الأمر وتخزين طلب الموافقة. يجهّز المنتج رسالة موافقة، لكن كود الخادم الحالي لا يربط مزود بريد، لذلك قد لا تُسلَّم الرسالة. لا تعتمد على وصول بريد. ولي الأمر الذي يريد إزالة حساب يمكنه مراسلتنا مباشرة.</p>
+            </section>
+            <section id="ar-ads" data-section="ads">
+              <h2>١٤. الرعاة والإعلانات والتحليلات</h2>
+              <p>تعرض «توقع واربح» أسماء الرعاة وشعاراتهم وتفاصيل المتاجر ومسابقات الجوائز. هذا محتوى مدعوم داخل التطبيق. الموقع العام لا يشغّل بكسل تحليلات أو إعلانات. يفوّض ملف <a href="https://90plus.pro/app-ads.txt">app-ads.txt</a> شركة Google ببيع المساحات الإعلانية لهذا التطبيق. كود التطبيق الذي رُوجع لهذه السياسة لا يتضمن حزمة إعلانات تطلب إعلانات داخل التطبيق، ولا يرسل ملفك إلى Google لهذا الغرض. لا نبيع المعلومات الشخصية. إذا فُعّلت الإعلانات داخل التطبيق لاحقاً، فقد تتلقى Google طلب إعلان وفق سياستها، وسيُحدَّث هذا البند.</p>
+              <p>في التطبيق مفتاح تحليلات وُصف بأنه يساعد على تحسين التطبيق. يُحفظ المفتاح في حسابك. الكود الحالي لا يربطه بحزمة تحليلات منتج، ولا يشغّل تقارير أعطال Sentry أو يوقفها. تقارير الأعطال موضحة في البند 3.</p>
+              <p>مفتاح البريد يُحفظ. الخادم الحالي لا يشغّل برنامج بريد تسويقي من هذا المفتاح. مفتاح مشاركة البيانات يُحفظ وهو مغلق افتراضياً. تشغيله لا يرسل ملفك إلى شريك في الكود الحالي.</p>
+            </section>
+            <section id="ar-push" data-section="push">
+              <h2>١٥. الإشعارات</h2>
+              <p>إذا سمحت بالإشعارات، نخزّن رمز Expo ومنصتك حتى نرسل تنبيهات المباريات والتنبيهات الاجتماعية وما شابهها. يُحفظ علم موافقة على الإشعارات في الحساب. يمكنك سحب الإذن من إعدادات النظام، وإغلاق مفتاح الإشعارات داخل التطبيق. تستخدم Live Activities على iOS رمزاً منفصلاً حتى تظهر مباراة تتابعها على شاشة القفل. إيقاف الإشعارات لا يحذف بقية حسابك.</p>
+            </section>
+            <section id="ar-deletion" data-section="deletion">
+              <h2>١٦. حذف الحساب</h2>
+              <p>يمكنك جدولة الحذف في التطبيق من «الخصوصية والبيانات»، أو استخدام <a href="/delete-account">https://90plus.pro/delete-account</a>، أو مراسلة <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a>. طلب التطبيق ينتظر 30 يوماً ويمكن إلغاؤه ما دام مجدولاً. في نهاية المدة نجعل الحساب مجهولاً كما يوضح البند 8. يخزّن الطلب عنوان IP ووكيل المستخدم.</p>
+              <p>يوجد مسار ثانٍ يحذف مستخدم Clerk فوراً ثم يحذف صف قاعدة البيانات والوسائط المطابقة بعد نحو 30 يوماً. راسلنا إذا احتجت معرفة أي مسار جرى لحسابك. الحذف لا يزيل المحتوى الذي نسخه الآخرون، ولا يزيل كل سجل أمان أو إشراف.</p>
+            </section>
+            <section id="ar-changes" data-section="changes">
+              <h2>١٧. التغييرات على هذه السياسة</h2>
+              <p>سنحدّث هذه الصفحة عندما تتغير ممارساتنا، وسنغيّر التاريخ في أعلاها. إذا كان التغيير جوهرياً فسنتخذ خطوة معقولة لإبلاغك في التطبيق أو في هذه الصفحة. الصفحات السابقة التي وصفت تتبعاً للموقع من أجل محتوى محلي، أو مزودي دفع، لا تصف الخدمة الحالية وقد أُلغيت.</p>
+            </section>
+            <section id="ar-contact" data-section="contact">
+              <h2>١٨. التواصل</h2>
+              <p>تُرسل طلبات الخصوصية إلى المطوّر الفرد الذي يشغّل 90Plus. لا يوجد مكتب خصوصية منفصل في السجلات.</p>
+              <ul>
+                <li>البريد: <a href="mailto:merdevai477@gmail.com">merdevai477@gmail.com</a></li>
+                <li>الدعم: <a href="https://90plus.pro/support">https://90plus.pro/support</a></li>
+                <li>هاتف الدعم المنشور في تلك الصفحة: <a href="tel:+2207630953">+220 76 30 953</a>. هذا رقم دعم وليس مقراً مسجلاً.</li>
+                <li>الموقع: <a href="https://90plus.pro">https://90plus.pro</a></li>
+                <li>شروط الخدمة: <a href="/terms">https://90plus.pro/terms</a></li>
+              </ul>
+            </section>
+          </article>
+        </div>
+        <footer class="legal-footer">
+          <span>90Plus · سياسة الخصوصية · 4 نوفمبر 2026</span>
+          <nav aria-label="تذييل">
+            <a href="/terms">شروط الخدمة</a>
+            <a href="/privacy">سياسة الخصوصية</a>
+            <a href="/support">تواصل</a>
+            <a href="https://90plus.pro">90plus.pro</a>
+          </nav>
+        </footer>
       </div>
     </div>
     <script src="/legal/legal-lang.js"></script>

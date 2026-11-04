@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import fs from 'fs/promises';
 import path from 'path';
 
-const CURRENT_TERMS_VERSION = '1.0';
+const CURRENT_TERMS_VERSION = '2.0';
 
 export class TermsService {
   /**
@@ -12,9 +12,12 @@ export class TermsService {
   static async getLatestTerms(): Promise<{ version: string; content: string }> {
     const candidates = [
       // Compiled deploy: dist/src/services → dist/src/data (copied by copy:public)
+      path.join(__dirname, '../data/terms-of-service-v2.0.md'),
       path.join(__dirname, '../data/terms-of-service-v1.0.md'),
       // Local ts-node / monorepo cwd fallback
+      path.join(process.cwd(), 'src/data/terms-of-service-v2.0.md'),
       path.join(process.cwd(), 'src/data/terms-of-service-v1.0.md'),
+      path.join(process.cwd(), 'dist/src/data/terms-of-service-v2.0.md'),
       path.join(process.cwd(), 'dist/src/data/terms-of-service-v1.0.md'),
     ];
     let lastError: unknown;

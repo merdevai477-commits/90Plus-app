@@ -25,6 +25,7 @@ import {
 import { buildAppleAppSiteAssociation } from './config/appleAppSite';
 import { setupSentryErrorHandler } from './config/sentry.config';
 import { startNativeHeapRelease, stopNativeHeapRelease } from './utils/native-heap';
+import { sendLegalPage } from './utils/legal-page';
 
 // Opt out of transparent huge pages before request traffic extends the malloc heap.
 startNativeHeapRelease();
@@ -558,42 +559,25 @@ if (siteAssetsDir) {
     app.use('/assets', express.static(siteAssetsDir, { immutable: true, maxAge: '1y', fallthrough: false }));
 }
 
+// Canonical legal pages. Registered before static so /terms is the HTML page
+// itself (no redirect) and old filenames cannot serve a stale copy.
+const termsPagePath = path.join(publicPath, 'terms.html');
+const privacyPagePath = path.join(publicPath, 'privacy.html');
+
+app.get(['/terms', '/terms.html', '/terms-of-service.html'], (req, res) => {
+    sendLegalPage(req, res, termsPagePath);
+});
+
+app.get(
+    ['/privacy-policy.html', '/privacy-policy', '/privacy-policy-v3.html', '/privacy-policy-complete.html'],
+    (req, res) => {
+        sendLegalPage(req, res, privacyPagePath);
+    },
+);
+
 // Serve static files from public directory
 app.use(express.static(publicPath));
 app.use(express.static(resolveWebDistDir(), { index: false }));
-
-// Serve legal pages with proper error handling and logging
-app.get('/privacy-policy.html', (req, res) => {
-    const filePath = path.join(publicPath, 'privacy-policy.html');
-    logger.info(`📄 Serving privacy policy from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send privacy-policy.html:', err);
-            res.status(404).json({ 
-                status: 'ERROR', 
-                message: 'Privacy policy not found',
-                path: filePath,
-                exists: require('fs').existsSync(filePath)
-            });
-        }
-    });
-});
-
-app.get('/terms-of-service.html', (req, res) => {
-    const filePath = path.join(publicPath, 'terms-of-service.html');
-    logger.info(`📄 Serving terms of service from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send terms-of-service.html:', err);
-            res.status(404).json({ 
-                status: 'ERROR', 
-                message: 'Terms of service not found',
-                path: filePath,
-                exists: require('fs').existsSync(filePath)
-            });
-        }
-    });
-});
 
 app.get('/support.html', (req, res) => {
     const filePath = path.join(publicPath, 'support.html');
@@ -627,12 +611,8 @@ app.get('/delete-account.html', (req, res) => {
     });
 });
 
-// Legacy routes for backward compatibility (/privacy is served by support.routes.ts)
-app.get('/terms', (req, res) => {
-    res.redirect('/terms-of-service.html');
-});
-
-// /support is served by support.routes.ts (public/support.html)
+// /privacy and /support are served by support.routes.ts.
+// /terms is served above, before the static files.
 
 app.get('/delete-account', (req, res) => {
     res.redirect('/delete-account.html');
