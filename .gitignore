@@ -74,3 +74,14 @@ front/assets/Quiz/
 # Local scratch / design dumps — never ship these
 .asset-backup/
 scripts/__tmp*
+/scratch/
+/PredictionKingPage-temp/
+/artifacts/
+/tester-emails.csv
+/today-check.json
+/tmp-validation_health.json
+/tmp-validation_metrics.json
+
+# Debug dumps. Keep the one tracked report.
+/tmp-validation/*
+!/tmp-validation/P1-7-SENTRY-GAP-REPORT.md
