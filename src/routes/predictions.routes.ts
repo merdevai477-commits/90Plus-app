@@ -966,84 +966,8 @@ router.get('/leaderboard', requireAuth, async (req: Request, res: Response): Pro
             return;
         }
 
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 50);
-        
-        // Efficient leaderboard: aggregate in DB instead of loading every user's predictions.
-        const countsByUserAndState = await prisma.prediction.groupBy({
-            by: ['userId', 'isCorrect'],
-            _count: true,
-        });
-
-        const coinsWonByUser = await prisma.prediction.groupBy({
-            by: ['userId'],
-            where: { isCorrect: true },
-            _sum: { coinsWon: true },
-        });
-
-        const statsByUser: Record<
-            string,
-            { total: number; correct: number; incorrect: number; pending: number; resolved: number; accuracy: number; totalCoinsWon: number }
-        > = {};
-
-        for (const row of countsByUserAndState) {
-            const userId: string = row.userId;
-            if (!statsByUser[userId]) {
-                statsByUser[userId] = { total: 0, correct: 0, incorrect: 0, pending: 0, resolved: 0, accuracy: 0, totalCoinsWon: 0 };
-            }
-            const c = row._count as number;
-            statsByUser[userId].total += c;
-            if (row.isCorrect === true) statsByUser[userId].correct += c;
-            else if (row.isCorrect === false) statsByUser[userId].incorrect += c;
-            else statsByUser[userId].pending += c;
-        }
-
-        for (const row of coinsWonByUser) {
-            const userId: string = row.userId;
-            if (!statsByUser[userId]) continue;
-            statsByUser[userId].totalCoinsWon = row._sum?.coinsWon || 0;
-        }
-
-        const candidates = Object.entries(statsByUser)
-            .map(([userId, s]) => {
-                const resolved = s.correct + s.incorrect;
-                const accuracy = resolved > 0 ? Math.round((s.correct / resolved) * 100) : 0;
-                return { userId, stats: { ...s, resolved, accuracy } };
-            })
-            .filter((x) => x.stats.resolved > 0)
-            .sort((a, b) => {
-                if (b.stats.accuracy !== a.stats.accuracy) return b.stats.accuracy - a.stats.accuracy;
-                return b.stats.correct - a.stats.correct;
-            })
-            .slice(0, take);
-
-        const userIds = candidates.map((c) => c.userId);
-        const users = await prisma.user.findMany({
-            where: { id: { in: userIds } },
-            select: { id: true, username: true, displayName: true, avatar: true, isVerified: true },
-        });
-
-        const usersById = new Map(users.map((u) => [u.id, u]));
-
-        const leaderboard = candidates
-            .map((c) => {
-                const u = usersById.get(c.userId);
-                if (!u) return null;
-                return {
-                    id: u.id,
-                    username: u.username,
-                    displayName: u.displayName,
-                    avatar: u.avatar,
-                    isVerified: u.isVerified,
-                    stats: c.stats,
-                };
-            })
-            .filter(Boolean);
-        
-        res.json({
-            success: true,
-            data: { leaderboard }
-        });
+        // The global accuracy board is gone. Competition boards pass mode + period.
+        res.json({ success: true, data: { leaderboard: [] } });
     } catch (error) {
         logger.error('Error getting predictions leaderboard:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');

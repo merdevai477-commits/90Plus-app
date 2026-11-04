@@ -47,7 +47,6 @@ import { BlockService } from '../../services/blockService';
 import { cacheService, CACHE_TTL } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
-import { getUserBadges } from '../../services/rankingsService';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
@@ -121,7 +120,6 @@ function UserProfileScreen() {
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [viewerImageUrl, setViewerImageUrl] = useState('');
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
@@ -137,7 +135,6 @@ function UserProfileScreen() {
       });
     }, 80);
   }, []);
-  const [badgeCount, setBadgeCount] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -145,19 +142,6 @@ function UserProfileScreen() {
   const followActionInFlightRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
-
-  useEffect(() => {
-    if (!user?.id || String(user.id).startsWith('user_')) return;
-    let cancelled = false;
-    getUserBadges(authToken, user.id)
-      .then((res) => {
-        if (!cancelled) setBadgeCount(res?.summary?.total ?? 0);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [authToken, user?.id]);
 
   const canViewPredictions = !!user && !blockedMe && !isBlocked;
   const {
@@ -197,7 +181,6 @@ function UserProfileScreen() {
 
     try {
       const token = await getTokenRef.current();
-      setAuthToken(token);
       const userData = await AuthService.getUserByUsername(token, username);
       if (userData) {
         setUser(userData);
@@ -289,8 +272,6 @@ function UserProfileScreen() {
     setHasMoreVideos(true);
 
     const bootstrap = async () => {
-      const token = await getTokenRef.current();
-      setAuthToken(token);
       await loadUserProfile();
       recordProfileView();
     };
@@ -769,7 +750,7 @@ function UserProfileScreen() {
             {
               key: 'achievements',
               icon: PROFILE_ICONS.trophy,
-              value: badgeCount,
+              value: 0,
               label: t.profile.achievements,
               onPress: () => openTabAndScroll('achievements'),
             },
@@ -849,11 +830,7 @@ function UserProfileScreen() {
         )}
 
         {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
-          <ProfileAchievementsTab
-            analytics={null}
-            userId={user.id}
-            authToken={authToken}
-          />
+          <ProfileAchievementsTab analytics={null} />
         )}
         </View>
           </>

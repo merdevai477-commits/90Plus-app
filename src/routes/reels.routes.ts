@@ -2310,42 +2310,17 @@ router.post('/:id/report', requireAuth, strictLimiter, async (req: Request, res:
  * GET /api/reels/rankings/user/:userId/badges
  * Get all badges for a user
  */
-router.get('/rankings/user/:userId/badges', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { userId } = req.params;
-        const userIdStr = ensureString(userId);
-
-        const badges = (await prisma.rankingBadge.findMany({
-            where: { userId: userIdStr, category: { not: 'team_of_month' } },
-            orderBy: { earnedAt: 'desc' },
-        })).filter((b) => b.category !== 'team_of_month');
-
-        // Group badges by type
-        const goldBadges = badges.filter((b: { badgeType: string }) => b.badgeType === 'gold');
-        const silverBadges = badges.filter((b: { badgeType: string }) => b.badgeType === 'silver');
-        const bronzeBadges = badges.filter((b: { badgeType: string }) => b.badgeType === 'bronze');
-        const diamondBadges = badges.filter((b: { badgeType: string }) => b.badgeType === 'diamond');
-        const rankBadges = badges.filter((b: { badgeType: string }) => b.badgeType.startsWith('rank_'));
-
-        res.json({
-            status: 'SUCCESS',
-            data: {
-                badges,
-                summary: {
-                    gold: goldBadges.length,
-                    silver: silverBadges.length,
-                    bronze: bronzeBadges.length,
-                    diamond: diamondBadges.length,
-                    ranked: rankBadges.length,
-                    total: badges.length,
-                },
-                streak: null,
-            }
-        });
-    } catch (error: any) {
-        logger.error('Get user badges error:', error);
-        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
-    }
+router.get('/rankings/user/:userId/badges', (_req: Request, res: Response): void => {
+    // Old rank medals and team-of-the-month are retired. Keep the shape so
+    // older builds stop hitting ranking_badges on every profile open.
+    res.json({
+        status: 'SUCCESS',
+        data: {
+            badges: [],
+            summary: { gold: 0, silver: 0, bronze: 0, diamond: 0, ranked: 0, total: 0 },
+            streak: null,
+        },
+    });
 });
 
 // ============================================
@@ -2518,130 +2493,16 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
 // GET /api/reels/trending
 // Get trending reels (most viewed/liked in last 24 hours)
 // ============================================
-router.get('/trending', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 20);
-        
-        // Get reels from last 24 hours, sorted by engagement
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        const trendingReels = await prisma.reel.findMany({
-            where: {
-                isDeleted: false,
-                createdAt: { gte: yesterday }
-            },
-            take,
-            orderBy: [
-                { views: 'desc' }
-            ],
-            select: {
-                id: true,
-                videoUrl: true,
-                thumbnail: true,
-                caption: true,
-                views: true,
-                sharesCount: true,
-                createdAt: true,
-                user: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatar: true,
-                        isVerified: true,
-                    }
-                },
-                _count: {
-                    select: {
-                        likes: true,
-                        comments: true,
-                    }
-                }
-            }
-        });
-        
-        res.json({
-            status: 'SUCCESS',
-            data: {
-                reels: trendingReels.map(reel => ({
-                    ...reel,
-                    likesCount: reel._count.likes,
-                    commentsCount: reel._count.comments,
-                }))
-            }
-        });
-    } catch (error: any) {
-        logger.error('Get trending reels error:', error);
-        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
-    }
+router.get('/trending', requireAuth, (_req: Request, res: Response): void => {
+    res.json({ status: 'SUCCESS', data: { reels: [] } });
 });
 
 // ============================================
 // GET /api/reels/rankings
 // Get user rankings by reel engagement
 // ============================================
-router.get('/rankings', requireAuth, async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { limit = '10' } = req.query;
-        const take = Math.min(parseInt(limit as string) || 10, 50);
-        
-        // Get users with most total views/likes on their reels
-        const rankings = await prisma.user.findMany({
-            take,
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isVerified: true,
-                reels: {
-                    where: { isDeleted: false },
-                    select: {
-                        views: true,
-                        _count: {
-                            select: { likes: true }
-                        }
-                    }
-                }
-            },
-            orderBy: {
-                reels: {
-                    _count: 'desc'
-                }
-            }
-        });
-        
-        // Calculate total engagement for each user
-        const rankedUsers = rankings.map(user => {
-            const totalViews = user.reels.reduce((sum, reel) => sum + reel.views, 0);
-            const totalLikes = user.reels.reduce((sum, reel) => sum + reel._count.likes, 0);
-            const reelsCount = user.reels.length;
-            
-            return {
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName,
-                avatar: user.avatar,
-                isVerified: user.isVerified,
-                stats: {
-                    totalViews,
-                    totalLikes,
-                    reelsCount,
-                    engagement: totalViews + (totalLikes * 10) // Weight likes more
-                }
-            };
-        }).sort((a, b) => b.stats.engagement - a.stats.engagement);
-        
-        res.json({
-            status: 'SUCCESS',
-            data: { rankings: rankedUsers }
-        });
-    } catch (error: any) {
-        logger.error('Get reels rankings error:', error);
-        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
-    }
+router.get('/rankings', requireAuth, (_req: Request, res: Response): void => {
+    res.json({ status: 'SUCCESS', data: { rankings: [] } });
 });
 
 // ============================================

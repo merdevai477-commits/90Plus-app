@@ -31,7 +31,6 @@ import { useCoins } from '../../contexts/CoinsContext';
 import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
 import { LevelInfoModal } from '../../components/common/LevelInfoModal';
 import { StreakInfoModal } from '../../components/common/StreakInfoModal';
-import { getUserBadges } from '../../services/rankingsService';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import * as ImagePicker from 'expo-image-picker';
@@ -659,9 +658,6 @@ function OwnProfileScreen() {
   // Auto-retry countdown for error screen
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
-  // Optimization: Token state for BadgesDisplay
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  const [badgeCount, setBadgeCount] = useState(0);
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
   const [showStreakInfo, setShowStreakInfo] = useState(false);
@@ -680,23 +676,6 @@ function OwnProfileScreen() {
   useEffect(() => {
     setShowMoreMenu(false);
   }, [clerkUser?.id]);
-
-  // Optimization: Fetch token for badges (memoized)
-  useEffect(() => {
-    let isMounted = true;
-    const fetchToken = async () => {
-      try {
-        const token = await getToken();
-        if (isMounted && token) {
-          setAuthToken(token);
-        }
-      } catch (error) {
-        // Silent fail - badges will handle missing token
-      }
-    };
-    fetchToken();
-    return () => { isMounted = false; };
-  }, []);
 
   // Optimization: Derive state from cache with memoization
   const userData = cachedUserData;
@@ -719,15 +698,6 @@ function OwnProfileScreen() {
   );
   const displayClubLogo = userData?.clubLogo;
 
-  useEffect(() => {
-    const userId = userData?.id;
-    if (!userId || String(userId).startsWith('user_')) return;
-    let cancelled = false;
-    getUserBadges(authToken, userId).then((res) => {
-      if (!cancelled) setBadgeCount(res?.summary?.total ?? 0);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [authToken, userData?.id]);
   const displayStats = useMemo(
     () => ({
       age:
@@ -1837,7 +1807,7 @@ function OwnProfileScreen() {
             {
               key: 'achievements',
               icon: PROFILE_ICONS.trophy,
-              value: badgeCount,
+              value: 0,
               label: t.profile.achievements,
               onPress: () => openTabAndScroll('achievements'),
             },
@@ -1909,11 +1879,7 @@ function OwnProfileScreen() {
           )}
 
           {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
-            <ProfileAchievementsTab
-              analytics={analytics}
-              userId={userData.id}
-              authToken={authToken}
-            />
+            <ProfileAchievementsTab analytics={analytics} />
           )}
         </View>
 

@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_ICONS } from './profileV2Assets';
-import BadgesDisplay from './BadgesDisplay';
 
 interface ProfileAnalytics {
   totalViews?: number;
@@ -17,8 +16,6 @@ interface ProfileAnalytics {
 
 interface Props {
   analytics: ProfileAnalytics | null;
-  userId: string;
-  authToken: string | null;
 }
 
 function fmt(n?: number): string {
@@ -58,7 +55,7 @@ const EngagementStat = memo(function EngagementStat({
   );
 });
 
-export function ProfileAchievementsTab({ analytics, userId, authToken }: Props) {
+export function ProfileAchievementsTab({ analytics }: Props) {
   const { t } = useTranslation();
 
   return (
@@ -85,12 +82,6 @@ export function ProfileAchievementsTab({ analytics, userId, authToken }: Props) 
           label={t.profile.newFollowers}
         />
       </View>
-
-      {userId && !String(userId).startsWith('user_') ? (
-        <View style={styles.badgesWrap}>
-          <BadgesDisplay userId={userId} token={authToken} compact={false} />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -138,8 +129,5 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 10,
-  },
-  badgesWrap: {
-    marginTop: 4,
   },
 });

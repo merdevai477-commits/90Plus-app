@@ -11,9 +11,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { CompetitionResolverService } from './competition-resolver.service';
-import { notifyUser } from './notify.service';
-import { NotificationType } from './notification.service';
-import { allowLeaderboardPush, getMaxMatchesPerTick } from './prediction-settle-push-policy';
+import { getMaxMatchesPerTick } from './prediction-settle-push-policy';
 import { isSchemaOk } from './schema-guard.service';
 import { loadAuthoritativeSettlementFixture } from './prediction-settlement-snapshot';
 import { VOID_STATUSES } from './prediction-void.service';
@@ -23,17 +21,6 @@ const FINAL_STATUSES = new Set(['FT', 'AET', 'PEN']);
 
 const isScore = (v: unknown): v is number =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0;
-
-/**
- * Stable bucket for idempotency on leaderboard notifications. We use UTC
- * day so a user crossing 4→3 multiple times in the same day still gets only
- * one push for that day. Periodic resets (weekly/monthly) can drift in/out
- * across this boundary but the user will be re-notified next day at worst.
- */
-function leaderboardPeriodKey(): string {
-    return new Date().toISOString().slice(0, 10);
-}
-
 
 export class PredictionWatcherService {
     private static isRunning = false;
@@ -151,16 +138,9 @@ export class PredictionWatcherService {
                 `📊 Checking ${matchIds.length}/${allMatchIds.length} matches with unresolved predictions...`,
             );
 
-            const oldBoard = await this.getTopUserIds(10);
-            let resolvedAny = false;
-            let freshResolved = false;
-
-            // Check each match
             for (const matchId of matchIds) {
                 try {
-                    const result = await this.checkAndResolveMatch(matchId);
-                    if (result.resolved) resolvedAny = true;
-                    if (result.resolved && !result.staleOnly) freshResolved = true;
+                    await this.checkAndResolveMatch(matchId);
                 } catch (error) {
                     logger.error(`Error checking match ${matchId}:`, error);
                 }
@@ -169,12 +149,6 @@ export class PredictionWatcherService {
             await runSettleWatchdog().catch((err) =>
                 logger.warn('[predictionWatcher] settle watchdog failed:', err?.message),
             );
-
-            // Leaderboard-entry pushes only for fresh results; a stale backlog settles silently.
-            if (resolvedAny && freshResolved && allowLeaderboardPush()) {
-                const newBoard = await this.getTopUserIds(10);
-                await this.notifyLeaderboardEntries(oldBoard, newBoard);
-            }
 
             logger.info('✅ Prediction check completed');
         } catch (error) {
@@ -275,13 +249,10 @@ export class PredictionWatcherService {
                 return { success: false, message: `Match not finished yet (status: ${status})` };
             }
 
-            const oldBoard = await this.getTopUserIds(10);
             const settle = await PredictionResolverService.resolveMatchPredictions(matchId, {
                 source: 'manual',
                 prefetched: { snapshot, fetchedAt },
             });
-            const newBoard = await this.getTopUserIds(10);
-            await this.notifyLeaderboardEntries(oldBoard, newBoard);
 
             if (settle.outcome !== 'SETTLE_COMPLETE') {
                 return { success: false, message: `Not settled: ${settle.outcome}` };
@@ -295,93 +266,6 @@ export class PredictionWatcherService {
         }
     }
 
-    /**
-     * Dispatch leaderboard celebration notifications when a user newly enters
-     * either the top-3 (elite) or the top-10. Both branches share the same
-     * `idempotencyKey` per day to avoid spamming a yo-yoing user.
-     *
-     * Order matters: a user crossing from rank 5 -> 2 receives BOTH the
-     * top-10 push (if they were not in top-10 before) and the top-3 push.
-     * Most users will already be top-10 when they crack top-3, so the
-     * top-10 branch is a no-op.
-     */
-    private static async notifyLeaderboardEntries(
-        oldBoard: string[],
-        newBoard: string[],
-    ): Promise<void> {
-        const oldTop10 = new Set(oldBoard.slice(0, 10));
-        const newTop10 = newBoard.slice(0, 10);
-        const oldTop3 = new Set(oldBoard.slice(0, 3));
-        const newTop3 = newBoard.slice(0, 3);
-        const period = leaderboardPeriodKey();
-
-        const top10New = newTop10.filter((id) => !oldTop10.has(id));
-        for (const userId of top10New) {
-            logger.info(`🏆 User ${userId} entered Top 10 Leaderboard`);
-            await notifyUser({
-                userId,
-                type: NotificationType.LEADERBOARD_TOP10,
-                titleKey: 'leaderboardTop10Title',
-                bodyKey: 'leaderboardTop10Body',
-                data: { screen: '/(tabs)/rank', rank: newBoard.indexOf(userId) + 1 },
-                idempotencyKey: `top10:${userId}:${period}`,
-            }).catch((err) => logger.warn('[predictionWatcher] top10 notify failed:', err?.message));
-        }
-
-        const top3New = newTop3.filter((id) => !oldTop3.has(id));
-        for (const userId of top3New) {
-            logger.info(`🥇 User ${userId} entered Top 3 Leaderboard (elite)`);
-            await notifyUser({
-                userId,
-                type: NotificationType.LEADERBOARD_TOP3,
-                titleKey: 'leaderboardTop3Title',
-                bodyKey: 'leaderboardTop3Body',
-                data: { screen: '/(tabs)/rank', rank: newBoard.indexOf(userId) + 1 },
-                idempotencyKey: `top3:${userId}:${period}`,
-            }).catch((err) => logger.warn('[predictionWatcher] top3 notify failed:', err?.message));
-        }
-    }
-
-    /**
-     * Get IDs of the current top-N predictors, ordered. We fetch with `n`
-     * so the same query backs both the top-3 and top-10 branches.
-     */
-    private static async getTopUserIds(n: number = 10): Promise<string[]> {
-        try {
-            const countsByUserAndState = await (prisma as any).prediction.groupBy({
-                by: ['userId', 'isCorrect'],
-                _count: true,
-            });
-
-            const statsByUser: Record<string, { correct: number; incorrect: number }> = {};
-
-            for (const row of countsByUserAndState) {
-                const userId: string = row.userId;
-                if (!statsByUser[userId]) statsByUser[userId] = { correct: 0, incorrect: 0 };
-                const c = row._count as number;
-                if (row.isCorrect === true) statsByUser[userId].correct += c;
-                else if (row.isCorrect === false) statsByUser[userId].incorrect += c;
-            }
-
-            const candidates = Object.entries(statsByUser)
-                .map(([userId, s]) => {
-                    const resolved = s.correct + s.incorrect;
-                    const accuracy = resolved > 0 ? Math.round((s.correct / resolved) * 100) : 0;
-                    return { userId, stats: { correct: s.correct, accuracy, resolved } };
-                })
-                .filter((x) => x.stats.resolved > 0)
-                .sort((a, b) => {
-                    if (b.stats.accuracy !== a.stats.accuracy) return b.stats.accuracy - a.stats.accuracy;
-                    return b.stats.correct - a.stats.correct;
-                })
-                .slice(0, Math.max(1, n));
-
-            return candidates.map(c => c.userId);
-        } catch (err) {
-            logger.warn('Error fetching top user IDs for leaderboard check:', err);
-            return [];
-        }
-    }
 }
 
 export default PredictionWatcherService;
