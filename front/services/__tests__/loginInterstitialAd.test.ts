@@ -2,6 +2,7 @@ import {
   cancelPendingLoginInterstitial,
   isPostAuthDestination,
   markLoginInterstitialPending,
+  preloadLoginInterstitial,
   presentPendingLoginInterstitial,
   resetLoginInterstitialSessionForTests,
   setLoginInterstitialPresenterForTests,
@@ -94,6 +95,22 @@ describe('login interstitial session', () => {
     markLoginInterstitialPending();
     await presentPendingLoginInterstitial();
     expect(secondCalls).toBe(1);
+  });
+
+  it('does not show while the ad is only preloading', async () => {
+    let calls = 0;
+    setLoginInterstitialPresenterForTests(async () => {
+      calls += 1;
+      return 'shown';
+    });
+
+    preloadLoginInterstitial();
+    await Promise.resolve();
+    expect(calls).toBe(0);
+
+    markLoginInterstitialPending();
+    await presentPendingLoginInterstitial();
+    expect(calls).toBe(1);
   });
 
   it('treats auth screens and the index redirect as not ready', () => {

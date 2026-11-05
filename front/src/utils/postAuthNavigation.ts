@@ -5,7 +5,7 @@ import { fetchAgeStatus } from '../../hooks/useAgeVerification';
 import { AuthService } from '@/src/services/authService';
 import { waitForClerkToken } from './authSession';
 import { needsTeamOnboarding } from '../../utils/teamOnboarding';
-import { markLoginInterstitialPending } from '@/services/loginInterstitialAd';
+import { markLoginInterstitialPending, preloadLoginInterstitial } from '@/services/loginInterstitialAd';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
 
@@ -36,6 +36,8 @@ export async function navigateAfterAuth(
   router: Router,
   getToken?: GetToken,
 ): Promise<void> {
+  // Overlap the ad request with profile sync so it is ready when the next screen opens.
+  preloadLoginInterstitial();
   try {
     await routeAfterAuthenticatedSession(router, getToken);
   } finally {

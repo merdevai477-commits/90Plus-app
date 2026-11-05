@@ -13,12 +13,18 @@ type ShowLoginInterstitial = (
   isCancelled: () => boolean,
 ) => Promise<LoginInterstitialShowResult>;
 
+type ShowableInterstitial = { show: () => Promise<void> };
+
 let pending = false;
 let inFlight = false;
 let consumed = false;
 let epoch = 0;
 let showLoginInterstitial: ShowLoginInterstitial = showLoginInterstitialNative;
 let sdkReady: Promise<void> | null = null;
+let allowNativePreload = true;
+let preloaded: ShowableInterstitial | null = null;
+let preloadTask: Promise<void> | null = null;
+let preloadGeneration = 0;
 
 /**
  * Arm the post-auth interstitial. Safe to call more than once: a session only
@@ -33,12 +39,48 @@ export function markLoginInterstitialPending(): void {
   // A previous load is still running. It will present this attempt when it finishes.
 }
 
+/**
+ * Start loading the interstitial while the user is still on the auth screen,
+ * so it can open as soon as sign-in finishes instead of after another network round trip.
+ */
+export function preloadLoginInterstitial(): void {
+  if (!allowNativePreload || consumed || preloaded || preloadTask) return;
+
+  const unitId = adsConfig.getServedLoginInterstitialAdUnitId();
+  if (!unitId) return;
+  if (adsConfig.shouldUseTestAds() && isConfiguredProductionAdUnit(unitId)) {
+    logger.error('[ads] Refused to request a production interstitial during development');
+    return;
+  }
+
+  const generation = preloadGeneration;
+  logger.info('[ads] Preloading login interstitial');
+  preloadTask = loadShowableInterstitial(unitId, () => generation !== preloadGeneration)
+    .then((ad) => {
+      if (generation !== preloadGeneration || !ad) return;
+      preloaded = ad;
+    })
+    .catch((error) => {
+      logger.warn('[ads] Login interstitial preload skipped', error);
+    })
+    .finally(() => {
+      if (generation === preloadGeneration) preloadTask = null;
+    });
+}
+
 /** Drop a pending or in-flight interstitial. Used when the user signs out. */
 export function cancelPendingLoginInterstitial(): void {
   const hadWork = pending || inFlight;
   pending = false;
   if (!hadWork) return;
   epoch += 1;
+  discardPreloadedInterstitial();
+}
+
+function discardPreloadedInterstitial(): void {
+  preloadGeneration += 1;
+  preloaded = null;
+  preloadTask = null;
 }
 
 export function isPostAuthDestination(pathname: string | null | undefined): boolean {
@@ -100,17 +142,61 @@ export function resetLoginInterstitialSessionForTests(): void {
   epoch = 0;
   sdkReady = null;
   showLoginInterstitial = showLoginInterstitialNative;
+  allowNativePreload = true;
+  discardPreloadedInterstitial();
 }
 
 export function setLoginInterstitialPresenterForTests(presenter: ShowLoginInterstitial | null): void {
   showLoginInterstitial = presenter ?? showLoginInterstitialNative;
+  allowNativePreload = presenter == null;
+}
+
+async function claimPreloadedInterstitial(
+  isCancelled: () => boolean,
+): Promise<ShowableInterstitial | null> {
+  if (isCancelled()) return null;
+  preloadLoginInterstitial();
+  const generation = preloadGeneration;
+  const task = preloadTask;
+  if (task) await task;
+  if (isCancelled() || generation !== preloadGeneration) return null;
+  const ad = preloaded;
+  preloaded = null;
+  return ad;
 }
 
 async function showLoginInterstitialNative(
-  adUnitId: string,
+  _adUnitId: string,
   isCancelled: () => boolean,
 ): Promise<LoginInterstitialShowResult> {
+  const ad = await claimPreloadedInterstitial(isCancelled);
   if (isCancelled()) return 'cancelled';
+  if (!ad) return 'not_loaded';
+
+  try {
+    logger.info('[ads] Showing login interstitial');
+    await ad.show();
+    return 'shown';
+  } catch (error) {
+    // Navigation may still be swapping activities. One short retry keeps the
+    // already-loaded ad instead of dropping it for the rest of the session.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (isCancelled()) return 'cancelled';
+    try {
+      await ad.show();
+      return 'shown';
+    } catch (retryError) {
+      logger.warn('[ads] Interstitial failed to show', retryError ?? error);
+      return 'not_loaded';
+    }
+  }
+}
+
+async function loadShowableInterstitial(
+  adUnitId: string,
+  isCancelled: () => boolean,
+): Promise<ShowableInterstitial | null> {
+  if (isCancelled()) return null;
 
   let mobileAds: typeof import('react-native-google-mobile-ads').default;
   let InterstitialAd: typeof import('react-native-google-mobile-ads').InterstitialAd;
@@ -123,31 +209,24 @@ async function showLoginInterstitialNative(
     AdEventType = ads.AdEventType;
   } catch (error) {
     logger.warn('[ads] Google Mobile Ads is not in this binary', error);
-    return 'unavailable';
+    return null;
   }
 
-  if (isCancelled()) return 'cancelled';
+  if (isCancelled()) return null;
 
   try {
     await withTimeout(ensureSdk(mobileAds), 12000, 'initialize');
   } catch (error) {
     logger.warn('[ads] Google Mobile Ads failed to initialize', error);
-    return 'unavailable';
+    return null;
   }
 
-  if (isCancelled()) return 'cancelled';
+  if (isCancelled()) return null;
 
   const interstitial = InterstitialAd.createForAdRequest(adUnitId);
   const loaded = await waitForInterstitialLoad(interstitial, AdEventType, isCancelled);
-  if (!loaded || isCancelled()) return isCancelled() ? 'cancelled' : 'not_loaded';
-
-  try {
-    await interstitial.show();
-    return 'shown';
-  } catch (error) {
-    logger.warn('[ads] Interstitial failed to show', error);
-    return 'not_loaded';
-  }
+  if (!loaded || isCancelled()) return null;
+  return interstitial;
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {

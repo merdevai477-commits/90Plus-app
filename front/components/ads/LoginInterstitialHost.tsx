@@ -5,12 +5,14 @@ import { useBootReady } from '@/contexts/BootReadyContext';
 import {
   cancelPendingLoginInterstitial,
   isPostAuthDestination,
+  preloadLoginInterstitial,
   presentPendingLoginInterstitial,
 } from '@/services/loginInterstitialAd';
 
 /**
  * Shows the login interstitial only after a successful sign-in has navigated
- * away from the auth stack. Renders nothing. Failures never block navigation.
+ * away from the auth stack. The ad loads while the auth screen is open, so it
+ * can appear as soon as sign-in finishes. Renders nothing. Failures never block navigation.
  */
 export function LoginInterstitialHost() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -22,21 +24,13 @@ export function LoginInterstitialHost() {
 
     if (!isSignedIn) {
       cancelPendingLoginInterstitial();
+      preloadLoginInterstitial();
       return;
     }
 
     if (!navigationReady || !isPostAuthDestination(pathname)) return;
 
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      void presentPendingLoginInterstitial();
-    }, 600);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    void presentPendingLoginInterstitial();
   }, [isLoaded, isSignedIn, navigationReady, pathname]);
 
   return null;
