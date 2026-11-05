@@ -1,0 +1,20 @@
+{
+  "admob": {
+    "android": {
+      "appId": "ca-app-pub-9975521818019509~2773027556",
+      "loginInterstitialId": "ca-app-pub-9975521818019509/8410381515"
+    },
+    "ios": {
+      "appId": "",
+      "loginInterstitialId": ""
+    }
+  },
+  "settings": {
+    "enabled": true,
+    "testMode": true,
+    "loginInterstitial": {
+      "enabled": true,
+      "frequency": "once_per_session"
+    }
+  }
+}

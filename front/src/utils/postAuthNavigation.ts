@@ -5,6 +5,7 @@ import { fetchAgeStatus } from '../../hooks/useAgeVerification';
 import { AuthService } from '@/src/services/authService';
 import { waitForClerkToken } from './authSession';
 import { needsTeamOnboarding } from '../../utils/teamOnboarding';
+import { markLoginInterstitialPending } from '@/services/loginInterstitialAd';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
 
@@ -32,6 +33,19 @@ async function routeFromAgeStatus(
 
 /** Route to matches after sign-in — waits for JWT + backend user sync when possible. */
 export async function navigateAfterAuth(
+  router: Router,
+  getToken?: GetToken,
+): Promise<void> {
+  try {
+    await routeAfterAuthenticatedSession(router, getToken);
+  } finally {
+    // Auth has already succeeded. The host shows the ad only after the
+    // destination screen is ready, and never awaits it here.
+    markLoginInterstitialPending();
+  }
+}
+
+async function routeAfterAuthenticatedSession(
   router: Router,
   getToken?: GetToken,
 ): Promise<void> {

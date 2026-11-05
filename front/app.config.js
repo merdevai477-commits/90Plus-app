@@ -1,3 +1,25 @@
+const ads = require('./config/ads.json');
+
+function withGoogleMobileAdsPlugin(plugins) {
+  const list = Array.isArray(plugins) ? plugins.slice() : [];
+  const pluginName = 'react-native-google-mobile-ads';
+  const alreadyAdded = list.some(
+    (plugin) => plugin === pluginName || (Array.isArray(plugin) && plugin[0] === pluginName),
+  );
+  if (alreadyAdded) return list;
+
+  const androidAppId =
+    typeof ads?.admob?.android?.appId === 'string' ? ads.admob.android.appId.trim() : '';
+  if (!androidAppId) return list;
+
+  const iosAppId = typeof ads?.admob?.ios?.appId === 'string' ? ads.admob.ios.appId.trim() : '';
+  const options = { androidAppId };
+  if (iosAppId) options.iosAppId = iosAppId;
+
+  list.push([pluginName, options]);
+  return list;
+}
+
 module.exports = ({ config }) => {
   const projectId = config.extra?.eas?.projectId;
 
@@ -32,6 +54,7 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    plugins: withGoogleMobileAdsPlugin(config.plugins),
     android: {
       ...config.android,
       intentFilters,

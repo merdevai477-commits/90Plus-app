@@ -48,6 +48,7 @@ import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { DeepLinkHandler } from '../components/DeepLinkHandler';
+import { LoginInterstitialHost } from '../components/ads/LoginInterstitialHost';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -288,7 +289,9 @@ function RootLayoutNav() {
   useOfflineSync();
 
   return (
-    <Stack screenOptions={STACK_SCREEN_OPTIONS}>
+    <>
+      <LoginInterstitialHost />
+      <Stack screenOptions={STACK_SCREEN_OPTIONS}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen
@@ -362,7 +365,8 @@ function RootLayoutNav() {
         options={{ title: 'Momentum Lab', headerShown: true }}
       />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-    </Stack>
+      </Stack>
+    </>
   );
 }
 
