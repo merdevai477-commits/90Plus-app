@@ -4,7 +4,7 @@ import {
   isConfiguredProductionAdUnit,
 } from './adsConfig';
 
-const LOAD_TIMEOUT_MS = 8000;
+const LOAD_TIMEOUT_MS = 20000;
 
 export type LoginInterstitialShowResult = 'shown' | 'not_loaded' | 'cancelled' | 'unavailable';
 
@@ -26,9 +26,11 @@ let sdkReady: Promise<void> | null = null;
  * This does not load or present an ad.
  */
 export function markLoginInterstitialPending(): void {
-  if (consumed || inFlight) return;
+  if (consumed) return;
   if (!adsConfig.getServedLoginInterstitialAdUnitId()) return;
   pending = true;
+  if (!inFlight) return;
+  // A previous load is still running. It will present this attempt when it finishes.
 }
 
 /** Drop a pending or in-flight interstitial. Used when the user signs out. */
@@ -76,15 +78,18 @@ export async function presentPendingLoginInterstitial(): Promise<void> {
     const result = await showLoginInterstitial(unitId, () => epoch !== token);
     if (result === 'shown') {
       consumed = true;
+      pending = false;
       return;
     }
     if (epoch !== token || result === 'cancelled') return;
-    consumed = true;
+    logger.info('[ads] Login interstitial was not shown', result);
   } catch (error) {
     logger.warn('[ads] Login interstitial skipped', error);
-    if (epoch === token) consumed = true;
   } finally {
     inFlight = false;
+    if (pending && !consumed) {
+      void presentPendingLoginInterstitial();
+    }
   }
 }
 
@@ -124,7 +129,7 @@ async function showLoginInterstitialNative(
   if (isCancelled()) return 'cancelled';
 
   try {
-    await ensureSdk(mobileAds);
+    await withTimeout(ensureSdk(mobileAds), 12000, 'initialize');
   } catch (error) {
     logger.warn('[ads] Google Mobile Ads failed to initialize', error);
     return 'unavailable';
@@ -143,6 +148,22 @@ async function showLoginInterstitialNative(
     logger.warn('[ads] Interstitial failed to show', error);
     return 'not_loaded';
   }
+}
+
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`[ads] ${label} timed out`)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 async function ensureSdk(
@@ -192,7 +213,12 @@ async function waitForInterstitialLoad(
     };
 
     remember(interstitial.addAdEventListener(AdEventType.LOADED, () => finish(true)));
-    remember(interstitial.addAdEventListener(AdEventType.ERROR, () => finish(false)));
+    remember(
+      interstitial.addAdEventListener(AdEventType.ERROR, () => {
+        logger.warn('[ads] Interstitial failed to load');
+        finish(false);
+      }),
+    );
 
     const timer = setTimeout(() => finish(false), LOAD_TIMEOUT_MS);
 

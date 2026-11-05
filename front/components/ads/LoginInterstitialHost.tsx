@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { InteractionManager } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useBootReady } from '@/contexts/BootReadyContext';
@@ -29,14 +28,14 @@ export function LoginInterstitialHost() {
     if (!navigationReady || !isPostAuthDestination(pathname)) return;
 
     let cancelled = false;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const timer = setTimeout(() => {
       if (cancelled) return;
       void presentPendingLoginInterstitial();
-    });
+    }, 600);
 
     return () => {
       cancelled = true;
-      task.cancel();
+      clearTimeout(timer);
     };
   }, [isLoaded, isSignedIn, navigationReady, pathname]);
 

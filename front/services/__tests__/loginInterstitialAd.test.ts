@@ -49,8 +49,7 @@ describe('login interstitial session', () => {
     expect(calls[0]).not.toContain('9975521818019509');
   });
 
-  it('does not show when the ad fails to load, and does not retry', async () => {
-    result = 'not_loaded';
+  it('does not loop after a failed load, and allows the next sign-in to try again', async () => {
     let calls = 0;
     setLoginInterstitialPresenterForTests(async () => {
       calls += 1;
@@ -59,10 +58,12 @@ describe('login interstitial session', () => {
 
     markLoginInterstitialPending();
     await presentPendingLoginInterstitial();
+    await presentPendingLoginInterstitial();
+    expect(calls).toBe(1);
+
     markLoginInterstitialPending();
     await presentPendingLoginInterstitial();
-
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
   });
 
   it('drops an in-flight ad on sign-out and allows the next sign-in', async () => {
