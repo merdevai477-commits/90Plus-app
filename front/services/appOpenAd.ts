@@ -286,10 +286,27 @@ function createNativeDriver(): AppOpenDriver {
         addAdEventListener: (type: string, listener: () => void) => unknown;
       };
       const ads = await import('react-native-google-mobile-ads');
+      let opened = false;
+      let failed = false;
+      let closed = false;
+      ad.addAdEventListener(ads.AdEventType.OPENED, () => {
+        opened = true;
+      });
+      ad.addAdEventListener(ads.AdEventType.ERROR, () => {
+        failed = true;
+      });
       ad.addAdEventListener(ads.AdEventType.CLOSED, () => {
+        closed = true;
         handlers.onDismiss();
       });
       await ad.show();
+      const openedDeadline = Date.now() + 2500;
+      while (!opened && !failed && !closed && Date.now() < openedDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (failed || (!opened && !closed)) {
+        throw new Error('App open ad did not present');
+      }
     },
   };
 }

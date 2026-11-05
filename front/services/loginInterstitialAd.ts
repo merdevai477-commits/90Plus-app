@@ -217,34 +217,44 @@ async function showLoginInterstitialNative(
   }
 }
 
-/** Keep the interstitial attempt in flight until the user actually closes it. */
+/**
+ * show() resolves as soon as it is requested, before the ad activity is visible.
+ * Wait until it actually opens, then until it closes, and give up quickly when
+ * the activity is not ready (common right after an OAuth browser returns).
+ */
 async function showAndWaitForClose(ad: ShowableInterstitial): Promise<void> {
-  let settled = false;
-  let finish = () => {
-    settled = true;
-  };
-  if (ad.addAdEventListener) {
-    const closed = new Promise<void>((resolve) => {
-      finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      try {
-        ad.addAdEventListener?.('closed', finish);
-      } catch {
-        finish();
-      }
-    });
+  if (!ad.addAdEventListener) {
     await ad.show();
-    await Promise.race([
-      closed,
-      new Promise<void>((resolve) => setTimeout(resolve, 120000)),
-    ]);
     return;
   }
 
+  let opened = false;
+  let closed = false;
+  let failed = false;
+  const mark = (flag: 'opened' | 'closed' | 'failed') => {
+    if (flag === 'opened') opened = true;
+    if (flag === 'closed') closed = true;
+    if (flag === 'failed') failed = true;
+  };
+  ad.addAdEventListener('opened', () => mark('opened'));
+  ad.addAdEventListener('closed', () => mark('closed'));
+  ad.addAdEventListener('error', () => mark('failed'));
+
   await ad.show();
+
+  const openedDeadline = Date.now() + 2500;
+  while (!opened && !closed && !failed && Date.now() < openedDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (failed || (!opened && !closed)) {
+    throw new Error('Interstitial did not open');
+  }
+
+  const closedDeadline = Date.now() + 120000;
+  while (!closed && !failed && Date.now() < closedDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  if (!closed) throw new Error('Interstitial did not close');
 }
 
 async function loadShowableInterstitial(
