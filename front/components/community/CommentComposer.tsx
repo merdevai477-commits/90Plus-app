@@ -8,7 +8,9 @@ import type { CommunityAuthor, CommunityComment } from '../../services/community
 import { CommunityApiError } from '../../services/community.api';
 import { useMentionSearch } from '../../hooks/community/useMentionSearch';
 import { MentionSuggestions } from './MentionSuggestions';
-import { activeMentionQuery } from './richTextParse';
+import { PageSuggestions } from './PageSuggestions';
+import { filterPages, type AppPage } from './pageLinks';
+import { activeMentionQuery, activeSlashQuery, everyoneSuggestionMatches } from './richTextParse';
 import { C, CI } from './theme';
 import { fillTemplate } from './format';
 
@@ -23,7 +25,15 @@ export interface CommentComposerHandle {
 interface Props {
   isAr: boolean;
   fonts: { regular: string; semibold: string };
-  labels: { placeholder: string; replyingTo: string; noUsers: string; cooldown: string };
+  labels: {
+    placeholder: string;
+    replyingTo: string;
+    noUsers: string;
+    cooldown: string;
+    everyone: string;
+    everyoneHint: string;
+    noPages: string;
+  };
   /** Resolves when saved; rejects with CommunityApiError to keep the text. */
   onSubmit: (text: string, replyTo: CommunityComment | null) => Promise<unknown>;
   onError: (err: unknown) => void;
@@ -43,7 +53,10 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   const [now, setNow] = useState(Date.now());
 
   const mention = activeMentionQuery(text, caret);
+  const slash = mention ? null : activeSlashQuery(text, caret);
+  const pages = slash ? filterPages(slash.query) : [];
   const { results, loading } = useMentionSearch(mention ? mention.query : null);
+  const showEveryone = !!mention && everyoneSuggestionMatches(mention.query);
 
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
@@ -69,16 +82,31 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   const trimmed = text.trim();
   const canSend = trimmed.length > 0 && secondsLeft === 0;
 
-  const pickMention = useCallback(
-    (u: CommunityAuthor) => {
-      if (!mention) return;
-      const next = `${text.slice(0, mention.start)}@${u.username} ${text.slice(caret)}`;
-      setText(next);
-      const pos = mention.start + u.username.length + 2;
+  const insertToken = useCallback(
+    (start: number, token: string) => {
+      const next = `${text.slice(0, start)}${token} ${text.slice(caret)}`;
+      setText(next.slice(0, MAX_LEN));
+      const pos = start + token.length + 1;
       setCaret(pos);
       requestAnimationFrame(() => inputRef.current?.setNativeProps({ selection: { start: pos, end: pos } }));
     },
-    [caret, mention, text],
+    [caret, text],
+  );
+
+  const pickMention = useCallback(
+    (u: CommunityAuthor) => {
+      if (!mention) return;
+      insertToken(mention.start, `@${u.username}`);
+    },
+    [insertToken, mention],
+  );
+
+  const pickPage = useCallback(
+    (page: AppPage) => {
+      if (!slash) return;
+      insertToken(slash.start, `/${page.token}`);
+    },
+    [insertToken, slash],
   );
 
   const send = useCallback(() => {
@@ -104,7 +132,23 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
 
   return (
     <View style={[styles.wrap, { paddingBottom: 10 + bottomInset }]}>
-      {mention && <MentionSuggestions users={results} loading={loading} emptyLabel={labels.noUsers} fontFamily={fonts.regular} onPick={pickMention} />}
+      {slash && (
+        <PageSuggestions pages={pages} isAr={isAr} emptyLabel={labels.noPages} fontFamily={fonts.regular} onPick={pickPage} />
+      )}
+      {mention && (
+        <MentionSuggestions
+          users={results}
+          loading={loading}
+          emptyLabel={labels.noUsers}
+          fontFamily={fonts.regular}
+          onPick={pickMention}
+          everyone={
+            showEveryone
+              ? { label: labels.everyone, hint: labels.everyoneHint, onPress: () => insertToken(mention.start, '@all') }
+              : null
+          }
+        />
+      )}
 
       {replyTarget && (
         <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)} style={[styles.chip, { flexDirection: row }]}>

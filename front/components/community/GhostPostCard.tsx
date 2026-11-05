@@ -14,7 +14,7 @@ import { CircleAlert, RotateCcw, Pencil, X } from 'lucide-react-native';
 import { usePublishStore, type PendingPost } from '../../hooks/community/publishQueue';
 import { CommunityAvatar } from './CommunityAvatar';
 import { ShimmerSweep } from './Shimmer';
-import { IMAGE_ASPECT, postCardStyles } from './PostCard';
+import { postCardStyles, postImageLayout } from './PostCard';
 import { AVATAR_SIZE, C, CI, POST_IMAGE_RADIUS } from './theme';
 import { isArabicText } from './richTextParse';
 
@@ -72,7 +72,7 @@ export const GhostPostCard = memo(function GhostPostCard({
   const row = isAr ? 'row-reverse' : 'row';
   const name = pending.author.displayName || pending.author.username;
   const rtl = isArabicText(pending.content);
-  const imgHeight = Math.round(contentWidth * IMAGE_ASPECT);
+  const imageLayout = pending.image ? postImageLayout(contentWidth, pending.image) : null;
 
   return (
     <Animated.View entering={FadeIn.duration(220)} style={[postCardStyles.card, styles.ghost, failed && styles.failedBorder]}>
@@ -122,8 +122,8 @@ export const GhostPostCard = memo(function GhostPostCard({
         )}
 
         {pending.image && (
-          <View style={[styles.imageWrap, { height: imgHeight }]}>
-            <Image source={{ uri: pending.image.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <View style={[styles.imageWrap, { height: imageLayout?.height }]}>
+            <Image source={{ uri: pending.image.uri }} style={StyleSheet.absoluteFill} contentFit={imageLayout?.fit ?? 'contain'} />
             {!failed && <View style={styles.imageVeil} />}
           </View>
         )}

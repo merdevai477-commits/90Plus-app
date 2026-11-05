@@ -136,6 +136,8 @@ export type PushTemplateKey =
     | 'communityMentionTitle'
     | 'communityMentionPostBody'
     | 'communityMentionCommentBody'
+    | 'communityMentionAllTitle'
+    | 'communityMentionAllBody'
     | 'communityOfficialPostTitle'
     | 'communityOfficialPostBody'
     | 'communityOfficialPostBodyFallback'
@@ -356,6 +358,8 @@ const en: TemplateMap = {
     communityMentionTitle: '📣 You were mentioned',
     communityMentionPostBody: '{user} mentioned you in a post',
     communityMentionCommentBody: '{user} mentioned you in a comment',
+    communityMentionAllTitle: '📣 Mentioned everyone',
+    communityMentionAllBody: '{user}: {content}',
     communityOfficialPostTitle: '📢 New from 90Plus',
     communityOfficialPostBody: '{content}',
     communityOfficialPostBodyFallback: 'Open Community to see the latest update',
@@ -584,6 +588,8 @@ const ar: TemplateMap = {
     communityMentionTitle: '📣 حد عمل لك منشن',
     communityMentionPostBody: '{user} عمل لك منشن في منشور',
     communityMentionCommentBody: '{user} عمل لك منشن في تعليق',
+    communityMentionAllTitle: '📣 منشن للكل',
+    communityMentionAllBody: '{user}: {content}',
     communityOfficialPostTitle: '📢 جديد من 90Plus',
     communityOfficialPostBody: '{content}',
     communityOfficialPostBodyFallback: 'افتح المجتمع وشوف آخر تحديث',

@@ -196,6 +196,9 @@ export const communityApi = {
   likePost: (getToken: GetTokenFn, id: string, like: boolean) =>
     request<{ likesCount: number; liked: boolean }>(getToken, `/posts/${id}/like`, { method: like ? 'POST' : 'DELETE' }),
 
+  postLikes: (getToken: GetTokenFn, id: string, cursor?: string | null) =>
+    request<CommunityPage<CommunityAuthor>>(getToken, `/posts/${id}/likes${qs({ cursor })}`),
+
   sharePost: (getToken: GetTokenFn, id: string, platform?: string) =>
     request<{ sharesCount: number }>(getToken, `/posts/${id}/share`, json({ platform })),
 

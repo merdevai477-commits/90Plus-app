@@ -38,6 +38,7 @@ import {
     encodeRankedCursor,
     extractHashtags,
     extractMentions,
+    mentionsEveryone,
     normalizeCommunityText,
     POST_MAX_LENGTH,
     type RankedFeedSort,
@@ -135,7 +136,15 @@ function assertCanWrite(actor: CommunityActor): void {
 async function claimRate(action: CommunityAction, userId: string): Promise<void> {
     const verdict = await consumeCommunityRate(action, userId);
     if (!verdict.allowed) {
-        throw new CommunityError(429, action === 'post' ? 'POST_COOLDOWN' : action === 'comment' ? 'COMMENT_COOLDOWN' : 'MEDIA_COOLDOWN', 'Slow down', {
+        const code =
+            action === 'post'
+                ? 'POST_COOLDOWN'
+                : action === 'comment'
+                  ? 'COMMENT_COOLDOWN'
+                  : action === 'mentionAll'
+                    ? 'MENTION_ALL_COOLDOWN'
+                    : 'MEDIA_COOLDOWN';
+        throw new CommunityError(429, code, action === 'mentionAll' ? 'You can mention everyone again later' : 'Slow down', {
             retryAfterSec: verdict.retryAfterSec,
             reason: verdict.reason,
         });
@@ -959,6 +968,65 @@ async function broadcastOfficialCommunityPost(input: {
     });
 }
 
+const MENTION_ALL_PAGE = 500;
+
+/**
+ * `@all` in a comment notifies every other account so the event shows up
+ * in their inbox. Runs in the background; a failure must not undo the comment.
+ */
+async function broadcastMentionAll(input: {
+    actor: CommunityActor;
+    postId: string;
+    commentId: string;
+    snippet: string;
+    skip: Set<string>;
+}): Promise<void> {
+    let cursor: string | undefined;
+    let delivered = 0;
+    const authorName = input.actor.displayName || input.actor.username || '90Plus';
+
+    for (;;) {
+        const page = await prisma.user.findMany({
+            where: { isBanned: false, id: { notIn: [...input.skip] } },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+            take: MENTION_ALL_PAGE,
+            ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        });
+        if (!page.length) break;
+        cursor = page[page.length - 1]?.id;
+        const result = await notifyUsers(
+            page.map((u) => ({
+                userId: u.id,
+                type: NotificationType.MENTION,
+                titleKey: 'communityMentionAllTitle' as const,
+                bodyKey: 'communityMentionAllBody' as const,
+                vars: { user: authorName, content: input.snippet },
+                data: {
+                    kind: 'community',
+                    screen: '/community/post/[id]',
+                    postId: input.postId,
+                    commentId: input.commentId,
+                    entityId: input.postId,
+                    actorId: input.actor.id,
+                    mentionAll: true,
+                },
+                idempotencyKey: `community:all:${input.commentId}:${u.id}`,
+                actor: {
+                    id: input.actor.id,
+                    username: input.actor.username,
+                    displayName: input.actor.displayName,
+                    avatar: input.actor.avatar,
+                },
+            })),
+            { concurrency: 20 },
+        );
+        delivered += result.delivered;
+        if (page.length < MENTION_ALL_PAGE) break;
+    }
+    logger.info('[community] @all broadcast complete', { commentId: input.commentId, delivered });
+}
+
 function fireAndForget(task: () => Promise<unknown>): void {
     setImmediate(() => {
         task().catch((err) => logger.warn('[community] background task failed:', err?.message));
@@ -1428,6 +1496,44 @@ export async function unlikePost(actor: CommunityActor, postId: string): Promise
     return { likesCount: row?.likesCount ?? 0, liked: false };
 }
 
+const LIKERS_PAGE_SIZE = 30;
+
+/** People who liked a post, newest first. Blocked accounts are omitted. */
+export async function listPostLikes(
+    viewerId: string,
+    postId: string,
+    cursorRaw: unknown,
+): Promise<FeedPage<CommunityAuthorDto>> {
+    await activePostOrThrow(postId);
+    const cursor = decodeCursor(cursorRaw);
+    const blocked = await blockedPairIds(viewerId);
+    const blockedIds = [...blocked];
+    const rows = await prisma.communityPostLike.findMany({
+        where: {
+            postId,
+            ...(blockedIds.length ? { userId: { notIn: blockedIds } } : {}),
+            ...(cursor
+                ? {
+                      OR: [
+                          { createdAt: { lt: cursor.createdAt } },
+                          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                      ],
+                  }
+                : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: LIKERS_PAGE_SIZE + 1,
+        select: { id: true, createdAt: true, user: { select: authorSelect } },
+    });
+    const hasMore = rows.length > LIKERS_PAGE_SIZE;
+    const page = hasMore ? rows.slice(0, LIKERS_PAGE_SIZE) : rows;
+    const last = page[page.length - 1];
+    return {
+        items: page.map((row) => ({ ...row.user, isFollowing: false })),
+        nextCursor: hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
+    };
+}
+
 const SHARE_DEDUPE_MS = 10 * 60 * 1000;
 
 export async function sharePost(actor: CommunityActor, postId: string, platformRaw: unknown): Promise<{ sharesCount: number }> {
@@ -1570,6 +1676,8 @@ export async function createComment(
     if (perPost >= MAX_COMMENTS_PER_USER_PER_POST) {
         throw new CommunityError(429, 'COMMENT_LIMIT_PER_POST', 'You reached the comment limit for this post', { retryAfterSec: 0 });
     }
+    const everyone = mentionsEveryone(content);
+    if (everyone) await claimRate('mentionAll', actor.id);
     await claimRate('comment', actor.id);
 
     const mentioned = await resolveMentionedUsers(content, actor.id);
@@ -1628,8 +1736,9 @@ export async function createComment(
         await Promise.all(
             mentioned
                 .filter((u) => !notified.has(u.id))
-                .map((u) =>
-                    notifyCommunity({
+                .map((u) => {
+                    notified.add(u.id);
+                    return notifyCommunity({
                         recipientId: u.id,
                         actor,
                         type: 'MENTION',
@@ -1638,9 +1747,18 @@ export async function createComment(
                         bodyKey: 'communityMentionCommentBody',
                         postId,
                         commentId: comment.id,
-                    }),
-                ),
+                    });
+                }),
         );
+        if (everyone) {
+            await broadcastMentionAll({
+                actor,
+                postId,
+                commentId: comment.id,
+                snippet,
+                skip: notified,
+            });
+        }
     });
 
     return { ...toCommentDto(comment, actor.id, new Set()), replies: [] };

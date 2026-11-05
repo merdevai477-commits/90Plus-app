@@ -5,6 +5,7 @@ import {
     encodeRankedCursor,
     extractHashtags,
     extractMentions,
+    mentionsEveryone,
     normalizeCommunityText,
     parseFeedSort,
 } from '../community-text';
@@ -36,6 +37,25 @@ describe('community text helpers', () => {
 
         it('requires at least two characters', () => {
             expect(extractMentions('@a @bb')).toEqual(['bb']);
+        });
+
+        it('does not treat @all or @everyone as a user', () => {
+            expect(extractMentions('@all @everyone @mo')).toEqual(['mo']);
+        });
+    });
+
+    describe('mentionsEveryone', () => {
+        it('matches English and Arabic broadcast mentions', () => {
+            expect(mentionsEveryone('شوفوا @all')).toBe(true);
+            expect(mentionsEveryone('@everyone اليوم')).toBe(true);
+            expect(mentionsEveryone('يا @الكل')).toBe(true);
+            expect(mentionsEveryone('@الجميع')).toBe(true);
+        });
+
+        it('ignores emails and ordinary mentions', () => {
+            expect(mentionsEveryone('fan@all.com')).toBe(false);
+            expect(mentionsEveryone('@mohamed')).toBe(false);
+            expect(mentionsEveryone('all')).toBe(false);
         });
     });
 

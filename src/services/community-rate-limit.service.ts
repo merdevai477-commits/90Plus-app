@@ -9,7 +9,7 @@
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { logger } from '../utils/logger';
 
-export type CommunityAction = 'post' | 'comment' | 'media';
+export type CommunityAction = 'post' | 'comment' | 'media' | 'mentionAll';
 
 interface WindowRule {
     id: string;
@@ -26,6 +26,8 @@ export const COMMUNITY_RATE_RULES: Record<CommunityAction, ActionRule> = {
     post: { cooldownSec: 60, windows: [{ id: 'day', windowSec: 24 * 60 * 60, max: 20 }] },
     comment: { cooldownSec: 5, windows: [{ id: '10m', windowSec: 10 * 60, max: 30 }] },
     media: { cooldownSec: 3, windows: [{ id: 'hour', windowSec: 60 * 60, max: 10 }] },
+    /** `@all` fans out to every user, so it stays rare. */
+    mentionAll: { cooldownSec: 4 * 60 * 60, windows: [{ id: 'day', windowSec: 24 * 60 * 60, max: 3 }] },
 };
 
 /** Max comments one user can leave on a single post (replies included). */

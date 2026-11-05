@@ -20,7 +20,7 @@ import { ConfirmSheet } from './ConfirmSheet';
 import { CommentsSheet } from './CommentsSheet';
 import { FeedSkeleton } from './FeedSkeleton';
 import { GhostPostCard } from './GhostPostCard';
-import { IMAGE_ASPECT, PostCard } from './PostCard';
+import { PostCard } from './PostCard';
 import { communityErrorMessage, formatRelativeTime, isContentRejection, isImageRejected } from './format';
 import { C } from './theme';
 
@@ -37,7 +37,7 @@ export function useFeedMetrics() {
     const cardWidth = Math.min(width - gutter * 2, MAX_CARD_WIDTH);
     const sidePad = Math.round((width - cardWidth) / 2);
     const contentWidth = Math.floor(cardWidth - CARD_PADDING * 2);
-    return { width, sidePad, cardWidth, contentWidth, imageHeight: Math.round(contentWidth * IMAGE_ASPECT) };
+    return { width, sidePad, cardWidth, contentWidth, imageHeight: Math.round(contentWidth * 1.6) };
   }, [width]);
 }
 

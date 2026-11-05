@@ -141,6 +141,13 @@ router.delete(
     }),
 );
 
+router.get(
+    '/posts/:id/likes',
+    requireAuth,
+    lenientLimiter,
+    handle((req, _res, actor) => community.listPostLikes(actor.id, param(req, 'id'), req.query.cursor)),
+);
+
 router.post('/posts/:id/like', requireAuth, handle((req, _res, actor) => community.likePost(actor, param(req, 'id'))));
 router.delete('/posts/:id/like', requireAuth, handle((req, _res, actor) => community.unlikePost(actor, param(req, 'id'))));
 

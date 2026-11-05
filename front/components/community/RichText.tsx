@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import { Linking, Text, type StyleProp, type TextStyle } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { C } from './theme';
 import { isArabicText, parseRichText } from './richTextParse';
@@ -32,6 +33,7 @@ export const RichText = memo(function RichText({
   onLongPress,
   align,
 }: Props) {
+  const router = useRouter();
   const segments = useMemo(() => parseRichText(text), [text]);
   const detectedRtl = useMemo(() => isArabicText(text), [text]);
   const rtl = align ? align === 'right' : detectedRtl;
@@ -68,6 +70,23 @@ export const RichText = memo(function RichText({
             case 'mention':
               return (
                 <Text key={i} style={{ color: C.accentSoft, fontWeight: '600' }} onPress={() => onMention(seg.username)} suppressHighlighting>
+                  {seg.text}
+                </Text>
+              );
+            case 'everyone':
+              return (
+                <Text key={i} style={{ color: '#F8C94A', fontWeight: '700' }} suppressHighlighting>
+                  {seg.text}
+                </Text>
+              );
+            case 'page':
+              return (
+                <Text
+                  key={i}
+                  style={{ color: C.accentSoft, fontWeight: '700' }}
+                  onPress={() => router.push(seg.href as never)}
+                  suppressHighlighting
+                >
                   {seg.text}
                 </Text>
               );

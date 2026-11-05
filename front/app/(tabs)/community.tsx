@@ -46,21 +46,25 @@ function FeedSortButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={6}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}: ${label}`}
-      style={({ pressed }) => [
-        styles.sortBtn,
-        { flexDirection: isAr ? 'row-reverse' : 'row', alignSelf: isAr ? 'flex-end' : 'flex-start' },
-        pressed && styles.sortBtnPressed,
-      ]}
-    >
-      <ArrowDownUp size={15} color={C.accentSoft} strokeWidth={2.4} />
-      <Text style={[styles.sortLabel, { fontFamily }]}>{label}</Text>
-      <ChevronDown size={15} color={C.muted} strokeWidth={2.4} />
-    </Pressable>
+    <View style={[styles.sortRow, { justifyContent: isAr ? 'flex-end' : 'flex-start' }]}>
+      <Pressable
+        onPress={onPress}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}: ${label}`}
+        style={({ pressed }) => [
+          styles.sortBtn,
+          { flexDirection: isAr ? 'row-reverse' : 'row' },
+          pressed && styles.sortBtnPressed,
+        ]}
+      >
+        <ArrowDownUp size={15} color={C.accentSoft} strokeWidth={2.4} />
+        <Text style={[styles.sortLabel, { fontFamily }]} numberOfLines={1}>
+          {label}
+        </Text>
+        <ChevronDown size={15} color={C.muted} strokeWidth={2.4} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -186,7 +190,7 @@ export default function CommunityScreen() {
         header={header}
         showPending={sort === 'latest'}
         topPadding={headerOffset}
-        bottomPadding={insets.bottom + TAB_BAR_HEIGHT + 36}
+        bottomPadding={insets.bottom + TAB_BAR_HEIGHT + 108}
       />
       <ActionMenu
         visible={sortMenuOpen}
@@ -240,15 +244,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  sortRow: {
+    width: '100%',
+    flexDirection: 'row',
+    direction: 'ltr',
+  },
   sortBtn: {
+    direction: 'ltr',
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    flexShrink: 0,
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(139,92,246,0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(183,154,248,0.18)',
+    borderColor: 'rgba(183,154,248,0.45)',
   },
   sortBtnPressed: {
     backgroundColor: 'rgba(167,139,250,0.12)',

@@ -1,7 +1,8 @@
-import React, { memo, useCallback, useEffect, useRef } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ChevronLeft } from 'lucide-react-native';
 import Animated, {
@@ -18,6 +19,7 @@ import type { CommunityPost } from '../../services/community.api';
 import { CommunityAvatar } from './CommunityAvatar';
 import { RichText } from './RichText';
 import { formatCount } from './format';
+import { LikersSheet } from './LikersSheet';
 import { AVATAR_SIZE, C, CARD_RADIUS, CI, POST_IMAGE_RADIUS } from './theme';
 
 export interface PostCardHandlers {
@@ -57,8 +59,23 @@ interface Props extends PostCardHandlers {
   imagePriority?: 'low' | 'normal' | 'high';
 }
 
-/** Figma ratio: 216px tall image in a 368px wide card body. */
+/** Fallback when a post has no stored dimensions. */
 export const IMAGE_ASPECT = 216 / 368;
+const MIN_IMAGE_RATIO = 0.42;
+const MAX_IMAGE_RATIO = 1.6;
+
+/** Size the frame to the photo so wide, square and tall images stay whole. */
+export function postImageLayout(
+  width: number,
+  image?: { width: number; height: number } | null,
+): { height: number; fit: 'cover' | 'contain' } {
+  const iw = image?.width ?? 0;
+  const ih = image?.height ?? 0;
+  const natural = iw > 0 && ih > 0 ? ih / iw : IMAGE_ASPECT;
+  const capped = Math.min(MAX_IMAGE_RATIO, Math.max(MIN_IMAGE_RATIO, natural));
+  const fit = natural < MIN_IMAGE_RATIO - 0.001 || natural > MAX_IMAGE_RATIO + 0.001 ? 'contain' : 'cover';
+  return { height: Math.max(1, Math.round(width * capped)), fit };
+}
 
 export const LikeIcon = memo(function LikeIcon({ liked, size = 18 }: { liked: boolean; size?: number }) {
   const scale = useSharedValue(1);
@@ -101,7 +118,7 @@ function PostImage({
   priority?: 'low' | 'normal' | 'high';
 }) {
   const heart = useSharedValue(0);
-  const height = Math.round(width * IMAGE_ASPECT);
+  const layout = postImageLayout(width, post.image);
 
   const burst = useCallback(() => {
     onDoubleTap();
@@ -131,13 +148,13 @@ function PostImage({
   if (!post.image) return null;
   return (
     <GestureDetector gesture={gesture}>
-      <View style={[styles.imageWrap, { width, height }]} accessibilityRole="imagebutton">
+      <View style={[styles.imageWrap, { width, height: layout.height }]} accessibilityRole="imagebutton">
         <Image
           source={{ uri: post.image.url }}
           placeholder={post.image.placeholder ? { uri: post.image.placeholder } : undefined}
-          placeholderContentFit="cover"
+          placeholderContentFit={layout.fit}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          contentFit={layout.fit}
           transition={120}
           cachePolicy="memory-disk"
           recyclingKey={post.id}
@@ -228,6 +245,7 @@ function ActionButton({
   count,
   icon,
   onPress,
+  onLongPress,
   isAr,
   fonts,
   selected,
@@ -236,6 +254,7 @@ function ActionButton({
   count: number;
   icon: React.ReactNode;
   onPress: () => void;
+  onLongPress?: () => void;
   isAr: boolean;
   fonts: Props['fonts'];
   selected?: boolean;
@@ -254,7 +273,16 @@ function ActionButton({
     </>
   );
   return (
-    <Pressable onPress={onPress} hitSlop={10} style={styles.action} accessibilityRole="button" accessibilityState={{ selected }}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={320}
+      hitSlop={10}
+      style={styles.action}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityHint={onLongPress ? label : undefined}
+    >
       {inner}
     </Pressable>
   );
@@ -282,6 +310,10 @@ function PostCardBase({
   onFollow,
   onVote,
 }: Props) {
+  const [likersOpen, setLikersOpen] = useState(false);
+  useEffect(() => {
+    setLikersOpen(false);
+  }, [post.id]);
   const name = post.author.displayName || post.author.username;
   const row = isAr ? 'row-reverse' : 'row';
   const openProfile = () => onProfile(post.author.username);
@@ -371,6 +403,10 @@ function PostCardBase({
           count={post.likesCount}
           icon={<LikeIcon liked={post.likedByMe} size={18} />}
           onPress={() => onLike(post)}
+          onLongPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setLikersOpen(true);
+          }}
           isAr={isAr}
           fonts={fonts}
           selected={post.likedByMe}
@@ -378,14 +414,22 @@ function PostCardBase({
       </View>
 
       <View style={styles.footerDivider} />
-      <Pressable
-        onPress={() => onComment(post)}
-        style={[styles.viewComments, { flexDirection: isAr ? 'row' : 'row-reverse' }]}
-        accessibilityRole="button"
-      >
-        <ChevronLeft size={16} color={C.muted} />
-        <Text style={[styles.viewCommentsText, { fontFamily: fonts.regular }]}>{labels.viewAllComments}</Text>
-      </Pressable>
+      <View style={[styles.viewCommentsRow, { justifyContent: isAr ? 'flex-end' : 'flex-start' }]}>
+        <Pressable
+          onPress={() => onComment(post)}
+          style={[styles.viewComments, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.viewCommentsText, { fontFamily: fonts.regular }]}>{labels.viewAllComments}</Text>
+          <ChevronLeft size={16} color={C.muted} style={isAr ? undefined : styles.chevronEn} />
+        </Pressable>
+      </View>
+      <LikersSheet
+        postId={post.id}
+        visible={likersOpen}
+        onClose={() => setLikersOpen(false)}
+        onProfile={onProfile}
+      />
     </View>
   );
 }
@@ -566,11 +610,19 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: C.divider,
   },
-  viewComments: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  viewCommentsRow: {
     width: '100%',
-    paddingTop: 0,
+    flexDirection: 'row',
+    direction: 'ltr',
+  },
+  viewComments: {
+    direction: 'ltr',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  chevronEn: {
+    transform: [{ scaleX: -1 }],
   },
   viewCommentsText: {
     color: C.muted,

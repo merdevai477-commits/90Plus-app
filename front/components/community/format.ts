@@ -50,6 +50,8 @@ export function communityErrorMessage(err: unknown, s: CommunityStrings): string
       return seconds > 3600 ? s.dailyLimit : fill(s.postCooldown, { seconds });
     case 'COMMENT_COOLDOWN':
       return fill(s.commentCooldown, { seconds });
+    case 'MENTION_ALL_COOLDOWN':
+      return fill(s.mentionAllCooldown, { seconds });
     case 'MEDIA_COOLDOWN':
       return fill(s.mediaCooldown, { seconds });
     case 'COMMENT_LIMIT_PER_POST':

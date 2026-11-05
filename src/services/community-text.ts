@@ -11,6 +11,9 @@ export const MAX_MENTIONS = 10;
 
 const HASHTAG_RE = /(^|[^\p{L}\p{N}_&])#([\p{L}\p{N}_]{1,50})/gu;
 const MENTION_RE = /(^|[^\p{L}\p{N}_.@])@([A-Za-z0-9_.]{2,30})/gu;
+/** `@all` / `@everyone` / `@الكل` / `@الجميع` — not a user, a broadcast. */
+const EVERYONE_RE = /(?:^|[^\p{L}\p{N}_.@])@(?:all|everyone|الكل|الجميع)(?![\p{L}\p{N}_])/iu;
+const RESERVED_MENTIONS = new Set(['all', 'everyone']);
 
 /** Trim, normalise line endings and cap blank-line runs at one empty line. */
 export function normalizeCommunityText(raw: unknown): string {
@@ -43,12 +46,17 @@ export function extractMentions(text: string, max = MAX_MENTIONS): string[] {
     const seen = new Set<string>();
     for (const m of text.matchAll(MENTION_RE)) {
         const name = m[2].replace(/\.+$/, '').toLowerCase();
-        if (name.length < 2 || seen.has(name)) continue;
+        if (name.length < 2 || RESERVED_MENTIONS.has(name) || seen.has(name)) continue;
         seen.add(name);
         out.push(name);
         if (out.length >= max) break;
     }
     return out;
+}
+
+/** True when the text mentions everyone (`@all`, `@everyone`, `@الكل`, `@الجميع`). */
+export function mentionsEveryone(text: string): boolean {
+    return EVERYONE_RE.test(text);
 }
 
 export interface FeedCursor {

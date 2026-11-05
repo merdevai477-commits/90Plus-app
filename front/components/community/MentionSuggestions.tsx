@@ -13,19 +13,42 @@ interface Props {
   emptyLabel: string;
   fontFamily: string;
   onPick: (user: CommunityAuthor) => void;
+  everyone?: { label: string; hint: string; onPress: () => void } | null;
 }
 
-export const MentionSuggestions = memo(function MentionSuggestions({ users, loading, emptyLabel, fontFamily, onPick }: Props) {
+export const MentionSuggestions = memo(function MentionSuggestions({
+  users,
+  loading,
+  emptyLabel,
+  fontFamily,
+  onPick,
+  everyone,
+}: Props) {
   return (
     <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOutDown.duration(120)} style={styles.box}>
-      {loading && !users.length ? (
+      {loading && !users.length && !everyone ? (
         <View style={styles.center}>
           <ActivityIndicator color={C.accentSoft} />
         </View>
-      ) : !users.length ? (
+      ) : !users.length && !everyone ? (
         <Text style={[styles.empty, { fontFamily }]}>{emptyLabel}</Text>
       ) : (
         <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 220 }}>
+          {everyone ? (
+            <Pressable onPress={everyone.onPress} style={styles.row}>
+              <View style={styles.everyoneBadge}>
+                <Text style={[styles.everyoneMark, { fontFamily }]}>@</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.name, { fontFamily }]} numberOfLines={1}>
+                  {everyone.label}
+                </Text>
+                <Text style={[styles.handle, { fontFamily }]} numberOfLines={1}>
+                  {everyone.hint}
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
           {users.map((u) => (
             <Pressable key={u.id} onPress={() => onPick(u)} style={styles.row}>
               <CommunityAvatar uri={u.avatar} name={u.displayName || u.username} size={32} ring={false} />
@@ -87,5 +110,18 @@ const styles = StyleSheet.create({
   handle: {
     color: C.muted,
     fontSize: 12,
+  },
+  everyoneBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(248,201,74,0.16)',
+  },
+  everyoneMark: {
+    color: '#F8C94A',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

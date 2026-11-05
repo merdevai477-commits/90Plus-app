@@ -112,7 +112,15 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
   }, [actions, menu, onReply, post?.isMine, s, thread]);
 
   const composerLabels = useMemo(
-    () => ({ placeholder: s.writeComment, replyingTo: s.replyingTo, noUsers: s.noUsersFound, cooldown: s.commentCooldown }),
+    () => ({
+      placeholder: s.writeComment,
+      replyingTo: s.replyingTo,
+      noUsers: s.noUsersFound,
+      cooldown: s.commentCooldown,
+      everyone: s.everyoneMention,
+      everyoneHint: s.everyoneHint,
+      noPages: s.noPages,
+    }),
     [s],
   );
 

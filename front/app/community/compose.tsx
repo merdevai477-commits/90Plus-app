@@ -23,7 +23,9 @@ import { CommunityAvatar } from '../../components/community/CommunityAvatar';
 import { ConfirmSheet } from '../../components/community/ConfirmSheet';
 import { KeyboardDock } from '../../components/community/KeyboardDock';
 import { MentionSuggestions } from '../../components/community/MentionSuggestions';
-import { activeMentionQuery, isArabicText } from '../../components/community/richTextParse';
+import { PageSuggestions } from '../../components/community/PageSuggestions';
+import { filterPages, type AppPage } from '../../components/community/pageLinks';
+import { activeMentionQuery, activeSlashQuery, everyoneSuggestionMatches, isArabicText } from '../../components/community/richTextParse';
 import { communityErrorMessage, fillTemplate, isImageRejected } from '../../components/community/format';
 import { C, CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
 import {
@@ -249,17 +251,33 @@ export default function ComposeScreen() {
   }, [canPost, clientId, editing, getToken, isPollMode, me, qc, router, saveEdit, teamA, teamB, trimmed]);
 
   const mention = activeMentionQuery(text, caret);
+  const slash = mention ? null : activeSlashQuery(text, caret);
+  const pages = slash ? filterPages(slash.query) : [];
   const { results, loading } = useMentionSearch(mention ? mention.query : null);
-  const pickMention = useCallback(
-    (u: CommunityAuthor) => {
-      if (!mention) return;
-      const next = `${text.slice(0, mention.start)}@${u.username} ${text.slice(caret)}`;
+  const showEveryone = !!mention && everyoneSuggestionMatches(mention.query);
+  const insertToken = useCallback(
+    (start: number, token: string) => {
+      const next = `${text.slice(0, start)}${token} ${text.slice(caret)}`;
       setText(next);
-      const pos = mention.start + u.username.length + 2;
+      const pos = start + token.length + 1;
       setCaret(pos);
       requestAnimationFrame(() => inputRef.current?.setNativeProps({ selection: { start: pos, end: pos } }));
     },
-    [caret, mention, text],
+    [caret, text],
+  );
+  const pickMention = useCallback(
+    (u: CommunityAuthor) => {
+      if (!mention) return;
+      insertToken(mention.start, `@${u.username}`);
+    },
+    [insertToken, mention],
+  );
+  const pickPage = useCallback(
+    (page: AppPage) => {
+      if (!slash) return;
+      insertToken(slash.start, `/${page.token}`);
+    },
+    [insertToken, slash],
   );
 
   const previewW = Math.min(width, 640) - 40;
@@ -445,9 +463,25 @@ export default function ComposeScreen() {
       </ScrollView>
 
       <KeyboardDock bottomInset={insets.bottom} style={{ paddingBottom: insets.bottom }}>
+        {slash && (
+          <View style={{ paddingHorizontal: 16 }}>
+            <PageSuggestions pages={pages} isAr={isAr} emptyLabel={s.noPages} fontFamily={fonts.regular} onPick={pickPage} />
+          </View>
+        )}
         {mention && (
           <View style={{ paddingHorizontal: 16 }}>
-            <MentionSuggestions users={results} loading={loading} emptyLabel={s.noUsersFound} fontFamily={fonts.regular} onPick={pickMention} />
+            <MentionSuggestions
+              users={results}
+              loading={loading}
+              emptyLabel={s.noUsersFound}
+              fontFamily={fonts.regular}
+              onPick={pickMention}
+              everyone={
+                showEveryone
+                  ? { label: s.everyoneMention, hint: s.everyoneHint, onPress: () => insertToken(mention.start, '@all') }
+                  : null
+              }
+            />
           </View>
         )}
         <View style={[styles.toolbar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
