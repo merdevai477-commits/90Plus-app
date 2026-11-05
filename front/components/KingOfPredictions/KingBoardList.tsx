@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import type { KingLeaderboardEntry, KingPeriod } from '../../services/predictions.service';
@@ -118,6 +118,89 @@ export function KingEmptyState({
   );
 }
 
+export const KingBoardRow = memo(function KingBoardRow({
+  entry,
+  index = 0,
+  mine,
+  youLabel,
+  xpLabel,
+  preview = false,
+  fonts,
+}: {
+  entry: KingLeaderboardEntry;
+  index?: number;
+  mine: boolean;
+  youLabel: string;
+  xpLabel: string;
+  preview?: boolean;
+  fonts: { bold: string; semi: string; medium: string; regular: string };
+}) {
+  const name = mine ? youLabel : (entry.displayName || entry.username || '—');
+  const tier = entry.rank >= 1 && entry.rank <= 3 ? TIERS[entry.rank - 1] : null;
+  const opacity = preview ? (PREVIEW_OPACITY[index] ?? 0.2) : 1;
+  const avatarSize = tier?.avatar ?? 34;
+  return (
+    <View
+      style={[
+        styles.row,
+        { backgroundColor: tier?.bg ?? '#0D0D0D', opacity },
+        entry.rank === 1 && styles.rowGold,
+      ]}
+    >
+      <View style={styles.xpWrap}>
+        <Text
+          maxFontSizeMultiplier={1.15}
+          style={[
+            styles.xp,
+            tier
+              ? { color: tier.xp, fontSize: tier.xpSize, fontFamily: entry.rank === 1 ? fonts.semi : fonts.medium }
+              : { color: '#EBDCFA', fontSize: 18, fontFamily: fonts.medium },
+          ]}
+        >
+          {entry.xp}
+        </Text>
+        <Text maxFontSizeMultiplier={1.15} style={[styles.xpUnit, { color: tier ? tier.xp : '#831DE5', fontFamily: fonts.semi }]}>
+          {xpLabel}
+        </Text>
+      </View>
+      <View style={[styles.identity, { gap: tier ? 16 : 30 }]}>
+        <View style={styles.person}>
+          <View style={styles.nameWrap}>
+            <Text
+              maxFontSizeMultiplier={1.15}
+              style={[
+                styles.name,
+                {
+                  fontSize: tier?.nameSize ?? 16,
+                  fontFamily: entry.rank === 1 ? fonts.bold : tier ? fonts.semi : fonts.regular,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {name}
+            </Text>
+            {mine ? <Image source={KING_ICON.user} style={styles.youIcon} contentFit="contain" /> : null}
+          </View>
+          <Image
+            source={entry.avatar ? { uri: entry.avatar } : PLACEHOLDER}
+            style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#2A2A2A' }}
+            contentFit="cover"
+            recyclingKey={entry.userId}
+          />
+        </View>
+        {tier ? (
+          <Image source={tier.medal} style={{ width: tier.medalSize, height: tier.medalSize }} contentFit="contain" />
+        ) : (
+          <Text maxFontSizeMultiplier={1.15} style={[styles.rankNum, { fontFamily: fonts.regular }]}>
+            {entry.rank}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+});
+
+/** Short preview (a handful of rows). The full board uses a virtualized list. */
 export function KingBoardList({
   entries,
   meId,
@@ -135,69 +218,22 @@ export function KingBoardList({
   const fontSemi = useAppFont(600);
   const fontMedium = useAppFont(500);
   const fontRegular = useAppFont(400);
+  const fonts = { bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular };
 
   return (
     <View style={{ gap: preview ? 6 : 8 }}>
-      {entries.map((entry, index) => {
-        const mine = meId != null && entry.userId === meId;
-        const name = mine ? youLabel : (entry.displayName || entry.username || '—');
-        const tier = entry.rank >= 1 && entry.rank <= 3 ? TIERS[entry.rank - 1] : null;
-        const opacity = preview ? (PREVIEW_OPACITY[index] ?? 0.2) : 1;
-        const avatarSize = tier?.avatar ?? 34;
-        return (
-          <View
-            key={entry.userId}
-            style={[
-              styles.row,
-              { backgroundColor: tier?.bg ?? '#0D0D0D', opacity },
-              entry.rank === 1 && styles.rowGold,
-            ]}
-          >
-            <View style={styles.xpWrap}>
-              <Text maxFontSizeMultiplier={1.15}
-                style={[
-                  styles.xp,
-                  tier
-                    ? { color: tier.xp, fontSize: tier.xpSize, fontFamily: entry.rank === 1 ? fontSemi : fontMedium }
-                    : { color: '#EBDCFA', fontSize: 18, fontFamily: fontMedium },
-                ]}
-              >
-                {entry.xp}
-              </Text>
-              <Text maxFontSizeMultiplier={1.15} style={[styles.xpUnit, { color: tier ? tier.xp : '#831DE5', fontFamily: fontSemi }]}>{xpLabel}</Text>
-            </View>
-            <View style={[styles.identity, { gap: tier ? 16 : 30 }]}>
-              <View style={styles.person}>
-                <View style={styles.nameWrap}>
-                  <Text maxFontSizeMultiplier={1.15}
-                    style={[
-                      styles.name,
-                      {
-                        fontSize: tier?.nameSize ?? 16,
-                        fontFamily: entry.rank === 1 ? fontBold : tier ? fontSemi : fontRegular,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {name}
-                  </Text>
-                  {mine ? <Image source={KING_ICON.user} style={styles.youIcon} contentFit="contain" /> : null}
-                </View>
-                <Image
-                  source={entry.avatar ? { uri: entry.avatar } : PLACEHOLDER}
-                  style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#2A2A2A' }}
-                  contentFit="cover"
-                />
-              </View>
-              {tier ? (
-                <Image source={tier.medal} style={{ width: tier.medalSize, height: tier.medalSize }} contentFit="contain" />
-              ) : (
-                <Text maxFontSizeMultiplier={1.15} style={[styles.rankNum, { fontFamily: fontRegular }]}>{entry.rank}</Text>
-              )}
-            </View>
-          </View>
-        );
-      })}
+      {entries.map((entry, index) => (
+        <KingBoardRow
+          key={entry.userId}
+          entry={entry}
+          index={index}
+          mine={meId != null && entry.userId === meId}
+          youLabel={youLabel}
+          xpLabel={xpLabel}
+          preview={preview}
+          fonts={fonts}
+        />
+      ))}
     </View>
   );
 }

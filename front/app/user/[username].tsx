@@ -27,6 +27,7 @@ import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import VideoGrid from '../../components/profile/VideoGrid';
+import { ProfileGridScrollProvider, useGridScrollReporter } from '../../components/profile/profileGridScroll';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -125,6 +126,7 @@ function UserProfileScreen() {
   const [showLevelInfo, setShowLevelInfo] = useState(false);
   const [showStreakInfo, setShowStreakInfo] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const gridScroll = useGridScrollReporter();
   const tabsOffsetY = useRef(0);
   const openTabAndScroll = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -593,10 +595,13 @@ function UserProfileScreen() {
         />
       )}
 
+      <ProfileGridScrollProvider tick={gridScroll.tick}>
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
+        scrollEventThrottle={32}
+        onScroll={(e) => gridScroll.onScroll(e.nativeEvent.contentOffset.y)}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -840,6 +845,7 @@ function UserProfileScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      </ProfileGridScrollProvider>
 
       {user.id ? (
         <FollowersListModal

@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';
+import { ProfileGridScrollProvider, useGridScrollReporter } from '../../components/profile/profileGridScroll';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
@@ -339,6 +340,7 @@ function OwnProfileScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('videos');
   const scrollRef = useRef<ScrollView>(null);
+  const gridScroll = useGridScrollReporter();
   const tabsOffsetY = useRef(0);
   const openTabAndScroll = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -1695,10 +1697,13 @@ function OwnProfileScreen() {
         </View>
       )}
 
+      <ProfileGridScrollProvider tick={gridScroll.tick}>
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        scrollEventThrottle={32}
+        onScroll={(e) => gridScroll.onScroll(e.nativeEvent.contentOffset.y)}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1885,6 +1890,7 @@ function OwnProfileScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      </ProfileGridScrollProvider>
 
       <LevelInfoModal
         visible={showLevelInfo}

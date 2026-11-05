@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,10 @@ import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 import { useTranslation } from '../../src/i18n';
+import { useGridScrollTick } from './profileGridScroll';
+import { visibleRowRange } from './videoGridWindow';
+
+const WINDOW_AFTER = 18;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const SPACING = 6;
@@ -98,13 +102,29 @@ const VideoGrid = memo(function VideoGrid({
     const { t } = useTranslation();
     const itemSize = computeItemSize(horizontalInset);
     const itemHeight = Math.round(itemSize * 1.28);
+    const tick = useGridScrollTick();
+    const gridRef = useRef<View>(null);
+    const lead = onAddPress && !isDeleteMode ? 1 : 0;
+    const rowCount = Math.ceil((lead + videos.length) / COLUMN_COUNT);
+    const shouldWindow = lead + videos.length > WINDOW_AFTER;
+    const [range, setRange] = useState<{ first: number; last: number } | null>(null);
 
-    return (
-        <View style={styles.grid}>
-            {onAddPress && !isDeleteMode ? (
-                <AddReelTile onPress={onAddPress} label={addLabel} size={itemSize} />
-            ) : null}
-            {videos.map((item, index) => (
+    useEffect(() => {
+        if (!shouldWindow) return;
+        gridRef.current?.measureInWindow((_x, pageY) => {
+            const next = visibleRowRange(pageY, Dimensions.get('window').height, itemHeight + SPACING, rowCount);
+            setRange((prev) => (prev && prev.first === next.first && prev.last === next.last ? prev : next));
+        });
+    }, [shouldWindow, tick, itemHeight, rowCount]);
+
+    const firstRow = shouldWindow ? (range?.first ?? 0) : 0;
+    const lastRow = shouldWindow ? (range?.last ?? Math.min(rowCount, 6)) : rowCount;
+    const startCell = firstRow * COLUMN_COUNT;
+    const endCell = lastRow * COLUMN_COUNT;
+    const topSpacer = firstRow * (itemHeight + SPACING);
+    const bottomSpacer = Math.max(0, rowCount - lastRow) * (itemHeight + SPACING);
+
+    const renderVideo = (item: VideoItem, index: number) => (
                 <TouchableOpacity
                     key={item.id}
                     activeOpacity={0.8}
@@ -196,7 +216,29 @@ const VideoGrid = memo(function VideoGrid({
                         </View>
                     )}
                 </TouchableOpacity>
-            ))}
+    );
+
+    const cells = [];
+    for (let cell = startCell; cell < endCell; cell += 1) {
+        if (lead === 1 && cell === 0) {
+            cells.push(<AddReelTile key="add" onPress={onAddPress!} label={addLabel} size={itemSize} />);
+            continue;
+        }
+        const index = cell - lead;
+        const item = videos[index];
+        if (item) cells.push(<React.Fragment key={item.id}>{renderVideo(item, index)}</React.Fragment>);
+    }
+
+    return (
+        <View ref={gridRef}>
+            {topSpacer > 0 ? <View style={{ height: topSpacer }} /> : null}
+            <View style={styles.grid}>
+                {!shouldWindow && lead === 1 ? (
+                    <AddReelTile onPress={onAddPress!} label={addLabel} size={itemSize} />
+                ) : null}
+                {shouldWindow ? cells : videos.map((item, index) => renderVideo(item, index))}
+            </View>
+            {bottomSpacer > 0 ? <View style={{ height: bottomSpacer }} /> : null}
         </View>
     );
 });

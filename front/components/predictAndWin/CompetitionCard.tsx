@@ -13,13 +13,12 @@
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { CompetitionDetailCard } from './CompetitionDetailCard';
-import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { shouldShowSponsorLogo, sponsorLogoSource, usesDefaultStoreLogo } from './pwAssets';
 import { SponsorCountryFlag } from './SponsorCountryFlag';
@@ -36,26 +35,6 @@ import {
 } from './theme';
 
 const CARD_H = 199;
-
-function useHubDeadlineRemaining(deadlineIso: string) {
-  const { formatRemaining } = usePWLocalize();
-  const { t } = useTranslation();
-  const endedLabel = t.predictAndWin.card.ended;
-  const [remaining, setRemaining] = useState('—');
-
-  useEffect(() => {
-    const tick = () => {
-      const ms = new Date(deadlineIso).getTime() - Date.now();
-      setRemaining(ms <= 0 ? endedLabel : formatRemaining(ms));
-    };
-    tick();
-    if (process.env.NODE_ENV === 'test') return undefined;
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [deadlineIso, endedLabel, formatRemaining]);
-
-  return remaining;
-}
 
 /**
  * Every inner coordinate on this card is an absolute Figma offset inside the
@@ -89,7 +68,6 @@ export function HubPrizeCard({
   onPress: () => void;
   onOpenSponsor?: () => void;
 }) {
-  const remaining = useHubDeadlineRemaining(competition.predictionDeadline);
   const { t } = useTranslation();
 
   const openMap = () => {
@@ -102,7 +80,7 @@ export function HubPrizeCard({
   return (
     <CompetitionDetailCard
       competition={competition}
-      remaining={remaining}
+      deadlineIso={competition.predictionDeadline}
       onCtaPress={onPress}
       ctaLabel={t.predictAndWin.detail.sharePrediction}
       onOpenMap={openMap}

@@ -70,11 +70,11 @@ const USE_IOS_PLAYER_SWAP = Platform.OS === 'ios';
 // long enough to read as a visible freeze on every swipe; 110ms still lets the
 // native player tear down cleanly while feeling near-instant.
 const IOS_PLAYER_SWAP_MS = 110;
-/** Android can keep the next cell's player warm for instant swipe starts. */
+/** Android keeps the next cell's player warm. Both platforms only mount three cells. */
 const REEL_PLAYER_MOUNT_DISTANCE = USE_IOS_PLAYER_SWAP ? 0 : 1;
-const REEL_LIST_WINDOW_SIZE = USE_IOS_PLAYER_SWAP ? 3 : 5;
-const REEL_INITIAL_RENDER = USE_IOS_PLAYER_SWAP ? 1 : 2;
-const REEL_MAX_BATCH = USE_IOS_PLAYER_SWAP ? 1 : 3;
+const REEL_LIST_WINDOW_SIZE = 3;
+const REEL_INITIAL_RENDER = 1;
+const REEL_MAX_BATCH = 1;
 const REELS_FEED_MUTED_KEY = '@reels_feed_muted';
 
 function prefetchReelThumbnails(items: Array<{ thumbnail?: string }>, from = 0, count = 6) {

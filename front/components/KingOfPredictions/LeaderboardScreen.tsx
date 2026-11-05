@@ -1,15 +1,16 @@
 import { useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { PredictionsService, type KingLeaderboard, type KingPeriod } from '../../services/predictions.service';
+import { PredictionsService, type KingLeaderboard, type KingLeaderboardEntry, type KingPeriod } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ICON } from './assets';
-import { KingBoardList, KingEmptyState, KingOrnament, KingPeriodTabs } from './KingBoardList';
+import { KingBoardRow, KingEmptyState, KingOrnament, KingPeriodTabs } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KING_BG, KING_PURPLE, parseKingMode, toApiMode } from './shared';
 import { useKingPicksStore } from './kingPicksStore';
@@ -24,6 +25,9 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const { t } = useTranslation();
   const copy = t.kingPredictions;
   const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  const fontMedium = useAppFont(500);
+  const fontRegular = useAppFont(400);
 
   const [period, setPeriod] = useState<KingPeriod>('week');
   const results = useKingPicksStore((state) => state.results);
@@ -60,46 +64,77 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
 
   const title = mode === 'results' ? copy.boardResults : copy.boardGame;
   const entries = board?.entries ?? [];
+  const fonts = useMemo(
+    () => ({ bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular }),
+    [fontBold, fontMedium, fontRegular, fontSemi],
+  );
+  const meId = board?.me?.userId;
+
+  const renderItem = useCallback(
+    ({ item }: { item: KingLeaderboardEntry }) => (
+      <KingBoardRow
+        entry={item}
+        mine={meId != null && item.userId === meId}
+        youLabel={copy.you}
+        xpLabel={copy.xp}
+        fonts={fonts}
+      />
+    ),
+    [copy.xp, copy.you, fonts, meId],
+  );
+
+  const header = (
+    <View>
+      <View style={styles.heading}>
+        <KingOrnament icon={mode === 'results' ? KING_ICON.trophy : KING_ICON.crown} />
+        <Text style={[styles.title, { fontFamily: fontBold }]}>{title}</Text>
+      </View>
+      <View style={styles.body}>
+        <KingPeriodTabs
+          period={period}
+          allLabel={copy.allTime}
+          weekLabel={copy.thisWeek}
+          onChange={setPeriod}
+        />
+        <View style={styles.list} />
+      </View>
+    </View>
+  );
+
+  const empty = loading ? (
+    <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 32 }} />
+  ) : (
+    <KingEmptyState
+      title={copy.emptyTitle}
+      actionLabel={copy.predictNow}
+      style={styles.empty}
+      onAction={() => {
+        if (router.canGoBack()) router.back();
+        else router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
+      }}
+    />
+  );
 
   return (
     <View style={styles.root}>
       <KingHeader />
-      <ScrollView
+      <FlashList
+        style={{ flex: 1 }}
+        data={loading ? [] : entries}
+        keyExtractor={(item) => item.userId}
+        renderItem={renderItem}
+        ListHeaderComponent={header}
+        ListEmptyComponent={empty}
+        ItemSeparatorComponent={BoardGap}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}
         showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.heading}>
-          <KingOrnament icon={mode === 'results' ? KING_ICON.trophy : KING_ICON.crown} />
-          <Text style={[styles.title, { fontFamily: fontBold }]}>{title}</Text>
-        </View>
-        <View style={styles.body}>
-          <KingPeriodTabs
-            period={period}
-            allLabel={copy.allTime}
-            weekLabel={copy.thisWeek}
-            onChange={setPeriod}
-          />
-          {loading ? (
-            <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 32 }} />
-          ) : entries.length === 0 ? (
-            <KingEmptyState
-              title={copy.emptyTitle}
-              actionLabel={copy.predictNow}
-              style={styles.empty}
-              onAction={() => {
-                if (router.canGoBack()) router.back();
-                else router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
-              }}
-            />
-          ) : (
-            <View style={styles.list}>
-              <KingBoardList entries={entries} meId={board?.me?.userId} youLabel={copy.you} xpLabel={copy.xp} />
-            </View>
-          )}
-        </View>
-      </ScrollView>
+      />
     </View>
   );
+}
+
+function BoardGap() {
+  return <View style={{ height: 8 }} />;
 }
 
 const styles = StyleSheet.create({

@@ -25,6 +25,7 @@ import { GlassCtaShell } from './glassCta';
 import { hasSponsorSocialLinks, PRIZE_CTA_GLASS, prizeCtaKind } from './prizeCta';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
+import { DeadlineCountdown } from './deadlineCountdown';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { shouldShowSponsorLogo, sponsorLogoSource } from './pwAssets';
 import { SponsorCountryFlag } from './SponsorCountryFlag';
@@ -105,7 +106,7 @@ function Stat({
   width,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon: React.ReactNode;
   width: number;
 }) {
@@ -120,12 +121,16 @@ function Stat({
         >
           {label}
         </Text>
-        <Text
-          style={{ fontFamily: semibold, fontSize: f(10), color: PW.statValue, textAlign: 'center' }}
-          numberOfLines={1}
-        >
-          {value}
-        </Text>
+        {typeof value === 'string' ? (
+          <Text
+            style={{ fontFamily: semibold, fontSize: f(10), color: PW.statValue, textAlign: 'center' }}
+            numberOfLines={1}
+          >
+            {value}
+          </Text>
+        ) : (
+          value
+        )}
       </View>
       {icon}
     </View>
@@ -193,6 +198,7 @@ function TeamSlot({
 export function CompetitionDetailCard({
   competition,
   remaining,
+  deadlineIso,
   onCtaPress,
   ctaLabel,
   /** Entry is closed (settled/locked/cancelled/past deadline) or in flight. */
@@ -201,7 +207,10 @@ export function CompetitionDetailCard({
   onSponsorPress,
 }: {
   competition: CompetitionInfo;
-  remaining: string;
+  /** Static label. Ignored for the clock when `deadlineIso` is set. */
+  remaining?: string;
+  /** Live countdown. Ticks on its own so the rest of the card stays still. */
+  deadlineIso?: string;
   onCtaPress: () => void;
   ctaLabel: string;
   ctaDisabled?: boolean;
@@ -598,7 +607,7 @@ export function CompetitionDetailCard({
         {divider}
         <Stat
           label={detail.timeLeft}
-          value={remaining}
+          value={deadlineIso ? <DeadlineCountdown deadlineIso={deadlineIso} /> : (remaining ?? '—')}
           width={78}
           icon={<IconTimeFill width={s(19)} height={s(19)} />}
         />
