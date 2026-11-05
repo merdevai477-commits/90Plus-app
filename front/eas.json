@@ -27,6 +27,9 @@
       "channel": "preview",
       "node": "22.15.0",
       "prebuildCommand": "prebuild --no-install --clean",
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
         "image": "macos-sequoia-15.6-xcode-26.2"
       },
