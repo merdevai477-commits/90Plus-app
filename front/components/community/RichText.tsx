@@ -84,7 +84,15 @@ export const RichText = memo(function RichText({
                 <Text
                   key={i}
                   style={{ color: C.accentSoft, fontWeight: '700' }}
-                  onPress={() => router.push(seg.href as never)}
+                  onPress={() => {
+                    const split = seg.href.indexOf('?');
+                    if (split === -1) {
+                      router.push(seg.href as never);
+                      return;
+                    }
+                    const params = Object.fromEntries(new URLSearchParams(seg.href.slice(split + 1)));
+                    router.push({ pathname: seg.href.slice(0, split), params } as never);
+                  }}
                   suppressHighlighting
                 >
                   {seg.text}

@@ -3,7 +3,7 @@
  * Mention and hashtag rules mirror `src/services/community-text.ts`.
  */
 
-import { resolvePageSlug } from './pageLinks';
+import { resolvePageCommand } from './pageLinks';
 
 export type RichSegment =
   | { kind: 'text'; text: string }
@@ -16,7 +16,7 @@ export type RichSegment =
 const EVERYONE = new Set(['all', 'everyone', 'الكل', 'الجميع']);
 
 const TOKEN_RE =
-  /(https?:\/\/[^\s]+|www\.[^\s]+)|(^|[^\p{L}\p{N}_&])#([\p{L}\p{N}_]{1,50})|(^|[^\p{L}\p{N}_.@])@(all|everyone|الكل|الجميع)(?![\p{L}\p{N}_])|(^|[^\p{L}\p{N}_.@])@([A-Za-z0-9_.]{2,30})|(^|[^\p{L}\p{N}_/])\/([\p{L}\p{N}_-]{2,40})/gu;
+  /(https?:\/\/[^\s]+|www\.[^\s]+)|(^|[^\p{L}\p{N}_&])#([\p{L}\p{N}_]{1,50})|(^|[^\p{L}\p{N}_.@])@(all|everyone|الكل|الجميع)(?![\p{L}\p{N}_])|(^|[^\p{L}\p{N}_.@])@([A-Za-z0-9_.]{2,30})|(^|[^\p{L}\p{N}_/])\/((?:search|بحث|البحث)(?:[-\s]+[\p{L}\p{N}][\p{L}\p{N}.'’\-]{0,40}(?:[-\s]+[\p{L}\p{N}][\p{L}\p{N}.'’\-]{0,40}){0,5})?|[\p{L}\p{N}_-]{1,40}(?:\s+[\p{L}\p{N}_-]{1,40}){0,3})/gu;
 
 export function parseRichText(input: string): RichSegment[] {
   const out: RichSegment[] = [];
@@ -58,12 +58,12 @@ export function parseRichText(input: string): RichSegment[] {
       }
       last = tokenStart + 1 + username.length;
     } else if (m[9]) {
-      const slug = m[9].replace(/[-_]+$/, '');
-      const page = resolvePageSlug(slug);
-      if (!page) continue;
+      const command = resolvePageCommand(m[9]);
+      if (!command) continue;
       push(input.slice(last, start) + lead);
-      out.push({ kind: 'page', text: `/${slug}`, href: page.href });
-      last = tokenStart + 1 + slug.length;
+      const visible = m[9].slice(0, command.consumed).replace(/[-\s]+$/, '');
+      out.push({ kind: 'page', text: `/${visible}`, href: command.href });
+      last = tokenStart + 1 + command.consumed;
     }
   }
   push(input.slice(last));
@@ -84,10 +84,12 @@ export function activeMentionQuery(text: string, caret: number): { query: string
   return { query: m[2], start: caret - m[2].length - 1 };
 }
 
-/** The `/partial` being typed right before the caret, if any. */
+/** The `/partial` being typed right before the caret, including a search name with spaces. */
 export function activeSlashQuery(text: string, caret: number): { query: string; start: number } | null {
   const before = text.slice(0, caret);
-  const m = before.match(/(^|[\s(])\/([\p{L}\p{N}_-]{0,40})$/u);
+  const m = before.match(
+    /(^|[\s(])\/((?:search|بحث|البحث)(?:[-\s]+[\p{L}\p{N}.'’\-]{0,40}(?:[-\s]+[\p{L}\p{N}.'’\-]{0,40}){0,5})?|[\p{L}\p{N}_-]{0,40}(?:\s+[\p{L}\p{N}_-]{0,40}){0,3})$/iu,
+  );
   if (!m) return null;
   return { query: m[2], start: caret - m[2].length - 1 };
 }

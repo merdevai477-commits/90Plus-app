@@ -23,7 +23,7 @@ export const PageSuggestions = memo(function PageSuggestions({ pages, isAr, empt
           {pages.map((page) => (
             <Pressable key={page.id} onPress={() => onPick(page)} style={[styles.row, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
               <View style={styles.token}>
-                <Text style={[styles.tokenText, { fontFamily }]}>/{page.token}</Text>
+                <Text style={[styles.tokenText, { fontFamily }]}>{page.insert ?? `/${page.token}`}</Text>
               </View>
               <Text style={[styles.label, { fontFamily, textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
                 {isAr ? page.labelAr : page.labelEn}

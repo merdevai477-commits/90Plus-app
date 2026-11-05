@@ -104,7 +104,7 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   const pickPage = useCallback(
     (page: AppPage) => {
       if (!slash) return;
-      insertToken(slash.start, `/${page.token}`);
+      insertToken(slash.start, page.insert ?? `/${page.token}`);
     },
     [insertToken, slash],
   );
