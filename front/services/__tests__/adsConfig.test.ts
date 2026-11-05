@@ -59,10 +59,21 @@ describe('adsConfig', () => {
     expect(adsJson.admob.ios.appId).toBe('');
     expect(adsJson.admob.ios.loginInterstitialId).toBe('');
     expect(adsJson.admob.ios.appOpenId).toBe('');
-    expect(adsJson.settings.testMode).toBe(true);
+    expect(adsJson.settings.testMode).toBe(false);
     expect(adsJson.settings.appOpen?.enabled).toBe(true);
     expect(adsJson.settings.appOpen?.frequency).toBe('once_per_session');
     expect(adsJson.settings.appOpen?.minimumIntervalMinutes).toBe(30);
+  });
+
+  it('serves the real Android interstitial from the shipped config in a release build', () => {
+    const flags = readAdsFlags(adsJson);
+    expect(
+      resolveServedLoginInterstitialAdUnitId(flags, { platform: 'android', dev: false }),
+    ).toBe(PRODUCTION_ANDROID_INTERSTITIAL_ID);
+    expect(resolveServedAppOpenAdUnitId(flags, { platform: 'android', dev: false })).toBeNull();
+    expect(
+      resolveServedLoginInterstitialAdUnitId(flags, { platform: 'android', dev: true }),
+    ).toBe(GOOGLE_TEST_INTERSTITIAL_AD_UNIT_IDS.android);
   });
 
   it('serves Google test interstitials while test mode is on', () => {
