@@ -5,6 +5,8 @@ import { fetchAgeStatus } from '../../hooks/useAgeVerification';
 import { AuthService } from '@/src/services/authService';
 import { waitForClerkToken } from './authSession';
 import { needsTeamOnboarding } from '../../utils/teamOnboarding';
+import { adsConfig } from '@/services/adsConfig';
+import { reserveLoginInterstitialForeground } from '@/services/fullscreenAdCoordinator';
 import { markLoginInterstitialPending, preloadLoginInterstitial } from '@/services/loginInterstitialAd';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
@@ -36,6 +38,11 @@ export async function navigateAfterAuth(
   router: Router,
   getToken?: GetToken,
 ): Promise<void> {
+  // Claim this foreground before navigation so an app-open ad cannot play
+  // ahead of, or immediately after, the login interstitial.
+  if (adsConfig.getServedLoginInterstitialAdUnitId()) {
+    reserveLoginInterstitialForeground();
+  }
   // Overlap the ad request with profile sync so it is ready when the next screen opens.
   preloadLoginInterstitial();
   try {

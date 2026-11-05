@@ -2,11 +2,13 @@
   "admob": {
     "android": {
       "appId": "ca-app-pub-9975521818019509~2773027556",
-      "loginInterstitialId": "ca-app-pub-9975521818019509/8410381515"
+      "loginInterstitialId": "ca-app-pub-9975521818019509/8410381515",
+      "appOpenId": ""
     },
     "ios": {
       "appId": "",
-      "loginInterstitialId": ""
+      "loginInterstitialId": "",
+      "appOpenId": ""
     }
   },
   "settings": {
@@ -15,6 +17,11 @@
     "loginInterstitial": {
       "enabled": true,
       "frequency": "once_per_session"
+    },
+    "appOpen": {
+      "enabled": true,
+      "frequency": "once_per_session",
+      "minimumIntervalMinutes": 30
     }
   }
 }

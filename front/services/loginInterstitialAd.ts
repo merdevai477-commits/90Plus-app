@@ -3,6 +3,13 @@ import {
   adsConfig,
   isConfiguredProductionAdUnit,
 } from './adsConfig';
+import {
+  clearLoginInterstitialForegroundReservation,
+  releaseFullscreen,
+  reserveLoginInterstitialForeground,
+  resetFullscreenAdCoordinatorForTests,
+  tryAcquireFullscreen,
+} from './fullscreenAdCoordinator';
 
 const LOAD_TIMEOUT_MS = 20000;
 
@@ -13,7 +20,10 @@ type ShowLoginInterstitial = (
   isCancelled: () => boolean,
 ) => Promise<LoginInterstitialShowResult>;
 
-type ShowableInterstitial = { show: () => Promise<void> };
+type ShowableInterstitial = {
+  show: () => Promise<void>;
+  addAdEventListener?: (type: string, listener: () => void) => unknown;
+};
 
 let pending = false;
 let inFlight = false;
@@ -31,10 +41,15 @@ let preloadGeneration = 0;
  * accepts one attempt, and a second call while a load is in flight is ignored.
  * This does not load or present an ad.
  */
+export function isLoginInterstitialBusy(): boolean {
+  return pending || inFlight;
+}
+
 export function markLoginInterstitialPending(): void {
   if (consumed) return;
   if (!adsConfig.getServedLoginInterstitialAdUnitId()) return;
   pending = true;
+  reserveLoginInterstitialForeground();
   if (!inFlight) return;
   // A previous load is still running. It will present this attempt when it finishes.
 }
@@ -75,6 +90,8 @@ export function cancelPendingLoginInterstitial(): void {
   if (!hadWork) return;
   epoch += 1;
   discardPreloadedInterstitial();
+  clearLoginInterstitialForegroundReservation();
+  releaseFullscreen('login_interstitial');
 }
 
 function discardPreloadedInterstitial(): void {
@@ -115,8 +132,14 @@ export async function presentPendingLoginInterstitial(): Promise<void> {
   inFlight = true;
   pending = false;
   const token = epoch;
+  let acquired = false;
 
   try {
+    acquired = tryAcquireFullscreen('login_interstitial');
+    if (!acquired) {
+      logger.info('[ads] Login interstitial skipped because another ad is visible');
+      return;
+    }
     const result = await showLoginInterstitial(unitId, () => epoch !== token);
     if (result === 'shown') {
       consumed = true;
@@ -128,6 +151,7 @@ export async function presentPendingLoginInterstitial(): Promise<void> {
   } catch (error) {
     logger.warn('[ads] Login interstitial skipped', error);
   } finally {
+    if (acquired) releaseFullscreen('login_interstitial');
     inFlight = false;
     if (pending && !consumed) {
       void presentPendingLoginInterstitial();
@@ -144,6 +168,7 @@ export function resetLoginInterstitialSessionForTests(): void {
   showLoginInterstitial = showLoginInterstitialNative;
   allowNativePreload = true;
   discardPreloadedInterstitial();
+  resetFullscreenAdCoordinatorForTests();
 }
 
 export function setLoginInterstitialPresenterForTests(presenter: ShowLoginInterstitial | null): void {
@@ -175,7 +200,7 @@ async function showLoginInterstitialNative(
 
   try {
     logger.info('[ads] Showing login interstitial');
-    await ad.show();
+    await showAndWaitForClose(ad);
     return 'shown';
   } catch (error) {
     // Navigation may still be swapping activities. One short retry keeps the
@@ -183,13 +208,43 @@ async function showLoginInterstitialNative(
     await new Promise((resolve) => setTimeout(resolve, 350));
     if (isCancelled()) return 'cancelled';
     try {
-      await ad.show();
+      await showAndWaitForClose(ad);
       return 'shown';
     } catch (retryError) {
       logger.warn('[ads] Interstitial failed to show', retryError ?? error);
       return 'not_loaded';
     }
   }
+}
+
+/** Keep the interstitial attempt in flight until the user actually closes it. */
+async function showAndWaitForClose(ad: ShowableInterstitial): Promise<void> {
+  let settled = false;
+  let finish = () => {
+    settled = true;
+  };
+  if (ad.addAdEventListener) {
+    const closed = new Promise<void>((resolve) => {
+      finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      try {
+        ad.addAdEventListener?.('closed', finish);
+      } catch {
+        finish();
+      }
+    });
+    await ad.show();
+    await Promise.race([
+      closed,
+      new Promise<void>((resolve) => setTimeout(resolve, 120000)),
+    ]);
+    return;
+  }
+
+  await ad.show();
 }
 
 async function loadShowableInterstitial(

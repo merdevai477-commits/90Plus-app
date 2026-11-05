@@ -49,6 +49,7 @@ import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { DeepLinkHandler } from '../components/DeepLinkHandler';
 import { LoginInterstitialHost } from '../components/ads/LoginInterstitialHost';
+import { AppOpenAdHost } from '../components/ads/AppOpenAdHost';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -291,6 +292,7 @@ function RootLayoutNav() {
   return (
     <>
       <LoginInterstitialHost />
+      <AppOpenAdHost />
       <Stack screenOptions={STACK_SCREEN_OPTIONS}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />

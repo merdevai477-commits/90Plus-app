@@ -1,6 +1,8 @@
 import {
+  GOOGLE_TEST_APP_OPEN_AD_UNIT_IDS,
   GOOGLE_TEST_INTERSTITIAL_AD_UNIT_IDS,
   readAdsFlags,
+  resolveServedAppOpenAdUnitId,
   resolveServedLoginInterstitialAdUnitId,
   type AdsJson,
 } from '../adsConfig';
@@ -15,16 +17,22 @@ function config(overrides?: {
   frequency?: string;
   iosAppId?: string;
   iosInterstitialId?: string;
+  appOpenId?: string;
+  iosAppOpenId?: string;
+  appOpenEnabled?: boolean;
+  appOpenFrequency?: string;
 }): AdsJson {
   return {
     admob: {
       android: {
         appId: PRODUCTION_ANDROID_APP_ID,
         loginInterstitialId: PRODUCTION_ANDROID_INTERSTITIAL_ID,
+        appOpenId: overrides?.appOpenId ?? '',
       },
       ios: {
         appId: overrides?.iosAppId ?? '',
         loginInterstitialId: overrides?.iosInterstitialId ?? '',
+        appOpenId: overrides?.iosAppOpenId ?? '',
       },
     },
     settings: {
@@ -34,6 +42,11 @@ function config(overrides?: {
         enabled: true,
         frequency: overrides?.frequency ?? 'once_per_session',
       },
+      appOpen: {
+        enabled: overrides?.appOpenEnabled ?? true,
+        frequency: overrides?.appOpenFrequency ?? 'once_per_session',
+        minimumIntervalMinutes: 30,
+      },
     },
   };
 }
@@ -42,9 +55,14 @@ describe('adsConfig', () => {
   it('keeps the real Android credentials in the JSON source', () => {
     expect(adsJson.admob.android.appId).toBe(PRODUCTION_ANDROID_APP_ID);
     expect(adsJson.admob.android.loginInterstitialId).toBe(PRODUCTION_ANDROID_INTERSTITIAL_ID);
+    expect(adsJson.admob.android.appOpenId).toBe('');
     expect(adsJson.admob.ios.appId).toBe('');
     expect(adsJson.admob.ios.loginInterstitialId).toBe('');
+    expect(adsJson.admob.ios.appOpenId).toBe('');
     expect(adsJson.settings.testMode).toBe(true);
+    expect(adsJson.settings.appOpen?.enabled).toBe(true);
+    expect(adsJson.settings.appOpen?.frequency).toBe('once_per_session');
+    expect(adsJson.settings.appOpen?.minimumIntervalMinutes).toBe(30);
   });
 
   it('serves Google test interstitials while test mode is on', () => {
@@ -84,6 +102,58 @@ describe('adsConfig', () => {
     );
     expect(resolveServedLoginInterstitialAdUnitId(ready, { platform: 'ios', dev: false })).toBe(
       'ca-app-pub-ios/unit',
+    );
+  });
+
+  it('serves the Android app-open test unit while test mode or a dev bundle is on', () => {
+    const testMode = readAdsFlags(config({ testMode: true, appOpenId: '' }));
+    expect(resolveServedAppOpenAdUnitId(testMode, { platform: 'android', dev: false })).toBe(
+      GOOGLE_TEST_APP_OPEN_AD_UNIT_IDS.android,
+    );
+
+    const devBundle = readAdsFlags(config({ testMode: false, appOpenId: 'ca-app-pub-real/appopen' }));
+    const served = resolveServedAppOpenAdUnitId(devBundle, { platform: 'android', dev: true });
+    expect(served).toBe(GOOGLE_TEST_APP_OPEN_AD_UNIT_IDS.android);
+    expect(served).not.toBe(PRODUCTION_ANDROID_INTERSTITIAL_ID);
+    expect(served).not.toBe('ca-app-pub-real/appopen');
+  });
+
+  it('serves the configured Android app-open unit in a production release', () => {
+    const flags = readAdsFlags(
+      config({ testMode: false, appOpenId: 'ca-app-pub-real/appopen' }),
+    );
+    expect(resolveServedAppOpenAdUnitId(flags, { platform: 'android', dev: false })).toBe(
+      'ca-app-pub-real/appopen',
+    );
+  });
+
+  it('disables app-open ads when the production Android id is empty', () => {
+    const flags = readAdsFlags(config({ testMode: false, appOpenId: '' }));
+    const served = resolveServedAppOpenAdUnitId(flags, { platform: 'android', dev: false });
+    expect(served).toBeNull();
+    expect(served).not.toBe(PRODUCTION_ANDROID_INTERSTITIAL_ID);
+  });
+
+  it('does not use the interstitial unit as an app-open unit', () => {
+    const flags = readAdsFlags(
+      config({ testMode: false, appOpenId: PRODUCTION_ANDROID_INTERSTITIAL_ID }),
+    );
+    expect(resolveServedAppOpenAdUnitId(flags, { platform: 'android', dev: false })).toBeNull();
+  });
+
+  it('keeps iOS app-open ads off until iOS credentials exist', () => {
+    const empty = readAdsFlags(config({ testMode: true }));
+    expect(resolveServedAppOpenAdUnitId(empty, { platform: 'ios', dev: false })).toBeNull();
+
+    const ready = readAdsFlags(
+      config({
+        testMode: false,
+        iosAppId: 'ca-app-pub-ios~app',
+        iosAppOpenId: 'ca-app-pub-ios/open',
+      }),
+    );
+    expect(resolveServedAppOpenAdUnitId(ready, { platform: 'ios', dev: false })).toBe(
+      'ca-app-pub-ios/open',
     );
   });
 
