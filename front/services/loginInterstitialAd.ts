@@ -28,6 +28,7 @@ type ShowableInterstitial = {
 let pending = false;
 let inFlight = false;
 let consumed = false;
+let holdForOnboarding = false;
 let epoch = 0;
 let showLoginInterstitial: ShowLoginInterstitial = showLoginInterstitialNative;
 let sdkReady: Promise<void> | null = null;
@@ -43,6 +44,26 @@ let preloadGeneration = 0;
  */
 export function isLoginInterstitialBusy(): boolean {
   return pending || inFlight;
+}
+
+/**
+ * Show the login interstitial now, while sign-in is still finishing, so the
+ * ad covers that wait. First registration holds the same ad until onboarding ends.
+ */
+export function armLoginInterstitial(options?: { afterOnboarding?: boolean }): void {
+  if (!adsConfig.getServedLoginInterstitialAdUnitId()) return;
+  preloadLoginInterstitial();
+  reserveLoginInterstitialForeground();
+  if (options?.afterOnboarding) holdForOnboarding = true;
+  markLoginInterstitialPending();
+  if (!holdForOnboarding) void presentPendingLoginInterstitial();
+}
+
+/** First-run onboarding is done. Show the ad that was held back. */
+export function releaseLoginInterstitialAfterOnboarding(): void {
+  if (!holdForOnboarding) return;
+  holdForOnboarding = false;
+  void presentPendingLoginInterstitial();
 }
 
 export function markLoginInterstitialPending(): void {
@@ -107,6 +128,8 @@ export function isPostAuthDestination(pathname: string | null | undefined): bool
   // Keep the interstitial off legal consent screens. The attempt stays armed
   // until navigation reaches the actual post-auth screen.
   if (pathname === '/parental-consent' || pathname === '/waiting-consent') return false;
+  // First registration watches the ad until onboarding is finished.
+  if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) return false;
   return true;
 }
 
@@ -115,7 +138,7 @@ export function isPostAuthDestination(pathname: string | null | undefined): bool
  * a load or show failure resolves without throwing.
  */
 export async function presentPendingLoginInterstitial(): Promise<void> {
-  if (consumed || inFlight || !pending) return;
+  if (holdForOnboarding || consumed || inFlight || !pending) return;
 
   const unitId = adsConfig.getServedLoginInterstitialAdUnitId();
   if (!unitId) {
@@ -163,6 +186,7 @@ export function resetLoginInterstitialSessionForTests(): void {
   pending = false;
   inFlight = false;
   consumed = false;
+  holdForOnboarding = false;
   epoch = 0;
   sdkReady = null;
   showLoginInterstitial = showLoginInterstitialNative;

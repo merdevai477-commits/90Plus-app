@@ -36,6 +36,7 @@ import {
   type OnboardingClubPick,
 } from '../utils/teamOnboarding';
 import { logger } from '../services/logger';
+import { releaseLoginInterstitialAfterOnboarding } from '../services/loginInterstitialAd';
 
 const LOGO = require('../assets/images/splash/splash-logo-v3.png');
 const SEARCH_DEBOUNCE_MS = 150;
@@ -138,6 +139,7 @@ export default function OnboardingScreen() {
   }, [searchQuery.data]);
 
   const goMatches = useCallback(() => {
+    releaseLoginInterstitialAfterOnboarding();
     router.replace('/(tabs)/matches');
   }, [router]);
 

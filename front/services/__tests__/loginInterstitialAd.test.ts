@@ -1,9 +1,11 @@
 import {
   cancelPendingLoginInterstitial,
   isPostAuthDestination,
+  armLoginInterstitial,
   markLoginInterstitialPending,
   preloadLoginInterstitial,
   presentPendingLoginInterstitial,
+  releaseLoginInterstitialAfterOnboarding,
   resetLoginInterstitialSessionForTests,
   setLoginInterstitialPresenterForTests,
   type LoginInterstitialShowResult,
@@ -113,12 +115,40 @@ describe('login interstitial session', () => {
     expect(calls).toBe(1);
   });
 
+  it('holds the ad until onboarding finishes for a first registration', async () => {
+    let calls = 0;
+    setLoginInterstitialPresenterForTests(async () => {
+      calls += 1;
+      return 'shown';
+    });
+
+    armLoginInterstitial({ afterOnboarding: true });
+    await presentPendingLoginInterstitial();
+    expect(calls).toBe(0);
+
+    releaseLoginInterstitialAfterOnboarding();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+  });
+
+  it('shows a returning sign-in immediately instead of waiting for navigation', async () => {
+    let calls = 0;
+    setLoginInterstitialPresenterForTests(async () => {
+      calls += 1;
+      return 'shown';
+    });
+
+    armLoginInterstitial();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+  });
+
   it('treats auth screens and the index redirect as not ready', () => {
     expect(isPostAuthDestination('/auth')).toBe(false);
     expect(isPostAuthDestination('/auth/login')).toBe(false);
     expect(isPostAuthDestination('/')).toBe(false);
     expect(isPostAuthDestination('/matches')).toBe(true);
-    expect(isPostAuthDestination('/onboarding')).toBe(true);
+    expect(isPostAuthDestination('/onboarding')).toBe(false);
     expect(isPostAuthDestination('/parental-consent')).toBe(false);
     expect(isPostAuthDestination('/waiting-consent')).toBe(false);
   });

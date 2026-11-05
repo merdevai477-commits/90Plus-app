@@ -81,7 +81,8 @@ export function useOAuthFlow({
           if (beforeNavigate) {
             await beforeNavigate();
           }
-          await navigateAfterAuth(router, getToken);
+          const firstRegistration = Boolean(result.signUp?.createdSessionId) && !result.signIn?.createdSessionId;
+          await navigateAfterAuth(router, getToken, { afterOnboarding: firstRegistration });
           return;
         }
 
@@ -98,7 +99,7 @@ export function useOAuthFlow({
             if (beforeNavigate) {
               await beforeNavigate();
             }
-            await navigateAfterAuth(router, getToken);
+            await navigateAfterAuth(router, getToken, { afterOnboarding: true });
             return;
           }
 

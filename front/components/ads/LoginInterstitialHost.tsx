@@ -10,9 +10,9 @@ import {
 } from '@/services/loginInterstitialAd';
 
 /**
- * Shows the login interstitial only after a successful sign-in has navigated
- * away from the auth stack. The ad loads while the auth screen is open, so it
- * can appear as soon as sign-in finishes. Renders nothing. Failures never block navigation.
+ * Presents a login interstitial that was armed during sign-in, once the user
+ * is past auth and onboarding. Returning sign-in starts the ad immediately
+ * from navigateAfterAuth. Renders nothing.
  */
 export function LoginInterstitialHost() {
   const { isLoaded, isSignedIn } = useAuth();

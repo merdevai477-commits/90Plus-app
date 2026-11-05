@@ -5,9 +5,7 @@ import { fetchAgeStatus } from '../../hooks/useAgeVerification';
 import { AuthService } from '@/src/services/authService';
 import { waitForClerkToken } from './authSession';
 import { needsTeamOnboarding } from '../../utils/teamOnboarding';
-import { adsConfig } from '@/services/adsConfig';
-import { reserveLoginInterstitialForeground } from '@/services/fullscreenAdCoordinator';
-import { markLoginInterstitialPending, preloadLoginInterstitial } from '@/services/loginInterstitialAd';
+import { armLoginInterstitial, markLoginInterstitialPending } from '@/services/loginInterstitialAd';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
 
@@ -33,23 +31,19 @@ async function routeFromAgeStatus(
   router.replace(needsTeamOnboarding(user) ? '/onboarding' : '/(tabs)/matches');
 }
 
-/** Route to matches after sign-in — waits for JWT + backend user sync when possible. */
+/**
+ * Route to matches after sign-in. Returning users see the interstitial while
+ * this work runs. First registration holds it until onboarding finishes.
+ */
 export async function navigateAfterAuth(
   router: Router,
   getToken?: GetToken,
+  options?: { afterOnboarding?: boolean },
 ): Promise<void> {
-  // Claim this foreground before navigation so an app-open ad cannot play
-  // ahead of, or immediately after, the login interstitial.
-  if (adsConfig.getServedLoginInterstitialAdUnitId()) {
-    reserveLoginInterstitialForeground();
-  }
-  // Overlap the ad request with profile sync so it is ready when the next screen opens.
-  preloadLoginInterstitial();
+  armLoginInterstitial({ afterOnboarding: options?.afterOnboarding === true });
   try {
     await routeAfterAuthenticatedSession(router, getToken);
   } finally {
-    // Auth has already succeeded. The host shows the ad only after the
-    // destination screen is ready, and never awaits it here.
     markLoginInterstitialPending();
   }
 }

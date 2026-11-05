@@ -138,7 +138,7 @@ export default function RegisterScreen() {
     try {
       await setActive({ session: sessionId });
       await recordSignupAgeAttestation();
-      await navigateAfterAuth(router, getToken);
+      await navigateAfterAuth(router, getToken, { afterOnboarding: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not complete sign up';
       Alert.alert('Error', msg);
