@@ -4,7 +4,7 @@
  */
 
 import React, {
-  useEffect, useRef, useState, useMemo, useCallback,
+  useEffect, useRef, useState, useMemo, useCallback, useSyncExternalStore,
 } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Platform, TextStyle, useWindowDimensions,
@@ -31,6 +31,7 @@ import { Message } from '../../hooks/useAIChatNative';
 import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 import { ChatNavLinks } from './ChatNavLinks';
 import { decodeChatNavMarker } from '../../utils/chatNavLinks';
+import { peekChatStream, subscribeChatStream } from './chatStreamText';
 import { IridescentRim } from './IridescentRim';
 
 const AI_BUBBLE_RADIUS = 22;
@@ -441,6 +442,33 @@ export const TypingIndicator = React.memo(() => {
   );
 });
 
+function StreamingMessageBody({
+  messageId,
+  tableScrollHint,
+  maxWidth,
+}: {
+  messageId: string;
+  tableScrollHint: string | undefined;
+  maxWidth: number;
+}) {
+  const text = useSyncExternalStore(
+    subscribeChatStream,
+    () => peekChatStream(messageId),
+    () => '',
+  );
+  const parsed = useMemo(() => decodeChatNavMarker(text), [text]);
+  const content = useMemo(
+    () => renderMarkdown(parsed.text, tableScrollHint, maxWidth),
+    [parsed.text, tableScrollHint, maxWidth],
+  );
+  return (
+    <View collapsable={false}>
+      {content}
+      <StreamCursor />
+    </View>
+  );
+}
+
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
 export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false, onNavChoice }: MessageBubbleProps) {
@@ -455,13 +483,16 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
     tsOp.value = withDelay(2500, withTiming(0, { duration: 300 }));
   }, []);
 
-  const parsed = useMemo(() => decodeChatNavMarker(message.text ?? ''), [message.text]);
+  const streaming = !isHistory && !!message.isStreaming;
+  const parsed = useMemo(
+    () => decodeChatNavMarker(streaming ? '' : (message.text ?? '')),
+    [streaming, message.text],
+  );
   const sourceText = parsed.text;
   const navLinks = message.navLinks?.length ? message.navLinks : parsed.navLinks;
-  const showCursor = !isHistory && !!message.isStreaming;
   const content = useMemo(
-    () => renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth),
-    [sourceText, t.chat.tableScrollHint, maxWidth],
+    () => (streaming ? null : renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth)),
+    [streaming, sourceText, t.chat.tableScrollHint, maxWidth],
   );
   const enter = Platform.OS === 'android'
     ? FadeIn.duration(140)
@@ -481,8 +512,15 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
             />
             <Pressable onPress={onPress} accessibilityRole="text">
               <View style={s.aiBubbleInner}>
-                {content}
-                {showCursor && <StreamCursor />}
+                {streaming ? (
+                  <StreamingMessageBody
+                    messageId={message.id}
+                    tableScrollHint={t.chat.tableScrollHint}
+                    maxWidth={maxWidth}
+                  />
+                ) : (
+                  content
+                )}
               </View>
             </Pressable>
             {navLinks.length ? (

@@ -18,6 +18,7 @@ import {
 } from './chatTheme';
 import { chatScreenStyles as styles } from './chatScreen.styles';
 import { safeFlashListScrollToEnd } from './safeFlashListScroll';
+import { peekChatStream } from './chatStreamText';
 
 export type ChatMessageListProps = {
   listRef: React.RefObject<FlashListRef<Message> | null>;
@@ -124,7 +125,8 @@ export function ChatMessageList({
   const renderMessage = useCallback(
     ({ item: msg, index: i }: { item: Message; index: number }) => {
       if (msg.role === 'ai') {
-        const text = (msg.text ?? '').toString();
+        const liveText = msg.isStreaming ? peekChatStream(msg.id) : '';
+        const text = (liveText || msg.text || '').toString();
         if (msg.isStreaming && text.trim().length === 0) {
           return <View style={styles.streamingPlaceholder} />;
         }

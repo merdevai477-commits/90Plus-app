@@ -30,6 +30,7 @@ import {
   stripChatNavMarker,
   type ChatNavLink,
 } from '../utils/chatNavLinks';
+import { appendChatStream, peekChatStream, resetChatStream, takeChatStream } from '../components/chat/chatStreamText';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -682,6 +683,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, createConversation, loadConversationMessages, isProtectedSession]);
 
+  const paintedThinkingRef = useRef(false);
+
+  const finalizeStreamingMessage = useCallback((id: string) => {
+    const typed = takeChatStream(id);
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, text: typed || m.text, isStreaming: false } : m)),
+    );
+  }, []);
+
   // ─── Streaming pipeline helpers ───────────────────────────────────────────
 
   /**
@@ -722,11 +732,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           clearInterval(typingTimerRef.current);
           typingTimerRef.current = null;
         }
-        // Mark the message as no longer streaming and run the deferred
-        // done callback (which clears UI loading flags etc.).
-        setMessages(prev =>
-          prev.map(m => (m.id === id ? { ...m, isStreaming: false } : m)),
-        );
+        // Commit the typed reply once. Ticks until now only updated the bubble.
+        finalizeStreamingMessage(id);
         activeAssistantMessageIdRef.current = null;
         const cb = pendingDoneCallbackRef.current;
         pendingDoneCallbackRef.current = null;
@@ -750,17 +757,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     // First visible word lands now — kill the thinking indicator. We compare
     // against a non-whitespace check so leading newlines/spaces don't count
     // as "first word".
-    if (piece.trim().length > 0) {
+    appendChatStream(id, piece);
+    if (piece.trim().length > 0 && !paintedThinkingRef.current) {
+      paintedThinkingRef.current = true;
       setIsThinking(false);
     }
-
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === id
-          ? { ...m, text: m.text + piece, isStreaming: true }
-          : m,
-      ),
-    );
   }, [computeWordsPerTick]);
 
   const ensureTypingTimer = useCallback(() => {
@@ -811,16 +812,12 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     } else {
       // Nothing queued — finish immediately.
       const id = activeAssistantMessageIdRef.current;
-      if (id) {
-        setMessages(prev =>
-          prev.map(m => (m.id === id ? { ...m, isStreaming: false } : m)),
-        );
-      }
+      if (id) finalizeStreamingMessage(id);
       activeAssistantMessageIdRef.current = null;
       pendingDoneCallbackRef.current = null;
       onAllRendered();
     }
-  }, [typingTick]);
+  }, [finalizeStreamingMessage, typingTick]);
 
   /**
    * Hard-stop the typing renderer (used by stopGeneration / clearChat /
@@ -836,15 +833,12 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     visibleTypingQueueRef.current = [];
     networkDoneRef.current = false;
     pendingDoneCallbackRef.current = null;
+    paintedThinkingRef.current = false;
 
     const id = activeAssistantMessageIdRef.current;
-    if (id) {
-      setMessages(prev =>
-        prev.map(m => (m.id === id ? { ...m, isStreaming: false } : m)),
-      );
-    }
+    if (id) finalizeStreamingMessage(id);
     activeAssistantMessageIdRef.current = null;
-  }, []);
+  }, [finalizeStreamingMessage]);
 
   // ─── Core SSE sender (internal, supports resume) ──────────────────────────
 
@@ -1139,6 +1133,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     visibleTypingQueueRef.current = [];
     networkDoneRef.current = false;
     pendingDoneCallbackRef.current = null;
+    paintedThinkingRef.current = false;
+    resetChatStream();
     if (typingTimerRef.current) {
       clearInterval(typingTimerRef.current);
       typingTimerRef.current = null;
@@ -1448,7 +1444,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         .join('\n\n');
 
     if (conversationId === currentConversationId) {
-      return formatLines(messages.slice(1).map(m => ({ role: m.role, text: m.text })));
+      return formatLines(messages.slice(1).map(m => ({ role: m.role, text: m.text || peekChatStream(m.id) })));
     }
 
     const res = await fetch(
