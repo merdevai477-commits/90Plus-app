@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { WC_2026_KICKOFF_MS } from '../../constants/worldCup';
 import { fetchAppFeatures } from '../../services/appFeaturesService';
 import { applyFootballCacheEpoch } from '../../services/footballCacheEpochSync';
+import { setRemoteAdsEnabled } from '../../services/adsConfig';
 
 interface AppFeaturesState {
   worldCupEnabled: boolean;
@@ -12,6 +13,7 @@ interface AppFeaturesState {
   unlockAtMs: number;
   revision: number;
   hydrated: boolean;
+  adsEnabled: boolean;
   hydrate: (force?: boolean) => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
   unlockAtMs: WC_2026_KICKOFF_MS,
   revision: 0,
   hydrated: false,
+  adsEnabled: false,
 
   hydrate: async (force = false) => {
     if (!force && get().hydrated) {
@@ -34,6 +37,8 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
           const data = await fetchAppFeatures();
           const busted = await applyFootballCacheEpoch(data.features.footballCacheEpoch);
           const wc = data.features.worldCupTab;
+          const adsEnabled = data.features.ads?.enabled === true;
+          setRemoteAdsEnabled(adsEnabled);
           const next = {
             worldCupEnabled: wc.enabled,
             worldCupLocked: wc.locked,
@@ -41,6 +46,7 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
             leagueId: wc.leagueId,
             season: wc.season,
             unlockAtMs: Date.parse(wc.unlockAt) || WC_2026_KICKOFF_MS,
+            adsEnabled,
           };
           const prev = get();
           const changed =
@@ -50,7 +56,8 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
             prev.worldCupCampaignMode !== next.worldCupCampaignMode ||
             prev.leagueId !== next.leagueId ||
             prev.season !== next.season ||
-            prev.unlockAtMs !== next.unlockAtMs;
+            prev.unlockAtMs !== next.unlockAtMs ||
+            prev.adsEnabled !== next.adsEnabled;
           if (!changed) return;
           set((s) => ({ ...next, revision: s.revision + 1 }));
         } catch {
@@ -66,6 +73,8 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
         const data = await fetchAppFeatures();
         await applyFootballCacheEpoch(data.features.footballCacheEpoch);
         const wc = data.features.worldCupTab;
+        const adsEnabled = data.features.ads?.enabled === true;
+        setRemoteAdsEnabled(adsEnabled);
         const next = {
           worldCupEnabled: wc.enabled,
           worldCupLocked: wc.locked,
@@ -73,6 +82,7 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
           leagueId: wc.leagueId,
           season: wc.season,
           unlockAtMs: Date.parse(wc.unlockAt) || WC_2026_KICKOFF_MS,
+          adsEnabled,
           hydrated: true as const,
         };
         const prev = get();
@@ -83,7 +93,8 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
           prev.worldCupCampaignMode !== next.worldCupCampaignMode ||
           prev.leagueId !== next.leagueId ||
           prev.season !== next.season ||
-          prev.unlockAtMs !== next.unlockAtMs;
+          prev.unlockAtMs !== next.unlockAtMs ||
+          prev.adsEnabled !== next.adsEnabled;
         if (!changed) return;
         set((s) => ({ ...next, revision: s.revision + 1 }));
       } catch {

@@ -15,6 +15,7 @@ import {
   resetLoginInterstitialSessionForTests,
   setLoginInterstitialPresenterForTests,
 } from '../loginInterstitialAd';
+import { setRemoteAdsEnabled } from '../adsConfig';
 
 jest.mock('react-native', () => ({
   Platform: {
@@ -47,6 +48,7 @@ describe('app open ads', () => {
   let releaseShow: (() => void) | null;
 
   beforeEach(() => {
+    setRemoteAdsEnabled(true);
     loads = [];
     shows = 0;
     releaseShow = null;
@@ -77,6 +79,7 @@ describe('app open ads', () => {
   afterEach(() => {
     resetAppOpenAdForTests();
     resetLoginInterstitialSessionForTests();
+    setRemoteAdsEnabled(null);
   });
 
   async function loadAd(): Promise<void> {

@@ -3,6 +3,9 @@
  */
 
 import { getScores365ExperimentFeatureState } from './scores365-experiment.service';
+import { isAdsFeatureEnabled } from './ads-feature-flag';
+
+export { isAdsFeatureEnabled, setAdsEnabledOverride } from './ads-feature-flag';
 
 export interface WorldCupFeatureConfig {
   /** Tab unlocked — matches available */
@@ -28,6 +31,10 @@ export interface AppFeatures {
     fixtureId: number;
     gameId: number;
     label: string;
+  };
+  /** Master switch. Off until ADS_ENABLED=true or an admin turns it on. */
+  ads: {
+    enabled: boolean;
   };
 }
 
@@ -83,5 +90,6 @@ export function getAppFeatures(): AppFeatures {
     worldCupTab: getWorldCupTabState(),
     footballCacheEpoch,
     scores365Experiment: getScores365ExperimentFeatureState(),
+    ads: { enabled: isAdsFeatureEnabled() },
   };
 }

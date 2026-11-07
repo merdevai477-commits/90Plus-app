@@ -10,6 +10,7 @@ import {
   setLoginInterstitialPresenterForTests,
   type LoginInterstitialShowResult,
 } from '../loginInterstitialAd';
+import { setRemoteAdsEnabled } from '../adsConfig';
 
 jest.mock('react-native', () => ({
   Platform: {
@@ -22,6 +23,7 @@ describe('login interstitial session', () => {
   let result: LoginInterstitialShowResult;
 
   beforeEach(() => {
+    setRemoteAdsEnabled(true);
     resetLoginInterstitialSessionForTests();
     result = 'shown';
     setLoginInterstitialPresenterForTests(async (_unitId, isCancelled) => {
@@ -32,6 +34,7 @@ describe('login interstitial session', () => {
 
   afterEach(() => {
     resetLoginInterstitialSessionForTests();
+    setRemoteAdsEnabled(null);
   });
 
   it('shows once per session after auth is armed', async () => {

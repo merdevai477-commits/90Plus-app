@@ -1,9 +1,11 @@
 import {
   GOOGLE_TEST_APP_OPEN_AD_UNIT_IDS,
   GOOGLE_TEST_INTERSTITIAL_AD_UNIT_IDS,
+  getServedLoginInterstitialAdUnitId,
   readAdsFlags,
   resolveServedAppOpenAdUnitId,
   resolveServedLoginInterstitialAdUnitId,
+  setRemoteAdsEnabled,
   type AdsJson,
 } from '../adsConfig';
 import adsJson from '../../config/ads.json';
@@ -74,6 +76,18 @@ describe('adsConfig', () => {
     expect(
       resolveServedLoginInterstitialAdUnitId(flags, { platform: 'android', dev: true }),
     ).toBe(GOOGLE_TEST_INTERSTITIAL_AD_UNIT_IDS.android);
+  });
+
+  it('does not request an ad until the backend turns ads on', () => {
+    setRemoteAdsEnabled(null);
+    expect(getServedLoginInterstitialAdUnitId({ platform: 'android', dev: false })).toBeNull();
+    setRemoteAdsEnabled(false);
+    expect(getServedLoginInterstitialAdUnitId({ platform: 'android', dev: false })).toBeNull();
+    setRemoteAdsEnabled(true);
+    expect(getServedLoginInterstitialAdUnitId({ platform: 'android', dev: false })).toBe(
+      PRODUCTION_ANDROID_INTERSTITIAL_ID,
+    );
+    setRemoteAdsEnabled(null);
   });
 
   it('serves Google test interstitials while test mode is on', () => {

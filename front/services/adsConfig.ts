@@ -189,9 +189,21 @@ export function resolveServedAppOpenAdUnitId(
   return null;
 }
 
+/** null until /app/features answers. Ads stay off until the backend says enabled. */
+let remoteAdsEnabled: boolean | null = null;
+
+export function setRemoteAdsEnabled(enabled: boolean | null): void {
+  remoteAdsEnabled = enabled;
+}
+
+export function isRemoteAdsEnabled(): boolean {
+  return remoteAdsEnabled === true;
+}
+
 export function getServedLoginInterstitialAdUnitId(
   runtime?: Partial<AdRuntime>,
 ): string | null {
+  if (!isRemoteAdsEnabled()) return null;
   return resolveServedLoginInterstitialAdUnitId(flags, {
     platform: runtime?.platform ?? Platform.OS,
     dev: runtime?.dev ?? (typeof __DEV__ !== 'undefined' && __DEV__ === true),
@@ -201,6 +213,7 @@ export function getServedLoginInterstitialAdUnitId(
 export function getServedAppOpenAdUnitId(
   runtime?: Partial<AdRuntime>,
 ): string | null {
+  if (!isRemoteAdsEnabled()) return null;
   return resolveServedAppOpenAdUnitId(flags, {
     platform: runtime?.platform ?? Platform.OS,
     dev: runtime?.dev ?? (typeof __DEV__ !== 'undefined' && __DEV__ === true),
@@ -225,5 +238,7 @@ export const adsConfig = {
   shouldUseTestAds: () => shouldUseTestAds(),
   getServedLoginInterstitialAdUnitId,
   getServedAppOpenAdUnitId,
+  isRemoteAdsEnabled,
+  setRemoteAdsEnabled,
   isConfiguredProductionAdUnit,
 };

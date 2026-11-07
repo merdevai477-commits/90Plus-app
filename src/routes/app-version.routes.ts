@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getAppFeatures } from '../services/app-features.service';
+import { isAdsFeatureEnabled, setAdsEnabledOverride } from '../services/ads-feature-flag';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
 import { logger } from '../utils/logger';
@@ -116,6 +117,22 @@ router.get('/features', (_req: Request, res: Response): void => {
     res.json({
         status: 'SUCCESS',
         features: getAppFeatures(),
+    });
+});
+
+/**
+ * POST /api/app/admin/ads
+ * Turn ads on or off without shipping a new app build.
+ * Body: { "enabled": true | false }
+ * A restart follows ADS_ENABLED again unless that env var is set.
+ */
+router.post('/admin/ads', requireAdmin, (req: Request, res: Response): void => {
+    const enabled = req.body?.enabled === true || req.body?.enabled === 'true';
+    setAdsEnabledOverride(enabled);
+    logger.info('Ads feature flag updated', { enabled });
+    res.json({
+        status: 'SUCCESS',
+        data: { enabled: isAdsFeatureEnabled() },
     });
 });
 

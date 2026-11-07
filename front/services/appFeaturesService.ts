@@ -15,6 +15,7 @@ export interface AppFeaturesResponse {
   features: {
     worldCupTab: WorldCupFeatureConfig;
     footballCacheEpoch?: string;
+    ads?: { enabled?: boolean };
   };
 }
 
