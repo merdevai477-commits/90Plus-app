@@ -1,4 +1,13 @@
-import { formatEntityBrief } from '../services/chat-agent.service';
+import { buildAgentVoicePrompt, formatEntityBrief } from '../services/chat-agent.service';
+
+describe('buildAgentVoicePrompt', () => {
+  it('stays short enough to keep the first token fast', () => {
+    const prompt = buildAgentVoicePrompt('medium');
+    expect(prompt).toContain('90Plus agent');
+    expect(prompt).toContain('لهجة مصرية');
+    expect(prompt.length).toBeLessThan(900);
+  });
+});
 
 describe('formatEntityBrief', () => {
   it('builds a player brief from the same career fields as the profile', () => {

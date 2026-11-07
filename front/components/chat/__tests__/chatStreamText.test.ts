@@ -2,6 +2,7 @@ import {
   appendChatStream,
   peekChatStream,
   resetChatStream,
+  subscribeChatStream,
   takeChatStream,
 } from '../chatStreamText';
 
@@ -15,6 +16,18 @@ describe('chatStreamText', () => {
     appendChatStream('a', ' world');
     expect(peekChatStream('a')).toBe('hello world');
     expect(peekChatStream('b')).toBe('');
+  });
+
+  it('paints the first token before later pieces are batched', () => {
+    const seen: string[] = [];
+    const unsubscribe = subscribeChatStream(() => {
+      seen.push(peekChatStream('a'));
+    });
+    appendChatStream('a', 'hi');
+    appendChatStream('a', ' there');
+    expect(seen).toEqual(['hi']);
+    expect(peekChatStream('a')).toBe('hi there');
+    unsubscribe();
   });
 
   it('returns the visible reply once and then clears it', () => {

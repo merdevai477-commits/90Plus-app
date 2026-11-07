@@ -82,6 +82,7 @@ import {
     type GeminiChatStreamClient,
 } from '../services/gemini-chat.client';
 import {
+    buildAgentVoicePrompt,
     isChatAgentConfigured,
     runFootballAgent,
 } from '../services/chat-agent.service';
@@ -516,7 +517,10 @@ interface HistoryItem {
     content: string;
 }
 
-function buildHistoryWindow(history: HistoryItem[]): HistoryItem[] {
+function buildHistoryWindow(
+    history: HistoryItem[],
+    tokenBudget: number = HISTORY_TOKEN_BUDGET,
+): HistoryItem[] {
     const clean = history.filter(
         (m) => !!m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string',
     );
@@ -530,7 +534,7 @@ function buildHistoryWindow(history: HistoryItem[]): HistoryItem[] {
     for (let i = clean.length - 1; i >= 0; i--) {
         const msg = clean[i];
         const t = estimateTokens(msg.content);
-        if (result.length >= HISTORY_MIN_MESSAGES && tokens + t > HISTORY_TOKEN_BUDGET) break;
+        if (result.length >= HISTORY_MIN_MESSAGES && tokens + t > tokenBudget) break;
         result.unshift({ ...msg, content: decodeChatNavMarker(msg.content).text });
         tokens += t;
     }
@@ -839,11 +843,10 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         // Bypasses the generic answer cache so temporal questions never get
         // stale hallucinated tables. Falls through to legacy on failure.
         if (agentEnabled && !clientClosed) {
-            const category = detectCategory(trimmedMessage);
             const lengthMode = detectLengthMode(trimmedMessage);
             const agentSystemPrompt = [
                 buildLanguageLockPrompt(messageLanguage),
-                buildSystemPrompt(category, lengthMode),
+                buildAgentVoicePrompt(lengthMode),
                 // Preserve profile personalization inside the grounded path.
                 // The agent's tool data still overrides anything here for facts.
                 sanitizedSuffix,
@@ -853,6 +856,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
             const historyForAgent = buildHistoryWindow(
                 Array.isArray(history) ? history : [],
+                1100,
             );
 
             try {

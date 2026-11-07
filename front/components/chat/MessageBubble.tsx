@@ -22,7 +22,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
 import { useTranslation } from '../../src/i18n';
 
 import { Colors } from '../../constants/theme';
@@ -32,7 +31,6 @@ import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 import { ChatNavLinks } from './ChatNavLinks';
 import { decodeChatNavMarker } from '../../utils/chatNavLinks';
 import { peekChatStream, subscribeChatStream } from './chatStreamText';
-import { IridescentRim } from './IridescentRim';
 
 const AI_BUBBLE_RADIUS = 22;
 
@@ -42,6 +40,8 @@ interface MessageBubbleProps {
   message: Message;
   index?: number;
   isHistory?: boolean;
+  bubbleMaxWidth?: number;
+  bubbleMinWidth?: number;
   onResend?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -302,12 +302,27 @@ function renderMarkdown(
   text: string,
   tableScrollHint: string | undefined,
   bubbleMaxWidth: number,
+  lite = false,
 ): React.ReactNode[] {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    // While tokens are still arriving, skip table measurement and horizontal
+    // scroll views. The finished message renders the real table once.
+    if (lite && (isTableLine(line) || isSeparator(line))) {
+      const cells = parseRow(line).filter((cell) => cell && !isSeparator(cell));
+      if (cells.length) {
+        out.push(
+          <Text key={`row-${i}`} style={lineTextStyle(cells.join(' · '), s.paragraph)}>
+            {renderInline(cells.join(' · '))}
+          </Text>,
+        );
+      }
+      continue;
+    }
 
     const tbl = extractTable(lines, i);
     if (tbl) {
@@ -432,7 +447,6 @@ export const TypingIndicator = React.memo(() => {
     <Animated.View entering={FadeIn.duration(300)} style={s.aiRow}>
       <View style={[s.aiBubbleWrap, { width: maxWidth, maxWidth, alignSelf: 'flex-start' }]}>
         <View style={s.aiBubble}>
-          <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={s.typingDots}>
             {[0, 150, 300].map((d, i) => <WaveDot key={i} delay={d} />)}
           </View>
@@ -458,7 +472,7 @@ function StreamingMessageBody({
   );
   const parsed = useMemo(() => decodeChatNavMarker(text), [text]);
   const content = useMemo(
-    () => renderMarkdown(parsed.text, tableScrollHint, maxWidth),
+    () => renderMarkdown(parsed.text, tableScrollHint, maxWidth, true),
     [parsed.text, tableScrollHint, maxWidth],
   );
   return (
@@ -471,10 +485,9 @@ function StreamingMessageBody({
 
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
-export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false, onNavChoice }: MessageBubbleProps) {
+export const AIMessageBubble = React.memo(function AIMessageBubble({ message, isHistory = false, onNavChoice, bubbleMaxWidth }: MessageBubbleProps) {
   const { t } = useTranslation();
-  const { width } = useWindowDimensions();
-  const { maxWidth } = useBubbleMaxWidth(width);
+  const maxWidth = bubbleMaxWidth ?? 320;
 
   const tsOp = useSharedValue(0);
   const tsStyle = useAnimatedStyle(() => ({ opacity: tsOp.value }));
@@ -494,13 +507,9 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
     () => (streaming ? null : renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth)),
     [streaming, sourceText, t.chat.tableScrollHint, maxWidth],
   );
-  const enter = Platform.OS === 'android'
-    ? FadeIn.duration(140)
-    : FadeIn.withInitialValues({ transform: [{ translateX: -20 }], opacity: 0 })
-        .springify().stiffness(180).damping(14).delay(index * 40);
 
   return (
-    <Animated.View entering={enter} style={s.aiRow}>
+    <View style={s.aiRow}>
       <View style={[s.aiBubbleWrap, { maxWidth, width: '100%', alignSelf: 'flex-start' }]}>
         <View style={s.aiBubbleShell}>
           <View style={s.aiBubble} collapsable={false}>
@@ -529,11 +538,10 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
               </View>
             ) : null}
           </View>
-          <IridescentRim radius={AI_BUBBLE_RADIUS} filmDepth={12} spin={false} />
         </View>
         <Animated.Text style={[s.aiTs, tsStyle]}>{message.time}</Animated.Text>
       </View>
-    </Animated.View>
+    </View>
   );
 });
 
@@ -542,10 +550,10 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
 const AnimPressable = Animated.createAnimatedComponent(Pressable);
 
 export const UserMessageBubble = React.memo(function UserMessageBubble({
-  message, index = 0, onResend, onEdit, onDelete, onCopy,
+  message, onResend, onEdit, onDelete, onCopy, bubbleMaxWidth, bubbleMinWidth,
 }: MessageBubbleProps) {
-  const { width } = useWindowDimensions();
-  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
+  const maxWidth = bubbleMaxWidth ?? 320;
+  const minWidth = bubbleMinWidth ?? 72;
   const userTextStyle = useMemo(
     () => [s.userText, getTextDirectionStyles(message.text ?? '')],
     [message.text],
@@ -573,15 +581,7 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
 
   return (
     <>
-      <Animated.View
-        entering={
-          Platform.OS === 'android'
-            ? FadeIn.duration(120)
-            : FadeIn.withInitialValues({ transform: [{ translateX: 20 }], opacity: 0 })
-                .springify().stiffness(180).damping(14).delay(index * 40)
-        }
-        style={s.userRow}
-      >
+      <View style={s.userRow}>
         <View style={[s.userBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-end' }]}>
           <AnimPressable
             style={scaleStyle}
@@ -604,7 +604,7 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
           </AnimPressable>
           <Animated.Text style={[s.userTs, tsStyle]}>{message.time}</Animated.Text>
         </View>
-      </Animated.View>
+      </View>
 
       {menuOpen && (
         <MessageContextMenu
@@ -635,9 +635,9 @@ const s = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#7C4DFF',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.28,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
       },
       default: {},
     }),
@@ -690,9 +690,9 @@ const s = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.4,
-        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.22,
+        shadowRadius: 5,
       },
       android: { elevation: 0 },
     }),

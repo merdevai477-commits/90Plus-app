@@ -9,7 +9,6 @@ export const CHAT_INPUT_NATIVE_ID = 'chat-input';
 export const CHAT_INPUT_MIN_HEIGHT = 52;
 export const CHAT_OVERLAY_BOTTOM = 16;
 export const CHAT_BANNER_BOTTOM = 24;
-export const CHAT_DRAW_DISTANCE = 400;
 
 export const chatColors = {
   accent: CHAT_ACCENT,

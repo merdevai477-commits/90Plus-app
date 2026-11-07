@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { View, Text, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
@@ -12,13 +12,13 @@ import { ChatGlassSurface } from './ChatGlassSurface';
 import ChatScrollView from './ChatScrollView';
 import {
   CHAT_BANNER_BOTTOM,
-  CHAT_DRAW_DISTANCE,
   CHAT_OVERLAY_BOTTOM,
   chatSpacing,
 } from './chatTheme';
 import { chatScreenStyles as styles } from './chatScreen.styles';
 import { safeFlashListScrollToEnd } from './safeFlashListScroll';
 import { peekChatStream } from './chatStreamText';
+import { useBubbleMaxWidth } from './chatTextUtils';
 
 export type ChatMessageListProps = {
   listRef: React.RefObject<FlashListRef<Message> | null>;
@@ -105,6 +105,9 @@ export function ChatMessageList({
       }
     };
   }, []);
+  const { width: screenWidth } = useWindowDimensions();
+  const { maxWidth: bubbleMaxWidth, minWidth: bubbleMinWidth } = useBubbleMaxWidth(screenWidth);
+
   const listContentStyle = useMemo(
     () => ({
       paddingHorizontal: chatSpacing.listHorizontal,
@@ -131,12 +134,22 @@ export function ChatMessageList({
           return <View style={styles.streamingPlaceholder} />;
         }
         const isHistory = msg.id !== streamingMessageId;
-        return <AIMessageBubble message={msg} index={i} isHistory={isHistory} onNavChoice={renderMessageHandlers.onNavChoice} />;
+        return (
+          <AIMessageBubble
+            message={msg}
+            index={i}
+            isHistory={isHistory}
+            bubbleMaxWidth={bubbleMaxWidth}
+            onNavChoice={renderMessageHandlers.onNavChoice}
+          />
+        );
       }
       return (
         <UserMessageBubble
           message={msg}
           index={i}
+          bubbleMaxWidth={bubbleMaxWidth}
+          bubbleMinWidth={bubbleMinWidth}
           onResend={() => renderMessageHandlers.onResend(msg.text)}
           onEdit={() => renderMessageHandlers.onEdit(msg.id, msg.text)}
           onDelete={() => renderMessageHandlers.onDelete(msg.id)}
@@ -144,8 +157,10 @@ export function ChatMessageList({
         />
       );
     },
-    [renderMessageHandlers, streamingMessageId],
+    [bubbleMaxWidth, bubbleMinWidth, renderMessageHandlers, streamingMessageId],
   );
+
+  const getItemType = useCallback((item: Message) => item.role, []);
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
@@ -195,6 +210,7 @@ export function ChatMessageList({
         keyboardShouldPersistTaps="handled"
         data={displayMessages}
         keyExtractor={keyExtractor}
+        getItemType={getItemType}
         renderItem={renderMessage}
         {...(useNativeKeyboardScroll
           ? { renderScrollComponent }
@@ -205,8 +221,8 @@ export function ChatMessageList({
         onScrollEndDrag={onScrollEndDrag}
         onMomentumScrollBegin={onMomentumScrollBegin}
         onMomentumScrollEnd={onMomentumScrollEnd}
-        scrollEventThrottle={16}
-        drawDistance={CHAT_DRAW_DISTANCE}
+        scrollEventThrottle={32}
+        drawDistance={Platform.OS === 'android' ? 240 : 320}
         bounces={false}
         overScrollMode="never"
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}

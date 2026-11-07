@@ -31,10 +31,14 @@ import {
 } from '../utils/football-colloquial.util';
 
 const MAX_STEPS = 3;
-const AGENT_STREAM_MAX_TOKENS = 480;
-const AGENT_FINAL_MAX_TOKENS = 420;
+/** Tool-selection turn only needs enough room for one call, not an essay. */
+const AGENT_STREAM_MAX_TOKENS = 360;
+/** Enough to finish a table without dragging the reply out. */
+const AGENT_FINAL_MAX_TOKENS = 680;
 /** Legend bios (career + titles table) get cut mid-table at the default cap. */
-const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 760;
+const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 920;
+const AGENT_TOOL_TEMPERATURE = 0.15;
+const AGENT_ANSWER_TEMPERATURE = 0.35;
 
 function finalTokenBudget(payloads: string[]): number {
   return payloads.some((p) => /\\?"source\\?":\\?"encyclopedia/.test(p))
@@ -115,10 +119,11 @@ const TOOL_USAGE_PREAMBLE = `
 - ممنوع أي سرد تاريخي أو تعليق زيادة حوالين البطولة — جاوب على السؤال بالرقم/النادي وبس.
 
 الأسلوب (صاحب كروي محترف):
-- ابدأ بالإجابة المباشرة في أول سطر، و**بولد** للرقم/النادي/الاسم المهم.
-- بعد كده لو مفيد: ٢–٤ نقط قصيرة، أو جدول Markdown مضغوط للبيانات المتعددة (مباريات، إحصائيات مواسم، ترتيب، مقارنات).
-- لهجة مصرية ودودة وطبيعية زي صاحب بيفهم كورة — محترم ومضبوط، من غير حشو ولا سرد تاريخي زيادة ولا إيموجي كتير.
-- الدقة أهم حاجة: الأسلوب الحلو ماينفعش يغيّر أي رقم/نادي — الأرقام والنوادي من الأداة بس.
+- أول سطر هو الإجابة نفسها، بصيغة جملة، و**بولد** للرقم أو النادي أو الاسم المهم.
+- كمّل الجملة والجدول لآخر صف. متقفش في نص فكرة.
+- بعد الخلاصة: ٢–٤ نقط، أو جدول Markdown واحد لو فيه ٣ صفوف أو أكتر.
+- لهجة مصرية طبيعية لو السؤال عربي. من غير حشو، ومن غير سرد زيادة، ومن غير إيموجي كتير.
+- الأسلوب مايغيّرش أي رقم أو نادي — دول من الأداة بس.
 - ماتذكرش أسماء الأدوات أو API للمستخدم.
 `.trim();
 
@@ -352,7 +357,7 @@ async function streamFinalAnswer(
     messages,
     tools: AGENT_TOOLS,
     tool_choice: 'none',
-    temperature: 0.2,
+    temperature: AGENT_ANSWER_TEMPERATURE,
     max_tokens: maxTokens,
     stream: true,
     reasoning: { effort: 'none' },
@@ -442,8 +447,9 @@ export function formatEntityBrief(parsed: any, language: MessageLanguage): strin
         ].join('\n')
       : null;
     const lines = [
-      `**${name}**`,
-      club ? (en ? `Current club: **${club}**.` : `بيلعب دلوقتي في **${club}**.`) : null,
+      club
+        ? (en ? `**${name}** plays for **${club}**.` : `**${name}** بيلعب دلوقتي في **${club}**.`)
+        : `**${name}**`,
       position ? (en ? `Position: ${position}.` : `مركز اللعب: ${position}.`) : null,
       age ? (en ? `Age: ${age}.` : `السن: ${age}.`) : null,
       nationality ? (en ? `Nationality: ${nationality}.` : `الجنسية: ${nationality}.`) : null,
@@ -473,8 +479,9 @@ export function formatEntityBrief(parsed: any, language: MessageLanguage): strin
     const nextMatch = formatCompactMatch(facts.nextMatch ?? parsed.recentMatches?.live?.[0] ?? parsed.recentMatches?.upcoming?.[0]);
     const lastMatch = formatCompactMatch(facts.lastMatch ?? parsed.recentMatches?.finished?.[0]);
     const lines = [
-      `**${name}**`,
-      coach ? (en ? `Coach: **${coach}**.` : `المدرب الحالي: **${coach}**.`) : null,
+      coach
+        ? (en ? `**${name}** — coach **${coach}**.` : `**${name}**، المدرب الحالي **${coach}**.`)
+        : `**${name}**`,
       league ? (en ? `Competition: ${league}.` : `بيلعب في ${league}.`) : null,
       country ? (en ? `Country: ${country}.` : `البلد: ${country}.`) : null,
       stadium ? (en ? `Stadium: ${stadium}.` : `الملعب: ${stadium}.`) : null,
@@ -490,6 +497,28 @@ export function formatEntityBrief(parsed: any, language: MessageLanguage): strin
 
   return null;
 }
+/** Short voice for the tool agent. The long legacy prompt fights the tool rules and slows the first token. */
+export function buildAgentVoicePrompt(mode: 'short' | 'medium' | 'detailed'): string {
+  const length =
+    mode === 'short'
+      ? 'السؤال قصير: سطر أو سطرين، والجملة كاملة.'
+      : mode === 'detailed'
+        ? 'ابدأ بالخلاصة في سطر، وبعدين جدول أو ٤–٦ نقط، وخلّص الفكرة.'
+        : 'الخلاصة في أول سطر، وبعدين ٢–٤ نقط أو جدول واحد لو الأرقام كتير.';
+  return [
+    'أنت 90Plus agent، صاحب كروي جوه تطبيق 90Plus.',
+    'ابدأ بالإجابة في أول سطر، و**بولد** الاسم أو الرقم أو النادي المهم.',
+    length,
+    'لو السؤال عربي: لهجة مصرية طبيعية. لو إنجليزي: إنجليزي واضح. من غير حشو ومن غير إيموجي كتير.',
+    'كمّل الجملة والجدول لآخر صف. متقفش في نص فكرة.',
+    'أي رقم أو نادي حالي أو نتيجة أو دقيقة مباراة لازم ييجي من أداة البيانات. ممنوع تخمين حاجة بتتغير.',
+    'التاريخ الثابت القديم تقدر تقوله لو الأداة مرجّعتش حاجة، ومن غير أرقام مش متأكد منها.',
+    'نطاقك: كرة القدم، التمرين، التغذية الرياضية، والاستشفاء. برا النطاق اعتذر في سطر.',
+    'لو فيه سباب، ارفض بهدوء.',
+    'متذكرش tool ولا API ولا إن في أداة شغالة.',
+  ].join('\n');
+}
+
 export interface AgentHistoryItem {
   role: 'user' | 'assistant';
   content: string;
@@ -808,7 +837,7 @@ export async function runFootballAgent(
         parallel_tool_calls: false,
         tool_choice:
           step === 0 && shouldRequireTools(userMessage) ? 'required' : 'auto',
-        temperature: 0.2,
+        temperature: AGENT_TOOL_TEMPERATURE,
         max_tokens: AGENT_STREAM_MAX_TOKENS,
         stream: true,
         reasoning: { effort: 'none' },

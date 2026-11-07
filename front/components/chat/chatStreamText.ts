@@ -26,19 +26,32 @@ export function peekChatStream(id: string): string {
   return activeId === id ? text : '';
 }
 
+const FLUSH_MS = 80;
+
 export function appendChatStream(id: string, piece: string): void {
   if (!piece) return;
-  if (activeId !== id) {
+  const firstPiece = activeId !== id;
+  if (firstPiece) {
     activeId = id;
     text = piece;
   } else {
     text += piece;
   }
+  // Paint the first token immediately so the reply feels instant, then
+  // coalesce the rest so markdown layout does not run on every SSE chunk.
+  if (firstPiece) {
+    if (emitTimer) {
+      clearTimeout(emitTimer);
+      emitTimer = null;
+    }
+    emit();
+    return;
+  }
   if (emitTimer) return;
   emitTimer = setTimeout(() => {
     emitTimer = null;
     emit();
-  }, 50);
+  }, FLUSH_MS);
 }
 
 /** Visible text so far. Does not notify — the caller is about to commit it into React state. */
