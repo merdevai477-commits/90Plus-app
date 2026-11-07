@@ -13,7 +13,7 @@ import { NotificationService } from './notification.service';
 import { renderPushTemplate, getUserLanguage } from './push-templates.service';
 
 // Lazy import to avoid circular dependency
-async function getMuxDeleteAsset(): Promise<(assetId: string) => Promise<void>> {
+async function getMuxDeleteAsset(): Promise<(assetId: string) => Promise<boolean>> {
   const mux = await import('./mux.service');
   return mux.deleteAsset;
 }
