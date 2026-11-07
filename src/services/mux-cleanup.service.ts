@@ -1,5 +1,8 @@
 /**
  * Mux asset cleanup — frees slots on the free-tier 10-asset cap.
+ *
+ * Stale, failed, and already-deleted reels go first. When every slot is a
+ * live READY reel, the oldest ones are retired so a new upload can be created.
  */
 import prisma from '../lib/prisma';
 import { deleteAsset, listMuxAssets, type MuxAssetSummary } from './mux.service';
@@ -32,7 +35,7 @@ function deletionPriority(asset: MuxAssetSummary, orphanReelIds: Set<string>): n
 }
 
 /**
- * Delete Mux assets that are safe to remove so new direct uploads can be created.
+ * Delete Mux assets so new direct uploads can be created.
  * Returns the number of assets deleted from Mux.
  */
 export async function freeMuxAssetSlots(need = 1): Promise<number> {
@@ -44,7 +47,7 @@ export async function freeMuxAssetSlots(need = 1): Promise<number> {
     listMuxAssets(100),
     prisma.reel.findMany({
       where: { muxAssetId: { not: null } },
-      select: { id: true, muxAssetId: true, status: true, createdAt: true },
+      select: { id: true, muxAssetId: true, status: true, createdAt: true, isDeleted: true },
     }),
     prisma.reel.findMany({ select: { id: true, status: true } }),
   ]);
@@ -61,13 +64,17 @@ export async function freeMuxAssetSlots(need = 1): Promise<number> {
   }
 
   const protectedIds = new Set<string>();
+  const liveReadyAt = new Map<string, number>();
   for (const reel of dbReels) {
     if (!reel.muxAssetId) continue;
-    if (reel.status === 'READY') {
+    if (reel.status === 'READY' && !reel.isDeleted) {
       protectedIds.add(reel.muxAssetId);
+      const created = reel.createdAt.getTime();
+      const prev = liveReadyAt.get(reel.muxAssetId);
+      if (prev == null || created < prev) liveReadyAt.set(reel.muxAssetId, created);
       continue;
     }
-    if (reel.status === 'PROCESSING') {
+    if (reel.status === 'PROCESSING' && !reel.isDeleted) {
       const ageMs = now - reel.createdAt.getTime();
       if (ageMs < STALE_PROCESSING_MS) {
         protectedIds.add(reel.muxAssetId);
@@ -83,19 +90,44 @@ export async function freeMuxAssetSlots(need = 1): Promise<number> {
     return (a.createdAt ?? 0) - (b.createdAt ?? 0);
   });
 
+  const retireLiveIds = new Set<string>();
+  if (ordered.length < need) {
+    const oldestLive = muxAssets
+      .filter((a) => liveReadyAt.has(a.id))
+      .sort((a, b) => (liveReadyAt.get(a.id) ?? 0) - (liveReadyAt.get(b.id) ?? 0));
+    for (const asset of oldestLive) {
+      if (ordered.length >= need) break;
+      ordered.push(asset);
+      retireLiveIds.add(asset.id);
+    }
+  }
+
   let deleted = 0;
+  let retiredLive = 0;
   const seen = new Set<string>();
   for (const asset of ordered) {
     if (deleted >= need) break;
     if (seen.has(asset.id)) continue;
     seen.add(asset.id);
 
-    await deleteAsset(asset.id);
+    const removed = await deleteAsset(asset.id);
+    if (!removed) continue;
     deleted++;
+
+    const retireLive = retireLiveIds.has(asset.id);
+    if (retireLive) retiredLive++;
 
     await prisma.reel.updateMany({
       where: { muxAssetId: asset.id },
-      data: { muxAssetId: null, muxPlaybackId: null },
+      data: retireLive
+        ? {
+            muxAssetId: null,
+            muxPlaybackId: null,
+            videoUrl: '',
+            isDeleted: true,
+            deletedAt: new Date(),
+          }
+        : { muxAssetId: null, muxPlaybackId: null },
     }).catch((err) => {
       logger.warn('[MuxCleanup] Failed to clear reel muxAssetId after delete:', err?.message);
     });
@@ -106,6 +138,7 @@ export async function freeMuxAssetSlots(need = 1): Promise<number> {
       muxAssetsBefore: muxAssets.length,
       protected: protectedIds.size,
       orphans: orphanReelIds.size,
+      retiredLive,
     });
   } else {
     logger.warn('[MuxCleanup] No deletable Mux assets found', {

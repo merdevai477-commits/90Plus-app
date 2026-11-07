@@ -178,7 +178,7 @@ export async function listMuxUploads(limit = 100): Promise<MuxUploadSummary[]> {
 /**
  * Create a Mux direct upload URL.
  * The caller PUTs the raw video buffer to `uploadUrl`.
- * On free-tier asset cap, prunes stale/test assets once and retries.
+ * On free-tier asset cap, prunes stale assets, then the oldest live reels, and retries.
  */
 export async function createUploadUrl(
   userId: string,
@@ -260,14 +260,16 @@ export function getThumbnailUrl(playbackId: string, time = 1): string {
 
 /**
  * Delete a Mux asset by its asset ID.
- * Non-throwing — logs warning on failure.
+ * Non-throwing — logs warning on failure. Returns whether Mux accepted the delete.
  */
-export async function deleteAsset(assetId: string): Promise<void> {
+export async function deleteAsset(assetId: string): Promise<boolean> {
   try {
     await mux().video.assets.delete(assetId);
     logger.info(`[Mux] Deleted asset ${assetId}`);
+    return true;
   } catch (err: any) {
     logger.warn(`[Mux] Failed to delete asset ${assetId}: ${err?.message}`);
+    return false;
   }
 }
 
