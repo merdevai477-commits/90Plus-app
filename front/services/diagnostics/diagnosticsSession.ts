@@ -9,6 +9,9 @@ import {
 import { clearPersisted, getOrCreateDiagDeviceId, loadPersisted, savePersisted } from './diagnosticsPersistence';
 import { recordDiagEvent } from './diagnosticsRecorder';
 import { diagFlags, diagState, monoNow, newOverheadWindow } from './diagnosticsState';
+import { setClockBaselineSink } from '../../utils/clockBaseline';
+import { recordObserveSummary } from './diagnosticsObserve';
+import { syncSentryToSession } from './diagnosticsSentry';
 import {
   abortStuckUpload,
   clockEstimator,
@@ -77,8 +80,25 @@ function currentInfo(): DiagSessionInfo | null {
   return { sessionId: session.id, recording: diagState.recording, features: { ...session.config.features } };
 }
 
+let clockSinkOn = false;
+
+function syncClockSink(info: DiagSessionInfo | null): void {
+  const on = Boolean(info?.features.clock && diagFlags.clock);
+  if (on === clockSinkOn) return;
+  clockSinkOn = on;
+  if (!on) {
+    setClockBaselineSink(null);
+    return;
+  }
+  setClockBaselineSink((type, data, fixtureId) => {
+    recordDiagEvent(type, { ...(fixtureId ? { fixtureId } : {}), data });
+  });
+}
+
 function notify(): void {
   const info = currentInfo();
+  syncSentryToSession(info);
+  syncClockSink(info);
   for (const listener of listeners) {
     try {
       listener(info);
@@ -230,6 +250,7 @@ export function endDiagnosticsSession(reason: SessionEndReason): void {
   } finally {
     diagState.closing = false;
   }
+  if (diagFlags.observe) void recordObserveSummary();
   diagState.recording = false;
   setRecordingFlags(null);
   notify();
@@ -318,6 +339,7 @@ function activateSession(json: Record<string, unknown>, reason: 'cold_start' | '
     });
   }
   void requestDiagnosticsPersist(true);
+  if (diagFlags.observe) void recordObserveSummary();
   notify();
 }
 
@@ -542,5 +564,7 @@ export function resetDiagnosticsSessionForTests(): void {
   persistInFlight = null;
   persistAgain = false;
   listeners.clear();
+  clockSinkOn = false;
+  setClockBaselineSink(null);
   setUploadHooks(null);
 }

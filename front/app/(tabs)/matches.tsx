@@ -82,6 +82,7 @@ import { logger } from '../../utils/logger';
 import { isDiagnosticsCapableBuild } from '../../services/diagnostics/diagnosticsConfig';
 import { diagFlags, monoNow } from '../../services/diagnostics/diagnosticsState';
 import { isFixtureSampled, recordDiagEvent } from '../../services/diagnostics/diagnosticsRecorder';
+import { setDiagnosticsScreen } from '../../services/diagnostics/diagnosticsSentry';
 import { noteRowCommitForFixture } from '../../services/diagnostics/diagnosticsPipeline';
 import {
   noteListCommit,
@@ -1256,6 +1257,7 @@ export default function MatchesHubScreenV2() {
 
   useEffect(() => {
     recordDiagEvent('screen_focus', { screen: 'matches', data: { focused: isFocused } });
+    if (isFocused) setDiagnosticsScreen('matches');
     if (!isFocused || detailsOpenedAtRef.current == null) return;
     recordDiagEvent('details_return', {
       screen: 'matches',

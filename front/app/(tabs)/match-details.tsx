@@ -20,6 +20,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { diagFlags } from '../../services/diagnostics/diagnosticsState';
 import { recordDiagEvent } from '../../services/diagnostics/diagnosticsRecorder';
+import { setDiagnosticsFixture, setDiagnosticsScreen } from '../../services/diagnostics/diagnosticsSentry';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -301,6 +302,10 @@ const MatchDetailsScreen = () => {
       fixtureId: fixtureId > 0 ? fixtureId : null,
       data: { focused: isFocused },
     });
+    if (isFocused) {
+      setDiagnosticsScreen('match_details');
+      setDiagnosticsFixture(fixtureId > 0 ? fixtureId : null);
+    }
   }, [isFocused, fixtureId]);
 
   const detailsTabPrev = useRef(activeTab);

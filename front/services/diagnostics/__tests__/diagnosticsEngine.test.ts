@@ -1,3 +1,12 @@
+jest.mock('../../sentry.service', () => ({
+  setTag: jest.fn(),
+  setContext: jest.fn(),
+  addBreadcrumb: jest.fn(),
+}));
+jest.mock('../../../utils/expoObserveSafe', () => ({
+  readObserveStoredEntries: jest.fn(async () => []),
+}));
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState } from 'react-native';

@@ -6,6 +6,7 @@
 
 import type { LiveDisplayClockInput } from './liveDisplayClock';
 import { resolveLiveDisplayClock } from './liveDisplayClock';
+import { diagFlags } from '../services/diagnostics/diagnosticsState';
 
 export const CLOCK_BASELINE_CAPACITY = 2000;
 export const CLOCK_BASELINE_FLUSH_MS = 30_000;
@@ -60,6 +61,7 @@ const intervalCounts: Record<RenderKey, number> = { detailsHeader: 0, clockHook:
 const totalCounts: Record<RenderKey, number> = { detailsHeader: 0, clockHook: 0, listRow: 0 };
 
 export function isClockBaselineEnabled(): boolean {
+  if (diagFlags.clock) return true;
   const flag = process.env.EXPO_PUBLIC_CLOCK_BASELINE;
   return flag === '1' || flag === 'true';
 }
@@ -122,14 +124,32 @@ function publishDumpHandle(): void {
   (globalThis as { __dumpClockBaseline?: () => string }).__dumpClockBaseline = exportClockBaselineJsonl;
 }
 
+type ClockSink = (type: 'clock_summary' | 'clock_reanchor' | 'list_minute_mismatch', data: Record<string, unknown>, fixtureId?: number) => void;
+let clockSink: ClockSink | null = null;
+let reanchorsInWindow = 0;
+
+/** Diagnostics sessions register this. The env-flag baseline never uploads. */
+export function setClockBaselineSink(next: ClockSink | null): void {
+  clockSink = next;
+}
+
+function forwardClock(type: 'clock_summary' | 'clock_reanchor' | 'list_minute_mismatch', data: Record<string, unknown>, fixtureId?: number): void {
+  if (!diagFlags.clock || !clockSink) return;
+  try {
+    clockSink(type, data, fixtureId);
+  } catch {
+    /* the clock must not depend on diagnostics */
+  }
+}
+
 function push(partial: Omit<ClockBaselineEvent, 'sessionId' | 't' | 'mono'> & { mono?: number; t?: string }): void {
   if (!session) return;
-  const event: ClockBaselineEvent = {
+  const event = {
+    ...partial,
     sessionId: session.sessionId,
     t: partial.t ?? epochIso(),
     mono: partial.mono ?? monoNow(),
-    ...partial,
-  };
+  } as ClockBaselineEvent;
   if (buffer.length >= CLOCK_BASELINE_CAPACITY) {
     buffer.shift();
     droppedEvents += 1;
@@ -284,6 +304,7 @@ function maybeFlush(mono: number): void {
   if (mono - lastFlushMono < CLOCK_BASELINE_FLUSH_MS) return;
   const windowMs = mono - lastFlushMono;
   lastFlushMono = mono;
+  const summary = listSummary();
   push({
     type: 'render_counters',
     mono,
@@ -296,8 +317,29 @@ function maybeFlush(mono: number): void {
     listRowTotal: totalCounts.listRow,
     droppedEvents,
     subscribers: lastSubscriberCount,
-    ...listSummary(),
+    ...summary,
   });
+  forwardClock('clock_summary', {
+    windowMs: Math.round(windowMs),
+    detailsRenders: intervalCounts.detailsHeader,
+    listRows: summary.listCompared,
+    listMismatches: summary.listMismatch,
+    reanchors: reanchorsInWindow,
+    droppedEvents,
+  });
+  for (const sample of summary.listSamples) {
+    const fixtureId = Number(sample.fixtureId);
+    forwardClock(
+      'list_minute_mismatch',
+      {
+        label: String(sample.displayedMinute).slice(0, 16),
+        elapsed: sample.serverElapsed,
+        deltaMin: Math.max(-300, Math.min(300, sample.deltaMin)),
+      },
+      Number.isFinite(fixtureId) && fixtureId > 0 ? fixtureId : undefined,
+    );
+  }
+  reanchorsInWindow = 0;
   intervalCounts.detailsHeader = 0;
   intervalCounts.clockHook = 0;
   intervalCounts.listRow = 0;
@@ -470,6 +512,17 @@ export function recordClockPresentation(args: {
           serverElapsed: args.serverElapsed,
           statusShort: args.statusShort,
         });
+        reanchorsInWindow += 1;
+        const fixtureId = Number(args.fixtureId);
+        forwardClock(
+          'clock_reanchor',
+          {
+            reason: String(args.reanchorReason ?? 'unknown').replace(/[^\w\-:.]/g, '').slice(0, 32) || 'unknown',
+            serverElapsed: args.serverElapsed,
+            status: args.statusShort ? String(args.statusShort).slice(0, 8) : null,
+          },
+          Number.isFinite(fixtureId) && fixtureId > 0 ? fixtureId : undefined,
+        );
       }
     }
     if (lastPresentationSeq.get(args.fixtureId) === tickerSeq) return;
@@ -512,6 +565,8 @@ export function resetClockBaselineForTests(): void {
   lastTickMono = null;
   lastSubscriberCount = 0;
   lastFlushMono = 0;
+  reanchorsInWindow = 0;
+  clockSink = null;
   awaitingForegroundSample = false;
   foregroundAtMono = null;
   lastTickBeforeBackgroundMono = null;

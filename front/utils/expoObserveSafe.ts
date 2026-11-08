@@ -46,3 +46,21 @@ const observe = loadObserve();
 export const AppMetrics: AppMetricsApi = observe?.AppMetrics ?? noopAppMetrics;
 export const AppMetricsRoot: AppMetricsRootApi = observe?.AppMetricsRoot ?? identityRoot;
 export const isExpoAppMetricsLinked = observe != null;
+
+export interface ObserveStoredEntry {
+  sessionId?: string;
+  name?: string;
+  value?: number;
+}
+
+/** Reads Observe's stored metrics when the native module exposes them. Empty when it does not. */
+export async function readObserveStoredEntries(): Promise<ObserveStoredEntry[]> {
+  const reader = (AppMetrics as AppMetricsApi & { getStoredEntries?: () => Promise<ObserveStoredEntry[]> }).getStoredEntries;
+  if (typeof reader !== 'function') return [];
+  try {
+    const entries = await reader.call(AppMetrics);
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+}

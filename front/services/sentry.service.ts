@@ -255,7 +255,14 @@ export function initSentry(): void {
       if (shouldDropNativeNoiseEvent(event)) {
         return null;
       }
-      
+
+      try {
+        const { noteSentryEventForDiagnostics } = require('./diagnostics/diagnosticsSentry') as typeof import('./diagnostics/diagnosticsSentry');
+        noteSentryEventForDiagnostics(event);
+      } catch {
+        /* diagnostics must not block an error report */
+      }
+
       return event;
     },
     
