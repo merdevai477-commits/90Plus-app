@@ -1319,7 +1319,10 @@ export default function CommentsModal({
                         styles.container,
                         {
                             transform: [{ translateY: slideAnim }],
-                            paddingBottom: Platform.OS === 'ios' ? keyboardHeight : 0
+                            // Android Modals ignore softwareKeyboardLayoutMode —
+                            // lift the whole sheet above the keyboard. FlatList
+                            // uses flex:1 so the composer is never clipped.
+                            marginBottom: keyboardHeight,
                         }
                     ]}
                 >
@@ -1337,7 +1340,10 @@ export default function CommentsModal({
                         data={displayedComments}
                         keyExtractor={item => item.id}
                         renderItem={renderItem}
+                        style={styles.list}
                         contentContainerStyle={styles.listContent}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
                         showsVerticalScrollIndicator={false}
                         onScrollToIndexFailed={(info) => {
                             // Fallback if scroll fails
@@ -1434,7 +1440,6 @@ export default function CommentsModal({
                         style={[
                             styles.inputContainer,
                             {
-                                marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
                                 transform: [{ translateX: shakeAnim }]
                             }
                         ]}
@@ -1530,6 +1535,10 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 10,
         elevation: 5,
+        overflow: 'hidden',
+    },
+    list: {
+        flex: 1,
     },
     handleContainer: {
         alignItems: 'center',
@@ -1566,7 +1575,8 @@ const styles = StyleSheet.create({
     },
     listContent: {
         padding: 16,
-        paddingBottom: 100,
+        paddingBottom: 24,
+        flexGrow: 1,
     },
     commentContainer: {
         marginBottom: 16,
