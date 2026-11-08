@@ -127,6 +127,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Keep-Alive', 'timeout=5, max=1000');
     next();
 });
+
+// Diagnostics ingest has its own 256 KB body limit, so it must be registered
+// before the global JSON parser. Responds 404 unless DIAGNOSTICS_ENABLED is set.
+import diagnosticsIngestRoutes from './routes/diagnostics-ingest.routes';
+app.use(`${API_PREFIX}/diagnostics/events`, diagnosticsIngestRoutes);
+
 // ✅ DRAGON FIX: Request size limits with proper error handling
 app.use(express.json({ 
     limit: '10mb',
@@ -786,6 +792,19 @@ async function startServer() {
                     .catch((err) =>
                         logger.warn('[MuxCleanup] Startup headroom check failed (non-fatal):', err?.message ?? err),
                     );
+
+                // Diagnostics retention runs even while DIAGNOSTICS_ENABLED is off so stored
+                // telemetry never outlives DIAG_RETENTION_DAYS after the feature is switched off.
+                cron.schedule('45 4 * * *', async () => {
+                    try {
+                        const { runDiagnosticsRetention } = await import(
+                            './services/diagnostics/diagnostics-retention.service'
+                        );
+                        await runDiagnosticsRetention();
+                    } catch (error) {
+                        logger.error('❌ Diagnostics retention cron failed:', (error as Error)?.message ?? error);
+                    }
+                });
             } catch (postConnectErr) {
                 logger.error('❌ Failed to initialize database-dependent services after connect:', postConnectErr);
                 process.exit(1);

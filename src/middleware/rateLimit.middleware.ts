@@ -75,7 +75,7 @@ function isSkippablePath(req: Request): boolean {
     return false;
 }
 
-function getRedisRateLimitStore(prefix?: string): RedisStore | undefined {
+export function getRedisRateLimitStore(prefix?: string): RedisStore | undefined {
     try {
         if (!isRedisConnected()) return undefined;
         const redis = getRedisClient();

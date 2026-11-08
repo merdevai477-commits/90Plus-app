@@ -3512,3 +3512,75 @@ model CoachKingCoachScore {
   @@index([coachId])
   @@map("coach_king_coach_scores")
 }
+
+// Remote diagnostic sessions: bounded, admin-activated telemetry windows for
+// diagnostics-capable app builds. Rows are deleted by the retention cron.
+model DiagnosticSession {
+  id          String    @id @default(uuid())
+  label       String?
+  status      String    @default("active")
+  environment String    @default("production")
+  target      Json
+  config      Json
+  startsAt    DateTime  @default(now())
+  expiresAt   DateTime
+  stoppedAt   DateTime?
+  createdBy   String?
+  eventCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  devices DiagnosticSessionDevice[]
+  events  DiagnosticEvent[]
+
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("diagnostic_sessions")
+}
+
+model DiagnosticSessionDevice {
+  id             String            @id @default(uuid())
+  sessionId      String
+  deviceRef      String
+  userRef        String?
+  platform       String
+  appVersion     String
+  buildNumber    String
+  runtimeVersion String?
+  updateId       String?
+  channel        String?
+  osVersion      String?
+  joinedAt       DateTime          @default(now())
+  lastSeenAt     DateTime          @default(now())
+  eventCount     Int               @default(0)
+  session        DiagnosticSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, deviceRef])
+  @@map("diagnostic_session_devices")
+}
+
+model DiagnosticEvent {
+  id         BigInt            @id @default(autoincrement())
+  sessionId  String
+  eventId    String
+  source     String
+  type       String
+  severity   String
+  traceId    String?
+  fixtureId  Int?
+  deviceRef  String?
+  screen     String?
+  component  String?
+  recordedAt DateTime
+  monoMs     Float?
+  receivedAt DateTime          @default(now())
+  payload    Json
+  session    DiagnosticSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, eventId])
+  @@index([sessionId, type])
+  @@index([sessionId, fixtureId, recordedAt])
+  @@index([sessionId, traceId])
+  @@index([receivedAt])
+  @@map("diagnostic_events")
+}
