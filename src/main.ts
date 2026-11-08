@@ -534,6 +534,21 @@ logger.info(`📁 Public path: ${publicPath}`);
 logger.info(`📁 Current directory: ${__dirname}`);
 logger.info(`📁 Production mode: ${isProduction}`);
 
+app.get(['/diagnostics', '/diagnostics/'], (_req: Request, res: Response) => {
+    const filePath = path.join(publicPath, 'diagnostics', 'index.html');
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send diagnostics page:', err);
+            res.status(500).send('Diagnostics page unavailable');
+        }
+    });
+});
+app.use('/diagnostics', (_req: Request, res: Response, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
+
 app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
     const filePath = path.join(publicPath, 'ass', 'index.html');
     res.set('Cache-Control', 'no-store');

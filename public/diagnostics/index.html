@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>90Plus diagnostics</title>
+  <link rel="stylesheet" href="/diagnostics/diagnostics.css" />
+</head>
+<body>
+  <header>
+    <h1>90Plus diagnostics</h1>
+    <p>Facts are counted from stored events. Inferences are possible explanations, not confirmed causes.</p>
+  </header>
+  <section class="card">
+    <label for="adminKey">Admin key</label>
+    <input id="adminKey" type="password" autocomplete="off" />
+    <button id="saveKey" type="button">Save key</button>
+    <p id="status" role="status"></p>
+  </section>
+  <section class="card">
+    <h2>New session</h2>
+    <form id="createForm">
+      <label>Label <input name="label" maxlength="80" /></label>
+      <label>Platform
+        <select name="platform">
+          <option value="ios">ios</option>
+          <option value="android">android</option>
+        </select>
+      </label>
+      <label>Build <input name="build" required maxlength="16" /></label>
+      <label>Minutes <input name="minutes" type="number" min="1" max="120" value="30" /></label>
+      <button type="submit">Create</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Sessions</h2>
+    <button id="refresh" type="button">Refresh</button>
+    <ul id="sessions"></ul>
+  </section>
+  <section class="card">
+    <h2>Report</h2>
+    <div id="report"></div>
+  </section>
+  <script src="/diagnostics/diagnostics.js" defer></script>
+</body>
+</html>

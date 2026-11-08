@@ -1,0 +1,17 @@
+:root { color-scheme: dark; }
+body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: #0f1115; color: #e8eaed; }
+header, .card { padding: 16px 20px; }
+header { border-bottom: 1px solid #2a2f3a; }
+.card { border-bottom: 1px solid #2a2f3a; }
+h1, h2 { margin: 0 0 8px; font-size: 1.1rem; }
+label { display: block; margin: 8px 0; }
+input, select, button { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid #3a4150; background: #181c24; color: inherit; }
+button { cursor: pointer; }
+ul { list-style: none; padding: 0; }
+li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid #222733; }
+.badge { font-size: 12px; padding: 2px 6px; border-radius: 999px; }
+.fact { background: #1d4e3a; }
+.inference { background: #5a3d12; }
+.finding { padding: 10px 0; border-top: 1px solid #222733; }
+.muted { color: #9aa3b2; }
+#status { min-height: 1.2em; }

@@ -14,6 +14,8 @@ import {
     getServerDiagnosticsEnvironment,
     isBackendTraceConfigured,
 } from '../services/diagnostics/diagnostics.config';
+import { analyzeDiagnostics } from '../services/diagnostics/analysis/diagnostics-analysis';
+import { buildSessionReport, loadSessionAnalysisEvents } from '../services/diagnostics/analysis/diagnostics-report.service';
 import {
     createSession,
     createSessionRequestSchema,
@@ -123,6 +125,71 @@ router.get('/sessions/:id/devices', validateZod(sessionParams), async (req: Requ
         res.json({ devices: await listSessionDevices(sessionIdOf(req)) });
     } catch (err) {
         handleFailure(res, 'list devices', err);
+    }
+});
+
+const eventsQuery = {
+    params: z.object({ id: z.string().uuid() }),
+    query: z.object({
+        type: z.string().max(48).optional(),
+        fixtureId: z.coerce.number().int().positive().optional(),
+        limit: z.coerce.number().int().min(1).max(2000).optional(),
+    }),
+};
+
+const fixtureParams = {
+    params: z.object({ id: z.string().uuid(), fixtureId: z.coerce.number().int().positive() }),
+};
+
+router.get('/sessions/:id/report', validateZod(sessionParams), async (req: Request, res: Response) => {
+    try {
+        res.json(await buildSessionReport(sessionIdOf(req)));
+    } catch (err) {
+        handleFailure(res, 'report', err);
+    }
+});
+
+router.get('/sessions/:id/events', validateZod(eventsQuery), async (req: Request, res: Response) => {
+    const query = req.query as { type?: string; fixtureId?: number; limit?: number };
+    try {
+        const events = await loadSessionAnalysisEvents(sessionIdOf(req), {
+            type: query.type,
+            fixtureId: query.fixtureId,
+            limit: query.limit,
+        });
+        res.json({ events });
+    } catch (err) {
+        handleFailure(res, 'events', err);
+    }
+});
+
+router.get('/sessions/:id/fixtures/:fixtureId', validateZod(fixtureParams), async (req: Request, res: Response) => {
+    const fixtureId = Number(req.params.fixtureId);
+    try {
+        const events = await loadSessionAnalysisEvents(sessionIdOf(req), { fixtureId, limit: 2000 });
+        res.json({ fixtureId, events, report: analyzeDiagnostics(events) });
+    } catch (err) {
+        handleFailure(res, 'fixture trace', err);
+    }
+});
+
+router.get('/sessions/:id/timeline', validateZod(sessionParams), async (req: Request, res: Response) => {
+    try {
+        const events = await loadSessionAnalysisEvents(sessionIdOf(req), { limit: 2000 });
+        res.json({
+            timeline: events.map((event) => ({
+                eventId: event.eventId,
+                type: event.type,
+                source: event.source,
+                recordedAt: event.recordedAt,
+                fixtureId: event.fixtureId ?? null,
+                traceId: event.traceId ?? null,
+                decision: typeof event.data.decision === 'string' ? event.data.decision : null,
+                kind: typeof event.data.kind === 'string' ? event.data.kind : null,
+            })),
+        });
+    } catch (err) {
+        handleFailure(res, 'timeline', err);
     }
 });
 
