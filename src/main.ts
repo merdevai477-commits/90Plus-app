@@ -259,6 +259,8 @@ import assRoutes from './routes/ass.routes';
 import coinsRoutes from './routes/coins.routes';
 
 import adminRoutes from './routes/admin.routes';
+import diagnosticsAdminRoutes from './routes/diagnostics-admin.routes';
+import diagnosticsRoutes from './routes/diagnostics.routes';
 import appVersionRoutes from './routes/app-version.routes';
 import supportRoutes from './routes/support.routes';
 import termsRoutes from './routes/terms.routes';
@@ -494,6 +496,8 @@ app.use(`${API_PREFIX}/terms`, termsRoutes);
 app.use(`${API_PREFIX}/reports`, reportsRoutes);
 app.use(`${API_PREFIX}/gdpr`, gdprRoutes); // GDPR compliance routes
 app.use(`${API_PREFIX}/admin`, adminRoutes); // Admin routes
+app.use(`${API_PREFIX}/diagnostics/admin`, diagnosticsAdminRoutes); // 404 unless DIAGNOSTICS_ENABLED
+app.use(`${API_PREFIX}/diagnostics`, diagnosticsRoutes); // directive; 404 unless DIAGNOSTICS_ENABLED
 app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /conversations/*
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
 app.use(`${API_PREFIX}/share-win`, shareWinRoutes); // Share & Win: referrals, weekly cycles, leaderboard

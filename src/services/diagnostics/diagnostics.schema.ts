@@ -278,27 +278,41 @@ const eventBaseSchema = z.object({
     data: z.unknown().optional(),
 });
 
+export const diagAppSchema = z.object({
+    version: txt(32),
+    build: txt(16),
+    platform: z.enum(['ios', 'android', 'web']),
+    osVersion: txt(32).optional(),
+    runtimeVersion: txt(32).optional(),
+    updateId: z.string().max(64).regex(/^[\w-]*$/).nullable().optional(),
+    channel: txt(32).nullable().optional(),
+    environment: z.enum(['production', 'development']),
+});
+
+export type DiagApp = z.infer<typeof diagAppSchema>;
+
+export const deviceIdSchema = z.string().regex(/^[\w-]{8,64}$/);
+
 export const batchEnvelopeSchema = z.object({
     schemaVersion: z.literal(DIAG_SCHEMA_VERSION),
     sessionId: z.string().uuid(),
     batchId: z.string().regex(/^[\w-]{6,64}$/),
-    deviceId: z.string().regex(/^[\w-]{8,64}$/),
+    deviceId: deviceIdSchema,
     sentAtWall: epochMs,
     sentAtMono: monoMs.optional(),
-    app: z.object({
-        version: txt(32),
-        build: txt(16),
-        platform: z.enum(['ios', 'android', 'web']),
-        osVersion: txt(32).optional(),
-        runtimeVersion: txt(32).optional(),
-        updateId: z.string().max(64).regex(/^[\w-]*$/).nullable().optional(),
-        channel: txt(32).nullable().optional(),
-        environment: z.enum(['production', 'development']),
-    }),
+    app: diagAppSchema,
     events: z.array(z.unknown()).min(1).max(DIAG_LIMITS.maxEventsPerBatch),
 });
 
 export type BatchEnvelope = z.infer<typeof batchEnvelopeSchema>;
+
+export const directiveRequestSchema = z.object({
+    schemaVersion: z.literal(DIAG_SCHEMA_VERSION),
+    deviceId: deviceIdSchema,
+    app: diagAppSchema,
+});
+
+export type DirectiveRequest = z.infer<typeof directiveRequestSchema>;
 
 export interface NormalizedClientEvent {
     eventId: string;

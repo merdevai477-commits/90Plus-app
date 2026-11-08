@@ -1,14 +1,8 @@
-import crypto from 'crypto';
-import express, { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
-import rateLimit from 'express-rate-limit';
-import { getRedisRateLimitStore } from '../middleware/rateLimit.middleware';
+import express, { Router, type NextFunction, type Request, type Response } from 'express';
+import { requireDiagnosticsEnabled } from '../middleware/diagnostics-gate.middleware';
+import { clientIpKey, hashRateLimitKey, perMinuteLimiter } from '../middleware/diagnostics-rate-limit.middleware';
 import { logger } from '../utils/logger';
-import {
-    DIAG_LIMITS,
-    getDiagnosticsSecrets,
-    getIngestRateLimits,
-    isDiagnosticsEnabled,
-} from '../services/diagnostics/diagnostics.config';
+import { DIAG_LIMITS, getDiagnosticsSecrets, getIngestRateLimits } from '../services/diagnostics/diagnostics.config';
 import { computeRef, readDiagAuthorization, verifyIngestToken } from '../services/diagnostics/diagnostics-token';
 import { batchEnvelopeSchema, summarizeIssues } from '../services/diagnostics/diagnostics.schema';
 import { ingestBatch } from '../services/diagnostics/diagnostics-ingest.service';
@@ -20,67 +14,19 @@ import { ingestBatch } from '../services/diagnostics/diagnostics-ingest.service'
  * 256 KB limit. Returns 404 unless DIAGNOSTICS_ENABLED is set.
  */
 
-type LimiterFactory = (store: ReturnType<typeof getRedisRateLimitStore>) => RequestHandler;
+const ipLimiter = perMinuteLimiter('rl:diag-ip:', () => getIngestRateLimits().perIpPerMin, clientIpKey);
 
-/**
- * Redis connects after routes are registered, so the Redis-backed limiter is
- * built on the first request that finds Redis connected; until then a memory
- * limiter applies.
- */
-export function lazyRateLimiter(prefix: string, build: LimiterFactory): RequestHandler {
-    let memoryLimiter: RequestHandler | null = null;
-    let redisLimiter: RequestHandler | null = null;
-    return (req, res, next) => {
-        if (!redisLimiter) {
-            const store = getRedisRateLimitStore(prefix);
-            if (store) redisLimiter = build(store);
-        }
-        const limiter = redisLimiter ?? (memoryLimiter ??= build(undefined));
-        return limiter(req, res, next);
-    };
-}
-
-function hashKey(value: string): string {
-    return crypto.createHash('sha256').update(value).digest('hex').slice(0, 24);
-}
-
-function limiterOptions(limit: number, keyGenerator: (req: Request) => string) {
-    return {
-        windowMs: 60 * 1000,
-        limit,
-        standardHeaders: true,
-        legacyHeaders: false,
-        passOnStoreError: true,
-        validate: { creationStack: false },
-        keyGenerator,
-        message: { error: 'rate_limited' },
-    } as const;
-}
-
-const ipLimiter = lazyRateLimiter('rl:diag-ip:', (store) =>
-    rateLimit({
-        ...limiterOptions(getIngestRateLimits().perIpPerMin, (req) => `ip:${req.ip ?? 'unknown'}`),
-        ...(store ? { store } : {}),
-    }),
+const tokenLimiter = perMinuteLimiter(
+    'rl:diag-token:',
+    () => getIngestRateLimits().perTokenPerMin,
+    (req) => {
+        const token = readDiagAuthorization(req.headers.authorization);
+        return token ? `tok:${hashRateLimitKey(token)}` : clientIpKey(req);
+    },
 );
 
-const tokenLimiter = lazyRateLimiter('rl:diag-token:', (store) =>
-    rateLimit({
-        ...limiterOptions(getIngestRateLimits().perTokenPerMin, (req) => {
-            const token = readDiagAuthorization(req.headers.authorization);
-            return token ? `tok:${hashKey(token)}` : `ip:${req.ip ?? 'unknown'}`;
-        }),
-        ...(store ? { store } : {}),
-    }),
-);
-
-function masterSwitch(_req: Request, res: Response, next: NextFunction): void {
-    if (!isDiagnosticsEnabled()) {
-        res.status(404).json({ error: 'not_found' });
-        return;
-    }
+function stampReceiveTime(_req: Request, res: Response, next: NextFunction): void {
     res.locals.diagRecvAt = Date.now();
-    res.setHeader('Cache-Control', 'no-store');
     next();
 }
 
@@ -164,7 +110,8 @@ const router = Router();
 
 router.post(
     '/',
-    masterSwitch,
+    stampReceiveTime,
+    requireDiagnosticsEnabled,
     ipLimiter,
     express.json({ limit: DIAG_LIMITS.maxBodyBytes }),
     tokenLimiter,
