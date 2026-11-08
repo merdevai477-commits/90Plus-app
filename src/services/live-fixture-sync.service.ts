@@ -13,6 +13,13 @@ import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
 import { lagAudit } from '../utils/lag-audit';
+import {
+    createDiagTrace,
+    flushBackendTrace,
+    recordBackendPoll,
+    refreshBackendTrace,
+    type DiagTrace,
+} from './diagnostics/diagnostics-backend-trace.service';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
 import { isPurposeAllowed } from './api-football-quota.service';
@@ -72,6 +79,8 @@ class LiveFixtureSyncService {
     private lastFavoriteIngestAt = new Map<number, number>();
     private favoriteIngestGapMs = 4_500;
     private lastLiveStatePruneAt = 0;
+    /** Poll generation for diagnostics traces. Stays 0 while backend trace is off. */
+    private pollGen = 0;
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -121,6 +130,7 @@ class LiveFixtureSyncService {
         status: string,
         elapsed: number | null,
         extra?: number | null,
+        trace?: DiagTrace,
     ): void {
         const isFinished = TERMINAL_LATCH_STATUSES_SET.has(status);
         WebSocketService.sendMatchUpdate(fixtureId, {
@@ -130,7 +140,7 @@ class LiveFixtureSyncService {
             status,
             minute: elapsed ?? undefined,
             extra: isFinished ? null : extra ?? undefined,
-        });
+        }, trace);
     }
 
     private async onMatchFinished(
@@ -511,14 +521,8 @@ class LiveFixtureSyncService {
 
             if (changed) {
                 this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra, seenAt: nowMs });
-                lagAudit('ws_broadcast_decision', {
-                  fixtureId: id,
-                  elapsed,
-                  extra,
-                  status,
-                  hg: homeScore,
-                  ag: awayScore,
-                  reason: !prev
+                const trace = createDiagTrace(this.pollGen, nowMs);
+                const reason = !prev
                     ? 'first_seen'
                     : scoreChanged
                       ? 'score'
@@ -526,9 +530,20 @@ class LiveFixtureSyncService {
                         ? 'status'
                         : extraChanged
                           ? 'extra'
-                          : 'elapsed',
+                          : 'elapsed';
+                lagAudit('ws_broadcast_decision', {
+                  fixtureId: id,
+                  elapsed,
+                  extra,
+                  status,
+                  hg: homeScore,
+                  ag: awayScore,
+                  reason,
+                  ...(trace
+                    ? { traceId: trace.id, gen: trace.gen, detectedAt: trace.detectedAt, instanceId: trace.instanceId }
+                    : {}),
                 });
-                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
+                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra, trace);
 
                 if (scoreChanged) {
                     // Leagues without an event feed still get goals on the events tab.
@@ -584,6 +599,18 @@ class LiveFixtureSyncService {
         }
     }
 
+    /** Diagnostics poll timing. No-op unless a backend trace session is active. */
+    private notePoll(cached: boolean, fetchStartedAt: number, count: number): void {
+        this.pollGen += 1;
+        recordBackendPoll({
+            gen: this.pollGen,
+            fetchStartedAt,
+            providerMs: Date.now() - fetchStartedAt,
+            count,
+            cached,
+        });
+    }
+
     /** Keep push pipeline alive from Redis when upstream API is rate-limited. */
     private async syncFromCachedSnapshots(): Promise<void> {
         const cached = await readLiveFixturesList();
@@ -593,6 +620,7 @@ class LiveFixtureSyncService {
         }
 
         logger.debug(`[LiveFixtureSync] Quota pause — processing ${cached.length} cached live fixture(s)`);
+        this.notePoll(true, Date.now(), cached.length);
         await this.processLiveFixtures(cached);
     }
 
@@ -614,6 +642,7 @@ class LiveFixtureSyncService {
         }
         this.syncInFlight = true;
         try {
+            await refreshBackendTrace().catch(() => undefined);
             const lease = await withSyncLeaderLease(
                 'live-fixture-sync',
                 ({ signal }) => this.syncOnceAsLeader(signal),
@@ -625,6 +654,7 @@ class LiveFixtureSyncService {
         } finally {
             this.syncInFlight = false;
             this.pruneStaleLiveState(Date.now());
+            await flushBackendTrace().catch(() => undefined);
         }
     }
 
@@ -658,10 +688,12 @@ class LiveFixtureSyncService {
             return;
         }
 
+        const fetchStartedAt = Date.now();
         const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({
             source: 'job',
             purpose: 'live-sync',
         });
+        this.notePoll(false, fetchStartedAt, liveFixturesRaw.length);
         let liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
             ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
             : liveFixturesRaw;

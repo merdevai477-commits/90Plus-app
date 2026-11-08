@@ -131,6 +131,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Diagnostics ingest has its own 256 KB body limit, so it must be registered
 // before the global JSON parser. Responds 404 unless DIAGNOSTICS_ENABLED is set.
 import diagnosticsIngestRoutes from './routes/diagnostics-ingest.routes';
+import { diagnosticsRequestTag } from './services/diagnostics/diagnostics-backend-trace.service';
 app.use(`${API_PREFIX}/diagnostics/events`, diagnosticsIngestRoutes);
 
 // ✅ DRAGON FIX: Request size limits with proper error handling
@@ -148,6 +149,9 @@ app.use(express.urlencoded({
     limit: '10mb',
     parameterLimit: 10000, // ✅ Limit number of parameters
 }));
+
+// No-op unless a backend diagnostics session is recording and the request carries its id.
+app.use(diagnosticsRequestTag);
 
 // ✅ TASK 10: Cookie parser for CSRF protection
 app.use(cookieParser());
@@ -1259,6 +1263,12 @@ process.on('SIGINT', async () => {
 
     stopKeepAlive();
     await stopResponseCacheInvalidationBus();
+    try {
+        const { flushBackendTrace } = await import('./services/diagnostics/diagnostics-backend-trace.service');
+        await flushBackendTrace();
+    } catch {
+        /* non-fatal */
+    }
     await prisma.$disconnect();
     process.exit(0);
 });
@@ -1287,6 +1297,12 @@ process.on('SIGTERM', async () => {
 
     stopKeepAlive();
     await stopResponseCacheInvalidationBus();
+    try {
+        const { flushBackendTrace } = await import('./services/diagnostics/diagnostics-backend-trace.service');
+        await flushBackendTrace();
+    } catch {
+        /* non-fatal */
+    }
     await prisma.$disconnect();
     process.exit(0);
 });

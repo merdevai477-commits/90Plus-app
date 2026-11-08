@@ -28,6 +28,13 @@ export interface WSMessage<T = any> {
     type: WSEventType;
     payload: T;
     timestamp: number;
+    /** Set only while a backend diagnostics session is recording. Older clients ignore it. */
+    trace?: {
+        id: string;
+        detectedAt: number;
+        gen: number;
+        instanceId: string;
+    };
 }
 
 /**
@@ -315,7 +322,7 @@ export class WebSocketService {
     /**
      * Send event to a specific room (e.g., match room for live updates)
      */
-    static sendToRoom<T>(room: string, event: WSEventType, data: T): void {
+    static sendToRoom<T>(room: string, event: WSEventType, data: T, trace?: WSMessage['trace']): void {
         if (!this.io) {
             logger.warn('WebSocket server not initialized, cannot send to room');
             return;
@@ -325,6 +332,7 @@ export class WebSocketService {
             type: event,
             payload: data,
             timestamp: Date.now(),
+            ...(trace ? { trace } : {}),
         };
 
         this.io.to(room).emit(event, message);
@@ -410,7 +418,7 @@ export class WebSocketService {
      * Send match update to subscribed users
      * Requirements: 21.5
      */
-    static sendMatchUpdate(matchId: number, update: MatchUpdatePayload): void {
+    static sendMatchUpdate(matchId: number, update: MatchUpdatePayload, trace?: WSMessage['trace']): void {
         // TEMP [LAG-AUDIT]: emit time vs payload minute. Gated by LAG_AUDIT=1.
         lagAudit('ws_emit', {
           matchId,
@@ -419,8 +427,11 @@ export class WebSocketService {
           status: update.status ?? null,
           hg: update.homeScore ?? null,
           ag: update.awayScore ?? null,
+          ...(trace
+            ? { traceId: trace.id, gen: trace.gen, detectedAt: trace.detectedAt, instanceId: trace.instanceId }
+            : {}),
         });
-        this.sendToRoom(`match:${matchId}`, 'match_update', update);
+        this.sendToRoom(`match:${matchId}`, 'match_update', update, trace);
     }
 
     /**

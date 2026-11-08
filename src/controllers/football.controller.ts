@@ -5,6 +5,7 @@ import { footballDataCacheService } from '../services/football-data-cache.servic
 import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clubs.service';
 import { logger } from '../utils/logger';
 import { lagAudit } from '../utils/lag-audit';
+import { withDiagMeta } from '../services/diagnostics/diagnostics-backend-trace.service';
 import { getFootballMetrics } from '../utils/football-metrics';
 import { resolveAppLanguage } from '../utils/app-language.util';
 import prisma from '../lib/prisma';
@@ -566,7 +567,7 @@ export class FootballController {
           source:
             redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
           language,
-          _meta: { elapsedMs, pullRefresh: 'list' },
+          _meta: withDiagMeta({ elapsedMs, pullRefresh: 'list' }),
         });
         return;
       }
@@ -599,7 +600,7 @@ export class FootballController {
           cached: true,
           source: redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
           language,
-          _meta: { elapsedMs },
+          _meta: withDiagMeta({ elapsedMs }),
         });
         return;
       }
@@ -665,7 +666,7 @@ export class FootballController {
         results: fixtures.length,
         response: fixtures,
         cached: false,
-        _meta: { elapsedMs },
+        _meta: withDiagMeta({ elapsedMs }),
       });
     } catch (error: any) {
       const errMsg = error?.message || String(error);
@@ -677,7 +678,7 @@ export class FootballController {
         cached: false,
         degraded: true,
         message: 'Live fixtures temporarily unavailable',
-        _meta: { elapsedMs: Date.now() - startedAt },
+        _meta: withDiagMeta({ elapsedMs: Date.now() - startedAt }),
       });
     }
   }
@@ -2037,14 +2038,14 @@ export class FootballController {
         status: 'SUCCESS',
         results: response.length,
         response,
-        _meta: {
+        _meta: withDiagMeta({
           date: dateString,
           ...(timezone ? { timezone } : {}),
           cached: true,
           elapsedMs,
           view: view === 'list' ? 'list' : 'full',
           ...(isPull ? { pullRefresh: 'list' } : {}),
-        },
+        }),
       });
     } catch (error) {
       logger.warn(`getCachedMatchesByDate(${dateString}): error, returning empty`, error);
@@ -2052,11 +2053,11 @@ export class FootballController {
         status: 'SUCCESS',
         results: 0,
         response: [],
-        _meta: {
+        _meta: withDiagMeta({
           date: dateString,
           cached: true,
           elapsedMs: Date.now() - startedAt,
-        },
+        }),
         degraded: true,
         message: 'Cached matches temporarily unavailable',
       });
@@ -2711,7 +2712,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         response: bundle,
-        _meta: {
+        _meta: withDiagMeta({
           ...(gameId
             ? {
                 scores365GameId: gameId,
@@ -2725,7 +2726,7 @@ export class FootballController {
                 pullCoalesced: pullMeta.coalescedCount,
               }
             : {}),
-        },
+        }),
       });
       lagAudit('http_details', {
         fixtureId,
