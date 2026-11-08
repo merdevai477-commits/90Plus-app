@@ -25,8 +25,10 @@ import {
     listSeenDevices,
     listSessionDevices,
     listSessions,
+    revokeSession,
     stopSession,
 } from '../services/diagnostics/diagnostics-session.service';
+import { describeDiagnosticRedis } from '../services/diagnostics/diagnostics-redis';
 
 /**
  * /api/diagnostics/admin/* — session management for the diagnostics
@@ -56,6 +58,7 @@ router.get('/status', (_req: Request, res: Response) => {
         adminKeyConfigured: getDiagnosticsAdminKey() !== null,
         backendTraceConfigured: isBackendTraceConfigured(),
         redisConnected: isRedisConnected(),
+        diagnosticsRedis: describeDiagnosticRedis(),
         retentionDays: getRetentionDays(),
         limits: DIAG_LIMITS,
     });
@@ -102,6 +105,21 @@ router.get('/sessions/:id', validateZod(sessionParams), async (req: Request, res
         res.json({ session: { ...session, state: effectiveSessionState(session, Date.now()) }, devices });
     } catch (err) {
         handleFailure(res, 'get session', err);
+    }
+});
+
+router.post('/sessions/:id/revoke', validateZod(sessionParams), async (req: Request, res: Response) => {
+    const id = sessionIdOf(req);
+    try {
+        const nowMs = Date.now();
+        const session = await revokeSession(id, nowMs);
+        if (!session) {
+            res.status(404).json({ error: 'session_not_found' });
+            return;
+        }
+        res.json({ session: { ...session, state: effectiveSessionState(session, nowMs) } });
+    } catch (err) {
+        handleFailure(res, 'revoke session', err);
     }
 });
 

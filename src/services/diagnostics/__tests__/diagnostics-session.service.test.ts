@@ -77,6 +77,9 @@ describe('effectiveSessionState', () => {
         expect(effectiveSessionState(snapshot, NOW)).toBe('active');
         expect(effectiveSessionState(snapshot, NOW + 60_000)).toBe('expired');
         expect(effectiveSessionState(toSessionSnapshot({ ...row, status: 'stopped' }), NOW)).toBe('stopped');
+        expect(effectiveSessionState(toSessionSnapshot({ ...row, status: 'pending' }), NOW)).toBe('pending');
+        expect(effectiveSessionState(toSessionSnapshot({ ...row, status: 'revoked' }), NOW)).toBe('revoked');
+        expect(effectiveSessionState(toSessionSnapshot({ ...row, status: 'unexpected' }), NOW)).toBe('revoked');
     });
 
     it('fills config defaults and treats an unreadable target as matching nothing', () => {

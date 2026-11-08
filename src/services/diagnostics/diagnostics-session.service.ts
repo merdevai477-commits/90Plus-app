@@ -53,8 +53,8 @@ export const sessionTargetSchema = z
 export type SessionConfig = z.infer<typeof sessionConfigSchema>;
 export type SessionTarget = z.infer<typeof sessionTargetSchema>;
 
-export type StoredSessionStatus = 'active' | 'stopped' | 'expired';
-export type EffectiveSessionState = 'active' | 'stopped' | 'expired';
+export type StoredSessionStatus = 'pending' | 'active' | 'stopped' | 'expired' | 'revoked';
+export type EffectiveSessionState = StoredSessionStatus;
 
 export interface SessionSnapshot {
     id: string;
@@ -84,13 +84,19 @@ interface SessionRow {
     createdBy?: string | null;
 }
 
+const STORED_STATUSES = new Set<StoredSessionStatus>(['pending', 'active', 'stopped', 'expired', 'revoked']);
+
+function storedStatus(status: string): StoredSessionStatus {
+    return STORED_STATUSES.has(status as StoredSessionStatus) ? (status as StoredSessionStatus) : 'revoked';
+}
+
 export function toSessionSnapshot(row: SessionRow): SessionSnapshot {
     const config = sessionConfigSchema.safeParse(row.config ?? {});
     const target = sessionTargetSchema.safeParse(row.target ?? {});
     return {
         id: row.id,
         label: row.label,
-        status: row.status === 'stopped' || row.status === 'expired' ? row.status : 'active',
+        status: storedStatus(row.status),
         environment: row.environment === 'development' ? 'development' : 'production',
         target: target.success ? target.data : {},
         config: config.success ? config.data : sessionConfigSchema.parse({}),
@@ -103,8 +109,10 @@ export function toSessionSnapshot(row: SessionRow): SessionSnapshot {
 }
 
 export function effectiveSessionState(session: SessionSnapshot, nowMs: number): EffectiveSessionState {
+    if (session.status === 'revoked') return 'revoked';
     if (session.status === 'stopped') return 'stopped';
     if (session.status === 'expired' || nowMs >= session.expiresAt) return 'expired';
+    if (session.status === 'pending') return 'pending';
     return 'active';
 }
 
@@ -138,7 +146,7 @@ export async function getSessionSnapshot(sessionId: string): Promise<SessionSnap
     return snapshot;
 }
 
-const activeSessionsKey = (environment: DiagnosticsEnvironment) => `${DIAG_KEYS.activeSessions}:${environment}`;
+const activeSessionsKey = () => DIAG_KEYS.activeSessions();
 const ACTIVE_SESSIONS_CACHE_TTL_SEC = 15;
 const SEEN_DEVICE_TTL_SEC = 24 * 60 * 60;
 const SEEN_DEVICES_CAP = 200;
@@ -147,11 +155,7 @@ export async function invalidateSessionCache(sessionId: string): Promise<void> {
     const redis = diagRedis();
     if (!redis) return;
     try {
-        await redis.del(
-            DIAG_KEYS.session(sessionId),
-            activeSessionsKey('production'),
-            activeSessionsKey('development'),
-        );
+        await redis.del(DIAG_KEYS.session(sessionId), activeSessionsKey());
     } catch (err) {
         logger.warn('[DIAG] session cache invalidate failed', (err as Error)?.message);
     }
@@ -274,9 +278,26 @@ export async function listSessions(limit: number, nowMs: number): Promise<Sessio
 }
 
 export async function stopSession(sessionId: string, nowMs: number): Promise<SessionSnapshot | null> {
-    await prisma.diagnosticSession.updateMany({
-        where: { id: sessionId, status: 'active' },
-        data: { status: 'stopped', stoppedAt: new Date(nowMs) },
+    await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "diagnostic_sessions" WHERE "id" = ${sessionId} FOR UPDATE`;
+        await tx.diagnosticSession.updateMany({
+            where: { id: sessionId, status: { in: ['active', 'pending'] } },
+            data: { status: 'stopped', stoppedAt: new Date(nowMs) },
+        });
+    });
+    await invalidateSessionCache(sessionId);
+    const row = await prisma.diagnosticSession.findUnique({ where: { id: sessionId } });
+    return row ? toSessionSnapshot(row) : null;
+}
+
+/** Closes a session permanently. Ingest rejects revoked sessions immediately. */
+export async function revokeSession(sessionId: string, nowMs: number): Promise<SessionSnapshot | null> {
+    await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "diagnostic_sessions" WHERE "id" = ${sessionId} FOR UPDATE`;
+        await tx.diagnosticSession.updateMany({
+            where: { id: sessionId, status: { not: 'revoked' } },
+            data: { status: 'revoked', stoppedAt: new Date(nowMs) },
+        });
     });
     await invalidateSessionCache(sessionId);
     const row = await prisma.diagnosticSession.findUnique({ where: { id: sessionId } });
@@ -335,7 +356,7 @@ export async function listActiveSessions(environment: DiagnosticsEnvironment, no
     let sessions: SessionSnapshot[] | null = null;
     if (redis) {
         try {
-            const cached = await redis.get(activeSessionsKey(environment));
+            const cached = await redis.get(activeSessionsKey());
             if (cached) sessions = JSON.parse(cached) as SessionSnapshot[];
         } catch {
             sessions = null;
@@ -343,20 +364,23 @@ export async function listActiveSessions(environment: DiagnosticsEnvironment, no
     }
     if (!sessions) {
         const rows = await prisma.diagnosticSession.findMany({
-            where: { status: 'active', environment, expiresAt: { gt: new Date(nowMs) } },
+            where: { status: { in: ['active', 'pending'] }, environment, expiresAt: { gt: new Date(nowMs) } },
             orderBy: { createdAt: 'desc' },
             take: 20,
         });
         sessions = rows.map(toSessionSnapshot);
         if (redis) {
             try {
-                await redis.set(activeSessionsKey(environment), JSON.stringify(sessions), 'EX', ACTIVE_SESSIONS_CACHE_TTL_SEC);
+                await redis.set(activeSessionsKey(), JSON.stringify(sessions), 'EX', ACTIVE_SESSIONS_CACHE_TTL_SEC);
             } catch {
                 /* next directive reads Postgres again */
             }
         }
     }
-    return sessions.filter((session) => effectiveSessionState(session, nowMs) === 'active');
+    return sessions.filter((session) => {
+        const state = effectiveSessionState(session, nowMs);
+        return state === 'active' || state === 'pending';
+    });
 }
 
 /**
@@ -382,6 +406,13 @@ async function joinSession(
     };
     return prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "diagnostic_sessions" WHERE "id" = ${session.id} FOR UPDATE`;
+        const current = await tx.diagnosticSession.findUnique({ where: { id: session.id } });
+        if (!current) return false;
+        const state = effectiveSessionState(toSessionSnapshot(current), nowMs);
+        if (state === 'stopped' || state === 'expired' || state === 'revoked') return false;
+        if (state === 'pending') {
+            await tx.diagnosticSession.update({ where: { id: session.id }, data: { status: 'active' } });
+        }
         const existing = await tx.diagnosticSessionDevice.findUnique({
             where: { sessionId_deviceRef: { sessionId: session.id, deviceRef } },
             select: { id: true },
@@ -420,10 +451,10 @@ async function rememberSeenDevice(device: SeenDevice): Promise<void> {
         await redis
             .multi()
             .set(DIAG_KEYS.seenDevice(device.deviceRef), JSON.stringify(device), 'EX', SEEN_DEVICE_TTL_SEC)
-            .zadd(DIAG_KEYS.seenDevices, device.lastSeenAt, device.deviceRef)
-            .zremrangebyscore(DIAG_KEYS.seenDevices, 0, device.lastSeenAt - SEEN_DEVICE_TTL_SEC * 1000)
-            .zremrangebyrank(DIAG_KEYS.seenDevices, 0, -(SEEN_DEVICES_CAP + 1))
-            .expire(DIAG_KEYS.seenDevices, SEEN_DEVICE_TTL_SEC)
+            .zadd(DIAG_KEYS.seenDevices(), device.lastSeenAt, device.deviceRef)
+            .zremrangebyscore(DIAG_KEYS.seenDevices(), 0, device.lastSeenAt - SEEN_DEVICE_TTL_SEC * 1000)
+            .zremrangebyrank(DIAG_KEYS.seenDevices(), 0, -(SEEN_DEVICES_CAP + 1))
+            .expire(DIAG_KEYS.seenDevices(), SEEN_DEVICE_TTL_SEC)
             .exec();
     } catch (err) {
         logger.warn('[DIAG] seen-device write failed', (err as Error)?.message);
@@ -435,7 +466,7 @@ export async function listSeenDevices(nowMs: number): Promise<SeenDevice[]> {
     const redis = diagRedis();
     if (!redis) return [];
     const refs = await redis.zrevrangebyscore(
-        DIAG_KEYS.seenDevices,
+        DIAG_KEYS.seenDevices(),
         '+inf',
         nowMs - SEEN_DEVICE_TTL_SEC * 1000,
         'LIMIT',

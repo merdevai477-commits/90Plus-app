@@ -30,6 +30,7 @@ jest.mock('../../lib/prisma', () => {
             if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
                 if ('gt' in cond) return row[key] > cond.gt;
                 if ('lt' in cond) return row[key] < cond.lt;
+                if (Array.isArray(cond.in)) return cond.in.includes(row[key]);
                 if ('not' in cond) return row[key] !== cond.not;
             }
             return row[key] === cond;
@@ -105,9 +106,15 @@ jest.mock('../../lib/prisma', () => {
                 }
                 return { count };
             },
+            count: async ({ where }: Row) => events.filter((row) => matches(row, where)).length,
         },
         user: { findUnique: async () => null },
-        $queryRaw: async () => [],
+        $queryRaw: async (strings: TemplateStringsArray, id?: string) => {
+            const sql = Array.isArray(strings) ? strings.join(' ') : '';
+            if (!sql.includes('FOR UPDATE')) return [];
+            const row = sessions.find((session) => session.id === id);
+            return row ? [row] : [];
+        },
     };
     prisma.$transaction = async (fn: (tx: Row) => unknown) => fn(prisma);
     return { __esModule: true, prisma, default: prisma, __fake: { sessions, devices, events } };
@@ -316,21 +323,16 @@ describe('remote diagnostic session lifecycle', () => {
         expect(devices.json.devices[0]).toMatchObject({ platform: 'ios', buildNumber: '173', channel: 'diagnostic', eventCount: 2 });
     });
 
-    it('stops on admin request: no new enrolment, late uploads of earlier events still accepted', async () => {
+    it('stops on admin request and rejects every later upload', async () => {
         const stopped = await admin('POST', `/sessions/${sessionId}/stop`);
         expect(stopped.json.session).toMatchObject({ state: 'stopped' });
-
         expect((await directive(DEVICE_A)).json).toMatchObject({ active: false });
 
+        const before = fake.events.filter((event) => event.sessionId === sessionId).length;
         const late = await ingest(tokenA, batch(sessionId, DEVICE_A, 'batch-a-0002', [3]));
-        expect(late.json).toMatchObject({ accepted: 1, sessionState: 'stopped' });
-
-        const afterStop = await ingest(
-            tokenA,
-            batch(sessionId, DEVICE_A, 'batch-a-0003', [4], Date.now() + 10 * 60_000),
-        );
-        expect(afterStop.json).toMatchObject({ accepted: 0 });
-        expect(afterStop.json.rejected).toEqual([{ eventId: expect.any(String), reason: 'recorded_after_close' }]);
+        expect(late.status).toBe(410);
+        expect(late.json).toMatchObject({ error: 'session_gone', sessionState: 'stopped' });
+        expect(fake.events.filter((event) => event.sessionId === sessionId)).toHaveLength(before);
     });
 
     it('stops enrolling once a session has expired', async () => {

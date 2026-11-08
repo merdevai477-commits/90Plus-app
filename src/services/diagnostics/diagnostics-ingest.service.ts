@@ -3,6 +3,7 @@ import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { DIAG_LIMITS } from './diagnostics.config';
 import { DIAG_KEYS, diagRedis } from './diagnostics-redis';
+import { sessionConfigSchema } from './diagnostics-session.service';
 import {
     validateClientEvent,
     PRIORITIES,
@@ -10,111 +11,40 @@ import {
     type EventRejectReason,
     type NormalizedClientEvent,
 } from './diagnostics.schema';
-import {
-    effectiveSessionState,
-    getSessionSnapshot,
-    sessionCloseAt,
-    type SessionSnapshot,
-} from './diagnostics-session.service';
 
 export type IngestRejectReason = EventRejectReason | 'recorded_after_close' | 'max_events' | 'duplicate_in_batch';
 
-export type IngestSessionState = 'active' | 'stopped' | 'expired' | 'capped';
+export type IngestSessionState = 'pending' | 'active' | 'stopped' | 'expired' | 'revoked' | 'capped' | 'closed';
 
 export type IngestResult =
-    | { kind: 'gone'; sessionState: 'missing' | 'closed' }
-    | { kind: 'forbidden'; reason: 'environment_mismatch' }
+    | { kind: 'gone'; sessionState: 'missing' | IngestSessionState }
+    | { kind: 'forbidden'; reason: 'environment_mismatch' | 'device_unauthorized' }
     | {
           kind: 'ok';
           accepted: number;
           duplicates: number;
           rejected: Array<{ eventId: string | null; reason: IngestRejectReason }>;
-          sessionState: IngestSessionState;
+          sessionState: 'active' | 'capped';
           maxEventsRemaining: number;
       };
 
-const PRIORITY_RANK = new Map<string, number>(PRIORITIES.map((p, i) => [p, i]));
+const PRIORITY_RANK = new Map<string, number>(PRIORITIES.map((priority, index) => [priority, index]));
 
-function counterTtlSec(session: SessionSnapshot, nowMs: number): number {
-    return Math.max(60, Math.ceil((sessionCloseAt(session) + DIAG_LIMITS.uploadGraceMs - nowMs) / 1000));
+interface LockedSession {
+    id: string;
+    status: string;
+    environment: string;
+    config: unknown;
+    expiresAt: Date;
 }
 
-async function readEventCount(session: SessionSnapshot, nowMs: number): Promise<number> {
-    const redis = diagRedis();
-    if (redis) {
-        try {
-            const raw = await redis.get(DIAG_KEYS.eventCount(session.id));
-            if (raw !== null) return Number(raw) || 0;
-        } catch {
-            /* fall through to the database count */
-        }
-    }
-    const row = await prisma.diagnosticSession.findUnique({
-        where: { id: session.id },
-        select: { eventCount: true },
-    });
-    const count = row?.eventCount ?? session.eventCount;
-    if (redis) {
-        // Seed from Postgres so a Redis restart cannot reset the session cap to zero.
-        try {
-            await redis.set(DIAG_KEYS.eventCount(session.id), String(count), 'EX', counterTtlSec(session, nowMs), 'NX');
-        } catch {
-            /* the cap check falls back to Postgres next time */
-        }
-    }
-    return count;
-}
-
-async function isDuplicateBatch(sessionId: string, batchId: string): Promise<boolean> {
-    const redis = diagRedis();
-    if (!redis) return false;
-    try {
-        return (await redis.exists(DIAG_KEYS.batch(sessionId, batchId))) === 1;
-    } catch {
-        return false;
-    }
-}
-
-async function recordBatchAccepted(
-    session: SessionSnapshot,
-    batchId: string,
-    deviceRef: string,
-    inserted: number,
-    nowMs: number,
-): Promise<void> {
-    const redis = diagRedis();
-    const tasks: Array<Promise<unknown>> = [
-        prisma.diagnosticSessionDevice.updateMany({
-            where: { sessionId: session.id, deviceRef },
-            data: { lastSeenAt: new Date(nowMs), eventCount: { increment: inserted } },
-        }),
-    ];
-    if (inserted > 0) {
-        tasks.push(
-            prisma.diagnosticSession.update({
-                where: { id: session.id },
-                data: { eventCount: { increment: inserted } },
-            }),
-        );
-    }
-    if (redis) {
-        tasks.push(redis.set(DIAG_KEYS.batch(session.id, batchId), '1', 'EX', DIAG_LIMITS.batchDedupTtlSec));
-        if (inserted > 0) {
-            tasks.push(
-                redis
-                    .multi()
-                    .incrby(DIAG_KEYS.eventCount(session.id), inserted)
-                    .expire(DIAG_KEYS.eventCount(session.id), counterTtlSec(session, nowMs))
-                    .exec(),
-            );
-        }
-    }
-    const results = await Promise.allSettled(tasks);
-    for (const result of results) {
-        if (result.status === 'rejected') {
-            logger.warn('[DIAG] post-ingest bookkeeping failed', (result.reason as Error)?.message);
-        }
-    }
+function acceptanceState(status: string, expiresAt: Date, nowMs: number): IngestSessionState {
+    if (status === 'revoked') return 'revoked';
+    if (status === 'stopped') return 'stopped';
+    if (status === 'expired' || expiresAt.getTime() <= nowMs) return 'expired';
+    if (status === 'pending') return 'pending';
+    if (status === 'active') return 'active';
+    return 'closed';
 }
 
 function toRow(
@@ -139,11 +69,23 @@ function toRow(
     };
 }
 
+async function mirrorRedis(sessionId: string, total: number, batchId: string, expiresAt: Date, nowMs: number): Promise<void> {
+    const redis = diagRedis();
+    if (!redis) return;
+    const ttlSec = Math.max(60, Math.ceil((expiresAt.getTime() - nowMs) / 1000) + 3600);
+    try {
+        await redis.set(DIAG_KEYS.eventCount(sessionId), String(total), 'EX', ttlSec);
+        await redis.set(DIAG_KEYS.batch(sessionId, batchId), '1', 'EX', DIAG_LIMITS.batchDedupTtlSec);
+    } catch (err) {
+        logger.warn('[DIAG] redis mirror failed', (err as Error)?.message);
+    }
+}
+
 /**
- * Validates and durably stores one client batch. The returned acknowledgement
- * is only produced after the insert commits, so a client that deletes events
- * on ack can never lose them. Re-sent events are absorbed by the unique
- * (sessionId, eventId) index.
+ * Stores one batch only while the locked session row is active and the device
+ * is enrolled. Stop, expiry, revocation, and the event cap are decided inside
+ * the same transaction as the insert, so a concurrent stop cannot land after
+ * the check and before the write.
  */
 export async function ingestBatch(input: {
     envelope: BatchEnvelope;
@@ -152,14 +94,6 @@ export async function ingestBatch(input: {
 }): Promise<IngestResult> {
     const { envelope, deviceRef, nowMs } = input;
     const startedAt = Date.now();
-
-    const session = await getSessionSnapshot(envelope.sessionId);
-    if (!session) return { kind: 'gone', sessionState: 'missing' };
-
-    const closeAt = sessionCloseAt(session);
-    if (nowMs > closeAt + DIAG_LIMITS.uploadGraceMs) return { kind: 'gone', sessionState: 'closed' };
-    if (envelope.app.environment !== session.environment) return { kind: 'forbidden', reason: 'environment_mismatch' };
-
     const rejected: Array<{ eventId: string | null; reason: IngestRejectReason }> = [];
     const valid: NormalizedClientEvent[] = [];
     const seen = new Set<string>();
@@ -174,72 +108,114 @@ export async function ingestBatch(input: {
             continue;
         }
         seen.add(result.event.eventId);
-        if (result.event.wall > closeAt + DIAG_LIMITS.closeSkewAllowanceMs) {
-            rejected.push({ eventId: result.event.eventId, reason: 'recorded_after_close' });
-            continue;
-        }
         valid.push(result.event);
     }
 
-    const state = effectiveSessionState(session, nowMs);
-    const maxEvents = session.config.maxEvents;
+    const outcome = await prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<LockedSession[]>`
+            SELECT "id", "status", "environment", "config", "expiresAt"
+            FROM "diagnostic_sessions"
+            WHERE "id" = ${envelope.sessionId}
+            FOR UPDATE
+        `;
+        const session = locked[0];
+        if (!session) return { kind: 'gone' as const, sessionState: 'missing' as const };
+        if (session.environment !== envelope.app.environment) {
+            return { kind: 'forbidden' as const, reason: 'environment_mismatch' as const };
+        }
+        const state = acceptanceState(session.status, new Date(session.expiresAt), nowMs);
+        if (state !== 'active') return { kind: 'gone' as const, sessionState: state };
 
-    if (await isDuplicateBatch(session.id, envelope.batchId)) {
-        const current = await readEventCount(session, nowMs);
-        return {
-            kind: 'ok',
-            accepted: 0,
-            duplicates: valid.length,
-            rejected,
-            sessionState: current >= maxEvents ? 'capped' : state,
-            maxEventsRemaining: Math.max(0, maxEvents - current),
-        };
-    }
+        const device = await tx.diagnosticSessionDevice.findUnique({
+            where: { sessionId_deviceRef: { sessionId: session.id, deviceRef } },
+            select: { id: true },
+        });
+        if (!device) return { kind: 'forbidden' as const, reason: 'device_unauthorized' as const };
 
-    const current = await readEventCount(session, nowMs);
-    const remaining = Math.max(0, maxEvents - current);
-    let toInsert = valid;
-    if (valid.length > remaining) {
-        const ranked = [...valid].sort(
+        const parsedConfig = sessionConfigSchema.safeParse(session.config ?? {});
+        const maxEvents = parsedConfig.success ? parsedConfig.data.maxEvents : 0;
+        const closeAt = new Date(session.expiresAt).getTime();
+        const deferred: Array<{ eventId: string; reason: IngestRejectReason }> = [];
+        const fresh: NormalizedClientEvent[] = [];
+        for (const event of valid) {
+            if (event.wall > closeAt + DIAG_LIMITS.closeSkewAllowanceMs) {
+                deferred.push({ eventId: event.eventId, reason: 'recorded_after_close' });
+                continue;
+            }
+            fresh.push(event);
+        }
+
+        const storedBefore = await tx.diagnosticEvent.count({ where: { sessionId: session.id } });
+        if (storedBefore >= maxEvents) {
+            await tx.diagnosticSession.update({ where: { id: session.id }, data: { eventCount: storedBefore } });
+            return {
+                kind: 'ok' as const,
+                accepted: 0,
+                duplicates: 0,
+                deferred: [...deferred, ...fresh.map((event) => ({ eventId: event.eventId, reason: 'max_events' as const }))],
+                sessionState: 'capped' as const,
+                maxEventsRemaining: 0,
+                total: storedBefore,
+                expiresAt: new Date(session.expiresAt),
+            };
+        }
+
+        const room = Math.max(0, maxEvents - storedBefore);
+        const ranked = [...fresh].sort(
             (a, b) => (PRIORITY_RANK.get(a.priority) ?? 9) - (PRIORITY_RANK.get(b.priority) ?? 9) || a.seq - b.seq,
         );
-        toInsert = ranked.slice(0, remaining);
-        for (const dropped of ranked.slice(remaining)) {
-            rejected.push({ eventId: dropped.eventId, reason: 'max_events' });
+        const toInsert = ranked.slice(0, room);
+        deferred.push(...ranked.slice(room).map((event) => ({ eventId: event.eventId, reason: 'max_events' as const })));
+
+        let inserted = 0;
+        if (toInsert.length > 0) {
+            const result = await tx.diagnosticEvent.createMany({
+                data: toInsert.map((event) => toRow(session.id, deviceRef, event)),
+                skipDuplicates: true,
+            });
+            inserted = result.count;
         }
-    }
-
-    let inserted = 0;
-    if (toInsert.length > 0) {
-        const result = await prisma.diagnosticEvent.createMany({
-            data: toInsert.map((event) => toRow(session.id, deviceRef, event)),
-            skipDuplicates: true,
+        const total = await tx.diagnosticEvent.count({ where: { sessionId: session.id } });
+        const deviceTotal = await tx.diagnosticEvent.count({ where: { sessionId: session.id, deviceRef } });
+        await tx.diagnosticSession.update({ where: { id: session.id }, data: { eventCount: total } });
+        await tx.diagnosticSessionDevice.update({
+            where: { id: device.id },
+            data: { eventCount: deviceTotal, lastSeenAt: new Date(nowMs) },
         });
-        inserted = result.count;
-    }
-    await recordBatchAccepted(session, envelope.batchId, deviceRef, inserted, nowMs);
+        return {
+            kind: 'ok' as const,
+            accepted: inserted,
+            duplicates: toInsert.length - inserted,
+            deferred,
+            sessionState: total >= maxEvents ? ('capped' as const) : ('active' as const),
+            maxEventsRemaining: Math.max(0, maxEvents - total),
+            total,
+            expiresAt: new Date(session.expiresAt),
+        };
+    });
 
-    const remainingAfter = Math.max(0, remaining - inserted);
+    if (outcome.kind !== 'ok') return outcome;
+    rejected.push(...outcome.deferred);
+    await mirrorRedis(envelope.sessionId, outcome.total, envelope.batchId, outcome.expiresAt, nowMs);
     logger.info(
         `[DIAG] ${JSON.stringify({
             evt: 'ingest',
-            session: session.id.slice(0, 8),
+            session: envelope.sessionId.slice(0, 8),
             batch: envelope.batchId,
             events: envelope.events.length,
-            accepted: inserted,
-            duplicates: toInsert.length - inserted,
+            accepted: outcome.accepted,
+            duplicates: outcome.duplicates,
             rejected: rejected.length,
-            state,
+            state: outcome.sessionState,
             ms: Date.now() - startedAt,
         })}`,
     );
-
     return {
         kind: 'ok',
-        accepted: inserted,
-        duplicates: toInsert.length - inserted,
+        accepted: outcome.accepted,
+        duplicates: outcome.duplicates,
         rejected,
-        sessionState: remainingAfter <= 0 ? 'capped' : state,
-        maxEventsRemaining: remainingAfter,
+        sessionState: outcome.sessionState,
+        maxEventsRemaining: outcome.maxEventsRemaining,
     };
 }

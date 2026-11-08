@@ -60,7 +60,7 @@ export const DIAG_LIMITS = {
     maxMaxEvents: 50_000,
     defaultMaxDevices: 3,
     maxMaxDevices: 10,
-    /** Already-recorded events may still be uploaded this long after a session closes. */
+    /** Ingest tokens stay verifiable this long after expiry so the client receives a session rejection instead of a token error. Ingest itself does not accept events during this window. */
     uploadGraceMs: 24 * 60 * 60 * 1000,
     /** Device wall clocks drift; events stamped slightly after close are still accepted. */
     closeSkewAllowanceMs: 5 * 60 * 1000,
