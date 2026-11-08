@@ -72,6 +72,14 @@
         "simulator": false,
         "buildConfiguration": "Release"
       }
+    },
+    "diagnostic": {
+      "extends": "production",
+      "channel": "diagnostic",
+      "autoIncrement": false,
+      "env": {
+        "EXPO_PUBLIC_DIAGNOSTICS": "1"
+      }
     }
   },
   "submit": {
