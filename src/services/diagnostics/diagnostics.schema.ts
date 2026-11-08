@@ -12,18 +12,26 @@ import { DIAG_LIMITS } from './diagnostics.config';
 export const DIAG_SCHEMA_VERSION = 1;
 
 const SAFE_TEXT = /^[\w .:|+\-/()#@,]*$/;
+/** URL- or email-shaped values are refused even when every character is allowed. */
+const LOOKS_IDENTIFYING = /:\/\/|@[\w-]+\.|www\./i;
 const SAFE_ID = /^[\w\-:.]+$/;
 const SIGNATURE = /^[\w.|+\-:]*$/;
 
 const id = (max: number) => z.string().min(1).max(max).regex(SAFE_ID);
-const txt = (max: number) => z.string().max(max).regex(SAFE_TEXT);
+const txt = (max: number) =>
+    z
+        .string()
+        .max(max)
+        .regex(SAFE_TEXT)
+        .refine((value) => !LOOKS_IDENTIFYING.test(value), { message: 'identifying_text' });
 const sig = z.string().max(48).regex(SIGNATURE);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const epochMs = z.number().min(1_500_000_000_000).max(4_000_000_000_000);
 const durMs = z.number().min(0).max(7 * DAY_MS);
 const signedMs = z.number().min(-7 * DAY_MS).max(7 * DAY_MS);
-const monoMs = z.number().min(0).max(1e10);
+// iOS performance.now() counts from device boot, so allow years of uptime.
+const monoMs = z.number().min(0).max(1e11);
 const count = z.number().int().min(0).max(100_000_000);
 const minute = z.number().int().min(0).max(300);
 
@@ -96,6 +104,7 @@ const DATA_SCHEMAS: Record<ClientEventType, z.ZodType> = {
         sampling: z.record(id(32), z.number().min(0).max(1)).optional(),
         restoredEvents: count.optional(),
         expiresInMs: durMs.optional(),
+        seqStart: count.optional(),
     }),
     session_end: z.object({
         reason: z.enum(['expired', 'stopped', 'max_events', 'disabled', 'token_rejected', 'error']),
@@ -220,14 +229,18 @@ const DATA_SCHEMAS: Record<ClientEventType, z.ZodType> = {
         elapsed: minute.nullable().optional(),
         deltaMin: z.number().min(-300).max(300),
     }),
-    clock_offset_sample: z.object({
-        t0: epochMs,
-        t1: epochMs,
-        t2: epochMs,
-        t3: epochMs,
-        offsetMs: signedMs,
-        rttMs: durMs,
-    }),
+    clock_offset_sample: z.discriminatedUnion('kind', [
+        z.object({
+            kind: z.literal('sample'),
+            t0: epochMs,
+            t1: epochMs,
+            t2: epochMs,
+            t3: epochMs,
+            offsetMs: signedMs,
+            rttMs: durMs,
+        }),
+        z.object({ kind: z.literal('wall_jump'), wallJumpMs: signedMs }),
+    ]),
     queue_stats: z.object({
         size: count,
         persisted: count.optional(),
@@ -238,6 +251,7 @@ const DATA_SCHEMAS: Record<ClientEventType, z.ZodType> = {
         uploadedBatches: count.optional(),
         uploadedEvents: count.optional(),
         bytesUploaded: count.optional(),
+        rejected: count.optional(),
     }),
     diag_overhead: z.object({
         windowMs: durMs,

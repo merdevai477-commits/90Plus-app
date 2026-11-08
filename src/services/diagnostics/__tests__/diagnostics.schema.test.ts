@@ -94,6 +94,13 @@ describe('validateClientEvent', () => {
             ok: false,
             reason: 'invalid_data',
         });
+        for (const reason of ['someone@example.com', 'https://api.example.com/x', 'www.example.com']) {
+            expect(validateClientEvent(event('ws_state', { state: 'disconnect', reason }))).toMatchObject({
+                ok: false,
+                reason: 'invalid_data',
+            });
+        }
+        expect(validateClientEvent(event('ws_state', { state: 'disconnect', reason: 'transport close' })).ok).toBe(true);
         expect(validateClientEvent(event('js_stall', { host: 'sync', latenessMs: Infinity, expectedMs: 5000 }))).toMatchObject({
             ok: false,
             reason: 'invalid_data',
@@ -140,5 +147,22 @@ describe('validateClientEvent', () => {
         );
         expect(result.ok).toBe(true);
         if (result.ok) expect(result.event.data).not.toHaveProperty('message');
+    });
+
+    it('accepts both clock offset variants and requires the kind', () => {
+        const sample = { kind: 'sample', t0: WALL, t1: WALL + 40, t2: WALL + 41, t3: WALL + 80, offsetMs: 0.5, rttMs: 79 };
+        expect(validateClientEvent(event('clock_offset_sample', sample)).ok).toBe(true);
+        expect(validateClientEvent(event('clock_offset_sample', { kind: 'wall_jump', wallJumpMs: -3_600_000 })).ok).toBe(true);
+        const { kind: _kind, ...withoutKind } = sample;
+        expect(validateClientEvent(event('clock_offset_sample', withoutKind))).toMatchObject({ ok: false, reason: 'invalid_data' });
+        expect(validateClientEvent(event('clock_offset_sample', { kind: 'sample', wallJumpMs: 5 }))).toMatchObject({
+            ok: false,
+            reason: 'invalid_data',
+        });
+    });
+
+    it('accepts monotonic times from a device with long uptime', () => {
+        const uptimeMs = 200 * 24 * 60 * 60 * 1000;
+        expect(validateClientEvent(event('screen_focus', { focused: true }, { mono: uptimeMs })).ok).toBe(true);
     });
 });

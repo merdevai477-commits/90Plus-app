@@ -85,6 +85,7 @@ import {
 import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
 import { WidgetSyncBootstrap } from "../components/common/WidgetSyncBootstrap";
 import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
+import { DiagnosticsBootstrap } from "../components/common/DiagnosticsBootstrap";
 import { OtaPendingReloadGate } from "../components/common/OtaPendingReloadGate";
 import { FootballCacheEpochBootstrap } from "../components/common/FootballCacheEpochBootstrap";
 import { AppEngagementBootstrap } from "../components/common/AppEngagementBootstrap";
@@ -806,6 +807,7 @@ function RootLayout() {
                 <SentryUserTracker />
                 <QueryClientProvider client={queryClient}>
                   <OtaUpdateBootstrap />
+                  <DiagnosticsBootstrap />
                   <FootballCacheEpochBootstrap />
                   <PushNotificationSetup />
                   <PushRegistrationReportBootstrap />
