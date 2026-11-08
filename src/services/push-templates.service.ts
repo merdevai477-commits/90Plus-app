@@ -107,6 +107,8 @@ export type PushTemplateKey =
     | 'coverChangeBlockedBody'
     | 'mentionInVideoTitle'
     | 'mentionInVideoBody'
+    | 'reelMentionAllTitle'
+    | 'reelMentionAllBody'
     // Reel social interactions (likes / comments / replies / shares /
     // mentions in comments / comment-likes). Used by reels.routes.ts.
     | 'reelLikeTitle'
@@ -329,7 +331,9 @@ const en: TemplateMap = {
     coverChangeBlockedTitle: 'Cover image change',
     coverChangeBlockedBody: 'You cannot change your cover image right now.',
     mentionInVideoTitle: 'You were mentioned',
-    mentionInVideoBody: 'Someone mentioned you in a video.',
+    mentionInVideoBody: '{user} mentioned you in a video.',
+    reelMentionAllTitle: '📣 Mentioned everyone',
+    reelMentionAllBody: '{user}: {content}',
     // Reel social interactions
     reelLikeTitle: '❤️ Someone liked your reel',
     reelLikeTitleMany: '❤️ {count} likes on your reel',
@@ -559,7 +563,9 @@ const ar: TemplateMap = {
     coverChangeBlockedTitle: 'تغيير صورة الغلاف',
     coverChangeBlockedBody: 'لا يمكنك تغيير صورة الغلاف الآن.',
     mentionInVideoTitle: 'تم الإشارة إليك',
-    mentionInVideoBody: 'قام شخص بالإشارة إليك في فيديو.',
+    mentionInVideoBody: 'قام {user} بالإشارة إليك في فيديو.',
+    reelMentionAllTitle: '📣 منشن للكل',
+    reelMentionAllBody: '{user}: {content}',
     // تفاعلات الريلز
     reelLikeTitle: '❤️ أعجب بمقطعك',
     reelLikeTitleMany: '❤️ {count} إعجاب على مقطعك',

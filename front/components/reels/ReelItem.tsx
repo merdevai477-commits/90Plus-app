@@ -55,6 +55,7 @@ import {
 } from '../../utils/confirmExternalShare';
 import { toastManager } from '../../services/toastManager';
 import { SURFACE_MODAL, OVERLAY_SCRIM } from '../../constants/tokens';
+import { RichText } from '../community/RichText';
 
 interface ReelItemProps {
     reel: ReelData;
@@ -133,7 +134,6 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
     const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
     const [isPaused, setIsPaused] = useState(false);
-    const [bioExpanded, setBioExpanded] = useState(false);
     const lastTapRef = useRef(0);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -599,29 +599,22 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             <View style={styles.bioAccent} />
                             <View style={styles.bioContent}>
                                 {reel.description?.trim() ? (
-                                    <TouchableOpacity
-                                        activeOpacity={0.9}
-                                        onPress={() => {
-                                            if ((reel.description?.length || 0) > 90) {
-                                                haptics.lightImpact();
-                                                setBioExpanded((v) => !v);
-                                            }
+                                    <RichText
+                                        text={reel.description.trim()}
+                                        style={[styles.description, { textAlign: captionAlign }]}
+                                        align={captionAlign}
+                                        collapseAfterLines={2}
+                                        seeMoreLabel={language === 'en' ? 'Show more' : 'عرض المزيد'}
+                                        seeLessLabel={language === 'en' ? 'Show less' : 'عرض أقل'}
+                                        onHashtag={(tag) => {
+                                            haptics.lightImpact();
+                                            onHashtagPress?.(tag);
                                         }}
-                                    >
-                                        <Text
-                                            style={[styles.description, { textAlign: captionAlign }]}
-                                            numberOfLines={bioExpanded ? undefined : 2}
-                                        >
-                                            {reel.description.trim()}
-                                        </Text>
-                                        {(reel.description?.length || 0) > 90 ? (
-                                            <Text style={[styles.bioMore, { textAlign: captionAlign }]}>
-                                                {bioExpanded
-                                                    ? (language === 'en' ? 'Show less' : 'عرض أقل')
-                                                    : (language === 'en' ? 'Show more' : 'عرض المزيد')}
-                                            </Text>
-                                        ) : null}
-                                    </TouchableOpacity>
+                                        onMention={(username) => {
+                                            haptics.lightImpact();
+                                            onMentionPress?.(username);
+                                        }}
+                                    />
                                 ) : null}
 
                                 {reel.hashtags && reel.hashtags.length > 0 ? (

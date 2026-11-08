@@ -3130,7 +3130,7 @@ export const en = {
     uploadTitle: 'Upload New Reel 🎥',
     uploadPickVideo: 'Choose a video from gallery',
     uploadDurationHint: '(5-60 sec · max {max} MB)',
-    uploadCaptionPlaceholder: 'Write a caption... #hashtag',
+    uploadCaptionPlaceholder: 'Write a caption... #hashtag, @user, or @all',
     uploadPublishNow: 'Publish Now',
     uploadPreparing: 'Preparing...',
     uploadUploading: 'Uploading...',

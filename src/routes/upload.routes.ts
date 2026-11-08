@@ -35,8 +35,14 @@ import { strictLimiter } from '../middleware/rateLimit.middleware';
 import { ErrorCode, sendError as sendApiError, type ErrorCodeValue } from '../constants/errors';
 import { renderPushTemplate, getUserLanguage } from '../services/push-templates.service';
 import { WebSocketService } from '../services/websocket.service';
-import { notifyUser } from '../services/notify.service';
+import { notifyUser, notifyUsers } from '../services/notify.service';
 import { NotificationType } from '../services/notification.service';
+import {
+  extractHashtags,
+  extractMentions,
+  mentionsEveryone,
+} from '../services/community-text';
+import { consumeCommunityRate } from '../services/community-rate-limit.service';
 
 const router = Router();
 
@@ -819,6 +825,59 @@ router.post(
   },
 );
 
+const REEL_MENTION_ALL_PAGE = 500;
+
+async function broadcastReelMentionAll(input: {
+  actor: { id: string; username: string; displayName: string; avatar: string | null };
+  reelId: string;
+  snippet: string;
+  skip: Set<string>;
+}): Promise<void> {
+  let cursor: string | undefined;
+  let delivered = 0;
+  const authorName = input.actor.displayName || input.actor.username || '90Plus';
+
+  for (;;) {
+    const page = await prisma.user.findMany({
+      where: { isBanned: false, id: { notIn: [...input.skip] } },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: REEL_MENTION_ALL_PAGE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (!page.length) break;
+    cursor = page[page.length - 1]?.id;
+    const result = await notifyUsers(
+      page.map((u) => ({
+        userId: u.id,
+        type: NotificationType.MENTION,
+        titleKey: 'reelMentionAllTitle' as const,
+        bodyKey: 'reelMentionAllBody' as const,
+        vars: { user: authorName, content: input.snippet },
+        data: {
+          kind: 'reel',
+          screen: '/(tabs)/reels',
+          reelId: input.reelId,
+          entityId: input.reelId,
+          actorId: input.actor.id,
+          mentionAll: true,
+        },
+        idempotencyKey: `reel:all:${input.reelId}:${u.id}`,
+        actor: {
+          id: input.actor.id,
+          username: input.actor.username,
+          displayName: input.actor.displayName,
+          avatar: input.actor.avatar,
+        },
+      })),
+      { concurrency: 20 },
+    );
+    delivered += result.delivered;
+    if (page.length < REEL_MENTION_ALL_PAGE) break;
+  }
+  logger.info('[upload/reel] @all broadcast complete', { reelId: input.reelId, delivered });
+}
+
 /** Heavy Mux PUT + metadata — runs after HTTP response so mobile clients don't 499. */
 async function processReelMuxUploadInBackground(params: {
   userId: string;
@@ -831,6 +890,8 @@ async function processReelMuxUploadInBackground(params: {
   fileSizeMB: number;
   hashtags: string[];
   mentions: string[];
+  mentionEveryone: boolean;
+  caption: string | null;
   timezone: string;
   startTime: number;
 }): Promise<void> {
@@ -845,6 +906,8 @@ async function processReelMuxUploadInBackground(params: {
     fileSizeMB,
     hashtags,
     mentions,
+    mentionEveryone,
+    caption,
     timezone,
     startTime,
   } = params;
@@ -909,23 +972,66 @@ async function processReelMuxUploadInBackground(params: {
       await prisma.reelHashtag.create({ data: { reelId, hashtagId: hashtag.id } });
     }
 
-    for (const username of mentions) {
-      const mentionedUser = await prisma.user.findUnique({
-        where: { username: username.replace(/^@/, '') },
+    const actorRow = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, displayName: true, avatar: true },
+    });
+    const actor = actorRow
+      ? {
+          id: actorRow.id,
+          username: actorRow.username || 'user',
+          displayName: actorRow.displayName || actorRow.username || '90Plus',
+          avatar: actorRow.avatar,
+        }
+      : null;
+    const authorName = actor?.displayName || '90Plus';
+    const snippet = (caption || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const notified = new Set<string>([userId]);
+    const reserved = new Set(['all', 'everyone', 'الكل', 'الجميع']);
+
+    for (const raw of mentions) {
+      const username = raw.replace(/^@/, '').trim().toLowerCase();
+      if (!username || reserved.has(username)) continue;
+      const mentionedUser = await prisma.user.findFirst({
+        where: { username: { equals: username, mode: 'insensitive' } },
         select: { id: true },
       });
-      if (!mentionedUser) continue;
+      if (!mentionedUser || notified.has(mentionedUser.id)) continue;
+      notified.add(mentionedUser.id);
       await prisma.reelMention.create({ data: { reelId, mentionedUserId: mentionedUser.id } });
-      const lang = await getUserLanguage(mentionedUser.id);
-      await prisma.notification.create({
+      await notifyUser({
+        userId: mentionedUser.id,
+        type: NotificationType.MENTION,
+        titleKey: 'mentionInVideoTitle',
+        bodyKey: 'mentionInVideoBody',
+        vars: { user: authorName },
         data: {
-          userId: mentionedUser.id,
-          title: renderPushTemplate('mentionInVideoTitle', lang),
-          message: renderPushTemplate('mentionInVideoBody', lang),
-          type: 'GENERAL',
-          data: { reelId },
+          kind: 'reel',
+          screen: '/(tabs)/reels',
+          reelId,
+          entityId: reelId,
+          actorId: userId,
         },
+        idempotencyKey: `reel:mention:${reelId}:${mentionedUser.id}`,
+        actor: actor ?? undefined,
       });
+    }
+
+    if (mentionEveryone && actor) {
+      const rate = await consumeCommunityRate('mentionAll', userId);
+      if (!rate.allowed) {
+        logger.warn('[upload/reel] @all rate-limited — skipping broadcast', {
+          reelId,
+          retryAfterSec: rate.retryAfterSec,
+        });
+      } else {
+        await broadcastReelMentionAll({
+          actor,
+          reelId,
+          snippet: snippet || `@all`,
+          skip: notified,
+        });
+      }
     }
 
     await prisma.user.update({
@@ -1031,11 +1137,38 @@ router.post(
       let hashtags: string[] = [];
       let mentions: string[] = [];
       let caption: string | null = null;
+      let mentionEveryone = false;
       try {
         const { caption: c, hashtags: hj, mentions: mj } = req.body;
-        caption = c || null;
-        hashtags = hj ? (typeof hj === 'string' ? JSON.parse(hj) : hj) : [];
-        mentions = mj ? (typeof mj === 'string' ? JSON.parse(mj) : mj) : [];
+        caption = typeof c === 'string' && c.trim() ? c : null;
+        const captionText = caption || '';
+        mentionEveryone = mentionsEveryone(captionText);
+
+        const fromCaptionTags = extractHashtags(captionText);
+        const clientTags: string[] = hj ? (typeof hj === 'string' ? JSON.parse(hj) : hj) : [];
+        const tagSet = new Set<string>();
+        for (const tag of [...fromCaptionTags, ...clientTags]) {
+          const clean = String(tag || '')
+            .toLowerCase()
+            .replace(/^#/, '')
+            .trim();
+          if (clean) tagSet.add(clean);
+        }
+        hashtags = [...tagSet].slice(0, 10);
+
+        const fromCaptionMentions = extractMentions(captionText);
+        const clientMentions: string[] = mj ? (typeof mj === 'string' ? JSON.parse(mj) : mj) : [];
+        const mentionSet = new Set<string>();
+        const reserved = new Set(['all', 'everyone', 'الكل', 'الجميع']);
+        for (const name of [...fromCaptionMentions, ...clientMentions]) {
+          const clean = String(name || '')
+            .replace(/^@/, '')
+            .trim()
+            .toLowerCase();
+          if (!clean || reserved.has(clean) || clean.length < 2) continue;
+          mentionSet.add(clean);
+        }
+        mentions = [...mentionSet].slice(0, 10);
       } catch { /* non-fatal */ }
 
       // ── 2. Create placeholder reel (thumbnail from Mux auto-generated) ────────
@@ -1138,6 +1271,8 @@ router.post(
           fileSizeMB,
           hashtags,
           mentions,
+          mentionEveryone,
+          caption,
           timezone,
           startTime,
         });

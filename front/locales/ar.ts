@@ -3058,7 +3058,7 @@ export const ar = {
     uploadTitle: 'رفع ريلز جديد 🎥',
     uploadPickVideo: 'اختر فيديو من الاستوديو',
     uploadDurationHint: '(5-60 ثانية · حتى {max} ميجا)',
-    uploadCaptionPlaceholder: 'اكتب وصفاً للفيديو... #هاشتاج',
+    uploadCaptionPlaceholder: 'اكتب وصفاً... #هاشتاج أو @شخص أو @all',
     uploadPublishNow: 'نشر الآن',
     uploadPreparing: 'جاري التحضير...',
     uploadUploading: 'جاري الرفع...',

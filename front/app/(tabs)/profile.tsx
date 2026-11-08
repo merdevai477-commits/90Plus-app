@@ -1273,7 +1273,15 @@ function OwnProfileScreen() {
 
       const caption = newVideo.caption || '';
       const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
-      const mentions = caption.match(/@[\w]+/g) || [];
+      const reservedMentions = new Set(['all', 'everyone']);
+      const mentionMatches = [...caption.matchAll(/(^|[^\w.@])@([A-Za-z0-9_.]{2,30})/g)];
+      const mentions = [
+        ...new Set(
+          mentionMatches
+            .map((m) => m[2].replace(/\.+$/, '').toLowerCase())
+            .filter((name) => name.length >= 2 && !reservedMentions.has(name)),
+        ),
+      ];
 
       const syncReelProgress = (progress: number) => {
         const safeProgress = Math.min(Math.max(Math.round(progress), 0), 100);
