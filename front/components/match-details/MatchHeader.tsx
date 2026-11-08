@@ -11,6 +11,7 @@ import Animated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { useMatchStatusLine } from './useMatchStatusLine';
+import { isClockBaselineEnabled, noteDetailsHeaderRender } from '../../utils/clockBaseline';
 import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import {
   LIVE_RED,
@@ -148,6 +149,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   onPressAwayTeam,
   onPressLeague,
 }) => {
+  if (isClockBaselineEnabled()) noteDetailsHeaderRender();
   const {
     short,
     isLive,

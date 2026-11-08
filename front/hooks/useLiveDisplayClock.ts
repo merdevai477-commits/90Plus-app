@@ -9,6 +9,7 @@ import {
   type LiveDisplayClockInput,
 } from '../utils/liveDisplayClock';
 import { subscribeSharedSecondTicker } from '../components/Matches/sharedSecondTicker';
+import { isClockBaselineEnabled, noteClockHookRender, recordClockPresentation } from '../utils/clockBaseline';
 
 /**
  * Presentation hook: canonical live fields in, display label out.
@@ -23,6 +24,8 @@ export function useLiveDisplayClock(input: LiveDisplayClockInput): string {
   const [, setTick] = useState(0);
 
   const ticking = enabled && liveDisplayClockShouldTick(input);
+
+  if (isClockBaselineEnabled()) noteClockHookRender();
 
   useEffect(() => {
     if (!ticking) return;
@@ -69,10 +72,24 @@ export function useLiveDisplayClock(input: LiveDisplayClockInput): string {
     }
   }
 
+  const anchorMs = anchorRef.current ?? nowMs;
   const result = resolveLiveDisplayClock({
     ...input,
     nowMs,
-    anchorMs: anchorRef.current ?? nowMs,
+    anchorMs,
   });
+  if (isClockBaselineEnabled()) {
+    recordClockPresentation({
+      fixtureId: input.fixtureId,
+      anchorMs,
+      nowMs,
+      actualDisplaySeconds: result.displaySeconds,
+      input,
+      reanchored: next.reanchored,
+      reanchorReason: next.reason,
+      serverElapsed: input.elapsed ?? null,
+      statusShort: input.statusShort ?? null,
+    });
+  }
   return result.label;
 }

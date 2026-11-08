@@ -4,6 +4,7 @@
  */
 
 import { AppState, type NativeEventSubscription } from 'react-native';
+import { isClockBaselineEnabled, noteAppState, recordTickerSample } from '../../utils/clockBaseline';
 
 type TickListener = () => void;
 
@@ -13,6 +14,7 @@ let appStateSub: NativeEventSubscription | null = null;
 let intervalStartCount = 0;
 
 function notify(): void {
+  if (isClockBaselineEnabled()) recordTickerSample(listeners.size);
   for (const listener of listeners) listener();
 }
 
@@ -29,6 +31,7 @@ function stopInterval(): void {
 }
 
 function onAppState(next: string): void {
+  if (isClockBaselineEnabled()) noteAppState(next);
   if (listeners.size === 0) return;
   if (next === 'active') {
     notify();

@@ -1,6 +1,12 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
+import {
+  isClockBaselineEnabled,
+  noteListMinute,
+  noteListRowRender,
+  noteLiveRowMounted,
+} from '../../utils/clockBaseline';
 
 type MatchListLiveClockProps = {
   fixtureId: string;
@@ -38,6 +44,16 @@ export const MatchListLiveClock = memo(function MatchListLiveClock({
     fallbackLabel,
     showSeconds: false,
   });
+
+  if (isClockBaselineEnabled()) {
+    noteListRowRender();
+    noteListMinute(fixtureId, label, elapsed);
+  }
+
+  useEffect(() => {
+    if (!isClockBaselineEnabled()) return;
+    return noteLiveRowMounted(fixtureId);
+  }, [fixtureId]);
 
   return (
     <Text style={[style, inStoppage ? stoppageStyle : null]} numberOfLines={1}>

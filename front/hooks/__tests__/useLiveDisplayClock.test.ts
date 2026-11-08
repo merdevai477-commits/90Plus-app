@@ -5,6 +5,7 @@ jest.mock('../../utils/logger', () => ({
 import { act, renderHook } from '@testing-library/react-hooks';
 import * as grouping from '../../utils/matchesGrouping';
 import { useLiveDisplayClock } from '../useLiveDisplayClock';
+import { resetClockBaselineForTests } from '../../utils/clockBaseline';
 import {
   getSharedSecondTickerListenerCount,
   resetSharedSecondTickerForTests,
@@ -205,5 +206,22 @@ describe('useLiveDisplayClock HT lifecycle', () => {
       }),
     );
     expect(result.current).toBe("51'");
+  });
+
+  it('baseline recording does not change HT or open-play labels', () => {
+    process.env.EXPO_PUBLIC_CLOCK_BASELINE = '1';
+    try {
+      const { result, rerender } = renderHook(
+        (props: typeof liveInput) => useLiveDisplayClock(props),
+        { initialProps: liveInput },
+      );
+      expect(result.current).toBe('44:00');
+      rerender({ ...liveInput, statusShort: 'HT', elapsed: 45, fallbackLabel: 'HT' });
+      expect(result.current).toBe('HT');
+      expect(getSharedSecondTickerListenerCount()).toBe(0);
+    } finally {
+      delete process.env.EXPO_PUBLIC_CLOCK_BASELINE;
+      resetClockBaselineForTests();
+    }
   });
 });
