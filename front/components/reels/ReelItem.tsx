@@ -164,13 +164,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     useEffect(() => {
         if (!isActive) {
             setIsPaused(false);
-            setBioExpanded(false);
         }
     }, [isActive]);
-
-    useEffect(() => {
-        setBioExpanded(false);
-    }, [reel.id]);
 
     // Handle tap (single for pause, double for like)
     const handlePress = (event: any) => {
