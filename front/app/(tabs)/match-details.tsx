@@ -18,6 +18,8 @@ import {
 import { Text } from '../../components/match-details/MatchText';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
+import { diagFlags } from '../../services/diagnostics/diagnosticsState';
+import { recordDiagEvent } from '../../services/diagnostics/diagnosticsRecorder';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -275,8 +277,43 @@ const MatchDetailsScreen = () => {
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
     if (!fixtureId) return;
-    await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId, { pull: true });
+    const started = diagFlags.active ? Date.now() : 0;
+    let ok = true;
+    try {
+      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId, { pull: true });
+    } catch (error) {
+      ok = false;
+      throw error;
+    } finally {
+      if (started) {
+        recordDiagEvent('pull_refresh', {
+          screen: 'match_details',
+          fixtureId,
+          data: { tab: 'details', durationMs: Math.max(0, Date.now() - started), ok },
+        });
+      }
+    }
   }, [fixtureId]);
+
+  useEffect(() => {
+    recordDiagEvent('screen_focus', {
+      screen: 'match_details',
+      fixtureId: fixtureId > 0 ? fixtureId : null,
+      data: { focused: isFocused },
+    });
+  }, [isFocused, fixtureId]);
+
+  const detailsTabPrev = useRef(activeTab);
+  useEffect(() => {
+    if (detailsTabPrev.current === activeTab) return;
+    const from = detailsTabPrev.current;
+    detailsTabPrev.current = activeTab;
+    recordDiagEvent('category_switch', {
+      screen: 'match_details',
+      fixtureId: fixtureId > 0 ? fixtureId : null,
+      data: { from, to: activeTab },
+    });
+  }, [activeTab, fixtureId]);
   const { refreshing: pullRefreshing, onRefresh: onPullRefresh } = usePullToRefresh(runDetailsPull);
   const fixture = snapshot?.fixture ?? null;
   // Stable empties: a fresh `[]` per render made every effect keyed on these arrays

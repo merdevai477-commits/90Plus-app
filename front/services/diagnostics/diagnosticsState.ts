@@ -69,6 +69,8 @@ export const diagState = {
   onCritical: null as null | (() => void),
   onBatchReady: null as null | (() => void),
   onExpired: null as null | (() => void),
+  /** Pipeline and render windows flush here before a session stops recording. */
+  onFlushSurfaces: null as null | (() => void),
 };
 
 export function monoNow(): number {
@@ -104,4 +106,5 @@ export function resetDiagStateForTests(): void {
   diagState.onCritical = null;
   diagState.onBatchReady = null;
   diagState.onExpired = null;
+  diagState.onFlushSurfaces = null;
 }

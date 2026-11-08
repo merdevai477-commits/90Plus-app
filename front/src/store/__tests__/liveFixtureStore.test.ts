@@ -1,6 +1,7 @@
 import {
   applyWebSocketToFixture,
   buildSnapshotFromRaw,
+  getHttpIngestSkipReason,
   isValidStatusTransition,
   shouldSkipHttpIngest,
 } from '../liveFixtureSync';
@@ -181,6 +182,59 @@ describe('shouldSkipHttpIngest', () => {
     incoming.phase = 'live';
     incoming.lastSource = 'http-fast';
     expect(shouldSkipHttpIngest(current, incoming, Date.now())).toBe(true);
+  });
+
+  it('reports a reason exactly when the boolean skips', () => {
+    const finished = baseSnapshot(makeFixture(90, 'FT', 0, 2));
+    finished.phase = 'finished';
+    const revived = baseSnapshot(makeFixture(90, '2H', 0, 2));
+    revived.phase = 'live';
+
+    const wsDuringFetch = baseSnapshot(makeFixture(55, '2H', 2, 1));
+    wsDuringFetch.lastWsAppliedAt = 1000;
+    wsDuringFetch.lastSource = 'websocket';
+
+    const newerHttp = baseSnapshot(makeFixture(40, '2H', 0, 0));
+    newerHttp.lastSource = 'http-fast';
+    newerHttp.lastWsAppliedAt = null;
+    newerHttp.lastHttpFetchAt = 500;
+    const olderHttp = baseSnapshot(makeFixture(42, '2H', 1, 0));
+    olderHttp.lastSource = 'http-fast';
+
+    const minuteRegress = baseSnapshot(makeFixture(62, '2H', 1, 0));
+    minuteRegress.lastSource = 'websocket';
+    minuteRegress.lastWsAppliedAt = 10;
+    minuteRegress.lastHttpFetchAt = 0;
+    const goalRegress = baseSnapshot(makeFixture(60, '2H', 2, 1));
+    goalRegress.lastSource = 'websocket';
+    goalRegress.lastWsAppliedAt = 10;
+    goalRegress.lastHttpFetchAt = 0;
+    const freshHttp = baseSnapshot(makeFixture(50, '2H', 1, 0));
+    freshHttp.lastSource = 'http-fast';
+    freshHttp.lastWsAppliedAt = null;
+    freshHttp.lastHttpFetchAt = 50;
+
+    const cases: Array<[string, Parameters<typeof shouldSkipHttpIngest>]> = [
+      ['finished_phase', [finished, revived, Date.now()]],
+      ['ws_after_fetch_start', [wsDuringFetch, baseSnapshot(makeFixture(50, '2H', 1, 1)), 900]],
+      ['newer_http_response', [newerHttp, olderHttp, 100]],
+      ['elapsed_regression', [minuteRegress, baseSnapshot(makeFixture(58, '2H', 1, 0)), 50]],
+      ['goals_regression', [goalRegress, baseSnapshot(makeFixture(60, '2H', 1, 1)), 50]],
+      ['apply', [freshHttp, baseSnapshot(makeFixture(55, '2H', 2, 0)), 100]],
+    ];
+    const reasons = cases.map(([name, args]) => {
+      const reason = getHttpIngestSkipReason(...args);
+      expect(shouldSkipHttpIngest(...args)).toBe(reason !== null);
+      return [name, reason] as const;
+    });
+    expect(reasons).toEqual([
+      ['finished_phase', 'finished_phase'],
+      ['ws_after_fetch_start', 'ws_after_fetch_start'],
+      ['newer_http_response', 'newer_http_response'],
+      ['elapsed_regression', 'elapsed_regression'],
+      ['goals_regression', 'goals_regression'],
+      ['apply', null],
+    ]);
   });
 });
 

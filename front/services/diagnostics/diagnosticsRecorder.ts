@@ -83,3 +83,12 @@ export function isFixtureSampled(fixtureId: number | string, feature: 'pipeline'
 export function getDiagSessionHeader(): string | null {
   return diagFlags.active && diagState.session ? diagState.session.id : null;
 }
+
+/** Adds the session header only while a session is recording. Otherwise returns the same headers. */
+export function headersWithDiagSession(headers: HeadersInit | undefined): HeadersInit | undefined {
+  const session = getDiagSessionHeader();
+  if (!session) return headers;
+  const next = new Headers(headers);
+  if (!next.has('x-diag-session')) next.set('x-diag-session', session);
+  return next;
+}

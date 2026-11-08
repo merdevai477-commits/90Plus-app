@@ -417,30 +417,39 @@ export async function fetchEventsSnapshot(
   });
 }
 
+export type HttpIngestSkipReason =
+  | 'finished_phase'
+  | 'finished_status'
+  | 'ws_after_fetch_start'
+  | 'newer_http_response'
+  | 'elapsed_regression'
+  | 'goals_regression';
+
 /**
- * Skip applying an HTTP snapshot when WS or a newer HTTP response already owns live fields.
- * Called after the fetch resolves, using the snapshot state at ingest time.
+ * Why an HTTP snapshot must not be applied (WS or a newer HTTP response
+ * already owns live fields), or null to apply it. Called after the fetch
+ * resolves, using the snapshot state at ingest time.
  */
-export function shouldSkipHttpIngest(
+export function getHttpIngestSkipReason(
   current: LiveFixtureSnapshot | undefined,
   incoming: LiveFixtureSnapshot,
   fetchStartedAt: number,
-): boolean {
-  if (!current) return false;
+): HttpIngestSkipReason | null {
+  if (!current) return null;
 
   if (current.phase === 'finished' && incoming.phase !== 'finished') {
-    return true;
+    return 'finished_phase';
   }
   const curShort = current.fixture.fixture.status.short;
   const incShort = incoming.fixture.fixture.status.short;
   if (FINISHED_STATUS_SHORTS.has(curShort) && !FINISHED_STATUS_SHORTS.has(incShort)) {
-    return true;
+    return 'finished_status';
   }
 
-  if (current.lastSource === 'bootstrap') return false;
+  if (current.lastSource === 'bootstrap') return null;
 
   if (current.lastWsAppliedAt != null && current.lastWsAppliedAt >= fetchStartedAt) {
-    return true;
+    return 'ws_after_fetch_start';
   }
 
   if (
@@ -448,25 +457,33 @@ export function shouldSkipHttpIngest(
     current.lastHttpFetchAt > fetchStartedAt &&
     (incoming.lastSource === 'http-fast' || incoming.lastSource === 'http-full')
   ) {
-    return true;
+    return 'newer_http_response';
   }
 
   const wsFresh =
     current.lastSource === 'websocket' ||
     (current.lastWsAppliedAt ?? 0) > (current.lastHttpFetchAt ?? 0);
-  if (!wsFresh) return false;
+  if (!wsFresh) return null;
 
   if (curShort === incShort) {
     const curElapsed = current.fixture.fixture.status.elapsed ?? 0;
     const incElapsed = incoming.fixture.fixture.status.elapsed ?? 0;
-    if (incElapsed < curElapsed) return true;
+    if (incElapsed < curElapsed) return 'elapsed_regression';
   }
 
   const curGoals = (current.fixture.goals.home ?? 0) + (current.fixture.goals.away ?? 0);
   const incGoals = (incoming.fixture.goals.home ?? 0) + (incoming.fixture.goals.away ?? 0);
-  if (incGoals < curGoals) return true;
+  if (incGoals < curGoals) return 'goals_regression';
 
-  return false;
+  return null;
+}
+
+export function shouldSkipHttpIngest(
+  current: LiveFixtureSnapshot | undefined,
+  incoming: LiveFixtureSnapshot,
+  fetchStartedAt: number,
+): boolean {
+  return getHttpIngestSkipReason(current, incoming, fetchStartedAt) !== null;
 }
 
 /** Deterministic WS status transitions — always allow terminal / period changes. */

@@ -79,6 +79,17 @@ import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
 import { matchCardToApiFixture } from '../../utils/matchCardToApiFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { logger } from '../../utils/logger';
+import { isDiagnosticsCapableBuild } from '../../services/diagnostics/diagnosticsConfig';
+import { diagFlags, monoNow } from '../../services/diagnostics/diagnosticsState';
+import { isFixtureSampled, recordDiagEvent } from '../../services/diagnostics/diagnosticsRecorder';
+import { noteRowCommitForFixture } from '../../services/diagnostics/diagnosticsPipeline';
+import {
+  noteListCommit,
+  noteListLoad,
+  noteMatchRowDuration,
+  noteMatchRowRendered,
+  noteRowCommitCount,
+} from '../../services/diagnostics/diagnosticsRender';
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -428,6 +439,15 @@ const MatchRow = memo(function MatchRow({
   /** Ref-based mount visibility — drives viewport-scoped registerInterest. */
   onFixtureVisibility?: (fixtureId: number, visible: boolean) => void;
 }) {
+  const diagSample = diagFlags.render && isFixtureSampled(fixture.id, 'render');
+  const diagT0 = diagSample ? monoNow() : 0;
+  if (diagFlags.render) noteMatchRowRendered(fixture);
+  useEffect(() => {
+    if (!diagFlags.pipeline && !diagFlags.render) return;
+    noteRowCommitCount();
+    const id = parseInt(fixture.id, 10);
+    if (Number.isFinite(id) && id > 0) noteRowCommitForFixture(id, monoNow());
+  }, [fixture.id, fixture.statusShort, fixture.elapsed, fixture.extra, fixture.homeScore, fixture.awayScore]);
   const predictionEntry = predictedMatches[fixture.id];
   const existingPrediction = predictionEntry?.type ?? null;
   const isSubmitting = submittingId === fixture.id;
@@ -686,8 +706,13 @@ const MatchRow = memo(function MatchRow({
     </>
   );
 
+  const finishRow = (node: React.ReactElement) => {
+    if (diagT0) noteMatchRowDuration(monoNow() - diagT0);
+    return node;
+  };
+
   if (worldCupCard) {
-    return (
+    return finishRow(
       <View style={styles.wcMatchCard}>
         <LinearGradient
           colors={['rgba(168,85,247,0.16)', 'rgba(88,28,135,0.06)', 'transparent']}
@@ -736,7 +761,7 @@ const MatchRow = memo(function MatchRow({
     );
   }
 
-  return <View style={styles.rowWrapCol}>{rowContent}</View>;
+  return finishRow(<View style={styles.rowWrapCol}>{rowContent}</View>);
 });
 
 // ─── League All Matches Modal ─────────────────────────────────────────────────
@@ -1225,6 +1250,39 @@ export default function MatchesHubScreenV2() {
   // freezeOnBlur only stops rendering — timers keep running, so pause polling
   // and live interest explicitly while another screen (e.g. match details) is up.
   const isFocused = useIsFocused();
+  const detailsOpenedAtRef = useRef<number | null>(null);
+  const filterPrevRef = useRef(filter);
+  const datePrevRef = useRef(selectedDate.getTime());
+
+  useEffect(() => {
+    recordDiagEvent('screen_focus', { screen: 'matches', data: { focused: isFocused } });
+    if (!isFocused || detailsOpenedAtRef.current == null) return;
+    recordDiagEvent('details_return', {
+      screen: 'matches',
+      data: { durationMs: Math.max(0, Date.now() - detailsOpenedAtRef.current) },
+    });
+    detailsOpenedAtRef.current = null;
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (filterPrevRef.current === filter) return;
+    const from = filterPrevRef.current;
+    filterPrevRef.current = filter;
+    recordDiagEvent('category_switch', { screen: 'matches', data: { from, to: filter } });
+  }, [filter]);
+
+  useEffect(() => {
+    const next = selectedDate.getTime();
+    if (datePrevRef.current === next) return;
+    const fromDate = new Date(datePrevRef.current);
+    datePrevRef.current = next;
+    const day = (date: Date) => {
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const dateNum = String(date.getDate()).padStart(2, '0');
+      return `${date.getFullYear()}-${month}-${dateNum}`;
+    };
+    recordDiagEvent('category_switch', { screen: 'matches', data: { from: day(fromDate), to: day(selectedDate) } });
+  }, [selectedDate]);
 
   // Israeli leagues → Palestine for every viewer except profile country Israel.
   const viewerIsIsrael = useViewerIsIsrael();
@@ -1905,6 +1963,14 @@ export default function MatchesHubScreenV2() {
         }
       }
       setViewAllLeagueId(null);
+      if (diagFlags.active) {
+        detailsOpenedAtRef.current = Date.now();
+        recordDiagEvent('details_open', {
+          screen: 'matches',
+          fixtureId: Number.isFinite(id) && id > 0 ? id : null,
+          data: { source: 'list', live: fixture.live === true },
+        });
+      }
       router.push({
         pathname: '/(tabs)/match-details',
         params: {
@@ -2549,18 +2615,39 @@ export default function MatchesHubScreenV2() {
   );
 
   const onListPull = useCallback(async () => {
-    if (filter === 'WorldCup' && worldCupEnabled) {
-      await refetchWorldCup();
-      return;
+    const started = diagFlags.active ? Date.now() : 0;
+    let ok = true;
+    try {
+      if (filter === 'WorldCup' && worldCupEnabled) {
+        await refetchWorldCup();
+        return;
+      }
+      if (filter === 'Favorite') {
+        await Promise.all([refetch(), refreshNotified()]);
+        return;
+      }
+      await refetch();
+    } catch (error) {
+      ok = false;
+      throw error;
+    } finally {
+      if (started) {
+        recordDiagEvent('pull_refresh', {
+          screen: 'matches',
+          data: { tab: filter, durationMs: Math.max(0, Date.now() - started), ok },
+        });
+      }
     }
-    if (filter === 'Favorite') {
-      await Promise.all([refetch(), refreshNotified()]);
-      return;
-    }
-    await refetch();
   }, [filter, worldCupEnabled, refetchWorldCup, refetch, refreshNotified]);
 
   const { refreshing: listPullRefreshing, onRefresh: onListPullRefresh } = usePullToRefresh(onListPull);
+
+  const onDiagListLoad = useCallback((info: { elapsedTimeInMs: number }) => {
+    noteListLoad('matches', info.elapsedTimeInMs);
+  }, []);
+  const onDiagListCommit = useCallback(() => {
+    noteListCommit();
+  }, []);
 
   // Always attach RefreshControl on every page so swipe→settle never flips the
   // prop from undefined→element (iOS nested FlashList remount risk).
@@ -2593,6 +2680,8 @@ export default function MatchesHubScreenV2() {
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={emptyNodeFor(pageFilter)}
               refreshControl={refreshControl}
+              onLoad={isDiagnosticsCapableBuild() ? onDiagListLoad : undefined}
+              onCommitLayoutEffect={isDiagnosticsCapableBuild() ? onDiagListCommit : undefined}
             />
           </View>
         );
@@ -2613,6 +2702,8 @@ export default function MatchesHubScreenV2() {
               onChooseFavoriteTeam={() => router.push('/search' as any)}
               refreshControl={refreshControl}
               listStyle={styles.pagerList}
+              onLoad={isDiagnosticsCapableBuild() ? onDiagListLoad : undefined}
+              onCommitLayoutEffect={isDiagnosticsCapableBuild() ? onDiagListCommit : undefined}
             />
           </View>
         );
@@ -2632,6 +2723,8 @@ export default function MatchesHubScreenV2() {
             ListEmptyComponent={emptyNodeFor(pageFilter)}
             refreshControl={refreshControl}
             onLayout={MATCHES_PAGER_DIAG && pageFilter === 'Upcoming' ? onUpcomingListLayout : undefined}
+            onLoad={isDiagnosticsCapableBuild() ? onDiagListLoad : undefined}
+            onCommitLayoutEffect={isDiagnosticsCapableBuild() ? onDiagListCommit : undefined}
           />
         </View>
       );
@@ -2653,6 +2746,8 @@ export default function MatchesHubScreenV2() {
       renderCountryAccordion,
       pinnedHeaderFor,
       onUpcomingListLayout,
+      onDiagListLoad,
+      onDiagListCommit,
     ],
   );
 

@@ -214,6 +214,7 @@ function emitStats(mono: number): void {
 
 export function endDiagnosticsSession(reason: SessionEndReason): void {
   if (!diagState.recording || !diagState.session) return;
+  diagState.onFlushSurfaces?.();
   const session = diagState.session;
   diagState.closing = true;
   try {

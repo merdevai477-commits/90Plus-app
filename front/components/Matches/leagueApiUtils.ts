@@ -10,6 +10,9 @@ import { logger } from '../../utils/logger';
 import { abortAfterForegroundMs } from '../../utils/abortAfterForegroundMs';
 import { isAbortError } from '../../utils/isAbortError';
 import { getApiUrl } from '../../config/api.config';
+import { headersWithDiagSession } from '../../services/diagnostics/diagnosticsRecorder';
+import { diagFlags, monoNow } from '../../services/diagnostics/diagnosticsState';
+import { httpEndpointLabel, recordHttpFetch } from '../../services/diagnostics/diagnosticsPipeline';
 import { appendPullQuery } from '../../utils/pullRefreshQuery';
 import { appendCalendarTzQuery, calendarStorageKey } from '../../utils/calendarTimezone';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
@@ -38,12 +41,36 @@ const MATCH_FETCH_TIMEOUT_MS = 12_000;
 async function fetchJsonWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
   const cancelTimeout = abortAfterForegroundMs(controller, MATCH_FETCH_TIMEOUT_MS);
+  const trace = diagFlags.pipeline;
+  const started = trace ? monoNow() : 0;
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headersWithDiagSession({ 'Content-Type': 'application/json' }),
       signal: controller.signal,
     });
+    if (trace) {
+      const rawBytes = response.headers.get('content-length');
+      recordHttpFetch({
+        endpoint: httpEndpointLabel(url),
+        status: response.status,
+        durationMs: monoNow() - started,
+        ok: response.ok,
+        bytes: rawBytes != null && /^\d+$/.test(rawBytes) ? Number(rawBytes) : undefined,
+        xCache: response.headers.get('x-cache'),
+      });
+    }
+    return response;
+  } catch (error) {
+    if (trace) {
+      recordHttpFetch({
+        endpoint: httpEndpointLabel(url),
+        status: 0,
+        durationMs: monoNow() - started,
+        ok: false,
+      });
+    }
+    throw error;
   } finally {
     cancelTimeout();
   }

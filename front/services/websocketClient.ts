@@ -13,6 +13,7 @@ import { io, Socket } from 'socket.io-client';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { getWsUrl } from '../config/api.config';
 import { logger } from './logger';
+import { armWsMatchUpdate, clearWsArm, recordWsState } from './diagnostics/diagnosticsPipeline';
 import { WSPayload } from '@/types/websocket';
 
 // Re-export WSPayload for convenience
@@ -38,6 +39,13 @@ export interface WSMessage<T extends WSPayload = WSPayload> {
   type: WSEventType;
   payload: T;
   timestamp: number;
+  /** Present when the backend diagnostics trace is on. Older servers omit it. */
+  trace?: {
+    id?: string;
+    detectedAt?: number;
+    gen?: number;
+    instanceId?: string;
+  };
 }
 
 /**
@@ -262,6 +270,7 @@ class WebSocketClient {
 
     this.socket.on('connect', () => {
       logger.info('[WebSocket] Connected successfully');
+      recordWsState(this.reconnectAttempts > 0 ? 'reconnect' : 'connect');
       this.reconnectAttempts = 0;
 
       // Register user if userId is set
@@ -279,6 +288,7 @@ class WebSocketClient {
 
     this.socket.on('disconnect', (reason) => {
       logger.debug(`[WebSocket] Disconnected: ${reason}`);
+      recordWsState('disconnect', { reason: String(reason ?? '') });
       this.notifyConnectionState(false);
 
       if (!this.isManualDisconnect) {
@@ -287,6 +297,7 @@ class WebSocketClient {
     });
 
     this.socket.on('connect_error', (error) => {
+      recordWsState('connect_error', { reason: String(error?.message ?? '') });
       // ✅ Silent logging for localhost - don't spam console
       if (this.currentWsUrl?.includes('localhost') || this.currentWsUrl?.includes('127.0.0.1')) {
         logger.debug('[WebSocket] Connection error (localhost - backend not running)');
@@ -379,16 +390,20 @@ class WebSocketClient {
    */
   private handleEvent(eventType: WSEventType, message: WSMessage): void {
     logger.debug(`[WebSocket] Received ${eventType} event`);
-    
-    const listeners = this.eventListeners.get(eventType);
-    if (listeners) {
-      listeners.forEach(callback => {
-        try {
-          callback(message);
-        } catch (error) {
-          logger.error(`[WebSocket] Error in ${eventType} handler:`, error);
-        }
-      });
+    if (eventType === 'match_update') armWsMatchUpdate(message);
+    try {
+      const listeners = this.eventListeners.get(eventType);
+      if (listeners) {
+        listeners.forEach(callback => {
+          try {
+            callback(message);
+          } catch (error) {
+            logger.error(`[WebSocket] Error in ${eventType} handler:`, error);
+          }
+        });
+      }
+    } finally {
+      if (eventType === 'match_update') clearWsArm();
     }
   }
 
@@ -418,6 +433,7 @@ class WebSocketClient {
     }
 
     const delay = calculateBackoffDelay(this.reconnectAttempts, this.reconnectionConfig);
+    recordWsState('reconnect_attempt', { attempt: this.reconnectAttempts + 1 });
     logger.debug(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.reconnectionConfig.maxAttempts})`);
 
     // ✅ Clear any existing timer before creating new one

@@ -28,6 +28,9 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { overlaySnapshotsOnCalendarDetailed } from '../utils/overlaySnapshotsOnCalendar';
+import { diagFlags, monoNow } from '../services/diagnostics/diagnosticsState';
+import { noteOverlayForFixtures } from '../services/diagnostics/diagnosticsPipeline';
+import { noteGroupDuration, noteOverlayDuration, noteSelectorSample, shouldTimeSelector } from '../services/diagnostics/diagnosticsRender';
 import {
   isStaleUpcomingOnCalendar,
   pickMatchesListInterestIds,
@@ -218,6 +221,17 @@ function listOverlaySnapshotsEqual(
   a: Record<number, LiveFixtureSnapshot>,
   b: Record<number, LiveFixtureSnapshot>,
 ): boolean {
+  const sample = shouldTimeSelector();
+  const started = sample ? monoNow() : 0;
+  const equal = overlaySnapshotsEqual(a, b);
+  if (sample) noteSelectorSample(monoNow() - started);
+  return equal;
+}
+
+function overlaySnapshotsEqual(
+  a: Record<number, LiveFixtureSnapshot>,
+  b: Record<number, LiveFixtureSnapshot>,
+): boolean {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
@@ -326,10 +340,16 @@ export const useMatchesData = (
     listOverlaySnapshotsEqual,
   );
 
-  const overlayResult = useMemo(
-    () => overlaySnapshotsOnCalendarDetailed(calendarMatches, overlaySnapshots),
-    [calendarMatches, overlaySnapshots],
-  );
+  const overlayResult = useMemo(() => {
+    const started = diagFlags.pipeline || diagFlags.render ? monoNow() : 0;
+    const result = overlaySnapshotsOnCalendarDetailed(calendarMatches, overlaySnapshots);
+    if (started) {
+      const finished = monoNow();
+      if (diagFlags.render) noteOverlayDuration(finished - started);
+      if (diagFlags.pipeline) noteOverlayForFixtures(result.changedIds, finished);
+    }
+    return result;
+  }, [calendarMatches, overlaySnapshots]);
   const matches = overlayResult.rows;
   useRegisterLiveFixtures(
     pauseBackgroundRefresh || !isToday ? [] : registerInterestIds,
@@ -396,12 +416,14 @@ export const useMatchesData = (
     countryGroupsPrevRef.current = null;
   }, [dateString, viewerIsIsrael]);
   const countryGroups = useMemo(() => {
+    const started = diagFlags.render ? monoNow() : 0;
     const next = groupMatchesByCountryIncremental(
       matches,
       overlayResult.changedIds,
       countryGroupsPrevRef.current,
       { viewerIsIsrael },
     );
+    if (started) noteGroupDuration(monoNow() - started);
     countryGroupsPrevRef.current = next;
     return next;
   }, [matches, overlayResult.changedIds, viewerIsIsrael]);

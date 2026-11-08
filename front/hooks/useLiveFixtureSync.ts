@@ -10,6 +10,11 @@ import {
 import { logger } from '../utils/logger';
 import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
 import { addBreadcrumb } from '../services/sentry.service';
+import { diagFlags, diagState, monoNow } from '../services/diagnostics/diagnosticsState';
+import { diagnosticsHostTick } from '../services/diagnostics/diagnosticsSession';
+import { pipelineHostTick } from '../services/diagnostics/diagnosticsPipeline';
+import { renderHostTick } from '../services/diagnostics/diagnosticsRender';
+import { recordDiagEvent } from '../services/diagnostics/diagnosticsRecorder';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
@@ -46,6 +51,11 @@ export function useLiveFixtureSync(): void {
   const eventsPollInFlightRef = useRef(false);
 
   useEffect(() => {
+    diagState.onFlushSurfaces = () => {
+      const now = monoNow();
+      pipelineHostTick(now, true);
+      renderHostTick(now, true);
+    };
     const clearTrustTimer = () => {
       if (trustTimerRef.current) {
         clearTimeout(trustTimerRef.current);
@@ -162,18 +172,31 @@ export function useLiveFixtureSync(): void {
     const appStateRef = { current: AppState.currentState };
 
     const syncRooms = () => {
+      pipelineHostTick();
+      renderHostTick();
+      diagnosticsHostTick('sync', LIVE_FIXTURE_FAST_POLL_MS);
       const targets = new Set(useLiveFixtureStore.getState().getPollTargetIds());
+      let subscribed = 0;
+      let unsubscribed = 0;
       for (const id of targets) {
         if (!subscribedRoomsRef.current.has(id)) {
           websocketClient.subscribeToRoom(`match:${id}`);
           subscribedRoomsRef.current.add(id);
+          subscribed += 1;
         }
       }
       for (const id of [...subscribedRoomsRef.current]) {
         if (!targets.has(id)) {
           websocketClient.unsubscribeFromRoom(`match:${id}`);
           subscribedRoomsRef.current.delete(id);
+          unsubscribed += 1;
         }
+      }
+      if (diagFlags.pipeline && subscribed > 0) {
+        recordDiagEvent('room_sub', { data: { action: 'sub', roomCount: subscribedRoomsRef.current.size } });
+      }
+      if (diagFlags.pipeline && unsubscribed > 0) {
+        recordDiagEvent('room_sub', { data: { action: 'unsub', roomCount: subscribedRoomsRef.current.size } });
       }
     };
 
@@ -208,6 +231,9 @@ export function useLiveFixtureSync(): void {
     startPollIntervals();
 
     const sweepId = setInterval(() => {
+      pipelineHostTick();
+      renderHostTick();
+      diagnosticsHostTick('sweep', LIVE_FIXTURE_SWEEP_MS);
       useLiveFixtureStore.getState().sweepEvictions();
     }, LIVE_FIXTURE_SWEEP_MS);
 
@@ -249,6 +275,7 @@ export function useLiveFixtureSync(): void {
     });
 
     return () => {
+      if (diagState.onFlushSurfaces) diagState.onFlushSurfaces = null;
       unsubWs();
       unsubConnection();
       clearTrustTimer();

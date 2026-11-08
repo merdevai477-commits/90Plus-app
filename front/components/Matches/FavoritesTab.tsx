@@ -65,6 +65,8 @@ export interface FavoritesTabProps {
     refreshControl?: React.ReactElement<import('react-native').RefreshControlProps>;
     /** Optional FlashList style — used by the matches horizontal pager for a bounded height. */
     listStyle?: StyleProp<ViewStyle>;
+    onLoad?: (info: { elapsedTimeInMs: number }) => void;
+    onCommitLayoutEffect?: () => void;
 }
 
 function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label: string }) {
@@ -373,6 +375,8 @@ export default function FavoritesTab({
     onChooseFavoriteTeam,
     refreshControl,
     listStyle,
+    onLoad,
+    onCommitLayoutEffect,
 }: FavoritesTabProps) {
     const { t } = useTranslation();
     const chooseLabel =
@@ -482,6 +486,8 @@ export default function FavoritesTab({
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={listHeader ?? null}
             refreshControl={refreshControl}
+            onLoad={onLoad}
+            onCommitLayoutEffect={onCommitLayoutEffect}
             ListEmptyComponent={
                 empty ? (
                     <View style={styles.emptyWrap}>

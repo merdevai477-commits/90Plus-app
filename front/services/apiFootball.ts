@@ -24,6 +24,7 @@ import { detailsRequestGate } from './detailsRequestGate';
 import { acceptLanguageHeader, getAppLanguageCode } from '../utils/appLanguage';
 import { getCalendarTzParam } from '../utils/calendarTimezone';
 import { isAbortError } from '../utils/isAbortError';
+import { headersWithDiagSession } from './diagnostics/diagnosticsRecorder';
 
 export { isAbortError };
 
@@ -203,6 +204,7 @@ async function fetchWithSignal(
   try {
     const response = await fetch(input, {
       ...init,
+      headers: headersWithDiagSession(init.headers),
       signal: controller.signal,
     });
     return response;

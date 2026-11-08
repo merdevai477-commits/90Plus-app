@@ -8,8 +8,17 @@ import {
   fetchScoreSnapshot,
   fetchFullSnapshot,
   fetchEventsSnapshot,
+  getHttpIngestSkipReason,
   shouldSkipHttpIngest,
 } from './liveFixtureSync';
+import { diagFlags, monoNow } from '../../services/diagnostics/diagnosticsState';
+import {
+  peekWsCapture,
+  recordStoreOutcome,
+  type PipelineSource,
+  type WsCapture,
+} from '../../services/diagnostics/diagnosticsPipeline';
+import { fixtureSignature } from '../../services/diagnostics/diagnosticsPrivacy';
 import { hasApiStatistics } from '../../utils/matchStatsFallback';
 import { pickBetterLineups } from '../../utils/matchLineupsFallback';
 import { mergeFixtureEvents } from '../../utils/mergeFixtureEvents';
@@ -60,8 +69,23 @@ const wsEnsureInFlight = new Map<number, Promise<void>>();
 /** Latest WS payload to apply after ensureSnapshot fetch completes. */
 const pendingWsWhileEnsuring = new Map<
   number,
-  { update: MatchUpdatePayload; messageTimestamp: number }
+  { update: MatchUpdatePayload; messageTimestamp: number; capture: WsCapture | null }
 >();
+
+function fixtureSig(fixture: Fixture | null | undefined): string | undefined {
+  if (!fixture?.fixture?.status) return undefined;
+  return fixtureSignature({
+    status: fixture.fixture.status.short,
+    elapsed: fixture.fixture.status.elapsed,
+    extra: fixture.fixture.status.extra,
+    home: fixture.goals?.home,
+    away: fixture.goals?.away,
+  });
+}
+
+function interestedIn(get: StoreGetter, fixtureId: number): boolean {
+  return (get().interestCounts[fixtureId] ?? 0) > 0;
+}
 
 type StoreGetter = () => LiveFixtureStoreState;
 
@@ -72,7 +96,10 @@ function applyWebSocketPatch(
   update: MatchUpdatePayload,
   messageTimestamp: number,
   existing: LiveFixtureSnapshot,
+  capture: WsCapture | null = null,
 ): void {
+  const trace = diagFlags.pipeline;
+  const sigBefore = trace ? fixtureSig(existing.fixture) : undefined;
   const patchedFixture = applyWebSocketToFixture(existing, update);
   const mergedEvents =
     update.newEvents?.length
@@ -88,10 +115,51 @@ function applyWebSocketPatch(
     source: 'websocket',
     existing,
   });
-  if (!next) return;
+  if (!next) {
+    if (trace) {
+      recordStoreOutcome({
+        source: 'ws',
+        fixtureId,
+        decision: 'noop',
+        reason: 'build_failed',
+        sigBefore,
+        sigIn: capture?.sigIn ?? fixtureSig(patchedFixture) ?? 'NA|null|null|null-null',
+        recvWall: capture?.recvWall ?? messageTimestamp,
+        recvMono: capture?.recvMono ?? monoNow(),
+        interested: interestedIn(get, fixtureId),
+        serverEmitAt: capture?.serverEmitAt,
+        traceId: capture?.traceId,
+        detectedAt: capture?.detectedAt,
+        traceGen: capture?.traceGen,
+        instanceId: capture?.instanceId,
+      });
+    }
+    return;
+  }
 
   next.lastWsAppliedAt = messageTimestamp;
+  const before = get().snapshots[fixtureId];
   get().ingestSnapshot(next);
+  if (trace) {
+    const applied = get().snapshots[fixtureId] !== before;
+    recordStoreOutcome({
+      source: 'ws',
+      fixtureId,
+      decision: applied ? 'applied' : 'skipped',
+      reason: applied ? undefined : 'ingest_rejected',
+      sigBefore,
+      sigIn: capture?.sigIn ?? fixtureSig(patchedFixture) ?? sigBefore ?? 'NA|null|null|null-null',
+      sigAfter: fixtureSig(next.fixture),
+      recvWall: capture?.recvWall ?? messageTimestamp,
+      recvMono: capture?.recvMono ?? monoNow(),
+      interested: interestedIn(get, fixtureId),
+      serverEmitAt: capture?.serverEmitAt,
+      traceId: capture?.traceId,
+      detectedAt: capture?.detectedAt,
+      traceGen: capture?.traceGen,
+      instanceId: capture?.instanceId,
+    });
+  }
 
   if (update.status === 'HT' || update.status === 'FT') {
     void get().fetchAndIngestFull(fixtureId);
@@ -123,14 +191,15 @@ async function ensureSnapshotForWebSocket(
   fixtureId: number,
   update: MatchUpdatePayload,
   messageTimestamp: number,
+  capture: WsCapture | null,
 ): Promise<void> {
-  pendingWsWhileEnsuring.set(fixtureId, { update, messageTimestamp });
+  pendingWsWhileEnsuring.set(fixtureId, { update, messageTimestamp, capture });
 
   const existing = get().snapshots[fixtureId];
   if (existing) {
     const pending = pendingWsWhileEnsuring.get(fixtureId)!;
     pendingWsWhileEnsuring.delete(fixtureId);
-    applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, existing);
+    applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, existing, pending.capture);
     return;
   }
 
@@ -150,7 +219,7 @@ async function ensureSnapshotForWebSocket(
         }
 
         pendingWsWhileEnsuring.delete(fixtureId);
-        applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, snap);
+        applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, snap, pending.capture);
       }
     })().finally(() => {
       wsEnsureInFlight.delete(fixtureId);
@@ -270,6 +339,21 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
 
     if (decision.action === 'KEEP') return;
 
+    const tracePreview = (source: PipelineSource, snap: LiveFixtureSnapshot) => {
+      if (!diagFlags.pipeline) return;
+      recordStoreOutcome({
+        source,
+        fixtureId,
+        decision: 'applied',
+        sigBefore: fixtureSig(existing?.fixture),
+        sigIn: fixtureSig(snap.fixture) ?? 'NA|null|null|null-null',
+        sigAfter: fixtureSig(snap.fixture),
+        recvWall: Date.now(),
+        recvMono: monoNow(),
+        interested: interestedIn(get, fixtureId),
+      });
+    };
+
     if (!existing?.fixture) {
       const snap = buildSnapshotFromRaw({
         fixtureId,
@@ -277,7 +361,10 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
         events: [],
         source: 'bootstrap',
       });
-      if (snap) get().ingestSnapshot(snap);
+      if (snap) {
+        get().ingestSnapshot(snap);
+        tracePreview('bootstrap', snap);
+      }
       return;
     }
 
@@ -292,19 +379,23 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
       source: existing.lastSource,
       existing,
     });
-    if (snap) get().ingestSnapshot(snap);
+    if (snap) {
+      get().ingestSnapshot(snap);
+      tracePreview('calendar', snap);
+    }
   },
 
   patchFromWebSocket(update: MatchUpdatePayload, messageTimestamp: number) {
     const fixtureId = update.matchId;
+    const capture = diagFlags.pipeline ? peekWsCapture(fixtureId) : null;
     const existing = get().snapshots[fixtureId];
     if (!existing) {
       // One-shot fetch + apply WS — never registerInterest (no ref-count leak).
-      void ensureSnapshotForWebSocket(get, fixtureId, update, messageTimestamp);
+      void ensureSnapshotForWebSocket(get, fixtureId, update, messageTimestamp, capture);
       return;
     }
 
-    applyWebSocketPatch(get, fixtureId, update, messageTimestamp, existing);
+    applyWebSocketPatch(get, fixtureId, update, messageTimestamp, existing, capture);
   },
 
   async ensureSnapshot(fixtureId: number) {
@@ -315,6 +406,8 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
   async fetchAndIngestFast(fixtureId: number, options?: { includeEvents?: boolean }) {
     const existing = get().snapshots[fixtureId] ?? null;
     const startedAt = Date.now();
+    const trace = diagFlags.pipeline;
+    const startedMono = trace ? monoNow() : 0;
     const includeEvents = options?.includeEvents !== false;
 
     // Score-only list poll: never stampede /details for 365 rows with calendar data.
@@ -335,22 +428,55 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     if (!snapshot) return;
 
     const current = get().snapshots[fixtureId];
-    if (shouldSkipHttpIngest(current, snapshot, startedAt)) {
+    const skipReason = trace ? getHttpIngestSkipReason(current, snapshot, startedAt) : null;
+    const skip = trace ? skipReason !== null : shouldSkipHttpIngest(current, snapshot, startedAt);
+    if (skip) {
+      if (trace) {
+        recordStoreOutcome({
+          source: 'http_fast',
+          fixtureId,
+          decision: 'skipped',
+          reason: skipReason ?? undefined,
+          sigBefore: fixtureSig(current?.fixture),
+          sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+          recvWall: startedAt,
+          recvMono: startedMono,
+          interested: interestedIn(get, fixtureId),
+        });
+      }
       return;
     }
     get().ingestSnapshot(snapshot);
+    if (trace) {
+      recordStoreOutcome({
+        source: 'http_fast',
+        fixtureId,
+        decision: 'applied',
+        sigBefore: fixtureSig(current?.fixture),
+        sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+        sigAfter: fixtureSig(snapshot.fixture),
+        recvWall: startedAt,
+        recvMono: startedMono,
+        interested: interestedIn(get, fixtureId),
+      });
+    }
   },
 
   async fetchAndIngestFull(fixtureId: number, options?: { pull?: boolean }) {
     const existing = get().snapshots[fixtureId] ?? null;
     const startedAt = Date.now();
+    const trace = diagFlags.pipeline;
+    const startedMono = trace ? monoNow() : 0;
     const snapshot = await fetchFullSnapshot(fixtureId, existing, { pull: options?.pull === true });
     if (!snapshot) return;
 
     const current = get().snapshots[fixtureId];
-    if (shouldSkipHttpIngest(current, snapshot, startedAt)) {
+    const skipReason = trace ? getHttpIngestSkipReason(current, snapshot, startedAt) : null;
+    const skip = trace ? skipReason !== null : shouldSkipHttpIngest(current, snapshot, startedAt);
+    if (skip) {
+      let merged = false;
       if (current) {
-        const merged = buildSnapshotFromRaw({
+        const mergedSnap = buildSnapshotFromRaw({
           fixtureId,
           fixture: current.fixture,
           events: snapshot.events.length > 0 ? snapshot.events : current.events,
@@ -362,25 +488,60 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
           source: 'http-full',
           existing: current,
         });
-        if (merged) get().ingestSnapshot(merged);
+        if (mergedSnap) {
+          get().ingestSnapshot(mergedSnap);
+          merged = true;
+        }
+      }
+      if (trace) {
+        recordStoreOutcome({
+          source: 'http_full',
+          fixtureId,
+          decision: merged ? 'partial' : 'skipped',
+          reason: skipReason ?? undefined,
+          sigBefore: fixtureSig(current?.fixture),
+          sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+          sigAfter: merged ? fixtureSig(current?.fixture) : undefined,
+          recvWall: startedAt,
+          recvMono: startedMono,
+          interested: interestedIn(get, fixtureId),
+        });
       }
       return;
     }
     get().ingestSnapshot(snapshot);
+    if (trace) {
+      recordStoreOutcome({
+        source: 'http_full',
+        fixtureId,
+        decision: 'applied',
+        sigBefore: fixtureSig(current?.fixture),
+        sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+        sigAfter: fixtureSig(snapshot.fixture),
+        recvWall: startedAt,
+        recvMono: startedMono,
+        interested: interestedIn(get, fixtureId),
+      });
+    }
   },
 
   async fetchAndIngestEvents(fixtureId: number) {
     const existing = get().snapshots[fixtureId] ?? null;
     if (!existing?.fixture) return;
     const startedAt = Date.now();
+    const trace = diagFlags.pipeline;
+    const startedMono = trace ? monoNow() : 0;
     const snapshot = await fetchEventsSnapshot(fixtureId, existing);
     if (!snapshot || snapshot === existing) return;
 
     const current = get().snapshots[fixtureId];
-    if (shouldSkipHttpIngest(current, snapshot, startedAt)) {
+    const skipReason = trace ? getHttpIngestSkipReason(current, snapshot, startedAt) : null;
+    const skip = trace ? skipReason !== null : shouldSkipHttpIngest(current, snapshot, startedAt);
+    if (skip) {
       // Still merge newer events when WS owns the score clock.
+      let merged = false;
       if (current && snapshot.events.length > current.events.length) {
-        const merged = buildSnapshotFromRaw({
+        const mergedSnap = buildSnapshotFromRaw({
           fixtureId,
           fixture: current.fixture,
           events: snapshot.events,
@@ -390,14 +551,41 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
           source: 'http-fast',
           existing: current,
         });
-        if (merged) {
-          merged.lastWsAppliedAt = current.lastWsAppliedAt;
-          get().ingestSnapshot(merged);
+        if (mergedSnap) {
+          mergedSnap.lastWsAppliedAt = current.lastWsAppliedAt;
+          get().ingestSnapshot(mergedSnap);
+          merged = true;
         }
+      }
+      if (trace) {
+        recordStoreOutcome({
+          source: 'http_events',
+          fixtureId,
+          decision: merged ? 'partial' : 'skipped',
+          reason: skipReason ?? undefined,
+          sigBefore: fixtureSig(current?.fixture),
+          sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+          recvWall: startedAt,
+          recvMono: startedMono,
+          interested: interestedIn(get, fixtureId),
+        });
       }
       return;
     }
     get().ingestSnapshot(snapshot);
+    if (trace) {
+      recordStoreOutcome({
+        source: 'http_events',
+        fixtureId,
+        decision: 'applied',
+        sigBefore: fixtureSig(current?.fixture),
+        sigIn: fixtureSig(snapshot.fixture) ?? 'NA|null|null|null-null',
+        sigAfter: fixtureSig(snapshot.fixture),
+        recvWall: startedAt,
+        recvMono: startedMono,
+        interested: interestedIn(get, fixtureId),
+      });
+    }
   },
 
   async refreshInterestedLive() {
