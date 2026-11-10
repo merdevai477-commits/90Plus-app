@@ -100,7 +100,10 @@ function applyWebSocketPatch(
 ): void {
   const trace = diagFlags.pipeline;
   const sigBefore = trace ? fixtureSig(existing.fixture) : undefined;
-  const patchedFixture = applyWebSocketToFixture(existing, update);
+  const patchedFixture = applyWebSocketToFixture(existing, update, messageTimestamp);
+  if (patchedFixture === existing.fixture && !update.newEvents?.length) {
+    return;
+  }
   const mergedEvents =
     update.newEvents?.length
       ? mergeFixtureEvents(existing.events, update.newEvents)

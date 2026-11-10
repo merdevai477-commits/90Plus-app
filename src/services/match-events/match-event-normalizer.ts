@@ -16,10 +16,35 @@ export const NS_LIKE_STATUSES = new Set(['NS', 'TBD']);
 interface ApiFootballEvent {
     time: { elapsed?: number; extra?: number | null };
     team: { id: number; name: string };
-    player: { id: number | null; name: string | null };
+    player: { id: number | null; name: string | null; photo?: string | null };
     assist: { id: number | null; name: string | null };
     type: string;
     detail: string;
+}
+
+/** Scorer/card names that are placeholders, not a real player. */
+const PLACEHOLDER_PLAYER_NAME = /^(?:—|–|-|player|a player|لاعب|#?\d+)$/i;
+
+/** How long after the incident the provider may still attach the player. */
+const IDENTITY_MAX_LAG_MIN = 15;
+
+export function realPlayerName(name: string | null | undefined): string | null {
+    const trimmed = (name ?? '').replace(/\s+/g, ' ').trim();
+    if (trimmed.length < 2) return null;
+    if (PLACEHOLDER_PLAYER_NAME.test(trimmed)) return null;
+    return trimmed;
+}
+
+export function realPlayerPhoto(url: string | null | undefined): string | null {
+    const trimmed = (url ?? '').trim();
+    if (!trimmed.toLowerCase().startsWith('https://')) return null;
+    try {
+        const parsed = new URL(trimmed);
+        if (!parsed.hostname) return null;
+    } catch {
+        return null;
+    }
+    return trimmed;
 }
 
 interface ApiFootballFixture {
@@ -99,7 +124,12 @@ export function normalizeApiEvents(
             teamId,
             playerId,
             detectedAt: now,
-            payload: { api: event },
+            payload: {
+                api: event,
+                ...(realPlayerPhoto(event.player?.photo)
+                    ? { playerPhoto: realPlayerPhoto(event.player?.photo) }
+                    : {}),
+            },
             templateVars: {
                 player: event.player?.name || '',
                 playerIn: playerIn || '—',
@@ -125,6 +155,101 @@ export function normalizeApiEvents(
     }
 
     return out;
+}
+
+/**
+ * A second notification once the provider names the player. The immediate
+ * score goal is unchanged. Yellow cards are never pushed. Nothing is emitted
+ * without a real name and a real https photo, or when the incident is already
+ * old on the match clock.
+ */
+export function identityNotificationsFromTimeline(
+    fixtureId: number,
+    events: ApiFootballEvent[],
+    meta: { homeTeam: string; awayTeam: string },
+    clock: { homeScore: number; awayScore: number; elapsed: number | null },
+): NormalizedMatchEvent[] {
+    const now = new Date();
+    const out: NormalizedMatchEvent[] = [];
+
+    for (const event of events) {
+        const name = realPlayerName(event.player?.name);
+        const photo = realPlayerPhoto(event.player?.photo);
+        if (!name || !photo) continue;
+
+        const minute = event.time?.elapsed ?? null;
+        const extraMinute = event.time?.extra ?? null;
+        if (!isRecentIdentityIncident(minute, clock.elapsed)) continue;
+
+        const team = event.team?.name || '';
+        const playerId = event.player?.id ?? null;
+        const teamId = event.team?.id ?? null;
+        const kind = identityKind(event);
+        if (!kind) continue;
+
+        const eventKey = [
+            kind,
+            fixtureId,
+            playerId ?? name,
+            minute ?? '',
+            extraMinute ?? '',
+        ].join(':');
+
+        if (kind === 'goal_scorer') {
+            out.push({
+                fixtureId,
+                eventKey,
+                eventType: 'goal_scorer',
+                minute,
+                extraMinute,
+                teamId,
+                playerId,
+                detectedAt: now,
+                payload: {
+                    playerPhoto: photo,
+                    homeScore: clock.homeScore,
+                    awayScore: clock.awayScore,
+                },
+                templateVars: {
+                    player: name,
+                    team,
+                    home: meta.homeTeam,
+                    away: meta.awayTeam,
+                    homeScore: clock.homeScore,
+                    awayScore: clock.awayScore,
+                },
+                notificationType: NotificationType.MATCH_GOAL,
+                titleKey: 'goalScorerTitle',
+                bodyKey: 'goalScorerBody',
+                prefKey: 'matchGoals',
+                data: {
+                    type: 'MATCH_GOAL',
+                    eventKind: 'goal_scorer',
+                    player: name,
+                    playerPhoto: photo,
+                    homeTeam: meta.homeTeam,
+                    awayTeam: meta.awayTeam,
+                    homeScore: clock.homeScore,
+                    awayScore: clock.awayScore,
+                },
+            });
+        }
+    }
+
+    return out;
+}
+
+function identityKind(event: ApiFootballEvent): 'goal_scorer' | null {
+    if (event.type !== 'Goal') return null;
+    const detail = (event.detail || '').toLowerCase();
+    if (detail.includes('shootout') || detail.includes('missed')) return null;
+    return 'goal_scorer';
+}
+
+function isRecentIdentityIncident(minute: number | null, elapsed: number | null): boolean {
+    if (minute == null || minute <= 0 || elapsed == null) return false;
+    if (minute > elapsed) return false;
+    return elapsed - minute <= IDENTITY_MAX_LAG_MIN;
 }
 
 type MatchClock = { minute: number | null; extra: number | null };

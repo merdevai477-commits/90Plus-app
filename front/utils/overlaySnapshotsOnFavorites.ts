@@ -98,6 +98,62 @@ function withAuthoritativeFavoritesMinute(row: FavoritesListFixture): FavoritesL
  * Overlay liveFixtureStore snapshots onto Favorites list rows.
  * Unchanged rows keep the same object reference.
  */
+export type FavoriteLiveFields = {
+  homeScore: number;
+  awayScore: number;
+  status: FavoritesListFixture['status'];
+  live?: boolean;
+  statusShort?: string;
+  elapsed?: number | null;
+  extra?: number | null;
+  minute?: string;
+};
+
+/**
+ * Bell and followed-team rows are stored without a live score or clock.
+ * The matches list already has both. Copy them when the list is ahead:
+ * a minute arrived, the score moved, or the match finished.
+ */
+export function overlayLiveListOnFavorites(
+  rows: FavoritesListFixture[],
+  liveById: Record<string, FavoriteLiveFields>,
+): FavoritesListFixture[] {
+  if (rows.length === 0 || Object.keys(liveById).length === 0) return rows;
+
+  let anyChanged = false;
+  const next = rows.map((row) => {
+    const live = liveById[row.id];
+    if (!live) return row;
+    const liveGoals = (live.homeScore ?? 0) + (live.awayScore ?? 0);
+    const rowGoals = row.homeScore + row.awayScore;
+    const clockArrived = live.elapsed != null && row.elapsed == null;
+    const scoreArrived = liveGoals > rowGoals;
+    const finishedArrived = live.status === 'FT' && row.status !== 'FT';
+    if (!clockArrived && !scoreArrived && !finishedArrived) return row;
+
+    const minute =
+      live.status === 'FT'
+        ? undefined
+        : formatLiveMinuteDisplay(live.statusShort ?? '', live.elapsed, live.extra) ??
+          live.minute ??
+          row.minute;
+    anyChanged = true;
+    return {
+      ...row,
+      homeScore: clockArrived || scoreArrived ? live.homeScore : row.homeScore,
+      awayScore: clockArrived || scoreArrived ? live.awayScore : row.awayScore,
+      status: finishedArrived ? 'FT' : live.status === 'LIVE' ? 'LIVE' : row.status,
+      live: finishedArrived ? false : (live.live ?? live.status === 'LIVE'),
+      statusShort: live.statusShort ?? row.statusShort,
+      elapsed: live.elapsed ?? row.elapsed,
+      extra: live.extra ?? row.extra,
+      minute,
+    };
+  });
+
+  return anyChanged ? next : rows;
+}
+
 export function overlaySnapshotsOnFavorites(
   rows: FavoritesListFixture[],
   snapshots: Record<number, LiveFixtureSnapshot>,

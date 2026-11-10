@@ -34,6 +34,10 @@ import {
     type FavoritesListFixture,
 } from '../../hooks/useFavoritesFeed';
 import { useFavoritesLiveOverlay } from '../../hooks/useFavoritesLiveOverlay';
+import {
+    overlayLiveListOnFavorites,
+    type FavoriteLiveFields,
+} from '../../utils/overlaySnapshotsOnFavorites';
 import type { StoredFollowedTeam } from '../../src/storage/teamFavorites.storage';
 import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
 import type { StoredFavoriteMatch } from '../../src/storage/matchFavorites.storage';
@@ -43,6 +47,7 @@ import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import { getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
+const EMPTY_LIVE_BY_ID: Record<string, FavoriteLiveFields> = {};
 
 type ListRow =
     | { type: 'section'; id: string; title: string }
@@ -55,6 +60,8 @@ export interface FavoritesTabProps {
     followedTeams: StoredFollowedTeam[];
     followedLeagues?: StoredFollowedLeague[];
     notifiedMatches: StoredFavoriteMatch[];
+    /** Score and clock from the matches list, keyed by fixture id. */
+    liveById?: Record<string, FavoriteLiveFields>;
     loading?: boolean;
     headerOffset: number;
     listHeader?: React.ReactElement | null;
@@ -156,10 +163,12 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
     team,
     renderFixture,
     onOpenTeam,
+    liveById,
 }: {
     team: StoredFollowedTeam;
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
     onOpenTeam?: (team: StoredFollowedTeam) => void;
+    liveById: Record<string, FavoriteLiveFields>;
 }) {
     const [expanded, setExpanded] = useState(false);
     const [diskFixtures, setDiskFixtures] = useState<FavoritesListFixture[]>([]);
@@ -184,7 +193,11 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
         return diskFixtures;
     }, [matchesQ.data, diskFixtures]);
 
-    const fixtures = useFavoritesLiveOverlay(baseFixtures);
+    const storeFixtures = useFavoritesLiveOverlay(baseFixtures);
+    const fixtures = useMemo(
+        () => overlayLiveListOnFavorites(storeFixtures, liveById),
+        [storeFixtures, liveById],
+    );
 
     const leagueGroups = useMemo(() => groupFixturesByLeague(fixtures), [fixtures]);
 
@@ -332,12 +345,18 @@ const LeagueFavoriteRow = memo(function LeagueFavoriteRow({
 const NotifiedFavoriteBlock = memo(function NotifiedFavoriteBlock({
     match,
     renderFixture,
+    liveById,
 }: {
     match: StoredFavoriteMatch;
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
+    liveById: Record<string, FavoriteLiveFields>;
 }) {
     const base = useMemo(() => [storedMatchToListFixture(match)], [match]);
-    const fixtures = useFavoritesLiveOverlay(base);
+    const storeFixtures = useFavoritesLiveOverlay(base);
+    const fixtures = useMemo(
+        () => overlayLiveListOnFavorites(storeFixtures, liveById),
+        [storeFixtures, liveById],
+    );
     const fixture = fixtures[0] ?? base[0];
 
     const interestIds = useMemo(() => {
@@ -366,6 +385,7 @@ export default function FavoritesTab({
     followedTeams,
     followedLeagues = [],
     notifiedMatches,
+    liveById = EMPTY_LIVE_BY_ID,
     loading,
     headerOffset,
     listHeader,
@@ -447,7 +467,11 @@ export default function FavoritesTab({
             }
             if (item.type === 'notified') {
                 return (
-                    <NotifiedFavoriteBlock match={item.match} renderFixture={renderFixture} />
+                    <NotifiedFavoriteBlock
+                        match={item.match}
+                        renderFixture={renderFixture}
+                        liveById={liveById}
+                    />
                 );
             }
             if (item.type === 'league') {
@@ -462,10 +486,11 @@ export default function FavoritesTab({
                     team={item.team}
                     renderFixture={renderFixture}
                     onOpenTeam={onOpenTeam}
+                    liveById={liveById}
                 />
             );
         },
-        [onOpenTeam, onOpenLeague, onChooseFavoriteTeam, chooseLabel, renderFixture],
+        [onOpenTeam, onOpenLeague, onChooseFavoriteTeam, chooseLabel, renderFixture, liveById],
     );
 
     const empty = !loading && rows.length === 0;

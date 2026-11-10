@@ -267,6 +267,10 @@ class LiveFixtureSyncService {
                     status,
                     fixture.fixture?.status?.elapsed ?? null,
                 );
+                // The live loop never saw the FT transition, so the end push
+                // has to be scheduled from the terminal snapshot. The ingestor
+                // sends it only when someone still follows this match.
+                LiveMatchIngestorService.triggerFixtureIngest(id);
                 const key = calendarDateFromKickoff(fixture.fixture?.date ?? null);
                 if (key) dateKeys.add(key);
             }

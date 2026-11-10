@@ -13,6 +13,27 @@ import { MATCH_PUSH_EVENT_KINDS } from './match-event.types';
 /** Only these live-match events trigger push/inbox notifications. */
 const PUSH_NOTIFIABLE_MATCH_EVENTS = new Set<MatchEventKind>(MATCH_PUSH_EVENT_KINDS);
 
+/**
+ * Kickoff, HT, second half, and full time are match-phase changes.
+ * Their minute is a label (45 / 90), not a timeline position, so the
+ * wall-clock subscribe filter and the catch-up window must not drop them.
+ * `isStatusEventObsolete` still blocks phases the follower already passed.
+ */
+/**
+ * Named-player follow-ups. The match minute is not a wall-clock offset, so the
+ * subscribe-minute filter must not drop a scorer whose name arrives in the
+ * second half. Historical rows are still rejected by the catch-up window and
+ * by the incident-age check that creates these events.
+ */
+const IDENTITY_PLAYER_EVENTS = new Set<MatchEventKind>(['goal_scorer']);
+
+const STATUS_PHASE_EVENTS = new Set<MatchEventKind>([
+    'kickoff',
+    'halftime',
+    'second_half_start',
+    'fulltime',
+]);
+
 export function isPushNotifiableMatchEvent(event: NormalizedMatchEvent): boolean {
     return PUSH_NOTIFIABLE_MATCH_EVENTS.has(event.eventType);
 }
@@ -45,6 +66,17 @@ export function shouldDeliverToSubscription(
         return false;
     }
 
+    if (IDENTITY_PLAYER_EVENTS.has(event.eventType)) {
+        if (isCatchUpReplayEvent(sub, event)) return false;
+        return true;
+    }
+
+    if (STATUS_PHASE_EVENTS.has(event.eventType)) {
+        if (event.eventType === 'kickoff' && sub.notifiedStart) return false;
+        if (event.eventType === 'fulltime' && sub.notifiedEnd) return false;
+        return true;
+    }
+
     if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
         return !isBaselinedGoal(sub, event);
     }
@@ -60,9 +92,6 @@ export function shouldDeliverToSubscription(
     if (event.minute != null && event.minute > 0) {
         if (isEventBeforeSubscribeMinute(sub, event.minute)) return false;
     }
-
-    if (event.eventType === 'kickoff' && sub.notifiedStart) return false;
-    if (event.eventType === 'fulltime' && sub.notifiedEnd) return false;
 
     return true;
 }

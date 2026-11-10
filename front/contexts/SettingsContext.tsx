@@ -176,12 +176,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [isLoaded, isSignedIn, i18nInitialized, i18nLanguage, getToken]);
 
-  // Sync settings to backend whenever they change (debounce could be added here)
+  // Sync settings to backend whenever they change (debounce could be added here).
+  // Wait until i18n has loaded. The store's first value is English, and writing
+  // that would make Arabic users receive English match pushes.
   useEffect(() => {
-    if (!loading && !settings.isFirstLaunch) {
-      syncSettingsToBackend(settings);
-    }
-  }, [settings]);
+    if (loading || settings.isFirstLaunch || !i18nInitialized) return;
+    syncSettingsToBackend({ ...settings, language: i18nLanguage });
+  }, [settings, loading, i18nInitialized, i18nLanguage]);
 
   const syncSettingsToBackend = async (currentSettings: SettingsState) => {
     try {

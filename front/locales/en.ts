@@ -3741,6 +3741,8 @@ export const en = {
     matchStartTitle: '⚽ Match started',
     matchStartBody: '{home} vs {away} — the match has started',
     goalTitle: '⚽ Goal!',
+    goalScorerTitle: '⚽ {player}',
+    goalScorerBody: '{player} scored — {home} {homeScore}-{awayScore} {away}',
     goalBody: '{player} scores for {team} ({minute}\')',
     goalScoreBody: '{home} {homeScore}-{awayScore} {away}',
     goalCancelledTitle: '🚫 Goal cancelled',

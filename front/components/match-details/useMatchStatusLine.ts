@@ -5,7 +5,6 @@ import {
   resolveLiveMinuteLabel,
 } from '../../components/Matches/leagueApiUtils';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
-import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
 
 const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
@@ -87,19 +86,17 @@ export function useMatchStatusLine({
   // the existing minute or status label.
   const clockActive = isLive && !isStoppage && !isHalftime;
 
-  const anchoredStart = useAnchoredPeriodStart(
-    clockAnchorKey,
-    short,
-    elapsed,
-    startTimestamp,
-  );
+  const apiPeriodStart =
+    elapsed == null && startTimestamp != null ? startTimestamp : undefined;
 
   const minuteLabel =
-    resolveLiveMinuteLabel(short, elapsed, {
-      startTimestamp: clockActive ? anchoredStart : undefined,
-      extra: stoppage,
-    }) ??
-    (isLive ? short || liveLabel : '');
+    elapsed == null && apiPeriodStart == null
+      ? (isLive ? short || liveLabel : '')
+      : resolveLiveMinuteLabel(short, elapsed, {
+          startTimestamp: apiPeriodStart,
+          extra: stoppage,
+        }) ??
+        (isLive ? short || liveLabel : '');
 
   const liveClock = useLiveDisplayClock({
     fixtureId: clockAnchorKey != null ? String(clockAnchorKey) : '',
@@ -107,6 +104,7 @@ export function useMatchStatusLine({
     elapsed,
     extra: stoppage,
     fallbackLabel: minuteLabel,
+    showSeconds: false,
   });
 
   const statusLine = isLive

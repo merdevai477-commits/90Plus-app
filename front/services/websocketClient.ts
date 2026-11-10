@@ -228,13 +228,22 @@ class WebSocketClient {
    * Requirement 21.1: Establish WebSocket connection
    */
   connect(userId?: string): void {
+    // A new intentional connection must be allowed to reconnect. Explicit
+    // disconnect() sets isDestroyed; leaving it set made attemptReconnect a no-op.
+    this.isDestroyed = false;
+    this.isManualDisconnect = false;
+    if (userId) this.userId = userId;
+    this.setupNetInfoListener();
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     if (this.socket?.connected) {
       logger.debug('[WebSocket] Already connected');
       return;
     }
-
-    this.isManualDisconnect = false;
-    this.userId = userId || null;
 
     const wsUrl = getWsUrl();
     this.currentWsUrl = wsUrl;
@@ -247,6 +256,7 @@ class WebSocketClient {
     
     logger.info(`[WebSocket] Connecting to ${wsUrl}`);
 
+    this.detachSocket(this.socket);
     this.socket = io(wsUrl, {
       transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
       autoConnect: true,
@@ -259,16 +269,26 @@ class WebSocketClient {
       withCredentials: true, // Include credentials for CORS
     });
 
-    this.setupEventHandlers();
+    this.setupEventHandlers(this.socket);
+  }
+
+  /** Drop listeners before disconnect so a stale socket cannot reconnect. */
+  private detachSocket(socket: Socket | null): void {
+    if (!socket) return;
+    socket.removeAllListeners();
+    socket.disconnect();
+  }
+
+  private isCurrentSocket(socket: Socket): boolean {
+    return this.socket === socket;
   }
 
   /**
    * Setup socket event handlers
    */
-  private setupEventHandlers(): void {
-    if (!this.socket) return;
-
-    this.socket.on('connect', () => {
+  private setupEventHandlers(socket: Socket): void {
+    socket.on('connect', () => {
+      if (!this.isCurrentSocket(socket)) return;
       logger.info('[WebSocket] Connected successfully');
       recordWsState(this.reconnectAttempts > 0 ? 'reconnect' : 'connect');
       this.reconnectAttempts = 0;
@@ -286,7 +306,8 @@ class WebSocketClient {
       this.notifyConnectionState(true);
     });
 
-    this.socket.on('disconnect', (reason) => {
+    socket.on('disconnect', (reason) => {
+      if (!this.isCurrentSocket(socket)) return;
       logger.debug(`[WebSocket] Disconnected: ${reason}`);
       recordWsState('disconnect', { reason: String(reason ?? '') });
       this.notifyConnectionState(false);
@@ -296,7 +317,8 @@ class WebSocketClient {
       }
     });
 
-    this.socket.on('connect_error', (error) => {
+    socket.on('connect_error', (error) => {
+      if (!this.isCurrentSocket(socket)) return;
       recordWsState('connect_error', { reason: String(error?.message ?? '') });
       // ✅ Silent logging for localhost - don't spam console
       if (this.currentWsUrl?.includes('localhost') || this.currentWsUrl?.includes('127.0.0.1')) {
@@ -362,7 +384,8 @@ class WebSocketClient {
     });
 
     // Suppress generic error events (they're noisy in development)
-    this.socket.on('error', (error) => {
+    socket.on('error', (error) => {
+      if (!this.isCurrentSocket(socket)) return;
       logger.debug('[WebSocket] Socket error:', error);
     });
 
@@ -379,7 +402,8 @@ class WebSocketClient {
     ];
 
     eventTypes.forEach(eventType => {
-      this.socket?.on(eventType, (message: WSMessage) => {
+      socket.on(eventType, (message: WSMessage) => {
+        if (!this.isCurrentSocket(socket)) return;
         this.handleEvent(eventType, message);
       });
     });
@@ -478,17 +502,37 @@ class WebSocketClient {
       this.netInfoUnsubscribe = null;
     }
 
-    // ✅ Disconnect socket
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    // Detach before disconnect so this socket's close event cannot reconnect.
+    const current = this.socket;
+    this.socket = null;
+    this.detachSocket(current);
 
-    // Clear userId to prevent stale registration on reconnect
-    this.userId = null;
+    // Keep userId and room subscriptions so the next connect() can restore them.
     this.reconnectAttempts = 0;
-    this.subscribedRooms.clear();
     logger.info('[WebSocket] Disconnected and destroyed');
+  }
+
+  /**
+   * After retries are exhausted, or the socket is down with no backoff pending,
+   * start one fresh connection. Called when the app returns to the foreground.
+   */
+  resumeIfNeeded(): void {
+    if (this.isDestroyed || this.isManualDisconnect) return;
+    if (this.socket?.connected) return;
+    const exhausted = this.reconnectAttempts >= this.reconnectionConfig.maxAttempts;
+    const backoffPending = this.reconnectTimer != null && !exhausted;
+    if (backoffPending) return;
+
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.socket) {
+      this.socket.connect();
+      return;
+    }
+    this.connect(this.userId || undefined);
   }
 
   /**

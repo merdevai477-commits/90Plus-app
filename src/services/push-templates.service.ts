@@ -178,6 +178,8 @@ export type PushTemplateKey =
     // Live match events
     | 'matchYellowCardTitle'
     | 'matchRedCardTitle'
+    | 'goalScorerTitle'
+    | 'goalScorerBody'
     | 'matchCardBody'
     | 'matchCardPlayerFallback'
     | 'leagueMatchSoonTitle'
@@ -408,6 +410,8 @@ const en: TemplateMap = {
     // Live match events (cards / kickoff / reminders)
     matchYellowCardTitle: '🟨 Yellow card!',
     matchRedCardTitle: '🟥 Red card!',
+    goalScorerTitle: '⚽ {player}',
+    goalScorerBody: '{player} scored — {home} {homeScore}-{awayScore} {away}',
     matchCardBody: '{player} ({team})',
     matchCardPlayerFallback: 'A player',
     leagueMatchSoonTitle: '⏰ Match starting soon!',
@@ -640,6 +644,8 @@ const ar: TemplateMap = {
     // أحداث المباراة (بطاقات / تذكير / بدء)
     matchYellowCardTitle: '🟨 بطاقة صفراء!',
     matchRedCardTitle: '🟥 بطاقة حمراء!',
+    goalScorerTitle: '⚽ {player}',
+    goalScorerBody: '{player} أحرز الهدف — {home} {homeScore}-{awayScore} {away}',
     matchCardBody: '{player} ({team})',
     matchCardPlayerFallback: 'لاعب',
     leagueMatchSoonTitle: '⏰ مباراة قريبًا!',

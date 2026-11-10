@@ -149,6 +149,8 @@ export class WebSocketService {
     private static io: Server | null = null;
     private static userSockets: Map<string, Set<string>> = new Map(); // userId -> Set of socketIds
     private static socketUsers: Map<string, string> = new Map(); // socketId -> userId
+    /** Last emitted match_update, replayed to a socket that subscribes after a gap. */
+    private static lastMatchUpdates = new Map<number, { update: MatchUpdatePayload; timestamp: number }>();
 
     /**
      * Initialize WebSocket server with HTTP server
@@ -220,8 +222,7 @@ export class WebSocketService {
 
             // Handle room subscriptions (e.g., for match updates)
             socket.on('subscribe', (room: string) => {
-                socket.join(room);
-                logger.debug(`Socket ${socket.id} joined room: ${room}`);
+                WebSocketService.handleRoomSubscribe(socket, room);
             });
 
             socket.on('unsubscribe', (room: string) => {
@@ -322,7 +323,13 @@ export class WebSocketService {
     /**
      * Send event to a specific room (e.g., match room for live updates)
      */
-    static sendToRoom<T>(room: string, event: WSEventType, data: T, trace?: WSMessage['trace']): void {
+    static sendToRoom<T>(
+        room: string,
+        event: WSEventType,
+        data: T,
+        trace?: WSMessage['trace'],
+        timestamp: number = Date.now(),
+    ): void {
         if (!this.io) {
             logger.warn('WebSocket server not initialized, cannot send to room');
             return;
@@ -331,7 +338,7 @@ export class WebSocketService {
         const message: WSMessage<T> = {
             type: event,
             payload: data,
-            timestamp: Date.now(),
+            timestamp,
             ...(trace ? { trace } : {}),
         };
 
@@ -418,6 +425,22 @@ export class WebSocketService {
      * Send match update to subscribed users
      * Requirements: 21.5
      */
+    /** Join a room and replay the last match payload to that socket only. */
+    static handleRoomSubscribe(socket: Socket, room: string): void {
+        socket.join(room);
+        logger.debug(`Socket ${socket.id} joined room: ${room}`);
+        if (typeof room !== 'string' || !room.startsWith('match:')) return;
+        const matchId = Number(room.slice('match:'.length));
+        if (!Number.isFinite(matchId)) return;
+        const last = this.lastMatchUpdates.get(matchId);
+        if (!last) return;
+        socket.emit('match_update', {
+            type: 'match_update',
+            payload: last.update,
+            timestamp: last.timestamp,
+        });
+    }
+
     static sendMatchUpdate(matchId: number, update: MatchUpdatePayload, trace?: WSMessage['trace']): void {
         // TEMP [LAG-AUDIT]: emit time vs payload minute. Gated by LAG_AUDIT=1.
         lagAudit('ws_emit', {
@@ -431,7 +454,9 @@ export class WebSocketService {
             ? { traceId: trace.id, gen: trace.gen, detectedAt: trace.detectedAt, instanceId: trace.instanceId }
             : {}),
         });
-        this.sendToRoom(`match:${matchId}`, 'match_update', update, trace);
+        const timestamp = Date.now();
+        this.lastMatchUpdates.set(matchId, { update, timestamp });
+        this.sendToRoom(`match:${matchId}`, 'match_update', update, trace, timestamp);
     }
 
     /**

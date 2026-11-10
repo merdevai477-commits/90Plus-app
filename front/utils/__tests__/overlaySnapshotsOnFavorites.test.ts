@@ -8,6 +8,7 @@ import type { LiveFixtureSnapshot } from '../../src/store/liveFixtureStore.types
 import {
   clockFromFavoritesListFixture,
   favoritesRowFromSnapshot,
+  overlayLiveListOnFavorites,
   overlaySnapshotsOnFavorites,
 } from '../overlaySnapshotsOnFavorites';
 
@@ -291,6 +292,43 @@ describe('overlaySnapshotsOnFavorites', () => {
     });
     const out = overlaySnapshotsOnFavorites([row], { 22: snap });
     expect(out[0]).toBe(row);
+  });
+});
+
+describe('overlayLiveListOnFavorites', () => {
+  it('copies the matches-list score and minute onto a bell row that only has 0-0 and 1H', () => {
+    const row = makeRow({ id: '88', homeScore: 0, awayScore: 0, elapsed: null, minute: undefined, statusShort: '1H' });
+    const [next] = overlayLiveListOnFavorites([row], {
+      '88': {
+        homeScore: 2,
+        awayScore: 1,
+        status: 'LIVE',
+        live: true,
+        statusShort: '1H',
+        elapsed: 23,
+        extra: null,
+      },
+    });
+    expect(next.homeScore).toBe(2);
+    expect(next.awayScore).toBe(1);
+    expect(next.elapsed).toBe(23);
+    expect(next.minute).toBe("23'");
+  });
+
+  it('does not replace a newer favorites score with an older 0-0 list row', () => {
+    const row = makeRow({ id: '88', homeScore: 1, awayScore: 0, elapsed: 30, minute: "30'" });
+    const [next] = overlayLiveListOnFavorites([row], {
+      '88': {
+        homeScore: 0,
+        awayScore: 0,
+        status: 'LIVE',
+        live: true,
+        statusShort: '1H',
+        elapsed: 12,
+        extra: null,
+      },
+    });
+    expect(next).toBe(row);
   });
 });
 

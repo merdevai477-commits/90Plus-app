@@ -9,6 +9,7 @@ import { appendMatchEventsToStream } from './match-event-stream.adapter';
 import {
     normalizeApiEvents,
     diffScoreGoals,
+    identityNotificationsFromTimeline,
     diffStatusEvents,
     getCachedFixtureState,
     setCachedFixtureState,
@@ -131,6 +132,13 @@ export class MatchEventIngestor {
                 });
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));
+                    normalized.push(
+                        ...identityNotificationsFromTimeline(fixtureId, apiEvents, meta, {
+                            homeScore: snapshot.homeScore,
+                            awayScore: snapshot.awayScore,
+                            elapsed: snapshot.elapsed,
+                        }),
+                    );
                 }
             }
 

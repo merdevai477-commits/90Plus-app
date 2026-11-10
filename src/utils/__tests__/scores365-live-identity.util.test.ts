@@ -192,6 +192,29 @@ describe('coerceAllScoresLiveStatus', () => {
     expect(coerced.fixture.status.short).toBe('2H');
   });
 
+  it('keeps an explicit finished text when statusGroup is still 3', () => {
+    const fixture = {
+      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 90, extra: null } },
+    };
+    expect(
+      coerceAllScoresLiveStatus(fixture, {
+        statusGroup: 3,
+        statusText: 'Ended',
+        shortStatusText: 'FT',
+        gameTime: 90,
+        gameTimeDisplay: 'FT',
+      }).fixture.status.short,
+    ).toBe('FT');
+    expect(
+      coerceAllScoresLiveStatus(fixture, {
+        statusGroup: 3,
+        statusText: 'انتهت المباراة',
+        shortStatusText: 'FT',
+        gameTime: 90,
+      }).fixture.status.short,
+    ).toBe('FT');
+  });
+
   it('keeps a plain 90\' row in 2H instead of finishing it', () => {
     const fixture = {
       fixture: { status: { short: '2H', long: 'Second Half', elapsed: 90, extra: null } },

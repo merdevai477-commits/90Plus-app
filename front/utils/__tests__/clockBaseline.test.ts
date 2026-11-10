@@ -203,15 +203,8 @@ describe('clockBaseline', () => {
         fallbackLabel: "46'",
       }),
     );
-    expect(result.current).toBe('45:00');
-    const clock = events().find((event) => event.type === 'clock');
-    expect(clock).toMatchObject({
-      fixtureId: '4812183',
-      actualDisplaySeconds: 45 * 60,
-      expectedDisplaySeconds: 45 * 60,
-      driftMs: 0,
-      serverElapsed: 46,
-    });
+    expect(result.current).toBe("46'");
+    expect(result.current).not.toMatch(/:/);
     setClockBaselineFocusedFixtureForTests(undefined);
     jest.useRealTimers();
   });

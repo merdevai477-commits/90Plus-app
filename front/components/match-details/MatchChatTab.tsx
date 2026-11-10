@@ -26,7 +26,6 @@ import {
   isLiveStoppage,
   resolveLiveMinuteLabel,
 } from '../Matches/leagueApiUtils';
-import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
 import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import { useTranslation } from '../../src/i18n';
@@ -397,18 +396,16 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
   const isStoppage = isLive && isLiveStoppage(short, summary.elapsed, summary.stoppage);
 
   const clockActive = isLive && !isStoppage && !isHalftime;
-  const anchoredStart = useAnchoredPeriodStart(
-    summary.clockAnchorKey,
-    short,
-    summary.elapsed,
-    summary.startTimestamp,
-  );
+  const apiPeriodStart =
+    summary.elapsed == null && summary.startTimestamp != null ? summary.startTimestamp : undefined;
   const minuteLabel =
-    resolveLiveMinuteLabel(short, summary.elapsed, {
-      startTimestamp: clockActive ? anchoredStart : undefined,
-      extra: summary.stoppage,
-    }) ??
-    (isLive ? short || summary.liveLabel || 'LIVE' : '');
+    summary.elapsed == null && apiPeriodStart == null
+      ? (isLive ? short || summary.liveLabel || 'LIVE' : '')
+      : resolveLiveMinuteLabel(short, summary.elapsed, {
+          startTimestamp: apiPeriodStart,
+          extra: summary.stoppage,
+        }) ??
+        (isLive ? short || summary.liveLabel || 'LIVE' : '');
 
   const liveClock = useLiveDisplayClock({
     fixtureId: summary.clockAnchorKey != null ? String(summary.clockAnchorKey) : '',
@@ -416,6 +413,7 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
     elapsed: summary.elapsed,
     extra: summary.stoppage,
     fallbackLabel: minuteLabel,
+    showSeconds: false,
   });
 
   const statusLine = isLive

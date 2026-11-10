@@ -73,6 +73,26 @@ describe('mapScores365Events', () => {
     expect(events[0].assist).toEqual({ id: 11, name: 'Assist' });
   });
 
+  it('attaches a headshot only when the scorer has an athlete id', () => {
+    const events = mapScores365Events(
+      gameWithEvents(
+        [
+          {
+            competitorId: 1,
+            gameTime: 16,
+            playerId: 10,
+            eventType: { id: 1, name: 'Goal', subTypeName: 'Field Goal' },
+          },
+        ],
+        [{ id: 10, competitorId: 1, athleteId: 501, imageVersion: 4, name: 'Scorer One', shortName: 'Scorer' }],
+      ),
+      baseFixture,
+    );
+
+    expect(events[0].player.photo).toContain('/Athletes/501');
+    expect(events[0].player.photo).toContain('v4/');
+  });
+
   it('maps own goals from subTypeName', () => {
     const events = mapScores365Events(
       gameWithEvents(

@@ -15,6 +15,7 @@ import { diagnosticsHostTick } from '../services/diagnostics/diagnosticsSession'
 import { pipelineHostTick } from '../services/diagnostics/diagnosticsPipeline';
 import { renderHostTick } from '../services/diagnostics/diagnosticsRender';
 import { recordDiagEvent } from '../services/diagnostics/diagnosticsRecorder';
+import { allTargetsSynced, resyncFixtureSnapshots } from '../src/store/liveFixtureResync';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
@@ -49,6 +50,8 @@ export function useLiveFixtureSync(): void {
   const lastFocusedEventsAtRef = useRef(0);
   /** Prevents stacking overlapping focused /events polls for one fixture. */
   const eventsPollInFlightRef = useRef(false);
+  const syncInFlightRef = useRef(new Set<number>());
+  const syncedFixturesRef = useRef(new Set<number>());
 
   useEffect(() => {
     diagState.onFlushSurfaces = () => {
@@ -237,22 +240,50 @@ export function useLiveFixtureSync(): void {
       useLiveFixtureStore.getState().sweepEvictions();
     }, LIVE_FIXTURE_SWEEP_MS);
 
+    const resyncVisibleFixtures = async () => {
+      const targets = useLiveFixtureStore.getState().getPollTargetIds();
+      for (const id of targets) {
+        if (!subscribedRoomsRef.current.has(id)) {
+          websocketClient.subscribeToRoom(`match:${id}`);
+          subscribedRoomsRef.current.add(id);
+        }
+      }
+      const focusedId = useLiveFixtureStore.getState().focusedFixtureId;
+      const synced = await resyncFixtureSnapshots(
+        targets,
+        (id) =>
+          useLiveFixtureStore.getState().fetchAndIngestFast(id, {
+            includeEvents: focusedId != null && id === focusedId,
+          }),
+        syncInFlightRef.current,
+      );
+      for (const id of synced) syncedFixturesRef.current.add(id);
+      const current = useLiveFixtureStore.getState().getPollTargetIds();
+      if (websocketClient.isConnected() && allTargetsSynced(current, syncedFixturesRef.current)) {
+        wsTrustedRef.current = true;
+        logger.debug('[LiveFixtureSync] Snapshots applied — suspending HTTP live polls');
+      }
+    };
+
     const unsubConnection = websocketClient.subscribeConnectionState((connected) => {
       if (connected) {
         const isReconnect = !wasConnectedRef.current;
         wasConnectedRef.current = true;
         clearTrustTimer();
-        // Reconcile silently if we just came back from disconnect.
+        // Connected is not synchronized. Keep polls until fresh snapshots land.
+        wsTrustedRef.current = false;
         if (isReconnect) {
-          logger.debug('[LiveFixtureSync] WS reconnect — WS patches will reconcile scores');
+          logger.debug('[LiveFixtureSync] WS reconnect — requesting authoritative snapshots');
+          void resyncVisibleFixtures();
+        } else {
+          trustTimerRef.current = setTimeout(() => {
+            void resyncVisibleFixtures();
+          }, WS_TRUST_DEBOUNCE_MS);
         }
-        trustTimerRef.current = setTimeout(() => {
-          wsTrustedRef.current = true;
-          logger.debug('[LiveFixtureSync] WS trusted — suspending HTTP live polls');
-        }, WS_TRUST_DEBOUNCE_MS);
       } else {
         wasConnectedRef.current = false;
         clearTrustTimer();
+        syncedFixturesRef.current.clear();
         const wasTrusted = wsTrustedRef.current;
         wsTrustedRef.current = false;
         logger.debug('[LiveFixtureSync] WS down — resuming HTTP live polls');
@@ -267,6 +298,7 @@ export function useLiveFixtureSync(): void {
       const wasBg = /inactive|background/.test(appStateRef.current);
       appStateRef.current = next;
       if (next === 'active' && wasBg) {
+        websocketClient.resumeIfNeeded();
         void pollTickRef.current();
         startPollIntervals();
       } else if (next !== 'active') {

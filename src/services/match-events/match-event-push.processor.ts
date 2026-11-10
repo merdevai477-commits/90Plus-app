@@ -30,6 +30,7 @@ const TIMED_EVENT_KINDS: ReadonlySet<MatchEventKind> = new Set([
     'goal_away',
     'goal_cancelled',
     'card_red',
+    'goal_scorer',
     'var',
 ]);
 

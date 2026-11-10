@@ -1,3 +1,10 @@
+jest.mock('../../notification.service', () => ({
+    NotificationType: new Proxy(
+        {},
+        { get: (_target, prop) => (typeof prop === 'string' ? prop : undefined) },
+    ),
+}));
+
 import {
     isBaselinedGoal,
     isEventBeforeSubscribeMinute,
@@ -185,6 +192,43 @@ describe('shouldDeliverToSubscription mid-match follow', () => {
         expect(shouldDeliverToSubscription(sub, event({ eventType: 'halftime' }))).toBe(false);
         expect(
             shouldDeliverToSubscription(sub, event({ eventType: 'second_half_start' })),
+        ).toBe(false);
+    });
+
+    it('delivers full time after a second-half follow even when the wall clock is past 90', () => {
+        const lateFollow = new Date('2026-06-13T16:40:00.000Z');
+        expect(
+            shouldDeliverToSubscription(
+                { ...sub, subscribedAt: lateFollow, baselineStatus: '2H', notifiedEnd: false },
+                event({
+                    eventType: 'fulltime',
+                    minute: 90,
+                    detectedAt: new Date(lateFollow.getTime() + 5_000),
+                }),
+            ),
+        ).toBe(true);
+    });
+
+    it('does not deliver full time when the follow already started at FT or was notified', () => {
+        expect(
+            shouldDeliverToSubscription(
+                { ...sub, baselineStatus: 'FT' },
+                event({
+                    eventType: 'fulltime',
+                    minute: 90,
+                    detectedAt: new Date(subscribedAt.getTime() + 60_000),
+                }),
+            ),
+        ).toBe(false);
+        expect(
+            shouldDeliverToSubscription(
+                { ...sub, notifiedEnd: true },
+                event({
+                    eventType: 'fulltime',
+                    minute: 90,
+                    detectedAt: new Date(subscribedAt.getTime() + 60_000),
+                }),
+            ),
         ).toBe(false);
     });
 

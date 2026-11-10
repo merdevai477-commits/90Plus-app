@@ -1,5 +1,12 @@
+jest.mock('../../notification.service', () => ({
+    NotificationType: new Proxy(
+        {},
+        { get: (_target, prop) => (typeof prop === 'string' ? prop : undefined) },
+    ),
+}));
+
 import { isPushNotifiableMatchEvent } from '../match-event-delivery.service';
-import { diffScoreGoals, diffStatusEvents, normalizeApiEvents } from '../match-event-normalizer';
+import { diffScoreGoals, diffStatusEvents, identityNotificationsFromTimeline, normalizeApiEvents } from '../match-event-normalizer';
 import type { NormalizedMatchEvent } from '../match-event.types';
 import { NotificationType } from '../../notification.service';
 import {
@@ -39,6 +46,7 @@ describe('isPushNotifiableMatchEvent', () => {
         expect(isPushNotifiableMatchEvent(baseEvent('goal_cancelled'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('kickoff'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('card_red'))).toBe(true);
+        expect(isPushNotifiableMatchEvent(baseEvent('goal_scorer'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('var'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('halftime'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('second_half_start'))).toBe(true);
@@ -50,6 +58,79 @@ describe('isPushNotifiableMatchEvent', () => {
         expect(isPushNotifiableMatchEvent(legacyEvent('card_yellow'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('penalty'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('lineup'))).toBe(false);
+    });
+});
+
+describe('identityNotificationsFromTimeline', () => {
+    const meta = { homeTeam: 'الأهلي', awayTeam: 'الزمالك' };
+    const clock = { homeScore: 1, awayScore: 0, elapsed: 67 };
+    const photo = 'https://imagecache.365scores.com/image/upload/Athletes/501';
+
+    it('sends the scorer only when the name and photo are both real', () => {
+        const events = identityNotificationsFromTimeline(
+            9,
+            [
+                {
+                    time: { elapsed: 66, extra: null },
+                    team: { id: 1, name: 'الأهلي' },
+                    player: { id: 501, name: 'محمود حسن', photo },
+                    assist: { id: null, name: null },
+                    type: 'Goal',
+                    detail: 'Normal Goal',
+                },
+                {
+                    time: { elapsed: 70, extra: null },
+                    team: { id: 1, name: 'الأهلي' },
+                    player: { id: 9, name: '—', photo },
+                    assist: { id: null, name: null },
+                    type: 'Goal',
+                    detail: 'Normal Goal',
+                },
+                {
+                    time: { elapsed: 71, extra: null },
+                    team: { id: 1, name: 'الأهلي' },
+                    player: { id: 8, name: 'بدون صورة' },
+                    assist: { id: null, name: null },
+                    type: 'Goal',
+                    detail: 'Normal Goal',
+                },
+            ],
+            meta,
+            clock,
+        );
+
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('goal_scorer');
+        expect(events[0].templateVars.player).toBe('محمود حسن');
+        expect(events[0].payload.playerPhoto).toBe(photo);
+        expect(events[0].titleKey).toBe('goalScorerTitle');
+    });
+
+    it('does not send a yellow card even when the player name and photo are real', () => {
+        const events = identityNotificationsFromTimeline(
+            9,
+            [
+                {
+                    time: { elapsed: 64, extra: null },
+                    team: { id: 2, name: 'الزمالك' },
+                    player: { id: 77, name: 'أحمد سيد', photo },
+                    assist: { id: null, name: null },
+                    type: 'Card',
+                    detail: 'Yellow Card',
+                },
+            ],
+            meta,
+            clock,
+        );
+
+        expect(events).toHaveLength(0);
+    });
+
+    it('does not turn the scoreboard goal into a named-player notification', () => {
+        const goals = diffScoreGoals(9, { homeScore: 0, awayScore: 0 }, { homeScore: 1, awayScore: 0, elapsed: 66 }, meta);
+        expect(goals).toHaveLength(1);
+        expect(goals[0].eventType).toBe('goal_home');
+        expect(goals[0].playerId).toBeNull();
     });
 });
 

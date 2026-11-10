@@ -114,10 +114,7 @@ describe('adsConfig', () => {
     expect(served).not.toBe(PRODUCTION_ANDROID_INTERSTITIAL_ID);
   });
 
-  it('does not request an iOS ad until both iOS credentials exist', () => {
-    const empty = readAdsFlags(config());
-    expect(resolveServedLoginInterstitialAdUnitId(empty, { platform: 'ios', dev: false })).toBeNull();
-
+  it('never requests an iOS interstitial', () => {
     const ready = readAdsFlags(
       config({
         testMode: false,
@@ -125,9 +122,8 @@ describe('adsConfig', () => {
         iosInterstitialId: 'ca-app-pub-ios/unit',
       }),
     );
-    expect(resolveServedLoginInterstitialAdUnitId(ready, { platform: 'ios', dev: false })).toBe(
-      'ca-app-pub-ios/unit',
-    );
+    expect(resolveServedLoginInterstitialAdUnitId(ready, { platform: 'ios', dev: false })).toBeNull();
+    expect(resolveServedLoginInterstitialAdUnitId(ready, { platform: 'ios', dev: true })).toBeNull();
   });
 
   it('serves the Android app-open test unit while test mode or a dev bundle is on', () => {
@@ -166,20 +162,16 @@ describe('adsConfig', () => {
     expect(resolveServedAppOpenAdUnitId(flags, { platform: 'android', dev: false })).toBeNull();
   });
 
-  it('keeps iOS app-open ads off until iOS credentials exist', () => {
-    const empty = readAdsFlags(config({ testMode: true }));
-    expect(resolveServedAppOpenAdUnitId(empty, { platform: 'ios', dev: false })).toBeNull();
-
+  it('never requests an iOS app-open ad', () => {
     const ready = readAdsFlags(
       config({
-        testMode: false,
+        testMode: true,
         iosAppId: 'ca-app-pub-ios~app',
         iosAppOpenId: 'ca-app-pub-ios/open',
       }),
     );
-    expect(resolveServedAppOpenAdUnitId(ready, { platform: 'ios', dev: false })).toBe(
-      'ca-app-pub-ios/open',
-    );
+    expect(resolveServedAppOpenAdUnitId(ready, { platform: 'ios', dev: false })).toBeNull();
+    expect(resolveServedAppOpenAdUnitId(ready, { platform: 'ios', dev: true })).toBeNull();
   });
 
   it('returns null when ads are disabled or the frequency is not once per session', () => {

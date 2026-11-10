@@ -10,11 +10,12 @@ function withGoogleMobileAdsPlugin(plugins) {
 
   const androidAppId =
     typeof ads?.admob?.android?.appId === 'string' ? ads.admob.android.appId.trim() : '';
+  // iOS never receives the Google Mobile Ads plugin. The SDK aborts launch
+  // without GADApplicationIdentifier, and iPhone builds do not show ads.
+  if (process.env.EAS_BUILD_PLATFORM === 'ios') return list;
   if (!androidAppId) return list;
 
-  const iosAppId = typeof ads?.admob?.ios?.appId === 'string' ? ads.admob.ios.appId.trim() : '';
   const options = { androidAppId };
-  if (iosAppId) options.iosAppId = iosAppId;
 
   list.push([pluginName, options]);
   return list;

@@ -3,12 +3,15 @@ import type { NotificationType } from '../notification.service';
 
 /**
  * Match events that may trigger push + inbox notifications.
- * Yellow cards, substitutions, lineups, etc. are intentionally excluded.
+ * Substitutions, lineups, and yellow cards stay out. `goal_scorer` is sent
+ * only after a real player name and photo arrive. It does not replace the
+ * immediate score goal. Red cards keep their existing push.
  */
 export const MATCH_PUSH_EVENT_KINDS = [
     'goal_home',
     'goal_away',
     'goal_cancelled',
+    'goal_scorer',
     'kickoff',
     'card_red',
     'var',

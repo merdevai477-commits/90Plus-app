@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef, startTransition } from 'react';
 import { useStableCallback } from '../../utils/performance';
+import { matchRowPropsEqual } from '../../utils/matchRowPropsEqual';
 import {
   View,
   Text,
@@ -50,6 +51,7 @@ import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import FavoritesTab from '../../components/Matches/FavoritesTab';
 import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavoritesFeed';
+import type { FavoriteLiveFields } from '../../utils/overlaySnapshotsOnFavorites';
 import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
 import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
 import { pinFavoriteLeaguesInCountryGroups } from '../../utils/matchesCountrySort';
@@ -68,7 +70,6 @@ import {
 } from '../../constants/worldCup';
 import { getAppFeaturesPollPeriodMs } from '../../utils/appFeaturesPoll';
 import type { ImageSource } from 'expo-image';
-import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   getSharedLivePulse,
@@ -470,15 +471,13 @@ const MatchRow = memo(function MatchRow({
   useSecondTick(false);
 
   // Live minute only — no MM:SS tick. Stoppage still uses 90+4' styling.
+  // Server elapsed is authoritative. The API period start is used only when
+  // elapsed has not arrived yet, so a device wall clock cannot invent a minute.
   const shortUpper = (fixture.statusShort ?? '').toUpperCase();
   const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
   const isHalfTimeStatus = shortUpper === 'HT' || shortUpper === 'BT';
-  const anchoredStart = useAnchoredPeriodStart(
-    fixture.id,
-    fixture.statusShort,
-    fixture.elapsed,
-    fixture.startTimestamp,
-  );
+  const apiPeriodStart =
+    fixture.elapsed == null && fixture.startTimestamp != null ? fixture.startTimestamp : undefined;
 
   useEffect(() => {
     if (!fixture.live) return;
@@ -578,7 +577,7 @@ const MatchRow = memo(function MatchRow({
                   extra={fixture.extra}
                   fallbackLabel={
                     resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
-                      startTimestamp: anchoredStart,
+                      startTimestamp: apiPeriodStart,
                       extra: fixture.extra,
                     }) ??
                     fixture.minute ??
@@ -763,7 +762,7 @@ const MatchRow = memo(function MatchRow({
   }
 
   return finishRow(<View style={styles.rowWrapCol}>{rowContent}</View>);
-});
+}, matchRowPropsEqual);
 
 // ─── League All Matches Modal ─────────────────────────────────────────────────
 function LeagueAllMatchesModal({
@@ -1299,6 +1298,25 @@ export default function MatchesHubScreenV2() {
       viewerIsIsrael,
     },
   );
+
+  const favoriteLiveById = useMemo(() => {
+    const map: Record<string, FavoriteLiveFields> = {};
+    for (const match of matches) {
+      if (!match.id) continue;
+      const status = mapStatus(match.status);
+      map[match.id] = {
+        homeScore: match.score?.home ?? 0,
+        awayScore: match.score?.away ?? 0,
+        status,
+        live: status === 'LIVE',
+        statusShort: match.statusShort,
+        elapsed: match.elapsed ?? null,
+        extra: match.extra ?? null,
+        minute: match.minute,
+      };
+    }
+    return map;
+  }, [matches]);
 
   const {
     matches: worldCupMatches,
@@ -2695,6 +2713,7 @@ export default function MatchesHubScreenV2() {
               followedTeams={followedTeams}
               followedLeagues={followedLeagues}
               notifiedMatches={notifiedMatches}
+              liveById={favoriteLiveById}
               loading={favoritesFeedLoading}
               headerOffset={8}
               listHeader={null}
@@ -2739,6 +2758,7 @@ export default function MatchesHubScreenV2() {
       followedTeams,
       followedLeagues,
       notifiedMatches,
+      favoriteLiveById,
       favoritesFeedLoading,
       renderFavoriteFixture,
       handleOpenFavoriteTeam,

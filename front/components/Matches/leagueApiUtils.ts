@@ -165,8 +165,6 @@ export const resolveLiveMinuteLabel = (
     }
   }
 
-  if (short === '1H') return "1'";
-  if (short === '2H') return "46'";
   return undefined;
 };
 

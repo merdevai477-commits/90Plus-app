@@ -20,8 +20,7 @@ type MatchListLiveClockProps = {
 };
 
 /**
- * Matches-list live minute (no MM:SS). Match details uses useLiveDisplayClock
- * with seconds enabled.
+ * Matches-list live minute. Details uses the same minute-only label.
  *
  * Named distinctly from `liveMatchClock.ts` (pure MM:SS helpers) because Windows
  * is case-insensitive.

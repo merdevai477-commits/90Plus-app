@@ -42,6 +42,7 @@ async function favoriteFixtureIds(): Promise<number[]> {
 export function WidgetSyncBootstrap(): null {
   const { followedTeams, loading } = useFavoriteTeam();
   const language = useLanguageStore((state) => state.language);
+  const languageReady = useLanguageStore((state) => state.isInitialized);
 
   const teamIds = useMemo(
     () => followedTeams.map((team) => Number(team.apiTeamId)).filter((id) => Number.isFinite(id) && id > 0),
@@ -49,11 +50,11 @@ export function WidgetSyncBootstrap(): null {
   );
   const teamKey = teamIds.join(',');
 
-  const latest = useRef({ teamIds, language, loading });
-  latest.current = { teamIds, language, loading };
+  const latest = useRef({ teamIds, language, loading, languageReady });
+  latest.current = { teamIds, language, loading, languageReady };
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !languageReady) return;
     let cancelled = false;
     void favoriteFixtureIds().then((favoriteIds) => {
       if (cancelled) return;
@@ -62,11 +63,11 @@ export function WidgetSyncBootstrap(): null {
     return () => {
       cancelled = true;
     };
-  }, [teamKey, language, loading]);
+  }, [teamKey, language, loading, languageReady]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (latest.current.loading) return;
+      if (latest.current.loading || !latest.current.languageReady) return;
       // Leaving the app hands over bells set during the session; returning forces a fresh feed.
       if (state !== 'active' && state !== 'background') return;
       void favoriteFixtureIds().then((favoriteIds) => {

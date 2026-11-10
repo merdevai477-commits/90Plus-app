@@ -84,6 +84,54 @@ describe('liveFixtureSync WS merge', () => {
     expect(patched.fixture.status.short).toBe('HT');
   });
 
+  it('accepts a newer VAR correction from 2-1 to 1-1', () => {
+    const snap = baseSnapshot(makeFixture(70, '2H', 2, 1));
+    snap.lastWsAppliedAt = 100;
+    const patched = applyWebSocketToFixture(
+      snap,
+      { homeScore: 1, awayScore: 1, status: '2H', minute: 71 },
+      200,
+    );
+    expect(patched.goals.home).toBe(1);
+    expect(patched.goals.away).toBe(1);
+    expect(patched.fixture.status.elapsed).toBe(71);
+  });
+
+  it('rejects an older 2-1 message after the correction', () => {
+    const snap = baseSnapshot(makeFixture(71, '2H', 1, 1));
+    snap.lastWsAppliedAt = 200;
+    const patched = applyWebSocketToFixture(
+      snap,
+      { homeScore: 2, awayScore: 1, status: '2H', minute: 70 },
+      100,
+    );
+    expect(patched.goals.home).toBe(1);
+    expect(patched.goals.away).toBe(1);
+    expect(patched.fixture.status.elapsed).toBe(71);
+  });
+
+  it('ignores a duplicate update with the same timestamp', () => {
+    const snap = baseSnapshot(makeFixture(71, '2H', 1, 1));
+    snap.lastWsAppliedAt = 200;
+    const patched = applyWebSocketToFixture(
+      snap,
+      { homeScore: 1, awayScore: 1, status: '2H', minute: 71 },
+      200,
+    );
+    expect(patched).toBe(snap.fixture);
+  });
+
+  it('accepts a newer lower minute correction', () => {
+    const snap = baseSnapshot(makeFixture(80, '2H', 1, 0));
+    snap.lastWsAppliedAt = 100;
+    const patched = applyWebSocketToFixture(
+      snap,
+      { homeScore: 1, awayScore: 0, status: '2H', minute: 76 },
+      300,
+    );
+    expect(patched.fixture.status.elapsed).toBe(76);
+  });
+
   it('clears stoppage extra when WS reports FT', () => {
     const snap = baseSnapshot(makeFixture(90, '2H', 2, 3, 4));
     const patched = applyWebSocketToFixture(snap, {

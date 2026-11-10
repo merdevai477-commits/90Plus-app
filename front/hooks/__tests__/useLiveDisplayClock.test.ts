@@ -42,13 +42,13 @@ describe('useLiveDisplayClock HT lifecycle', () => {
       (props: typeof liveInput) => useLiveDisplayClock(props),
       { initialProps: liveInput },
     );
-    expect(result.current).toBe('44:00');
-    expect(getSharedSecondTickerListenerCount()).toBe(1);
+    expect(result.current).toBe("45'");
+    expect(getSharedSecondTickerListenerCount()).toBe(0);
 
     act(() => {
       jest.advanceTimersByTime(59_000);
     });
-    expect(result.current).toBe('44:59');
+    expect(result.current).toBe("45'");
 
     rerender({
       ...liveInput,
@@ -88,16 +88,16 @@ describe('useLiveDisplayClock HT lifecycle', () => {
         },
       },
     );
-    expect(result.current).toBe('44:00');
+    expect(result.current).toBe("45'");
     act(() => {
       jest.advanceTimersByTime(60_000);
     });
-    expect(result.current).toBe('45:00');
+    expect(result.current).toBe("45'");
     rerender({
       ...liveInput,
       statusShort: 'HT',
       elapsed: 45,
-      fallbackLabel: "45'",
+      fallbackLabel: 'HT',
     });
     expect(result.current).toBe('HT');
     expect(result.current).not.toBe('45:00');
@@ -124,7 +124,7 @@ describe('useLiveDisplayClock HT lifecycle', () => {
       statusShort: 'HT',
       elapsed: 49,
       extra: 4,
-      fallbackLabel: "45+4'",
+      fallbackLabel: 'HT',
     });
     expect(result.current).toBe('HT');
     expect(getSharedSecondTickerListenerCount()).toBe(0);
@@ -151,13 +151,13 @@ describe('useLiveDisplayClock HT lifecycle', () => {
       elapsed: 46,
       fallbackLabel: "46'",
     });
-    expect(result.current).toBe('45:00');
-    expect(getSharedSecondTickerListenerCount()).toBe(1);
+    expect(result.current).toBe("46'");
+    expect(getSharedSecondTickerListenerCount()).toBe(0);
 
     act(() => {
       jest.advanceTimersByTime(1_000);
     });
-    expect(result.current).toBe('45:01');
+    expect(result.current).toBe("46'");
   });
 
   it('TEST F — HT resolve does not mutate the Match object', () => {
@@ -215,7 +215,7 @@ describe('useLiveDisplayClock HT lifecycle', () => {
         (props: typeof liveInput) => useLiveDisplayClock(props),
         { initialProps: liveInput },
       );
-      expect(result.current).toBe('44:00');
+      expect(result.current).toBe("45'");
       rerender({ ...liveInput, statusShort: 'HT', elapsed: 45, fallbackLabel: 'HT' });
       expect(result.current).toBe('HT');
       expect(getSharedSecondTickerListenerCount()).toBe(0);

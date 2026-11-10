@@ -3650,6 +3650,8 @@ export const ar = {
     matchStartTitle: '⚽ بدأت المباراة',
     matchStartBody: '{home} ضد {away} — المباراة بدأت الآن',
     goalTitle: '⚽ هدف!',
+    goalScorerTitle: '⚽ {player}',
+    goalScorerBody: '{player} أحرز الهدف — {home} {homeScore}-{awayScore} {away}',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
     goalScoreBody: '{home} {homeScore}-{awayScore} {away}',
     goalCancelledTitle: '🚫 تم إلغاء الهدف',

@@ -44,6 +44,7 @@ import prisma from '../../lib/prisma';
 import { liveFixtureSyncService } from '../live-fixture-sync.service';
 import { WebSocketService } from '../websocket.service';
 import { withSyncLeaderLease } from '../football-sync-leader.service';
+import { readTerminalFixturesForIds } from '../live-fixture-cache.service';
 import LiveMatchIngestorService from '../live-match-ingestor.service';
 
 const MINUTE = 60_000;
@@ -156,6 +157,28 @@ describe('live fixture sync clock kicks', () => {
             expect(LiveMatchIngestorService.triggerFixtureIngest).toHaveBeenCalledTimes(2);
         } finally {
             findMany.mockResolvedValue([]);
+        }
+    });
+
+    it('ingests the end notification when a native 365 match leaves the live set as FT', async () => {
+        const id = 4_800_001;
+        (readTerminalFixturesForIds as jest.Mock).mockResolvedValue([
+            {
+                fixture: {
+                    id,
+                    date: '2026-10-08T18:00:00+00:00',
+                    status: { short: 'FT', elapsed: 90, extra: null },
+                },
+                goals: { home: 2, away: 1 },
+            },
+        ]);
+        try {
+            await svc.processLiveFixtures([liveFixture(id, 90, 2, 1)]);
+            (LiveMatchIngestorService.triggerFixtureIngest as jest.Mock).mockClear();
+            await svc.processLiveFixtures([]);
+            expect(LiveMatchIngestorService.triggerFixtureIngest).toHaveBeenCalledWith(id);
+        } finally {
+            (readTerminalFixturesForIds as jest.Mock).mockResolvedValue([]);
         }
     });
 

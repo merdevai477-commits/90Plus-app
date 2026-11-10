@@ -2460,6 +2460,12 @@ export function mapScores365Events(
       : type === 'Goal' && extraMember
         ? extraMember.shortName || extraMember.name || null
         : null;
+    const photoMember = isSubstitution ? extraMember : primaryMember;
+    const photoAthleteId = photoMember?.athleteId;
+    const photo =
+      photoAthleteId != null && photoAthleteId > 0
+        ? buildScores365AthletePhotoUrl(photoAthleteId, 160, photoMember?.imageVersion ?? null)
+        : undefined;
 
     return {
       time: { elapsed, extra },
@@ -2471,6 +2477,7 @@ export function mapScores365Events(
       player: {
         id: playerId,
         name: playerName,
+        ...(photo ? { photo } : {}),
       },
       assist: { id: assistId, name: assistName },
       type,

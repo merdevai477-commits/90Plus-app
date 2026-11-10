@@ -105,8 +105,9 @@ export const appOpenEnabled = flags.appOpenEnabled;
 export const appOpenFrequency = flags.appOpenFrequency;
 export const appOpenMinimumIntervalMinutes = flags.appOpenMinimumIntervalMinutes;
 
-export function isIosAdsConfigured(source: AdsFlags = flags): boolean {
-  return source.iosAppId.length > 0 && source.iosLoginInterstitialId.length > 0;
+/** iPhone builds never serve ads and never link the Google Mobile Ads SDK. */
+export function isIosAdsConfigured(_source: AdsFlags = flags): boolean {
+  return false;
 }
 
 export function shouldUseTestAds(
@@ -139,12 +140,7 @@ export function resolveServedLoginInterstitialAdUnitId(
       : source.loginInterstitialId;
   }
 
-  if (runtime.platform === 'ios') {
-    if (!isIosAdsConfigured(source)) return null;
-    return useTestAds
-      ? GOOGLE_TEST_INTERSTITIAL_AD_UNIT_IDS.ios
-      : source.iosLoginInterstitialId;
-  }
+  if (runtime.platform === 'ios') return null;
 
   return null;
 }
@@ -161,7 +157,7 @@ export function isConfiguredProductionAdUnit(unitId: string, source: AdsFlags = 
 /**
  * App Open unit that may actually be requested.
  * An empty production id disables the ad. The login interstitial id is never
- * substituted. iOS stays off until both an iOS app id and an app-open unit exist.
+ * substituted. iOS never receives an app-open unit.
  * Dev bundles always receive Google's test unit.
  */
 export function resolveServedAppOpenAdUnitId(
@@ -180,11 +176,7 @@ export function resolveServedAppOpenAdUnitId(
     return source.androidAppOpenId;
   }
 
-  if (runtime.platform === 'ios') {
-    if (!source.iosAppId || !source.iosAppOpenId) return null;
-    if (source.iosAppOpenId === source.iosLoginInterstitialId) return null;
-    return useTestAds ? GOOGLE_TEST_APP_OPEN_AD_UNIT_IDS.ios : source.iosAppOpenId;
-  }
+  if (runtime.platform === 'ios') return null;
 
   return null;
 }

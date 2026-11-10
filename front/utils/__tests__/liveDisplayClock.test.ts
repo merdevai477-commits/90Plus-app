@@ -445,14 +445,12 @@ describe('liveDisplayClock presentation', () => {
     expect(late.ticking).toBe(false);
   });
 
-  it('flag defaults on unless explicitly disabled', () => {
+  it('minutes-only display stays off even when the env flag is on', () => {
     const prev = process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS;
     delete process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS;
-    expect(isLiveClockSecondsEnabled()).toBe(true);
-    process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS = '0';
     expect(isLiveClockSecondsEnabled()).toBe(false);
     process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS = '1';
-    expect(isLiveClockSecondsEnabled()).toBe(true);
+    expect(isLiveClockSecondsEnabled()).toBe(false);
     process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS = prev;
   });
 });

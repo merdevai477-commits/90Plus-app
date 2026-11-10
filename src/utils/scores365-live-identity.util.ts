@@ -227,6 +227,22 @@ export function isStaleMappedInPlayClock(opts: {
   );
 }
 
+/** Explicit whistle text. A stuck "2nd Half" clock is not one of these. */
+function rawSaysMatchFinished(raw?: {
+  statusText?: string;
+  shortStatusText?: string;
+  gameTimeDisplay?: string;
+}): boolean {
+  const hay = `${raw?.statusText ?? ''} ${raw?.shortStatusText ?? ''} ${raw?.gameTimeDisplay ?? ''}`.toLowerCase();
+  return (
+    hay.includes('انته') ||
+    hay.includes('ended') ||
+    hay.includes('full time') ||
+    hay.includes('fulltime') ||
+    /\bft\b/.test(hay)
+  );
+}
+
 /** 365 allscores live set — statusGroup 3 wins unless the clock is stuck past FT. */
 export function isAllScoresLiveItem(item: {
   phase?: string;
@@ -268,7 +284,11 @@ export function coerceAllScoresLiveStatus<
 
   if (isStale365InPlayClock(raw)) return finishStale();
   if (LIVE_SHORTS.has(short)) return fixture;
-  if (FINISHED_SHORTS.has(short) && raw?.statusGroup !== 3) return fixture;
+  // statusGroup 3 can outlive the whistle. Keep a finished classification
+  // when 365 itself says the match ended; a bare "2nd Half" label stays live.
+  if (FINISHED_SHORTS.has(short) && (raw?.statusGroup !== 3 || rawSaysMatchFinished(raw))) {
+    return fixture;
+  }
   if (raw?.statusGroup !== 3) return fixture;
 
   const minute = raw.gameTime != null && raw.gameTime >= 0 ? Math.floor(raw.gameTime) : null;

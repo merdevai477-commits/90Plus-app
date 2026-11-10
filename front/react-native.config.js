@@ -2,11 +2,9 @@
  * Exclude expo-dev-client packages from native autolinking on non-development EAS builds.
  * Development profile (EAS_BUILD_PROFILE=development) must link expo-dev-client.
  *
- * iOS AdMob stays unlinked until config/ads.json has an iOS App ID. The Google
- * Mobile Ads SDK crashes on launch without GADApplicationIdentifier, and no
- * iOS credentials have been provided.
+ * iPhone builds do not show ads. The Google Mobile Ads SDK stays out of the
+ * iOS binary. package.json expo.autolinking.ios.exclude is the Expo 55 guard.
  */
-const ads = require('./config/ads.json');
 const DEV_CLIENT_PACKAGES = [
   'expo-dev-client',
   'expo-dev-launcher',
@@ -31,8 +29,6 @@ function buildDevClientExcludes() {
 }
 
 function googleMobileAdsExcludes() {
-  const iosAppId = ads?.admob?.ios?.appId;
-  if (typeof iosAppId === 'string' && iosAppId.trim()) return {};
   return {
     'react-native-google-mobile-ads': {
       platforms: {

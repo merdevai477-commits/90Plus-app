@@ -14,6 +14,7 @@ import {
     logExpoPushTicket,
 } from '../utils/expo-push-log.util';
 import { removePushTokenEverywhere } from './user-push-devices.service';
+import { receiptStorageValue, tokenFromReceiptRecord } from '../utils/push-receipt-association';
 
 // Create a new Expo SDK client
 const expo = new Expo();
@@ -74,11 +75,17 @@ async function storeReceiptIds(receiptIds: string[], tokenMap?: Map<string, stri
     if (!redis || receiptIds.length === 0) return;
     try {
         const pipeline = redis.pipeline();
+        let stored = 0;
         for (const id of receiptIds) {
-            const value = tokenMap?.get(id) || '1';
+            const value = receiptStorageValue(tokenMap?.get(id));
+            if (!value) {
+                logger.warn('[EXPO PUSH] receipt has no token association', { receiptId: id });
+                continue;
+            }
             pipeline.setex(`expo:receipt:${id}`, RECEIPT_TTL_SECONDS, value);
+            stored += 1;
         }
-        await pipeline.exec();
+        if (stored > 0) await pipeline.exec();
     } catch (err) {
         logger.warn('Failed to store receipt IDs in Redis:', err);
     }
@@ -118,8 +125,7 @@ export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
                     }
 
                     if (receipt.status === 'error' && errorCode) {
-                        const tokenForCleanup =
-                            storedToken && storedToken !== '1' ? storedToken : undefined;
+                        const tokenForCleanup = tokenFromReceiptRecord(storedToken) ?? undefined;
                         const action = await handleExpoPushError(errorCode, tokenForCleanup, {
                             receiptId,
                             phase: 'receipt',
@@ -491,10 +497,10 @@ export class PushNotificationService {
             try {
                 return await getUserLanguage(opts.userId);
             } catch {
-                return 'en';
+                return 'ar';
             }
         }
-        return 'en';
+        return 'ar';
     }
 
     static async sendGoalNotification(

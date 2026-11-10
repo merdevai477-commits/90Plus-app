@@ -508,6 +508,12 @@ export function applyWebSocketToFixture(
     minute?: number;
     extra?: number | null;
   },
+  /**
+   * Server emit time (`WSMessage.timestamp`, `Date.now()` when the message was sent).
+   * Newer than `lastWsAppliedAt` is authoritative, including a lower score or minute.
+   * Older messages are ignored. Omitted timestamps keep the conservative merge.
+   */
+  messageTimestamp?: number,
 ): Fixture {
   const fixture = snapshot.fixture;
   const currentShort = fixture.fixture.status.short;
@@ -515,6 +521,18 @@ export function applyWebSocketToFixture(
   const currentExtra = fixture.fixture.status.extra ?? null;
   const currentHome = fixture.goals.home ?? 0;
   const currentAway = fixture.goals.away ?? 0;
+  const lastApplied = snapshot.lastWsAppliedAt ?? 0;
+  const hasTimestamp = messageTimestamp != null && Number.isFinite(messageTimestamp);
+  if (hasTimestamp && messageTimestamp < lastApplied) {
+    return fixture;
+  }
+  if (hasTimestamp && messageTimestamp === lastApplied) {
+    const sameScore = update.homeScore === currentHome && update.awayScore === currentAway;
+    const sameMinute = update.minute == null || update.minute === currentElapsed;
+    const sameStatus = update.status === currentShort;
+    if (sameScore && sameMinute && sameStatus) return fixture;
+  }
+  const authoritative = hasTimestamp && messageTimestamp > lastApplied;
 
   let nextShort = currentShort;
   if (update.status !== currentShort && isValidStatusTransition(currentShort, update.status)) {
@@ -523,15 +541,22 @@ export function applyWebSocketToFixture(
 
   let nextHome = currentHome;
   let nextAway = currentAway;
-  const totalWs = update.homeScore + update.awayScore;
-  const totalCur = currentHome + currentAway;
-  if (totalWs >= totalCur || FINISHED_STATUS_SHORTS.has(nextShort)) {
+  if (authoritative) {
     nextHome = update.homeScore;
     nextAway = update.awayScore;
+  } else {
+    const totalWs = update.homeScore + update.awayScore;
+    const totalCur = currentHome + currentAway;
+    if (totalWs >= totalCur || FINISHED_STATUS_SHORTS.has(nextShort)) {
+      nextHome = update.homeScore;
+      nextAway = update.awayScore;
+    }
   }
 
   let nextElapsed = currentElapsed;
-  if (FINISHED_STATUS_SHORTS.has(nextShort) || nextShort === 'HT' || nextShort === 'BT') {
+  if (authoritative) {
+    if (update.minute != null) nextElapsed = update.minute;
+  } else if (FINISHED_STATUS_SHORTS.has(nextShort) || nextShort === 'HT' || nextShort === 'BT') {
     if (update.minute != null) nextElapsed = update.minute;
   } else if (update.minute != null) {
     nextElapsed = Math.max(currentElapsed, update.minute);

@@ -27,6 +27,17 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
     let vars = { ...event.templateVars };
     let imageUrl: string | undefined;
 
+    const playerPhoto =
+        typeof event.payload.playerPhoto === 'string' && event.payload.playerPhoto.startsWith('https://')
+            ? event.payload.playerPhoto
+            : '';
+    if (
+        playerPhoto &&
+        (event.eventType === 'goal_scorer' || event.eventType === 'card_red')
+    ) {
+        imageUrl = playerPhoto;
+    }
+
     if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
         const side = event.eventType === 'goal_home' ? 'home' : 'away';
         const scorer = side === 'home' ? sub.homeTeam : sub.awayTeam;

@@ -3,15 +3,14 @@
  * Canonical elapsed/status/score live in the server pipeline — this file
  * never writes Match objects, Zustand, or network.
  *
- * Seconds are for match details only (pass `showSeconds: false` on the list).
- * Set EXPO_PUBLIC_LIVE_CLOCK_SECONDS=0 to turn them off everywhere.
+ * Matches list and match details show minutes only (`67'`, `45+2'`).
  */
 
 import { formatLiveMinuteDisplay } from './formatLiveMinuteDisplay';
 import { isLiveStoppage } from '../components/Matches/liveMatchClock';
 
 /** Instant rollback without env or live-data pipeline changes. */
-export const LIVE_CLOCK_SECONDS_HARD_OFF = false;
+export const LIVE_CLOCK_SECONDS_HARD_OFF = true;
 
 const LIVE_CLOCK_LOG =
   process.env.EXPO_PUBLIC_LIVE_CLOCK_LOG === '1' ||
