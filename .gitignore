@@ -85,3 +85,5 @@ scripts/__tmp*
 # Debug dumps. Keep the one tracked report.
 /tmp-validation/*
 !/tmp-validation/P1-7-SENTRY-GAP-REPORT.md
+
+tmp/
