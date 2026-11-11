@@ -12,6 +12,7 @@ import {
     renderGoalScorePushBody,
     withEventMinute,
 } from '../push-templates.service';
+import { translateFootballNames } from '../football-translation.service';
 import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
 import type { MatchEventKind } from './match-event.types';
@@ -25,6 +26,26 @@ import {
 } from './match-event-delivery.service';
 
 /** In-play moments whose title shows the match minute; status changes (kickoff, HT, FT) don't. */
+const PUSH_NAME_KEYS = ['home', 'away', 'team', 'scorer', 'player', 'homeTeam', 'awayTeam'] as const;
+
+async function localizePushNames(
+    vars: Record<string, string | number>,
+    language: string,
+): Promise<Record<string, string | number>> {
+    if (language !== 'ar') return vars;
+    const texts = PUSH_NAME_KEYS
+        .map((key) => vars[key])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    if (texts.length === 0) return vars;
+    const translated = await translateFootballNames(texts, 'ar');
+    const next = { ...vars };
+    for (const key of PUSH_NAME_KEYS) {
+        const value = next[key];
+        if (typeof value === 'string' && translated[value]) next[key] = translated[value];
+    }
+    return next;
+}
+
 const TIMED_EVENT_KINDS: ReadonlySet<MatchEventKind> = new Set([
     'goal_home',
     'goal_away',
@@ -59,7 +80,7 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
     }
 
     const lang = await getUserLanguage(userId);
-    const vars: Record<string, string | number> = { ...(job.vars ?? {}) };
+    const vars = await localizePushNames({ ...(job.vars ?? {}) }, lang);
     if (event.eventType === 'var' && vars.detail != null) {
         vars.detail = localizeMatchVarDetail(String(vars.detail), lang);
     }

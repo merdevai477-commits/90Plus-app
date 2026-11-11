@@ -315,6 +315,44 @@ describe('overlayLiveListOnFavorites', () => {
     expect(next.minute).toBe("23'");
   });
 
+  it('replaces Home/Away placeholders with the list team name and logo', () => {
+    const row = makeRow({
+      id: '88',
+      home: 'Home',
+      away: 'Away',
+      homeLogo: '',
+      awayLogo: '',
+      leagueName: 'Match',
+      homeScore: 0,
+      awayScore: 3,
+      elapsed: 62,
+      minute: "62'",
+    });
+    const [next] = overlayLiveListOnFavorites([row], {
+      '88': {
+        home: 'الأهلي',
+        away: 'الزمالك',
+        homeLogo: 'https://cdn.example/ahly.png',
+        awayLogo: 'https://cdn.example/zamalek.png',
+        leagueName: 'الدوري المصري',
+        leagueLogo: 'https://cdn.example/league.png',
+        homeScore: 0,
+        awayScore: 3,
+        status: 'LIVE',
+        live: true,
+        statusShort: '2H',
+        elapsed: 62,
+        extra: null,
+        minute: "62'",
+      },
+    });
+    expect(next.home).toBe('الأهلي');
+    expect(next.away).toBe('الزمالك');
+    expect(next.homeLogo).toContain('ahly');
+    expect(next.awayLogo).toContain('zamalek');
+    expect(next.leagueName).toBe('الدوري المصري');
+  });
+
   it('does not replace a newer favorites score with an older 0-0 list row', () => {
     const row = makeRow({ id: '88', homeScore: 1, awayScore: 0, elapsed: 30, minute: "30'" });
     const [next] = overlayLiveListOnFavorites([row], {

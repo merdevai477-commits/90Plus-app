@@ -9,6 +9,7 @@ import { readLiveFixtureById } from './live-fixture-cache.service';
 import { matchCacheService, type FixtureFromAPI } from './match-cache.service';
 import { resolveVenueImage } from './stadium-image.service';
 import { logger } from '../utils/logger';
+import { translateFootballNames } from './football-translation.service';
 
 export const WIDGET_MAX_TEAMS = 8;
 const TOP_PLAYERS = 3;
@@ -906,7 +907,7 @@ export async function buildWidgetFeed(
     (primary != null && isLiveStatus(primary.status)) || followedMatches.some((match) => isLiveStatus(match.status));
   const hold = primary ? finishHoldLeft(primary, nowSec) : 0;
 
-  return {
+  return localizeWidgetFeed({
     generatedAt: now,
     hasLive,
     teams: unique,
@@ -916,6 +917,82 @@ export async function buildWidgetFeed(
     featured,
     others,
     refreshInSec: hold > 0 ? hold + 5 : null,
+  }, language);
+}
+
+async function localizeWidgetFeed(payload: WidgetFeedPayload, language: string): Promise<WidgetFeedPayload> {
+  if (!language.toLowerCase().startsWith('ar')) return payload;
+  const names: string[] = [];
+  const add = (name?: string | null) => {
+    const trimmed = (name ?? '').trim();
+    if (trimmed) names.push(trimmed);
+  };
+  const walkMatch = (match?: WidgetMatch | null) => {
+    if (!match) return;
+    add(match.home.name);
+    add(match.away.name);
+    add(match.league.name);
+  };
+  const walkFeatured = (featured?: WidgetFeatured | null) => {
+    if (!featured) return;
+    for (const player of featured.topPlayers) add(player.name);
+    for (const event of featured.events) add(event.player);
+    if (featured.goal) add(featured.goal.player);
+    for (const side of [featured.lineup?.home, featured.lineup?.away]) {
+      for (const player of side ?? []) add(player.name);
+    }
+  };
+  for (const team of payload.teams) {
+    add(team.name);
+    walkMatch(team.match);
+  }
+  walkMatch(payload.primary);
+  for (const match of payload.fixtures) walkMatch(match);
+  walkFeatured(payload.featured);
+  for (const other of payload.others) {
+    walkMatch(other.match);
+    walkFeatured(other.featured);
+  }
+
+  const translated = await translateFootballNames(names, 'ar');
+  const nameOf = (name: string) => translated[name] ?? name;
+  const mapMatch = (match: WidgetMatch): WidgetMatch => ({
+    ...match,
+    home: { ...match.home, name: nameOf(match.home.name) },
+    away: { ...match.away, name: nameOf(match.away.name) },
+    league: { ...match.league, name: nameOf(match.league.name) },
+  });
+  const mapFeatured = (featured: WidgetFeatured | null): WidgetFeatured | null => {
+    if (!featured) return null;
+    return {
+      ...featured,
+      topPlayers: featured.topPlayers.map((player) => ({ ...player, name: nameOf(player.name) })),
+      events: featured.events.map((event) => ({ ...event, player: nameOf(event.player) })),
+      goal: featured.goal ? { ...featured.goal, player: nameOf(featured.goal.player) } : null,
+      lineup: featured.lineup
+        ? {
+            ...featured.lineup,
+            home: featured.lineup.home.map((player) => ({ ...player, name: nameOf(player.name) })),
+            away: featured.lineup.away.map((player) => ({ ...player, name: nameOf(player.name) })),
+          }
+        : null,
+    };
+  };
+
+  return {
+    ...payload,
+    teams: payload.teams.map((team) => ({
+      ...team,
+      name: nameOf(team.name),
+      match: team.match ? mapMatch(team.match) : null,
+    })),
+    primary: payload.primary ? mapMatch(payload.primary) : null,
+    fixtures: payload.fixtures.map(mapMatch),
+    featured: mapFeatured(payload.featured),
+    others: payload.others.map((other) => ({
+      match: mapMatch(other.match),
+      featured: mapFeatured(other.featured),
+    })),
   };
 }
 

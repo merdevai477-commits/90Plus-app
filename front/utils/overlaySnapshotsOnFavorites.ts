@@ -66,6 +66,8 @@ export function favoritesRowFromSnapshot(
   const status = mapApiStatus(short);
   const elapsed = st?.elapsed ?? null;
   const extra = st?.extra ?? null;
+  const homeSide = snap.fixture?.teams?.home;
+  const awaySide = snap.fixture?.teams?.away;
   const homeScore = snap.fixture?.goals?.home ?? base.homeScore;
   const awayScore = snap.fixture?.goals?.away ?? base.awayScore;
   const minute =
@@ -76,6 +78,10 @@ export function favoritesRowFromSnapshot(
 
   return {
     ...base,
+    home: preferRealName(base.home, homeSide?.name),
+    away: preferRealName(base.away, awaySide?.name),
+    homeLogo: preferLogo(base.homeLogo, homeSide?.logo),
+    awayLogo: preferLogo(base.awayLogo, awaySide?.logo),
     homeScore: homeScore ?? 0,
     awayScore: awayScore ?? 0,
     status,
@@ -99,6 +105,12 @@ function withAuthoritativeFavoritesMinute(row: FavoritesListFixture): FavoritesL
  * Unchanged rows keep the same object reference.
  */
 export type FavoriteLiveFields = {
+  home?: string;
+  away?: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  leagueName?: string;
+  leagueLogo?: string;
   homeScore: number;
   awayScore: number;
   status: FavoritesListFixture['status'];
@@ -108,6 +120,34 @@ export type FavoriteLiveFields = {
   extra?: number | null;
   minute?: string;
 };
+
+const PLACEHOLDER_TEAM_NAMES = new Set([
+  'home',
+  'away',
+  'tbd',
+  'match',
+  'المنزل',
+  'بعيداً',
+  'بعيدا',
+  'مباراة',
+]);
+
+export function isPlaceholderTeamName(name: string | null | undefined): boolean {
+  const trimmed = (name ?? '').trim().toLowerCase();
+  return trimmed.length === 0 || PLACEHOLDER_TEAM_NAMES.has(trimmed);
+}
+
+function preferRealName(current: string, incoming: string | null | undefined): string {
+  const next = (incoming ?? '').trim();
+  if (!next || isPlaceholderTeamName(next)) return current;
+  if (isPlaceholderTeamName(current)) return next;
+  return current;
+}
+
+function preferLogo(current: string, incoming: string | null | undefined): string {
+  const next = (incoming ?? '').trim();
+  return current.trim() || next;
+}
 
 /**
  * Bell and followed-team rows are stored without a live score or clock.
@@ -129,7 +169,20 @@ export function overlayLiveListOnFavorites(
     const clockArrived = live.elapsed != null && row.elapsed == null;
     const scoreArrived = liveGoals > rowGoals;
     const finishedArrived = live.status === 'FT' && row.status !== 'FT';
-    if (!clockArrived && !scoreArrived && !finishedArrived) return row;
+    const home = preferRealName(row.home, live.home);
+    const away = preferRealName(row.away, live.away);
+    const homeLogo = preferLogo(row.homeLogo, live.homeLogo);
+    const awayLogo = preferLogo(row.awayLogo, live.awayLogo);
+    const leagueName = preferRealName(row.leagueName ?? '', live.leagueName) || row.leagueName;
+    const leagueLogo = preferLogo(row.leagueLogo ?? '', live.leagueLogo) || row.leagueLogo;
+    const identityArrived =
+      home !== row.home ||
+      away !== row.away ||
+      homeLogo !== row.homeLogo ||
+      awayLogo !== row.awayLogo ||
+      leagueName !== row.leagueName ||
+      leagueLogo !== row.leagueLogo;
+    if (!clockArrived && !scoreArrived && !finishedArrived && !identityArrived) return row;
 
     const minute =
       live.status === 'FT'
@@ -140,6 +193,12 @@ export function overlayLiveListOnFavorites(
     anyChanged = true;
     return {
       ...row,
+      home,
+      away,
+      homeLogo,
+      awayLogo,
+      leagueName,
+      leagueLogo,
       homeScore: clockArrived || scoreArrived ? live.homeScore : row.homeScore,
       awayScore: clockArrived || scoreArrived ? live.awayScore : row.awayScore,
       status: finishedArrived ? 'FT' : live.status === 'LIVE' ? 'LIVE' : row.status,

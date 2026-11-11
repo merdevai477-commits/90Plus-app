@@ -23,6 +23,10 @@ const MAX_TEXTS_PER_REQUEST = 200;
 
 const memoryCache = new Map<string, string>();
 
+function hasArabicScript(text: string): boolean {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
 function cacheKey(text: string): string {
   const hash = crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex').slice(0, 32);
   return `${CACHE_PREFIX}${hash}`;
@@ -190,6 +194,11 @@ export async function translateFootballNames(
   const missing: string[] = [];
 
   for (const text of unique) {
+    if (hasArabicScript(text)) {
+      output[text] = text;
+      continue;
+    }
+
     const curated = getCuratedArabicLeagueName(text);
     if (curated) {
       output[text] = curated;

@@ -56,5 +56,6 @@ describe('matchRowPropsEqual', () => {
     const prev = props({ predictedMatches: { '10': { type: 'draw', isCorrect: null } } });
     const next = props({ predictedMatches: { '10': { type: 'home', isCorrect: null } } });
     expect(matchRowPropsEqual(prev, next)).toBe(false);
+    expect(matchRowPropsEqual(prev, props({ nameRevision: 2 }))).toBe(false);
   });
 });

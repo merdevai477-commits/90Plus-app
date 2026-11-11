@@ -52,6 +52,7 @@ import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import FavoritesTab from '../../components/Matches/FavoritesTab';
 import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavoritesFeed';
 import type { FavoriteLiveFields } from '../../utils/overlaySnapshotsOnFavorites';
+import { useFootballTranslationStore } from '../../src/stores/footballTranslationStore';
 import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
 import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
 import { pinFavoriteLeaguesInCountryGroups } from '../../utils/matchesCountrySort';
@@ -427,6 +428,7 @@ const MatchRow = memo(function MatchRow({
   onOpenDetails,
   worldCupCard,
   onFixtureVisibility,
+  nameRevision,
 }: {
   fixture: Fixture;
   showPreds: boolean;
@@ -440,6 +442,7 @@ const MatchRow = memo(function MatchRow({
   worldCupCard?: { logoSource: ImageSource; leagueName: string };
   /** Ref-based mount visibility — drives viewport-scoped registerInterest. */
   onFixtureVisibility?: (fixtureId: number, visible: boolean) => void;
+  nameRevision?: number;
 }) {
   const diagSample = diagFlags.render && isFixtureSampled(fixture.id, 'render');
   const diagT0 = diagSample ? monoNow() : 0;
@@ -793,6 +796,7 @@ function LeagueAllMatchesModal({
   onOpenDetails: (fixture: Fixture) => void;
 }) {
   const { language, translate: t } = useTranslation();
+  const nameRevision = useFootballTranslationStore((state) => state.revision);
   const [extraFixtures, setExtraFixtures] = useState<Fixture[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);
 
@@ -850,6 +854,7 @@ function LeagueAllMatchesModal({
         isSubscribing={subscribingFixtureId === item.id}
         onToggleSubscription={onToggleSubscription}
         onOpenDetails={openDetailsSafely}
+        nameRevision={nameRevision}
       />
     ),
     [
@@ -964,6 +969,7 @@ const LeagueCard = memo(function LeagueCard({
   subscribingFixtureId,
   onToggleSubscription,
   onOpenDetails,
+  nameRevision = 0,
 }: {
   group: LeagueGroup;
   filter: string;
@@ -975,6 +981,7 @@ const LeagueCard = memo(function LeagueCard({
   subscribingFixtureId: string | null;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
+  nameRevision?: number;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -1049,6 +1056,7 @@ const LeagueCard = memo(function LeagueCard({
                 isSubscribing={subscribingFixtureId === fixture.id}
                 onToggleSubscription={onToggleSubscription}
                 onOpenDetails={onOpenDetails}
+                nameRevision={nameRevision}
               />
             ))}
             {hasMore && (
@@ -1287,6 +1295,7 @@ export default function MatchesHubScreenV2() {
 
   // Israeli leagues → Palestine for every viewer except profile country Israel.
   const viewerIsIsrael = useViewerIsIsrael();
+  const nameRevision = useFootballTranslationStore((state) => state.revision);
 
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
   const { countryGroups, matches, loading, error, isDataStale, refetch, refreshSoft } = useMatchesData(
@@ -1305,6 +1314,12 @@ export default function MatchesHubScreenV2() {
       if (!match.id) continue;
       const status = mapStatus(match.status);
       map[match.id] = {
+        home: match.homeTeam?.name,
+        away: match.awayTeam?.name,
+        homeLogo: match.homeTeam?.logo,
+        awayLogo: match.awayTeam?.logo,
+        leagueName: match.league?.name,
+        leagueLogo: match.league?.logo,
         homeScore: match.score?.home ?? 0,
         awayScore: match.score?.away ?? 0,
         status,
@@ -2016,6 +2031,7 @@ export default function MatchesHubScreenV2() {
           onToggleSubscription={handleToggleSubscription}
           onOpenDetails={handleOpenMatchDetails}
           onFixtureVisibility={handleFixtureVisibility}
+          nameRevision={nameRevision}
         />
       );
     },
@@ -2028,6 +2044,7 @@ export default function MatchesHubScreenV2() {
       handleToggleSubscription,
       handleOpenMatchDetails,
       handleFixtureVisibility,
+      nameRevision,
     ],
   );
 
@@ -2044,6 +2061,7 @@ export default function MatchesHubScreenV2() {
         onToggleSubscription={handleToggleSubscription}
         onOpenDetails={handleOpenMatchDetails}
         onFixtureVisibility={handleFixtureVisibility}
+        nameRevision={nameRevision}
       />
     ),
     [
@@ -2055,6 +2073,7 @@ export default function MatchesHubScreenV2() {
       handleToggleSubscription,
       handleOpenMatchDetails,
       handleFixtureVisibility,
+      nameRevision,
     ],
   );
 
@@ -2116,6 +2135,7 @@ export default function MatchesHubScreenV2() {
           subscribingFixtureId={subscribingFixtureId}
           onToggleSubscription={handleToggleSubscription}
           onOpenDetails={handleOpenMatchDetails}
+          nameRevision={nameRevision}
         />
       ),
     [
@@ -2127,6 +2147,7 @@ export default function MatchesHubScreenV2() {
       subscribingFixtureId,
       handleToggleSubscription,
       handleOpenMatchDetails,
+      nameRevision,
     ],
   );
 
@@ -2555,6 +2576,7 @@ export default function MatchesHubScreenV2() {
             subscribingFixtureId={subscribingFixtureId}
             onToggleSubscription={handleToggleSubscription}
             onOpenDetails={handleOpenMatchDetails}
+            nameRevision={nameRevision}
           />
         </View>
       );
@@ -2569,6 +2591,7 @@ export default function MatchesHubScreenV2() {
       subscribingFixtureId,
       handleToggleSubscription,
       handleOpenMatchDetails,
+      nameRevision,
     ],
   );
 

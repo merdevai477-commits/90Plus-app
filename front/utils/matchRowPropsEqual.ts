@@ -38,6 +38,8 @@ export type MatchRowCompareProps = {
   onOpenDetails: unknown;
   worldCupCard?: { logoSource: unknown; leagueName: string };
   onFixtureVisibility?: unknown;
+  /** Bumps when Arabic name translations arrive, so a memoized row can refresh both teams together. */
+  nameRevision?: number;
 };
 
 function predictionStamp(
@@ -80,6 +82,7 @@ export function matchRowPropsEqual(prev: MatchRowCompareProps, next: MatchRowCom
     prev.onOpenDetails === next.onOpenDetails &&
     prev.worldCupCard?.leagueName === next.worldCupCard?.leagueName &&
     prev.worldCupCard?.logoSource === next.worldCupCard?.logoSource &&
-    prev.onFixtureVisibility === next.onFixtureVisibility
+    prev.onFixtureVisibility === next.onFixtureVisibility &&
+    prev.nameRevision === next.nameRevision
   );
 }
