@@ -80,6 +80,11 @@
       "env": {
         "EXPO_PUBLIC_DIAGNOSTICS": "1"
       }
+    },
+    "simulator": {
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {
