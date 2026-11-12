@@ -14,14 +14,13 @@ jest.mock('../../lib/prisma', () => ({
     cachedFixture: {
       findMany: jest.fn(),
     },
-    $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        kingDailySlate: {
-          deleteMany: jest.fn(),
-          createMany: jest.fn(),
-        },
-      }),
-    ),
+    $transaction: jest.fn(async (fn: (tx: any) => Promise<unknown>) => {
+      const { default: db } = jest.requireMock('../../lib/prisma') as { default: any };
+      return fn({
+        kingDailySlate: db.kingDailySlate,
+        $executeRaw: jest.fn().mockResolvedValue(1),
+      });
+    }),
   },
 }));
 
@@ -74,15 +73,51 @@ describe('king daily slate', () => {
     expect(rows.map((r) => r.fixture.id)).toEqual([200, 100]);
   });
 
-  it('falls back to auto ranking when the slate is empty', async () => {
-    (mockedPrisma.kingDailySlate.findMany as jest.Mock).mockResolvedValue([]);
+  it('pins the auto ranking on the first read and keeps that list', async () => {
+    const findMany = mockedPrisma.kingDailySlate.findMany as jest.Mock;
+    findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     (mockedCache.getMatchesByDate as jest.Mock).mockResolvedValue([
       fixture(1, 'One'),
       fixture(2, 'Two'),
     ]);
 
     const rows = (await getKingDailyMatches('2026-11-01')) as any[];
-    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.fixture.id)).toEqual([1, 2]);
+    expect(mockedPrisma.kingDailySlate.createMany).toHaveBeenCalledWith({
+      data: [
+        { cairoDay: new Date('2026-11-01T00:00:00.000Z'), apiMatchId: 1, sortOrder: 1 },
+        { cairoDay: new Date('2026-11-01T00:00:00.000Z'), apiMatchId: 2, sortOrder: 2 },
+      ],
+    });
+
+    findMany.mockResolvedValue([{ apiMatchId: 2 }, { apiMatchId: 1 }]);
+    const again = (await getKingDailyMatches('2026-11-01')) as any[];
+    expect(again.map((row) => row.fixture.id)).toEqual([2, 1]);
+    expect(mockedPrisma.kingDailySlate.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the list already pinned inside the lock', async () => {
+    const findMany = mockedPrisma.kingDailySlate.findMany as jest.Mock;
+    findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ apiMatchId: 2 }]);
+    (mockedCache.getMatchesByDate as jest.Mock).mockResolvedValue([
+      fixture(1, 'One'),
+      fixture(2, 'Two'),
+    ]);
+
+    const rows = (await getKingDailyMatches('2026-11-01')) as any[];
+    expect(rows.map((row) => row.fixture.id)).toEqual([2]);
+    expect(mockedPrisma.kingDailySlate.createMany).not.toHaveBeenCalled();
+  });
+
+  it('does not pin an empty day', async () => {
+    (mockedPrisma.kingDailySlate.findMany as jest.Mock).mockResolvedValue([]);
+    (mockedCache.getMatchesByDate as jest.Mock).mockResolvedValue([]);
+
+    const rows = await getKingDailyMatches('2026-11-01');
+    expect(rows).toEqual([]);
+    expect(mockedPrisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('setKingDailySlate replaces the day and caps at 10', async () => {

@@ -5,9 +5,9 @@ jest.mock('@clerk/clerk-expo', () => ({ useAuth: () => ({ isLoaded: true, userId
 jest.mock('../../../services/predictions.service', () => {
   class PredictionApiError extends Error {
     status: number;
-    constructor(message: string, code: number) {
+    constructor(_code: string, message: string, status: number) {
       super(message);
-      this.status = code;
+      this.status = status;
     }
   }
   return {
@@ -62,12 +62,12 @@ describe('useKingPicksStore hydrate', () => {
     );
     store.confirm('42', seq);
 
-    expect(useKingPicksStore.getState().server['42']?.type).toBe('home');
+    expect(useKingPicksStore.getState().server['winner:42']?.type).toBe('home');
 
     // Simulate a stale/empty GET after a successful POST (iOS focus reload).
     store.hydrate({});
 
-    const pick = useKingPicksStore.getState().server['42'];
+    const pick = useKingPicksStore.getState().server['winner:42'];
     expect(pick?.type).toBe('home');
     expect(pick?.correct).toBeNull();
   });
@@ -78,8 +78,8 @@ describe('useKingPicksStore hydrate', () => {
 
     store.hydrate({});
 
-    expect(useKingPicksStore.getState().local['7']?.type).toBe('draw');
-    expect(useKingPicksStore.getState().server['7']?.type).toBe('draw');
+    expect(useKingPicksStore.getState().local['winner:7']?.type).toBe('draw');
+    expect(useKingPicksStore.getState().server['winner:7']?.type).toBe('draw');
   });
 
   it('drops local once the server echoes the same pick', () => {
@@ -100,8 +100,8 @@ describe('useKingPicksStore hydrate', () => {
       },
     });
 
-    expect(useKingPicksStore.getState().local['9']).toBeUndefined();
-    expect(useKingPicksStore.getState().server['9']?.type).toBe('away');
+    expect(useKingPicksStore.getState().local['winner:9']).toBeUndefined();
+    expect(useKingPicksStore.getState().server['winner:9']?.type).toBe('away');
   });
 });
 
@@ -114,7 +114,7 @@ describe('a save that failed without a definite answer (D3)', () => {
 
     await expect(settleUncertainSave('tok', '42', seq)).resolves.toBe('confirmed');
 
-    expect(useKingPicksStore.getState().server['42']?.type).toBe('home');
+    expect(useKingPicksStore.getState().server['winner:42']?.type).toBe('home');
     expect(useKingPicksStore.getState().confirmed).toBe(1);
   });
 
@@ -124,7 +124,7 @@ describe('a save that failed without a definite answer (D3)', () => {
 
     await expect(settleUncertainSave('tok', '42', seq)).resolves.toBe('reverted');
 
-    expect(useKingPicksStore.getState().local['42']).toBeUndefined();
+    expect(useKingPicksStore.getState().local['winner:42']).toBeUndefined();
   });
 
   it('reverts when the server holds a different pick', async () => {
@@ -140,7 +140,7 @@ describe('a save that failed without a definite answer (D3)', () => {
 
     await expect(settleUncertainSave('tok', '42', seq)).resolves.toBe('unknown');
 
-    expect(useKingPicksStore.getState().local['42']?.type).toBe('home');
+    expect(useKingPicksStore.getState().local['winner:42']?.type).toBe('home');
   });
 
   it('treats only a 4xx as a definite rejection', () => {
@@ -161,7 +161,7 @@ describe('picks across sessions (D5, D6)', () => {
 
     useKingPicksStore.getState().bindUser('user_a');
 
-    expect(useKingPicksStore.getState().server['42']?.type).toBe('home');
+    expect(useKingPicksStore.getState().server['winner:42']?.type).toBe('home');
   });
 
   it('sign-out and a different account wipe the picks', () => {
@@ -184,16 +184,16 @@ describe('picks across sessions (D5, D6)', () => {
     store.confirm('42', store.begin('42', pending, meta));
     store.begin('7', { ...pending, type: 'draw' }, meta);
 
-    const saved = JSON.parse((await AsyncStorage.getItem('king-picks')) ?? '{}');
+    const saved = JSON.parse((await AsyncStorage.getItem('king-picks-v2')) ?? '{}');
 
     expect(saved.state.userId).toBe('user_a');
-    expect(Object.keys(saved.state.server)).toEqual(['42']);
+    expect(Object.keys(saved.state.server)).toEqual(['winner:42']);
     expect(saved.state.local).toBeUndefined();
   });
 
   async function restoreFor(savedUser: string | null) {
-    await AsyncStorage.setItem('king-picks', JSON.stringify({
-      state: { userId: savedUser, server: { '42': pending } },
+    await AsyncStorage.setItem('king-picks-v2', JSON.stringify({
+      state: { userId: savedUser, server: { 'winner:42': pending } },
       version: 0,
     }));
     await useKingPicksStore.persist.rehydrate();
@@ -203,7 +203,7 @@ describe('picks across sessions (D5, D6)', () => {
     await restoreFor('user_a');
     useKingPicksStore.getState().bindUser('user_a');
 
-    expect(useKingPicksStore.getState().server['42']?.type).toBe('home');
+    expect(useKingPicksStore.getState().server['winner:42']?.type).toBe('home');
   });
 
   it('never restores one account\'s picks into another', async () => {
@@ -218,10 +218,10 @@ describe('picks across sessions (D5, D6)', () => {
     useKingPicksStore.getState().bindUser('user_a');
 
     useKingPicksStore.getState().hydrate({}, ['99']);
-    expect(useKingPicksStore.getState().server['42']).toBeDefined();
+    expect(useKingPicksStore.getState().server['winner:42']).toBeDefined();
 
     useKingPicksStore.getState().hydrate({}, ['42']);
-    expect(useKingPicksStore.getState().server['42']).toBeUndefined();
+    expect(useKingPicksStore.getState().server['winner:42']).toBeUndefined();
   });
 });
 
@@ -231,5 +231,25 @@ describe('result pushes (D9)', () => {
     useKingPicksStore.getState().noteResult();
 
     expect(useKingPicksStore.getState().results).toBe(2);
+  });
+});
+
+describe('modes stay apart', () => {
+  it('a winner reload does not drop an exact pick', () => {
+    const store = useKingPicksStore.getState();
+    store.confirm(
+      '42',
+      store.begin('42', { type: 'home', home: null, away: null, correct: null }, meta, 'winner'),
+      'winner',
+    );
+    store.confirm(
+      '42',
+      store.begin('42', { type: 'draw', home: 1, away: 1, correct: null }, meta, 'exact'),
+      'exact',
+    );
+
+    store.hydrate({}, ['42'], 'winner');
+
+    expect(useKingPicksStore.getState().server['exact:42']?.home).toBe(1);
   });
 });

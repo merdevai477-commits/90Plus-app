@@ -115,7 +115,7 @@ describe('KingHistoryList', () => {
     fireEvent.press(screen.getByText(/^Correct/));
 
     await waitFor(() =>
-      expect(getKingHistory).toHaveBeenLastCalledWith('tok', expect.anything(), 'correct', 0));
+      expect(getKingHistory).toHaveBeenLastCalledWith(expect.any(Function), 'winner', 'correct', 0));
     expect(screen.getByText('Arsenal')).toBeTruthy();
   });
 
@@ -162,7 +162,7 @@ describe('KingHistoryList', () => {
     });
 
     expect(getKingHistory).toHaveBeenCalledTimes(2);
-    expect(getKingHistory).toHaveBeenLastCalledWith('tok', expect.anything(), 'all', 1);
+    expect(getKingHistory).toHaveBeenLastCalledWith(expect.any(Function), 'winner', 'all', 1);
 
     await act(async () => {
       release(page([row('p1', 'Arsenal'), row('p2', 'Benfica')]));

@@ -311,8 +311,14 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000, clien
         // only the newest 50 come back, and a pick made before 50 newer ones
         // would be missing from a screen that lists its match.
         const matchIds = parseMatchIdsQuery(req.query.matchIds);
+        const rawMode = req.query.mode;
+        const kingMode: KingMode | null = rawMode === 'exact' || rawMode === 'winner' ? rawMode : null;
         const predictions = await prisma.prediction.findMany({
-            where: matchIds ? { userId: user.id, apiMatchId: { in: matchIds } } : { userId: user.id },
+            where: {
+                userId: user.id,
+                ...(matchIds ? { apiMatchId: { in: matchIds } } : {}),
+                ...(kingMode ? { kingMode } : {}),
+            },
             orderBy: { createdAt: 'desc' },
             ...(matchIds ? {} : { take: 50 }),
         });
@@ -334,9 +340,11 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000, clien
             source: 'match',
         }));
 
-        // Group by match for frontend consumption
+        // One card per match. Rows are newest first, so the first row wins when
+        // the caller did not ask for a single King mode.
         const predictionsMap: { [key: number]: any } = {};
-        predictions.forEach((p: any) => {
+        for (const p of predictions) {
+            if (predictionsMap[p.apiMatchId]) continue;
             predictionsMap[p.apiMatchId] = {
                 id: p.id,
                 prediction: {
@@ -351,7 +359,7 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000, clien
                 isCorrect: p.isCorrect,
                 createdAt: p.createdAt
             };
-        });
+        }
 
         res.json({
             success: true,

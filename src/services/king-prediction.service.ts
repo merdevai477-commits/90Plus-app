@@ -1,9 +1,10 @@
 /**
  * King of the Game / King of Results persistence and leaderboard.
  *
- * One prediction row per user+match. Winner mode stores home/draw/away and
- * clears the scoreline. Results mode stores the scoreline and derives the
- * winner from it. A row can be edited until kickoff.
+ * One row per user, match, and mode. Winner mode stores home/draw/away.
+ * Results mode stores the scoreline and derives the winner from it.
+ * Each row can be edited until that match kicks off, and saving one mode
+ * does not replace the other.
  */
 
 import type { Prediction } from '@prisma/client';
@@ -166,27 +167,11 @@ async function loadFixturesByIds(ids: number[], dayFixtures: any[]): Promise<any
 }
 
 /**
- * The day's King matches. Prefer an admin-curated slate when one exists for the
- * Cairo day; otherwise rank the same way the prediction-groups daily round did
- * (Big 5 first, then marquee clubs per continent).
- *
- * `pickTopFixtures` only considers fixtures that have not kicked off, so every
- * fixture is ranked as if it were still upcoming. Otherwise a match would drop
- * out of the list at kickoff and take the user's locked prediction with it.
- * Women's, reserve and youth sides are left out so quiet days don't fill up
- * with them.
+ * Rank the day's fixtures as if none have kicked off, so a match that is live
+ * or finished does not fall out of the ten. Women's, reserve and youth sides
+ * stay out so a quiet day does not fill up with them.
  */
-export async function getKingDailyMatches(dateString?: string): Promise<unknown[]> {
-  const day = dateString && KING_DATE_RE.test(dateString) ? dateString : calendarTodayKey();
-  const { footballDataCacheService } = await import('./football-data-cache.service');
-  const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
-
-  const slateIds = await getKingDailySlateIds(day);
-  if (slateIds.length > 0) {
-    const curated = await loadFixturesByIds(slateIds, fixtures);
-    return projectMatchesForListView(curated.map(stripHeavyFixtureFields));
-  }
-
+function rankKingFixtureIds(fixtures: any[]): number[] {
   const asUpcoming = fixtures.filter((f) => !isSecondaryFixture(f)).map((original) => ({
     ...original,
     fixture: {
@@ -196,16 +181,61 @@ export async function getKingDailyMatches(dateString?: string): Promise<unknown[
     __original: original,
   }));
 
-  const top = pickTopFixtures(asUpcoming, KING_DAILY_MATCH_LIMIT)
+  return pickTopFixtures(asUpcoming, KING_DAILY_MATCH_LIMIT)
     .map((row: any) => row.__original)
     .sort((a: any, b: any) => {
       const left = Date.parse(a?.fixture?.date ?? '') || 0;
       const right = Date.parse(b?.fixture?.date ?? '') || 0;
       return left - right;
     })
-    .map(stripHeavyFixtureFields);
+    .map((row: any) => fixtureIdOf(row))
+    .filter((id: number | null): id is number => id != null);
+}
 
-  return projectMatchesForListView(top);
+/**
+ * The day's match ids. An admin slate is left as it was saved. The first read
+ * of a day with no slate pins the auto ranking, under a lock, so a later
+ * request cannot swap the ten matches.
+ */
+async function ensureKingDailySlate(day: string, fixtures: any[]): Promise<number[]> {
+  const existing = await getKingDailySlateIds(day);
+  if (existing.length > 0) return existing;
+
+  const ranked = rankKingFixtureIds(fixtures);
+  if (ranked.length === 0) return [];
+
+  const dayDate = cairoDayDate(day);
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`king-slate:${day}`}))`;
+    const rows = await tx.kingDailySlate.findMany({
+      where: { cairoDay: dayDate },
+      orderBy: [{ sortOrder: 'asc' }, { apiMatchId: 'asc' }],
+      select: { apiMatchId: true },
+    });
+    if (rows.length > 0) return rows.map((row) => row.apiMatchId);
+    await tx.kingDailySlate.createMany({
+      data: ranked.map((apiMatchId, index) => ({
+        cairoDay: dayDate,
+        apiMatchId,
+        sortOrder: index + 1,
+      })),
+    });
+    return ranked;
+  });
+}
+
+/**
+ * The day's King matches, in slate order. A match that has kicked off stays
+ * in the list; only the prediction button closes.
+ */
+export async function getKingDailyMatches(dateString?: string): Promise<unknown[]> {
+  const day = dateString && KING_DATE_RE.test(dateString) ? dateString : calendarTodayKey();
+  const { footballDataCacheService } = await import('./football-data-cache.service');
+  const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
+  const slateIds = await ensureKingDailySlate(day, fixtures);
+  if (slateIds.length === 0) return [];
+  const curated = await loadFixturesByIds(slateIds, fixtures);
+  return projectMatchesForListView(curated.map(stripHeavyFixtureFields));
 }
 
 export interface UpsertKingPredictionInput {
@@ -260,14 +290,18 @@ export async function upsertKingPrediction(
     }
   }
 
-  // Concurrent first-create on (userId, apiMatchId) can lose with P2002; retry once as update (GK-6).
+  // Concurrent first-create on (userId, apiMatchId, kingMode) can lose with P2002; retry once as update (GK-6).
   let racedCreate = false;
   for (;;) {
     try {
       return await prisma.$transaction(async (tx) => {
         const existing = await tx.prediction.findUnique({
           where: {
-            userId_apiMatchId: { userId: user.id, apiMatchId: input.apiMatchId },
+            userId_apiMatchId_kingMode: {
+              userId: user.id,
+              apiMatchId: input.apiMatchId,
+              kingMode: input.mode,
+            },
           },
         });
 
@@ -275,7 +309,7 @@ export async function upsertKingPrediction(
           if (existing.isCorrect !== null) {
             throw new KingPredictionError('ALREADY_RESOLVED');
           }
-          // Any change after kickoff is refused, including switching mode (B4, Q4, Q6).
+          // Edits to this mode close at kickoff. The other mode is its own row (B4, Q4, Q6).
           const verdict = lockVerdict(fixture, { isNew: false }, now);
           if (verdict !== 'OPEN') throw new KingPredictionError(verdict);
 
@@ -283,6 +317,7 @@ export async function upsertKingPrediction(
             where: { id: existing.id },
             data: {
               predictionType,
+              kingMode: input.mode,
               predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
               predictedAwayScore: input.mode === 'exact' ? input.awayScore : null,
               homeTeam: input.homeTeam ?? existing.homeTeam,
@@ -315,6 +350,7 @@ export async function upsertKingPrediction(
             userId: user.id,
             apiMatchId: input.apiMatchId,
             predictionType,
+            kingMode: input.mode,
             coinsSpent: input.coinsSpent,
             isCorrect: null,
             predictedHomeScore: input.mode === 'exact' ? input.homeScore : null,
@@ -540,9 +576,7 @@ export interface KingHistoryResult {
 }
 
 function modeWhere(mode: KingMode) {
-  return mode === 'exact'
-    ? { predictedHomeScore: { not: null }, predictedAwayScore: { not: null } }
-    : { predictedHomeScore: null };
+  return { kingMode: mode };
 }
 
 const STATUS_WHERE: Record<Exclude<KingHistoryStatus, 'all'>, object> = {

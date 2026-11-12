@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,11 +30,14 @@ import { KingHistoryList } from './HistoryList';
 import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KingToast, type KingToastState } from './KingToast';
+import { kingCardButton, matchHasStarted } from './kingMatchButton';
 import {
   isDefiniteRejection,
+  kingPickKey,
   settleUncertainSave,
   useBindKingPicksUser,
   useKingPicksStore,
+  type KingApiMode,
   type KingPick,
 } from './kingPicksStore';
 import {
@@ -65,11 +69,9 @@ const BUTTON_LOOK: Record<
   closed: { tone: 'muted', icon: 'lock-closed', text: '#8A8794' },
 };
 
-function started(match: Match): boolean {
-  if (match.status === 'live' || match.status === 'finished') return true;
-  if (!match.fixtureDate) return false;
-  const kickoff = new Date(match.fixtureDate).getTime();
-  return Number.isFinite(kickoff) && kickoff <= Date.now();
+function started(match: Match, now = Date.now()): boolean {
+  const kickoff = match.fixtureDate ? new Date(match.fixtureDate).getTime() : null;
+  return matchHasStarted(match.status, Number.isFinite(kickoff) ? kickoff : null, now);
 }
 
 function parseScore(text: string): number | null {
@@ -87,6 +89,7 @@ export function KingPlayScreen({
 }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
   const isGame = mode === 'game';
+  const apiMode: KingApiMode = isGame ? 'winner' : 'exact';
   const dateKey = (Array.isArray(date) ? date[0] : date) || '';
   const [todayKey, setTodayKey] = useState(() => cairoTodayKey());
   const dayPassed = dateKey !== '' && dateKey < todayKey;
@@ -114,6 +117,7 @@ export function KingPlayScreen({
     [serverPicks, localPicks],
   );
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [sheetMatch, setSheetMatch] = useState<Match | null>(null);
   const [sheetPick, setSheetPick] = useState<Pick | null>(null);
@@ -125,31 +129,40 @@ export function KingPlayScreen({
   const listBottom = navBottom + NAV_HEIGHT + 20;
 
   const loadGenRef = useRef(0);
+  const hasRows = useRef(false);
+
+  useEffect(() => {
+    hasRows.current = false;
+    setMatches([]);
+    setError(false);
+    setLoading(true);
+  }, [dateKey]);
 
   const load = useCallback(async () => {
     const gen = ++loadGenRef.current;
-    setError(false);
     const { matches: dayMatches, calendar } = await fetchKingMatches(dateKey || cairoTodayKey());
     if (gen !== loadGenRef.current) return;
     if (calendar) setTodayKey(calendar.today);
     setMatches(dayMatches);
+    setError(false);
+    hasRows.current = true;
 
     // No token is a gap, not a sign-out: the picks stay until Clerk says otherwise (D6).
     const hasToken = !!(await getTokenRef.current().catch(() => null));
     if (gen !== loadGenRef.current || !hasToken) return;
     const ids = dayMatches.map((match) => match.id);
-    const picks = await PredictionsService.getPredictionsForMatches(getTokenRef.current, ids).catch(() => null);
+    const picks = await PredictionsService.getPredictionsForMatches(getTokenRef.current, ids, apiMode).catch(() => null);
     if (gen !== loadGenRef.current) return;
-    if (picks) useKingPicksStore.getState().hydrate(picks, ids);
-  }, [dateKey]);
+    if (picks) useKingPicksStore.getState().hydrate(picks, ids, apiMode);
+  }, [apiMode, dateKey]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      setLoading(true);
+      if (!hasRows.current) setLoading(true);
       void load()
         .catch(() => {
-          if (active) setError(true);
+          if (active && !hasRows.current) setError(true);
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -161,6 +174,18 @@ export function KingPlayScreen({
       };
     }, [load]),
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } catch {
+      if (!hasRows.current) setError(true);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, [load]);
 
   const showError = useCallback((title: string) => setToast({ variant: 'error', title }), []);
 
@@ -182,13 +207,13 @@ export function KingPlayScreen({
     showError(copy.loadError);
   }, [copy, showError]);
 
-  const isLocked = useCallback(
-    (match: Match) => dayPassed || started(match) || saved[String(match.id)]?.correct != null,
-    [dayPassed, saved],
+  const pickFor = useCallback(
+    (matchId: string | number) => saved[kingPickKey(apiMode, matchId)],
+    [apiMode, saved],
   );
 
   const openSheet = (match: Match) => {
-    const prev = saved[String(match.id)];
+    const prev = pickFor(match.id);
     setHomeText(prev?.home != null ? String(prev.home) : '');
     setAwayText(prev?.away != null ? String(prev.away) : '');
     setSheetPick(prev?.type ?? null);
@@ -226,6 +251,7 @@ export function KingPlayScreen({
       matchId,
       { type: predictionType, home: isGame ? null : home, away: isGame ? null : away, correct: null },
       meta,
+      apiMode,
     );
 
     setSheetMatch(null);
@@ -233,7 +259,7 @@ export function KingPlayScreen({
       predictionType === 'home' ? teamName(match.homeTeam) : predictionType === 'away' ? teamName(match.awayTeam) : copy.draw;
     setToast({
       variant: 'success',
-      title: saved[matchId] ? copy.updated : copy.saved,
+      title: pickFor(matchId) ? copy.updated : copy.saved,
       pick: isGame ? pickName : `${away} - ${home}`,
       caption: `${teamName(match.awayTeam)} ${copy.vs} ${teamName(match.homeTeam)}`,
     });
@@ -247,26 +273,26 @@ export function KingPlayScreen({
           predictedHomeScore: isGame ? undefined : home!,
           predictedAwayScore: isGame ? undefined : away!,
         });
-        picks.confirm(matchId, seq);
+        picks.confirm(matchId, seq, apiMode);
       } catch (err) {
         if (isDefiniteRejection(err)) {
-          picks.revert(matchId, seq);
+          picks.revert(matchId, seq, apiMode);
           explain(err);
           return;
         }
         // Timeout / network / 5xx: the save may have landed, so ask before undoing it (D3).
-        const outcome = await settleUncertainSave(getTokenRef.current, matchId, seq);
+        const outcome = await settleUncertainSave(getTokenRef.current, matchId, seq, apiMode);
         if (outcome !== 'confirmed') explain(err);
       }
     })();
-  }, [awayText, copy, explain, homeText, isGame, isSignedIn, saved, sheetMatch, sheetPick, showError, teamName]);
+  }, [apiMode, awayText, copy, explain, homeText, isGame, isSignedIn, pickFor, sheetMatch, sheetPick, showError, teamName]);
 
   const sheetReady = isGame
     ? sheetPick != null
     : parseScore(homeText) != null && parseScore(awayText) != null;
 
   const savedLabel = (match: Match): string | null => {
-    const prev = saved[String(match.id)];
+    const prev = pickFor(match.id);
     if (!prev) return null;
     const exact = prev.home != null && prev.away != null;
     // King of Results — exact scoreline.
@@ -282,7 +308,7 @@ export function KingPlayScreen({
   // King of Results is about the exact scoreline, so a right winner with the
   // wrong score still reads as wrong here once the final score is known.
   const verdictOf = (match: Match): Verdict | null => {
-    const prev = saved[String(match.id)];
+    const prev = pickFor(match.id);
     if (!prev || savedLabel(match) == null) return null;
     if (prev.correct == null) return 'pending';
     if (!prev.correct) return 'wrong';
@@ -306,34 +332,39 @@ export function KingPlayScreen({
 
       {tab === 'history' ? (
         <KingHistoryList mode={mode} bottomPadding={listBottom} onPredict={() => setTab('predict')} />
-      ) : loading ? (
+      ) : loading && matches.length === 0 ? (
         <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 40 }} />
-      ) : error ? (
+      ) : error && matches.length === 0 ? (
         <Pressable onPress={() => { setLoading(true); void load().catch(() => setError(true)).finally(() => setLoading(false)); }} style={styles.center}>
           <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.loadError}</Text>
           <Text style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
         </Pressable>
-      ) : matches.length === 0 ? (
-        <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
       ) : (
         <ScrollView
           contentContainerStyle={[styles.cardList, { paddingBottom: listBottom }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={KING_PURPLE} />}
         >
+          {matches.length === 0 ? (
+            <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
+          ) : null}
           {visibleMatches.map((match) => {
-            const locked = isLocked(match);
             const verdict = verdictOf(match);
+            const button = kingCardButton({
+              dayPassed,
+              started: started(match),
+              live: match.status === 'live',
+              verdict,
+            });
             const pick = savedLabel(match);
-            const label =
-              verdict === 'correct'
+            const label = button.state === 'closed'
+              ? (button.closedKind === 'live' ? copy.liveClosed : copy.playedClosed)
+              : verdict === 'correct'
                 ? copy.resultCorrect
                 : verdict === 'wrong'
                   ? copy.resultWrong
                   : pick ?? copy.predictNow;
-            // Never show the gray "closed" lock on a visible card: locked + pick
-            // uses pending/correct/wrong; unlocked uses open.
-            const state: ButtonState = verdict ?? 'open';
-            const look = BUTTON_LOOK[state];
+            const look = BUTTON_LOOK[button.state];
             return (
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
                 <CardTeam name={teamName(match.awayTeam)} logo={match.awayTeam.logo} font={fontBold} size={13} />
@@ -343,15 +374,20 @@ export function KingPlayScreen({
                   </Text>
                   <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
                   <Pressable
-                    disabled={locked}
+                    disabled={button.locked}
+                    delayPressIn={0}
                     onPress={() => openSheet(match)}
-                    style={({ pressed }) => [styles.predictPress, pressed && styles.predictPressed]}
+                    style={({ pressed }) => [styles.predictPress, pressed && !button.locked && styles.predictPressed]}
                   >
-                    <GlassSurface radius={12} tone={look.tone} style={styles.predictBtn}>
+                    <GlassSurface
+                      radius={12}
+                      tone={look.tone}
+                      style={[styles.predictBtn, button.state === 'closed' && styles.predictBtnClosed]}
+                    >
                       <Ionicons name={look.icon} size={13} color={look.text} />
                       <Text
                         style={[styles.predictText, { color: look.text, fontFamily: fontBold }]}
-                        numberOfLines={1}
+                        numberOfLines={button.state === 'closed' ? 2 : 1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
                         maxFontSizeMultiplier={1.15}
@@ -628,13 +664,15 @@ const styles = StyleSheet.create({
   predictPress: { marginTop: 9, alignSelf: 'stretch' },
   predictPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   predictBtn: {
-    height: 34,
+    minHeight: 34,
     paddingHorizontal: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
   },
+  predictBtnClosed: { minHeight: 44 },
   predictText: { flexShrink: 1, fontSize: 13 },
   footerBtn: {
     height: 58,

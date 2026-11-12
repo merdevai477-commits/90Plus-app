@@ -13,6 +13,13 @@ import {
 
 export type KingPickType = 'home' | 'draw' | 'away';
 
+/** Matches the API `kingMode`: winner is King of the Game, exact is King of Results. */
+export type KingApiMode = 'winner' | 'exact';
+
+export function kingPickKey(mode: KingApiMode, matchId: string | number): string {
+  return `${mode}:${matchId}`;
+}
+
 export interface KingPick {
   type?: KingPickType;
   home: number | null;
@@ -57,14 +64,18 @@ interface KingPicksState {
    * `requestedIds` are the matches the read asked about; a restored pick the
    * server no longer returns for one of them is dropped (D5).
    */
-  hydrate: (predictionsMap: Record<string, unknown>, requestedIds?: Array<string | number>) => void;
+  hydrate: (
+    predictionsMap: Record<string, unknown>,
+    requestedIds?: Array<string | number>,
+    mode?: KingApiMode,
+  ) => void;
   clear: () => void;
   /** Sign-out or a different account wipes the picks; the same user keeps them (D6). */
   bindUser: (userId: string | null) => void;
   /** Applies the pick right away and returns a token for settling it. */
-  begin: (matchId: string, pick: KingPick, meta: KingPickMeta) => number;
-  confirm: (matchId: string, seq: number) => void;
-  revert: (matchId: string, seq: number) => void;
+  begin: (matchId: string, pick: KingPick, meta: KingPickMeta, mode?: KingApiMode) => number;
+  confirm: (matchId: string, seq: number, mode?: KingApiMode) => void;
+  revert: (matchId: string, seq: number, mode?: KingApiMode) => void;
 }
 
 let nextSeq = 0;
@@ -98,40 +109,47 @@ export const useKingPicksStore = create<KingPicksState>()(persist((set) => ({
 
   noteResult: () => set((state) => ({ results: state.results + 1 })),
 
-  hydrate: (predictionsMap, requestedIds = []) =>
+  hydrate: (predictionsMap, requestedIds = [], mode = 'winner') =>
     set((state) => {
+      const prefix = `${mode}:`;
       const incoming: Record<string, KingPick> = {};
       for (const [id, raw] of Object.entries(predictionsMap ?? {})) {
-        incoming[String(id)] = rowToPick(raw as ServerRow);
+        incoming[kingPickKey(mode, id)] = rowToPick(raw as ServerRow);
       }
-      const asked = new Set(requestedIds.map(String));
+      const asked = new Set(requestedIds.map((id) => kingPickKey(mode, id)));
       const fromDisk = { ...state.fromDisk };
       for (const id of [...asked, ...Object.keys(incoming)]) delete fromDisk[id];
 
       // A cached/stale GET can predate a save; keep the local pick until the
-      // server returns the same values.
+      // server returns the same values. The other mode is left untouched.
       const local: Record<string, LocalPick> = {};
       for (const [id, pick] of Object.entries(state.local)) {
-        const key = String(id);
-        const fromServer = incoming[key];
-        if (!fromServer || !samePick(fromServer, pick)) local[key] = pick;
+        if (!id.startsWith(prefix)) {
+          local[id] = pick;
+          continue;
+        }
+        const fromServer = incoming[id];
+        if (!fromServer || !samePick(fromServer, pick)) local[id] = pick;
       }
 
-      const server: Record<string, KingPick> = { ...incoming };
+      const server: Record<string, KingPick> = {};
+      for (const [id, pick] of Object.entries(state.server)) {
+        if (!id.startsWith(prefix)) server[id] = pick;
+      }
+      Object.assign(server, incoming);
 
       // Re-apply in-flight locals the payload omitted (empty/stale cache race).
       for (const [id, pick] of Object.entries(local)) {
-        if (!server[id]) server[id] = stripLocal(pick);
+        if (id.startsWith(prefix) && !server[id]) server[id] = stripLocal(pick);
       }
 
       // Pending picks already confirmed into `server` must not vanish when a
       // later hydrate arrives empty (common after iOS blur→focus reloads).
       for (const [id, pick] of Object.entries(state.server)) {
-        const key = String(id);
-        if (server[key]) continue;
+        if (!id.startsWith(prefix) || server[id]) continue;
         // A restored pick the server was just asked about and did not return is gone.
-        if (state.fromDisk[key] && asked.has(key)) continue;
-        if (pick.correct == null || state.fromDisk[key]) server[key] = pick;
+        if (state.fromDisk[id] && asked.has(id)) continue;
+        if (pick.correct == null || state.fromDisk[id]) server[id] = pick;
       }
 
       return { server, local, fromDisk };
@@ -145,18 +163,18 @@ export const useKingPicksStore = create<KingPicksState>()(persist((set) => ({
       return { userId, bound: true, server: {}, local: {}, fromDisk: {} };
     }),
 
-  begin: (matchId, pick, meta) => {
+  begin: (matchId, pick, meta, mode = 'winner') => {
     const seq = ++nextSeq;
-    const id = String(matchId);
+    const id = kingPickKey(mode, matchId);
     set((state) => ({ local: { ...state.local, [id]: { ...pick, meta, seq } } }));
     return seq;
   },
 
   // The local pick stays until hydrate sees it, so lists that refetch after
   // this bump never drop the row in between.
-  confirm: (matchId, seq) =>
+  confirm: (matchId, seq, mode = 'winner') =>
     set((state) => {
-      const id = String(matchId);
+      const id = kingPickKey(mode, matchId);
       const pick = state.local[id];
       if (!pick || pick.seq !== seq) return state;
       return {
@@ -165,15 +183,15 @@ export const useKingPicksStore = create<KingPicksState>()(persist((set) => ({
       };
     }),
 
-  revert: (matchId, seq) =>
+  revert: (matchId, seq, mode = 'winner') =>
     set((state) => {
-      const id = String(matchId);
+      const id = kingPickKey(mode, matchId);
       if (state.local[id]?.seq !== seq) return state;
       const { [id]: _failed, ...local } = state.local;
       return { local };
     }),
 }), {
-  name: 'king-picks',
+  name: 'king-picks-v2',
   storage: createJSONStorage(() => AsyncStorage),
   // In-flight saves are not persisted: one the app was killed during would show forever.
   partialize: (state) => ({ server: state.server, userId: state.userId }),
@@ -211,22 +229,24 @@ export async function settleUncertainSave(
   token: PredictionAuth,
   matchId: string,
   seq: number,
+  mode: KingApiMode = 'winner',
 ): Promise<'confirmed' | 'reverted' | 'unknown'> {
   const store = useKingPicksStore.getState();
-  const pick = store.local[matchId];
+  const key = kingPickKey(mode, matchId);
+  const pick = store.local[key];
   if (!pick || pick.seq !== seq) return 'unknown';
   let map: Record<string, unknown>;
   try {
-    map = await PredictionsService.getPredictionsForMatches(token, [matchId]);
+    map = await PredictionsService.getPredictionsForMatches(token, [matchId], mode);
   } catch {
     return 'unknown';
   }
   const row = map[matchId];
   if (row && samePick(rowToPick(row as ServerRow), pick)) {
-    useKingPicksStore.getState().confirm(matchId, seq);
+    useKingPicksStore.getState().confirm(matchId, seq, mode);
     return 'confirmed';
   }
-  useKingPicksStore.getState().revert(matchId, seq);
+  useKingPicksStore.getState().revert(matchId, seq, mode);
   return 'reverted';
 }
 
@@ -237,13 +257,16 @@ export function isExactPick(pick: Pick<KingPick, 'home' | 'away'>): boolean {
 /** Local saves for one mode, shaped like history rows so the list can show them before the server does. */
 export function localHistoryItems(
   local: Record<string, LocalPick>,
-  exact: boolean,
+  mode: KingApiMode,
 ): KingHistoryItem[] {
-  return Object.entries(local).flatMap(([matchId, pick]) => {
-    if (isExactPick(pick) !== exact) return [];
+  const prefix = `${mode}:`;
+  return Object.entries(local).flatMap(([key, pick]) => {
+    if (!key.startsWith(prefix)) return [];
+    const matchId = Number(key.slice(prefix.length));
+    if (!Number.isFinite(matchId)) return [];
     return [{
-      id: `local-${matchId}`,
-      apiMatchId: Number(matchId),
+      id: `local-${key}`,
+      apiMatchId: matchId,
       predictionType: pick.type ?? 'draw',
       predictedHomeScore: pick.home,
       predictedAwayScore: pick.away,
@@ -257,6 +280,7 @@ export function localHistoryItems(
       finalHomeScore: null,
       finalAwayScore: null,
       matchStatus: null,
+      voided: false,
     }];
   });
 }

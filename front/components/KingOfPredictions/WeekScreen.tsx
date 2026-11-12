@@ -34,7 +34,7 @@ import {
 } from './KingBoardList';
 import { GlassSurface } from './GlassSurface';
 import { KingHeader } from './KingHeader';
-import { isExactPick, useBindKingPicksUser, useKingPicksStore } from './kingPicksStore';
+import { kingPickKey, useBindKingPicksUser, useKingPicksStore } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
@@ -124,23 +124,25 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
     }
 
     const ids = dayMatches.map((match) => match.id);
+    const apiMode = toApiMode(mode);
     const [picks, leaderboard] = await Promise.all([
-      PredictionsService.getPredictionsForMatches(getTokenRef.current, ids).catch(() => null),
-      PredictionsService.getKingLeaderboard(getTokenRef.current, toApiMode(mode), period).catch(
+      PredictionsService.getPredictionsForMatches(getTokenRef.current, ids, apiMode).catch(() => null),
+      PredictionsService.getKingLeaderboard(getTokenRef.current, apiMode, period).catch(
         () => null,
       ),
     ]);
     if (gen !== loadGenRef.current) return;
-    if (picks) useKingPicksStore.getState().hydrate(picks, ids);
+    if (picks) useKingPicksStore.getState().hydrate(picks, ids, apiMode);
     setBoard(leaderboard);
     // `results` re-runs this when a PREDICTION_RESULT push lands (D9).
   }, [calendar, isSignedIn, mode, period, results, selectedKey]);
 
   const predictedIds = useMemo(() => {
     const ids = new Set<string>();
+    const apiMode = toApiMode(mode);
     for (const id of dayMatchIds) {
-      const pick = localPicks[id] ?? serverPicks[id];
-      if (pick && isExactPick(pick) === (mode === 'results')) ids.add(id);
+      const key = kingPickKey(apiMode, id);
+      if (localPicks[key] ?? serverPicks[key]) ids.add(id);
     }
     return ids;
   }, [dayMatchIds, localPicks, mode, serverPicks]);

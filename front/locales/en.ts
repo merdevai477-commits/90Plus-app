@@ -1172,6 +1172,8 @@ export const en = {
     draw: 'Draw',
     awayWin: 'Away win',
     closed: 'Predictions closed',
+    liveClosed: 'Live · predictions closed',
+    playedClosed: 'Played · predictions closed',
     saved: 'Prediction saved',
     updated: 'Prediction updated',
     limit: 'Daily limit reached (10 predictions)',

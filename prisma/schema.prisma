@@ -1569,6 +1569,8 @@ model Prediction {
   userId             String
   apiMatchId         Int
   predictionType     String
+  /// winner = King of the Game, exact = King of Results. One row per mode.
+  kingMode           String
   coinsSpent         Int       @default(5)
   coinsWon           Int?
   isCorrect          Boolean?
@@ -1598,8 +1600,8 @@ model Prediction {
   resettleRunId      String?
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, apiMatchId])
-  @@unique([userId, canonicalFixtureKey])
+  @@unique([userId, apiMatchId, kingMode])
+  @@unique([userId, canonicalFixtureKey, kingMode])
   @@index([userId])
   @@index([apiMatchId])
   @@index([createdAt])

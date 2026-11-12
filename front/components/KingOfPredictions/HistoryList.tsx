@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +24,7 @@ import { useAppFont } from '../../utils/fontSetup';
 import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { GlassSurface, type GlassTone } from './GlassSurface';
 import { KingEmptyState } from './KingBoardList';
-import { isExactPick, localHistoryItems, useKingPicksStore } from './kingPicksStore';
+import { isExactPick, kingPickKey, localHistoryItems, useKingPicksStore } from './kingPicksStore';
 import { KING_PURPLE, toApiMode, type KingRouteMode } from './shared';
 
 const SIDE = 22;
@@ -86,9 +87,11 @@ export function KingHistoryList({
   const [counts, setCounts] = useState<Record<KingHistoryStatus, number> | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const requestId = useRef(0);
+  const itemsRef = useRef<KingHistoryItem[]>([]);
   const pageRef = useRef(0);
   const loadingMoreRef = useRef(false);
   const tokenRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,6 +119,7 @@ export function KingHistoryList({
       if (id !== requestId.current) return;
       if (!data) {
         if (!signedInRef.current) {
+          itemsRef.current = [];
           setItems([]);
           setCounts(null);
           setHasMore(false);
@@ -127,12 +131,13 @@ export function KingHistoryList({
         tokenRetry.current = setTimeout(() => { void reload(true); }, 3000);
         return;
       }
+      itemsRef.current = data.items;
       setItems(data.items);
       setCounts(data.counts);
       setHasMore(data.hasMore);
       pageRef.current = 0;
     } catch {
-      if (id === requestId.current) setError(true);
+      if (id === requestId.current && itemsRef.current.length === 0) setError(true);
     } finally {
       if (id === requestId.current) setLoading(false);
     }
@@ -162,14 +167,14 @@ export function KingHistoryList({
   // used to wipe history cards when the user had fiddled with Game and Results.
   const localPicks = useKingPicksStore((state) => state.local);
   const { shown, shownCounts } = useMemo(() => {
-    const exact = mode === 'results';
-    const pending = status === 'correct' || status === 'wrong' ? [] : localHistoryItems(localPicks, exact);
+    const apiMode = toApiMode(mode);
+    const pending = status === 'correct' || status === 'wrong' ? [] : localHistoryItems(localPicks, apiMode);
     if (Object.keys(localPicks).length === 0) return { shown: items, shownCounts: counts };
     const byMatch = new Map(pending.map((row) => [row.apiMatchId, row]));
     const merged = items.flatMap((item) => {
-      const local = localPicks[String(item.apiMatchId)];
+      const local = localPicks[kingPickKey(apiMode, item.apiMatchId)];
       if (!local) return [item];
-      if (isExactPick(local) !== exact) return [item];
+      if (isExactPick(local) !== (mode === 'results')) return [item];
       const row = byMatch.get(item.apiMatchId);
       byMatch.delete(item.apiMatchId);
       return row
@@ -190,6 +195,15 @@ export function KingHistoryList({
     };
   }, [counts, items, localPicks, mode, status]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await reload(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [reload]);
+
   const loadMore = useCallback(async () => {
     // The ref, not state, guards: two onEndReached in one frame both see the old state (D13).
     if (!hasMore || loading || loadingMoreRef.current) return;
@@ -202,7 +216,9 @@ export function KingHistoryList({
       if (!data || id !== requestId.current) return;
       setItems((prev) => {
         const seen = new Set(prev.map((row) => row.id));
-        return [...prev, ...data.items.filter((row) => !seen.has(row.id))];
+        const next = [...prev, ...data.items.filter((row) => !seen.has(row.id))];
+        itemsRef.current = next;
+        return next;
       });
       setCounts(data.counts);
       setHasMore(data.hasMore);
@@ -346,6 +362,7 @@ export function KingHistoryList({
         data={shown}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={KING_PURPLE} />}
         ListEmptyComponent={empty}
         // Rows already on screen stay while a reload runs; the full-list spinner
         // is only for the very first load (D1).

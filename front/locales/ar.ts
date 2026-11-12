@@ -1258,6 +1258,8 @@ export const ar = {
     draw: 'تعادل',
     awayWin: 'فوز الضيف',
     closed: 'التوقع مغلق',
+    liveClosed: 'بتتلعب · التوقع مغلق',
+    playedClosed: 'اتلعبت · التوقع مغلق',
     saved: 'تم حفظ توقعك',
     updated: 'تم تحديث توقعك',
     limit: 'وصلت للحد اليومي (10 توقعات)',

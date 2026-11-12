@@ -274,10 +274,12 @@ export const PredictionsService = {
   getPredictionsForMatches: async (
     token: PredictionAuth,
     matchIds: (string | number)[],
+    mode?: 'winner' | 'exact',
   ): Promise<Record<string, unknown>> => {
     if (matchIds.length === 0) return {};
     const query = encodeURIComponent(matchIds.join(','));
-    const response = await authFetch(token, `${API_URL}/predictions/user?matchIds=${query}`);
+    const modeQuery = mode ? `&mode=${mode}` : '';
+    const response = await authFetch(token, `${API_URL}/predictions/user?matchIds=${query}${modeQuery}`);
     if (!response.ok) {
       throw await PredictionsService._parseError(response);
     }

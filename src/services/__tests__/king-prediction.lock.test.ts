@@ -5,6 +5,7 @@
 
 const mockResolveFixture = jest.fn();
 const mockUserFind = jest.fn();
+const mockSlateFind = jest.fn();
 const mockTx = {
   prediction: { findUnique: jest.fn(), update: jest.fn(), create: jest.fn(), count: jest.fn() },
   $executeRaw: jest.fn(),
@@ -15,6 +16,7 @@ jest.mock('../../lib/prisma', () => ({
   __esModule: true,
   default: {
     user: { findFirst: (...a: unknown[]) => mockUserFind(...a) },
+    kingDailySlate: { findMany: (...a: unknown[]) => mockSlateFind(...a) },
     $transaction: (fn: (tx: unknown) => unknown) => fn(mockTx),
   },
 }));
@@ -62,6 +64,7 @@ beforeEach(() => {
   mockTx.prediction.update.mockImplementation(async ({ data }: any) => ({ id: 'p1', ...data }));
   mockTx.$executeRaw.mockResolvedValue(1);
   mockTx.$queryRaw.mockResolvedValue([{ count: 1 }]);
+  mockSlateFind.mockResolvedValue([]);
 });
 
 describe('upsertKingPrediction', () => {
@@ -80,6 +83,7 @@ describe('upsertKingPrediction', () => {
   it('submit route uses server kickoff — stored matchDate is the fixture kickoff (B2)', async () => {
     const r = await upsertKingPrediction(input({ mode: 'exact', homeScore: 2, awayScore: 1 }));
     expect(mockTx.prediction.create.mock.calls[0][0].data.matchDate).toBe(FUTURE);
+    expect(mockTx.prediction.create.mock.calls[0][0].data.kingMode).toBe('exact');
     expect(mockTx.prediction.create.mock.calls[0][0].data.canonicalFixtureKey).toBe('365:4800001');
     expect(r.updated).toBe(false);
   });
@@ -100,12 +104,28 @@ describe('upsertKingPrediction', () => {
     expect(mockTx.prediction.update).not.toHaveBeenCalled();
   });
 
-  it('allows mode switch before kickoff and does not take a daily slot', async () => {
+  it('edits the same mode before kickoff without taking another daily slot', async () => {
     mockTx.prediction.findUnique.mockResolvedValue({ id: 'p1', isCorrect: null, canonicalFixtureKey: null });
     const r = await upsertKingPrediction(input({ mode: 'exact', homeScore: 0, awayScore: 0 }));
     expect(r.updated).toBe(true);
     expect(mockTx.$executeRaw).not.toHaveBeenCalled();
+    expect(mockTx.prediction.update.mock.calls[0][0].data.kingMode).toBe('exact');
     expect(mockTx.prediction.update.mock.calls[0][0].data.canonicalFixtureKey).toBe('365:4800001');
+    expect(mockTx.prediction.findUnique).toHaveBeenCalledWith({
+      where: {
+        userId_apiMatchId_kingMode: { userId: 'u1', apiMatchId: 4800001, kingMode: 'exact' },
+      },
+    });
+  });
+
+  it('stores the other mode as its own row and takes a daily slot', async () => {
+    mockTx.prediction.findUnique.mockResolvedValue(null);
+    const winner = await upsertKingPrediction(input({ mode: 'winner', predictionType: 'away' }));
+    const exact = await upsertKingPrediction(input({ mode: 'exact', homeScore: 2, awayScore: 1 }));
+    expect(winner.updated).toBe(false);
+    expect(exact.updated).toBe(false);
+    expect(mockTx.prediction.create.mock.calls.map((call) => call[0].data.kingMode)).toEqual(['winner', 'exact']);
+    expect(mockTx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it('rejects update after kickoff (Q6)', async () => {
