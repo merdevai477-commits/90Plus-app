@@ -36,6 +36,30 @@ export function membershipCoversKickoff(member: MembershipInterval, kickoffAt: D
   return true;
 }
 
+/**
+ * Kickoff membership is the rule for every new performance.
+ * `legacyThrough` keeps rows already stored before the squad-lock migration,
+ * and only inside that membership's own gameweek. It must not pull points
+ * from earlier weeks the user did not play this player in.
+ */
+export function performanceCountsForMember(
+  row: { kickoffAt: Date; createdAt: Date; gameweekId?: string | null },
+  member: MembershipInterval & { legacyThrough?: Date | null },
+  memberGameweekId: string | null = null,
+): boolean {
+  if (membershipCoversKickoff(member, row.kickoffAt)) return true;
+  if (member.legacyThrough == null || memberGameweekId == null) return false;
+  if (row.gameweekId != null && row.gameweekId !== memberGameweekId) return false;
+  return row.createdAt.getTime() <= member.legacyThrough.getTime();
+}
+
+/** Provider kickoff when a postponed match is given a new start. */
+export function providerKickoff(game: { startTime?: string | null } | null | undefined): Date | null {
+  if (!game?.startTime) return null;
+  const parsed = new Date(game.startTime);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function lineupKey(slots: ReadonlyArray<{ slotKey: string; id: string | null }>): string {
   return [...slots]
     .map((slot) => `${slot.slotKey}:${slot.id ?? ''}`)

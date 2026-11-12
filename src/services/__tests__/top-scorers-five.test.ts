@@ -292,7 +292,7 @@ import {
   scoreTsfPicks,
   TopScorersFiveError,
 } from '../top-scorers-five.service';
-import { membershipCoversKickoff, nextConfirmedLock, pointsCoveringKickoff, squadUnlocksAt } from '../squad-lock';
+import { membershipCoversKickoff, nextConfirmedLock, performanceCountsForMember, pointsCoveringKickoff, squadUnlocksAt } from '../squad-lock';
 import { processTsfFixture, type TsfProcessingDeps } from '../top-scorers-five-processing.service';
 
 const NOW = new Date('2026-10-10T20:00:00.000Z');
@@ -1001,6 +1001,39 @@ describe('scoring follows kickoff, not the job clock', () => {
       [{ selectedAt, removedAt: null }],
       new Date('2026-11-12T00:00:00.000Z'),
     )).toBe(4);
+  });
+
+  it('does not let a migrated membership collect points from an earlier week', () => {
+    const member = {
+      selectedAt: new Date('2026-11-10T12:00:00.000Z'),
+      removedAt: null,
+      legacyThrough: new Date('2026-11-12T18:00:00.000Z'),
+    };
+    const earlierWeek = {
+      kickoffAt: new Date('2026-11-03T18:00:00.000Z'),
+      createdAt: new Date('2026-11-03T20:00:00.000Z'),
+      gameweekId: 'week-old',
+    };
+    expect(performanceCountsForMember(earlierWeek, member, 'week-live')).toBe(false);
+    expect(performanceCountsForMember(
+      { kickoffAt: new Date('2026-11-11T18:00:00.000Z'), createdAt: new Date('2026-11-11T20:00:00.000Z'), gameweekId: 'week-live' },
+      member,
+      'week-live',
+    )).toBe(true);
+  });
+
+  it('uses the rescheduled kickoff of a postponed match and does not score it early', async () => {
+    const later = new Date(NOW.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const result = await processTsfFixture(
+      gameweek(),
+      fixture({ status: 'PST', kickoffAt: new Date(NOW.getTime() - 3 * 60 * 60 * 1000) }),
+      deps({ startTime: later.toISOString(), members: [], events: [] }, 'PST'),
+    );
+    expect(result.outcome).toBe('not_started');
+    expect(prismaMock.topScorersFiveFixture.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kickoffAt: later }),
+    }));
+    expect(db.performances).toHaveLength(0);
   });
 
   it('does not move the lock when the confirmed lineup did not change', () => {

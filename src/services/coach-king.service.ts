@@ -33,7 +33,7 @@ import {
   syncCoachKingPool,
 } from './coach-king-pool.service';
 import { coachKingTimerVisible } from './coach-king-timer';
-import { isSquadEditLocked, lineupsDiffer, membershipCoversKickoff, nextConfirmedLock } from './squad-lock';
+import { isSquadEditLocked, lineupsDiffer, nextConfirmedLock, performanceCountsForMember } from './squad-lock';
 import { redisCacheService } from './redis-cache.service';
 
 export type CkErrorCode =
@@ -430,23 +430,52 @@ export async function carryOverCoachKingSquads(_gameweek: CoachKingGameweek, _no
   return 0;
 }
 
-async function pointsByPlayer(gameweekId: string, playerIds: string[], coachId: string | null) {
-  const [players, coach] = await Promise.all([
+type CkScoreMember = {
+  playerId: string | null;
+  coachId: string | null;
+  selectedAt: Date;
+  removedAt: Date | null;
+  legacyThrough: Date | null;
+};
+
+/** Week points a confirmed membership actually earned. Draft slots score nothing. */
+async function pointsByPlayer(gameweekId: string, members: CkScoreMember[]) {
+  const playerIds = members.map((member) => member.playerId).filter((id): id is string => id != null);
+  const coachIds = members.map((member) => member.coachId).filter((id): id is string => id != null);
+  const [playerRows, coachRows] = await Promise.all([
     playerIds.length
-      ? prisma.coachKingPerformance.groupBy({
-        by: ['playerId'],
+      ? prisma.coachKingPerformance.findMany({
         where: { gameweekId, playerId: { in: playerIds } },
-        _sum: { points: true },
+        select: { playerId: true, points: true, fixtureDate: true, createdAt: true },
       })
       : Promise.resolve([]),
-    coachId
-      ? prisma.coachKingCoachScore.aggregate({ where: { gameweekId, coachId }, _sum: { points: true } })
-      : Promise.resolve({ _sum: { points: 0 } }),
+    coachIds.length
+      ? prisma.coachKingCoachScore.findMany({
+        where: { gameweekId, coachId: { in: coachIds } },
+        select: { coachId: true, points: true, fixtureDate: true, createdAt: true },
+      })
+      : Promise.resolve([]),
   ]);
-  return {
-    players: new Map(players.map((row) => [row.playerId, row._sum.points ?? 0])),
-    coach: coach._sum.points ?? 0,
-  };
+  const players = new Map<string, number>();
+  for (const row of playerRows) {
+    const counted = members.some((member) => member.playerId === row.playerId && performanceCountsForMember(
+      { kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId },
+      member,
+      gameweekId,
+    ));
+    if (!counted) continue;
+    players.set(row.playerId, (players.get(row.playerId) ?? 0) + row.points);
+  }
+  let coach = 0;
+  for (const row of coachRows) {
+    const counted = members.some((member) => member.coachId === row.coachId && performanceCountsForMember(
+      { kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId },
+      member,
+      gameweekId,
+    ));
+    if (counted) coach += row.points;
+  }
+  return { players, coach };
 }
 
 type CkOpenMember = { slotKey: string | null; playerId: string | null; coachId: string | null };
@@ -517,11 +546,11 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
   const members = squad
     ? await prisma.coachKingMembership.findMany({
       where: { squadId: squad.id, removedAt: null },
-      select: { slotKey: true, playerId: true, coachId: true },
+      select: { slotKey: true, playerId: true, coachId: true, selectedAt: true, removedAt: true, legacyThrough: true },
     })
     : [];
   const [scores, board] = await Promise.all([
-    pointsByPlayer(gameweek.id, squad?.slots.map((slot) => slot.playerId) ?? [], squad?.coachId ?? null),
+    pointsByPlayer(gameweek.id, members),
     cachedBoard(now).catch((error) => {
       logger.warn(`[CoachKing] rank skipped: ${(error as Error)?.message}`);
       return null;
@@ -776,13 +805,12 @@ export async function getCoachKingUserSquad(userId: string, lang: CkLanguage, no
   if (!user) throw new CoachKingError('USER_NOT_FOUND', 'User not found');
   const gameweek = await ensureCoachKingGameweek(now);
   const squad = await prisma.coachKingSquad.findFirst({
-    where: { userId, confirmedAt: { not: null }, gameweek: { startAt: { lte: gameweek.startAt } } },
-    orderBy: { gameweek: { startAt: 'desc' } },
-    include: { ...SQUAD_INCLUDE, gameweek: true },
+    where: { userId, isLive: true },
+    include: { ...SQUAD_INCLUDE, gameweek: true, memberships: { where: { removedAt: null } } },
   });
   const [scores, board] = await Promise.all([
     squad
-      ? pointsByPlayer(squad.gameweekId, squad.slots.map((slot) => slot.playerId), squad.coachId)
+      ? pointsByPlayer(gameweek.id, squad.memberships)
       : Promise.resolve({ players: new Map<string, number>(), coach: 0 }),
     cachedBoard(now).catch(() => null),
   ]);
@@ -967,9 +995,11 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
         for (const row of rowsForMember) {
           const key = `${row.gameweekId}:${'fixtureId' in row ? row.fixtureId : ''}:${member.playerId ?? member.coachId}`;
           if (seen.has(key)) continue;
-          const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
-          const covered = membershipCoversKickoff(member, row.fixtureDate);
-          if (!legacy && !covered) continue;
+          if (!performanceCountsForMember(
+            { kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId: row.gameweekId },
+            member,
+            squad.gameweekId,
+          )) continue;
           seen.add(key);
           points += row.points;
           if (row.gameweekId === current.id) weekPoints += row.points;
@@ -1097,9 +1127,11 @@ export async function settleCoachKingGameweek(gameweekId: string, now: Date = ne
             if (row.playerId !== member.playerId) continue;
             const key = `p:${row.fixtureId}:${row.playerId}`;
             if (seen.has(key)) continue;
-            const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
-            const covered = membershipCoversKickoff(member, row.fixtureDate);
-            if (!legacy && !covered) continue;
+            if (!performanceCountsForMember(
+              { kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId },
+              member,
+              squad.gameweekId,
+            )) continue;
             seen.add(key);
             points += row.points;
           }
@@ -1109,9 +1141,11 @@ export async function settleCoachKingGameweek(gameweekId: string, now: Date = ne
             if (row.coachId !== member.coachId) continue;
             const key = `c:${row.fixtureId}:${row.coachId}`;
             if (seen.has(key)) continue;
-            const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
-            const covered = membershipCoversKickoff(member, row.fixtureDate);
-            if (!legacy && !covered) continue;
+            if (!performanceCountsForMember(
+              { kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId },
+              member,
+              squad.gameweekId,
+            )) continue;
             seen.add(key);
             points += row.points;
           }

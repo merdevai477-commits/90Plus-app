@@ -24,6 +24,7 @@ import {
   ensureCoachKingSchema,
   settleCoachKingGameweek,
 } from './coach-king.service';
+import { providerKickoff } from './squad-lock';
 import {
   TSF_EUROPE_LEAGUE_KEYS,
   TSF_LEAGUES,
@@ -120,6 +121,13 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
 
   const game = await fetchScores365GameById(fixture.fixtureId, { force: true, language: 'en' });
   if (!game) return;
+  const movedKickoff = providerKickoff(game);
+  let kickoffAt = fixture.kickoffAt;
+  if (movedKickoff && movedKickoff.getTime() !== kickoffAt.getTime()) {
+    kickoffAt = movedKickoff;
+    await prisma.coachKingFixture.update({ where: { id: fixture.id }, data: { kickoffAt } });
+  }
+  if (kickoffAt > now) return;
   const status = classifyScores365MatchStatus(game).short;
   if (isTsfVoidStatus(status)) {
     await prisma.coachKingFixture.update({ where: { id: fixture.id }, data: { processedAt: now, status } });
@@ -146,8 +154,8 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
     prisma.coachKingMembership.findMany({
       where: {
         player: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
-        selectedAt: { lte: fixture.kickoffAt },
-        OR: [{ removedAt: null }, { removedAt: { gt: fixture.kickoffAt } }],
+        selectedAt: { lte: kickoffAt },
+        OR: [{ removedAt: null }, { removedAt: { gt: kickoffAt } }],
       },
       select: { player: { select: { id: true, externalPlayerId: true, line: true } } },
     }),
@@ -173,7 +181,7 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
       ownGoals: line.ownGoals,
       cleanSheet: scored.cleanSheet,
       points: scored.points,
-      fixtureDate: fixture.kickoffAt,
+      fixtureDate: kickoffAt,
     };
   });
 
@@ -199,8 +207,8 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
       prisma.coachKingMembership.findMany({
         where: {
           coach: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
-          selectedAt: { lte: fixture.kickoffAt },
-          OR: [{ removedAt: null }, { removedAt: { gt: fixture.kickoffAt } }],
+          selectedAt: { lte: kickoffAt },
+          OR: [{ removedAt: null }, { removedAt: { gt: kickoffAt } }],
         },
         select: { coach: { select: { id: true, teamId: true } } },
       }),
@@ -222,7 +230,7 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
         fixtureId: fixture.fixtureId,
         result,
         points: coachKingResultPoints(result),
-        fixtureDate: fixture.kickoffAt,
+        fixtureDate: kickoffAt,
       });
     }
   }

@@ -37,6 +37,7 @@ import {
   fixtureAvailabilityLabel,
   isSquadEditLocked,
   lineupsDiffer,
+  membershipCoversKickoff,
   nearestFixture,
   nextConfirmedLock,
   type FixtureAvailabilityLabel,
@@ -145,10 +146,9 @@ async function carryOverTsfLineups(
 }
 
 /**
- * Gameweek used for picking. When every fixture in the current Tuesday window
- * has already started/finished (common for Egypt's midweek rounds), roll
- * forward to the next window so empty slots stay open instead of locking the
- * whole pitch until the calendar week ends.
+ * Legacy week roller. Nothing in the pick or scoring path calls it: a finished
+ * Tuesday window must not move a fixture onto the next week. Picks use
+ * `ensureTsfGameweek`.
  */
 export async function resolveTsfPickGameweek(
   leagueKey: string,
@@ -705,7 +705,7 @@ export async function getTsfSelection(
   const covered = member && member.playerId === player.id
     ? performances.filter((row) => {
         const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
-        return legacy || row.fixtureDate.getTime() >= member.selectedAt.getTime();
+        return legacy || membershipCoversKickoff(member, row.fixtureDate);
       })
     : [];
   const [totals, season] = await Promise.all([
@@ -1006,10 +1006,11 @@ async function attributeTsfPoints(
     for (const member of members) {
       if (member.playerId !== perf.playerId) continue;
       if (member.squad.confirmedAt == null) continue;
-      const legacyHit = member.legacyThrough != null && perf.createdAt.getTime() <= member.legacyThrough.getTime();
-      const covered = perf.fixtureDate.getTime() >= member.selectedAt.getTime()
-        && (member.removedAt == null || perf.fixtureDate.getTime() < member.removedAt.getTime());
-      if (!legacyHit && !covered) continue;
+      // Old weeks stay on legacy selection rows. A membership must not inherit them.
+      if (!membershipCoversKickoff(
+        { selectedAt: member.selectedAt, removedAt: member.removedAt },
+        perf.fixtureDate,
+      )) continue;
       const key = `${member.squad.userId}:${perf.gameweekId}:${perf.playerId}:${perf.fixtureId}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -1092,7 +1093,7 @@ export async function getTsfLeaderboard(params: {
       xp += params.period === 'week' ? value.week : value.total;
       if (value.firstAt < first) first = value.firstAt;
     }
-    if (xp === 0 && params.period === 'week' && !leagues.size) continue;
+    if (params.period === 'week' && xp <= 0) continue;
     byUser.set(userId, xp);
     firstPick.set(userId, Number.isFinite(first) ? first : 0);
   }

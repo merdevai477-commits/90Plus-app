@@ -37,7 +37,8 @@ import {
   type TsfLeagueConfig,
   type TsfScorableGame,
 } from './top-scorers-five-scoring';
-import { computeTsfLockAt, ensureTsfGameweek, resolveTsfPickGameweek } from './top-scorers-five.service';
+import { computeTsfLockAt, ensureTsfGameweek } from './top-scorers-five.service';
+import { providerKickoff } from './squad-lock';
 
 const TICK_MS = 10 * 60 * 1000;
 /** A match is worth re-checking for a final whistle this long after kickoff. */
@@ -235,6 +236,14 @@ export async function processTsfFixture(
   const game = await deps.fetchGame(fixture.fixtureId);
   if (!game) return missingData('no game data from 365Scores');
 
+  const movedKickoff = providerKickoff(game as { startTime?: string | null });
+  let kickoffAt = fixture.kickoffAt;
+  if (movedKickoff && movedKickoff.getTime() !== kickoffAt.getTime()) {
+    kickoffAt = movedKickoff;
+    await prisma.topScorersFiveFixture.update({ where: { id: fixture.id }, data: { kickoffAt } });
+  }
+  if (kickoffAt > now) return { outcome: 'not_started' };
+
   const status = deps.classifyStatus(game);
   if (status !== fixture.status) {
     await prisma.topScorersFiveFixture.update({ where: { id: fixture.id }, data: { status } });
@@ -276,7 +285,7 @@ export async function processTsfFixture(
       points: computeTsfPoints(line),
       status: 'FINISHED',
       participation: tsfParticipationOf(athleteId, participation),
-      fixtureDate: fixture.kickoffAt,
+      fixtureDate: kickoffAt,
     };
   });
 
@@ -297,7 +306,7 @@ export async function processTsfFixture(
 export async function syncTsfPickFixtures(leagueKey: string, teamId: number | null): Promise<void> {
   const cfg = getTsfLeagueConfig(leagueKey);
   if (!cfg || teamId == null) return;
-  const gameweek = await resolveTsfPickGameweek(cfg.key, defaultDeps.now());
+  const gameweek = await ensureTsfGameweek(cfg.key, defaultDeps.now());
   if (gameweek.status === 'COMPLETED') return;
   await storeFixtures(gameweek, await discoverFixtures(cfg, gameweek, [teamId], defaultDeps, { supplement: false }));
 }

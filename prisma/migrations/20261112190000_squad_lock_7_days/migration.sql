@@ -91,15 +91,24 @@ UPDATE "top_scorers_five_selections" SET "legacyThrough" = CURRENT_TIMESTAMP WHE
 
 INSERT INTO "top_scorers_five_squads" ("id", "userId", "scopeKey", "confirmedAt", "unlocksAt", "version", "createdAt", "updatedAt")
 SELECT gen_random_uuid()::text,
-       s."userId",
-       CASE WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt' ELSE s."leagueKey" END,
-       MAX(s."confirmedAt"),
+       grouped."userId",
+       grouped.scope,
+       grouped.confirmed,
        NULL,
        0,
        CURRENT_TIMESTAMP,
        CURRENT_TIMESTAMP
-FROM "top_scorers_five_selections" s
-GROUP BY s."userId", CASE WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt' ELSE s."leagueKey" END;
+FROM (
+    SELECT s."userId",
+           CASE WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt' ELSE s."leagueKey" END AS scope,
+           MAX(s."confirmedAt") AS confirmed
+    FROM "top_scorers_five_selections" s
+    GROUP BY s."userId", CASE WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt' ELSE s."leagueKey" END
+) grouped
+WHERE NOT EXISTS (
+    SELECT 1 FROM "top_scorers_five_squads" sq
+    WHERE sq."userId" = grouped."userId" AND sq."scopeKey" = grouped.scope
+);
 
 INSERT INTO "top_scorers_five_squad_members" ("id", "squadId", "slotKey", "playerId", "selectedAt", "removedAt", "legacyThrough", "createdAt")
 SELECT gen_random_uuid()::text,
@@ -123,7 +132,13 @@ FROM (
     ORDER BY sel."userId", sel."leagueKey", gw."startAt" DESC, sel."createdAt" DESC
 ) latest
 JOIN "top_scorers_five_squads" sq
-  ON sq."userId" = latest."userId" AND sq."scopeKey" = latest.scope;
+  ON sq."userId" = latest."userId" AND sq."scopeKey" = latest.scope
+WHERE NOT EXISTS (
+    SELECT 1 FROM "top_scorers_five_squad_members" existing
+    WHERE existing."squadId" = sq."id"
+      AND existing."slotKey" = latest."leagueKey"
+      AND existing."removedAt" IS NULL
+);
 
 UPDATE "coach_king_squads" AS live
 SET "isLive" = true,
@@ -148,7 +163,13 @@ SELECT gen_random_uuid()::text,
        CURRENT_TIMESTAMP
 FROM "coach_king_squad_slots" slot
 JOIN "coach_king_squads" sq ON sq."id" = slot."squadId"
-WHERE sq."isLive" = true;
+WHERE sq."isLive" = true
+  AND NOT EXISTS (
+    SELECT 1 FROM "coach_king_memberships" existing
+    WHERE existing."squadId" = sq."id"
+      AND existing."slotKey" = slot."slotKey"
+      AND existing."removedAt" IS NULL
+  );
 
 INSERT INTO "coach_king_memberships" ("id", "squadId", "slotKey", "playerId", "coachId", "selectedAt", "removedAt", "priceMilli", "legacyThrough", "createdAt")
 SELECT gen_random_uuid()::text,
@@ -162,4 +183,11 @@ SELECT gen_random_uuid()::text,
        CURRENT_TIMESTAMP,
        CURRENT_TIMESTAMP
 FROM "coach_king_squads" sq
-WHERE sq."isLive" = true AND sq."coachId" IS NOT NULL;
+WHERE sq."isLive" = true AND sq."coachId" IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "coach_king_memberships" existing
+    WHERE existing."squadId" = sq."id"
+      AND existing."slotKey" IS NULL
+      AND existing."coachId" = sq."coachId"
+      AND existing."removedAt" IS NULL
+  );
