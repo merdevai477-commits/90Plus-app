@@ -327,13 +327,24 @@ export async function processTsfGameweek(
     }
   }
 
-  const selected = await prisma.topScorersFiveSelection.findMany({
-    where: { gameweekId: current.id },
-    distinct: ['playerId'],
-    select: { player: { select: { teamId: true } } },
-  });
-  report.selectedPlayers = selected.length;
-  const teamIds = [...new Set(selected.map((s) => s.player.teamId).filter((id): id is number => id != null))];
+  const slotKey = current.leagueKey === 'egypt'
+    ? { in: ['egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'] }
+    : current.leagueKey;
+  const [selected, members] = await Promise.all([
+    prisma.topScorersFiveSelection.findMany({
+      where: { gameweekId: current.id },
+      distinct: ['playerId'],
+      select: { player: { select: { teamId: true } } },
+    }),
+    prisma.topScorersFiveSquadMember.findMany({
+      where: { removedAt: null, slotKey },
+      select: { player: { select: { teamId: true } } },
+    }),
+  ]);
+  report.selectedPlayers = selected.length + members.length;
+  const teamIds = [...new Set(
+    [...selected, ...members].map((row) => row.player.teamId).filter((id): id is number => id != null),
+  )];
 
   if (teamIds.length > 0 && now >= current.startAt) {
     try {

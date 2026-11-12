@@ -368,12 +368,32 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          {(typeof shown.gameweek.showTimer === 'boolean' ? shown.gameweek.showTimer : closed) ? (
+          {closed ? (
             <CoachKingDeadline
               startAt={shown.gameweek.startAt}
-              endAt={shown.gameweek.endAt}
-              locked={closed}
+              endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
+              locked
             />
+          ) : (
+            <Text style={[styles.meta, { fontFamily: fontMed, marginTop: 8 }]}>{copy.deadline.tipOpen}</Text>
+          )}
+          {shown.squad.dirty && !closed ? (
+            <Text
+              onPress={() => {
+                void (async () => {
+                  const token = await tokenOf();
+                  if (!token) return;
+                  try {
+                    setHome(await coachKingService.confirmSquad(token, language));
+                  } catch {
+                    setError(copy.errors.generic);
+                  }
+                })();
+              }}
+              style={[styles.meta, { fontFamily: fontBold, color: '#C4B5FD', marginTop: 8 }]}
+            >
+              {copy.confirmSquad}
+            </Text>
           ) : null}
           {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}
 

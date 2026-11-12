@@ -135,13 +135,26 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
   const homeScore = typeof scorable.homeCompetitor?.score === 'number' ? scorable.homeCompetitor.score : null;
   const awayScore = typeof scorable.awayCompetitor?.score === 'number' ? scorable.awayCompetitor.score : null;
 
-  const selected = await prisma.coachKingSquadSlot.findMany({
-    where: {
-      squad: { gameweekId: gameweek.id, confirmedAt: { not: null } },
-      player: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
-    },
-    select: { player: { select: { id: true, externalPlayerId: true, line: true } } },
-  });
+  const [selected, memberPlayers] = await Promise.all([
+    prisma.coachKingSquadSlot.findMany({
+      where: {
+        squad: { gameweekId: gameweek.id, confirmedAt: { not: null }, isLive: false },
+        player: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
+      },
+      select: { player: { select: { id: true, externalPlayerId: true, line: true } } },
+    }),
+    prisma.coachKingMembership.findMany({
+      where: {
+        player: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
+        selectedAt: { lte: fixture.kickoffAt },
+        OR: [{ removedAt: null }, { removedAt: { gt: fixture.kickoffAt } }],
+      },
+      select: { player: { select: { id: true, externalPlayerId: true, line: true } } },
+    }),
+  ]);
+  for (const row of memberPlayers) {
+    if (row.player) selected.push({ player: row.player });
+  }
   const players = new Map(selected.map((row) => [row.player.id, row.player]));
   const performanceRows = [...players.values()].map((player) => {
     const line = stats.get(player.externalPlayerId) ?? {
@@ -173,14 +186,29 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
     fixtureDate: Date;
   }> = [];
   if (homeScore != null && awayScore != null) {
-    const coaches = await prisma.coachKingSquad.findMany({
-      where: {
-        gameweekId: gameweek.id,
-        confirmedAt: { not: null },
-        coach: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
-      },
-      select: { coach: { select: { id: true, teamId: true } } },
-    });
+    const [legacyCoaches, coachMembers] = await Promise.all([
+      prisma.coachKingSquad.findMany({
+        where: {
+          gameweekId: gameweek.id,
+          isLive: false,
+          confirmedAt: { not: null },
+          coach: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
+        },
+        select: { coach: { select: { id: true, teamId: true } } },
+      }),
+      prisma.coachKingMembership.findMany({
+        where: {
+          coach: { teamId: { in: [fixture.homeTeamId, fixture.awayTeamId] } },
+          selectedAt: { lte: fixture.kickoffAt },
+          OR: [{ removedAt: null }, { removedAt: { gt: fixture.kickoffAt } }],
+        },
+        select: { coach: { select: { id: true, teamId: true } } },
+      }),
+    ]);
+    const coaches = [
+      ...legacyCoaches,
+      ...coachMembers.filter((row) => row.coach).map((row) => ({ coach: row.coach })),
+    ];
     const seen = new Set<string>();
     for (const row of coaches) {
       if (!row.coach || seen.has(row.coach.id)) continue;
@@ -239,7 +267,10 @@ export async function processCoachKing(now: Date = new Date()): Promise<void> {
     }
 
     const squads = await prisma.coachKingSquad.findMany({
-      where: { gameweekId: gameweek.id, confirmedAt: { not: null } },
+      where: {
+        confirmedAt: { not: null },
+        OR: [{ gameweekId: gameweek.id, isLive: false }, { isLive: true }],
+      },
       select: { coach: { select: { teamId: true } }, slots: { select: { player: { select: { teamId: true } } } } },
     });
     const teamIds = [...new Set(squads.flatMap((squad) => [

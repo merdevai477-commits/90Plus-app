@@ -53,6 +53,8 @@ export interface TsfApiPlayer {
   points: number;
   seasonGoals: number;
   seasonAssists: number;
+  /** Finished, Live, Upcoming, or Postponed. Never hides the player. */
+  fixtureStatus?: 'FINISHED' | 'LIVE' | 'UPCOMING' | 'POSTPONED' | null;
 }
 
 export interface TsfApiGameweek {
@@ -69,10 +71,20 @@ export type TsfPickState = 'PICKING' | 'CONFIRMED' | 'WAITING_FOR_MATCHES' | 'CA
 
 export type TsfParticipation = 'STARTED' | 'SUBBED_ON' | 'BENCH' | 'UNAVAILABLE' | 'NOT_IN_SQUAD' | 'UNKNOWN';
 
+export interface TsfApiSquadLock {
+  scopeKey: string;
+  locked: boolean;
+  unlocksAt: string | null;
+  confirmedAt: string | null;
+  dirty: boolean;
+  readyToEdit: boolean;
+}
+
 export interface TsfApiSelection {
   leagueKey: string;
   gameweek: TsfApiGameweek;
   state: TsfPickState;
+  squad?: TsfApiSquadLock;
   selection: null | {
     player: TsfApiPlayer;
     score: {
@@ -186,6 +198,14 @@ export const topScorersFiveService = {
 
   clearSelection: (token: string, league: TsfApiLeague) =>
     request<null>(`/leagues/${league}/selection`, { token, method: 'DELETE' }),
+
+  /** Egypt: commit the draft and start the 7-day lock. Europe confirms on save. */
+  confirmSquad: (token: string, leagueKey: string, lang: string) =>
+    request<TsfApiSelection>(`/squad/confirm?lang=${lang}`, {
+      token,
+      method: 'POST',
+      body: JSON.stringify({ leagueKey }),
+    }),
 
   getPlayerFixtures: (playerId: string, lang: string) =>
     request<TsfApiFixture[]>(`/players/${encodeURIComponent(playerId)}/fixtures?lang=${lang}`),

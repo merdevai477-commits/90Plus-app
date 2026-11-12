@@ -16,6 +16,7 @@ import {
   listCoachKingCoaches,
   listCoachKingFixtures,
   listCoachKingPlayers,
+  confirmCoachKingSquad,
   pickCoachKingCoach,
   pickCoachKingSlot,
   resetCoachKingCompetition,
@@ -112,6 +113,12 @@ router.post('/me/coach', requireAuth, handle('pick coach', async (req, res) => {
     return;
   }
   res.json({ success: true, data: await pickCoachKingCoach(id, coachId, language(req)) });
+}));
+
+router.post('/me/confirm', requireAuth, handle('confirm squad', async (req, res) => {
+  const id = clerkId(req, res);
+  if (!id) return;
+  res.json({ success: true, data: await confirmCoachKingSquad(id, language(req)) });
 }));
 
 router.get('/users/:userId/squad', requireAuth, handle('user squad', async (req, res) => {

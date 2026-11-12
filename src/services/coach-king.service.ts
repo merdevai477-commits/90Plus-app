@@ -23,7 +23,6 @@ import {
 import {
   TSF_EUROPE_LEAGUE_KEYS,
   TSF_LEAGUES,
-  isTsfFixtureNotStarted,
   tsfGameweekWindow,
   tsfPortraitUrl,
 } from './top-scorers-five-scoring';
@@ -34,6 +33,7 @@ import {
   syncCoachKingPool,
 } from './coach-king-pool.service';
 import { coachKingTimerVisible } from './coach-king-timer';
+import { isSquadEditLocked, lineupsDiffer, membershipCoversKickoff, nextConfirmedLock } from './squad-lock';
 import { redisCacheService } from './redis-cache.service';
 
 export type CkErrorCode =
@@ -58,6 +58,7 @@ const LOGO = (teamId: number) =>
 
 const MIGRATION_FILE = path.join(process.cwd(), 'prisma/migrations/20261026030000_coach_king/migration.sql');
 const SLOT_LOCK_MIGRATION_FILE = path.join(process.cwd(), 'prisma/migrations/20261026160000_coach_king_slot_lock/migration.sql');
+const SQUAD_LOCK_MIGRATION_FILE = path.join(process.cwd(), 'prisma/migrations/20261112190000_squad_lock_7_days/migration.sql');
 
 function migrationStatements(sql: string): string[] {
   const body = sql
@@ -118,6 +119,29 @@ async function ensureSlotLockColumns(): Promise<void> {
   slotLockColumnsReady = true;
 }
 
+let squadLockReady = false;
+
+async function ensureSquadLockColumns(): Promise<void> {
+  if (squadLockReady) return;
+  const cols = await prisma.$queryRawUnsafe<Array<{ attname: string }>>(
+    `SELECT a.attname
+     FROM pg_attribute a
+     JOIN pg_class c ON c.oid = a.attrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = 'coach_king_squads'
+       AND a.attname = 'unlocksAt'
+       AND a.attnum > 0 AND NOT a.attisdropped`,
+  );
+  if (cols.length === 0) {
+    for (const statement of migrationStatements(fs.readFileSync(SQUAD_LOCK_MIGRATION_FILE, 'utf8'))) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+    logger.info('[CoachKing] applied squad lock schema');
+  }
+  squadLockReady = true;
+}
+
 /** Create the fantasy tables when this deploy's migration did not land. */
 export function ensureCoachKingSchema(): Promise<void> {
   if (!schemaReady) {
@@ -132,6 +156,7 @@ export function ensureCoachKingSchema(): Promise<void> {
         logger.info('[CoachKing] created missing fantasy tables');
       }
       await ensureSlotLockColumns();
+      await ensureSquadLockColumns();
     })().catch((error) => {
       schemaReady = null;
       throw error;
@@ -208,33 +233,6 @@ export async function ensureCoachKingGameweek(now: Date = new Date()): Promise<C
     }
     throw error;
   }
-}
-
-function pickingOpen(gameweek: CoachKingGameweek, now: Date): boolean {
-  if (now >= gameweek.endAt) return false;
-  return gameweek.status !== 'CALCULATING' && gameweek.status !== 'COMPLETED';
-}
-
-
-async function startedTeamIds(teamIds: number[], gameweek: CoachKingGameweek, now: Date): Promise<Set<number>> {
-  const ids = [...new Set(teamIds)];
-  if (ids.length === 0) return new Set();
-  const rows = await prisma.cachedFixture.findMany({
-    where: {
-      leagueId: { in: europeLeagueIds() },
-      matchDate: { gte: gameweek.startAt, lt: gameweek.endAt },
-      OR: [{ homeTeamId: { in: ids } }, { awayTeamId: { in: ids } }],
-    },
-    select: { homeTeamId: true, awayTeamId: true, matchDate: true, status: true },
-  });
-  const wanted = new Set(ids);
-  const started = new Set<number>();
-  for (const row of rows) {
-    if (isTsfFixtureNotStarted({ kickoffAt: row.matchDate, status: row.status }, now)) continue;
-    if (wanted.has(row.homeTeamId)) started.add(row.homeTeamId);
-    if (wanted.has(row.awayTeamId)) started.add(row.awayTeamId);
-  }
-  return started;
 }
 
 function displayName(row: { nameAr: string; nameEn: string | null }, lang: CkLanguage): string {
@@ -404,68 +402,32 @@ function squadCost(squad: LoadedSquad | null): number {
   return squad.slots.reduce((sum, slot) => sum + slotCost(slot), 0) + coachCost(squad);
 }
 
-/**
- * A new week starts from last week's lineup with every pick unlocked, so the
- * player can keep it or swap anyone before their match starts.
- */
-async function carryOverSquad(userId: string, gameweek: CoachKingGameweek, now: Date): Promise<LoadedSquad | null> {
+/** The live squad is the one the user edits. Older week rows stay for history. */
+async function loadSquad(userId: string, _gameweek: CoachKingGameweek, _now: Date = new Date()): Promise<LoadedSquad | null> {
+  const live = await prisma.coachKingSquad.findFirst({
+    where: { userId, isLive: true },
+    include: SQUAD_INCLUDE,
+  });
+  if (live) return live;
   const previous = await prisma.coachKingSquad.findFirst({
-    where: { userId, confirmedAt: { not: null }, gameweek: { startAt: { lt: gameweek.startAt } } },
-    orderBy: { gameweek: { startAt: 'desc' } },
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
     include: SQUAD_INCLUDE,
   });
   if (!previous) return null;
-  const slots = previous.slots.filter((slot) => slot.player.active);
-  const coachActive = previous.coach?.active === true;
-  try {
-    await prisma.coachKingSquad.create({
-      data: {
-        userId,
-        gameweekId: gameweek.id,
-        coachId: coachActive ? previous.coachId : null,
-        coachPriceMilli: coachActive ? coachCost(previous) : 0,
-        confirmedAt: now,
-        spentMilli: slots.reduce((sum, slot) => sum + slotCost(slot), 0) + (coachActive ? coachCost(previous) : 0),
-        slots: {
-          create: slots.map((slot) => ({ slotKey: slot.slotKey, playerId: slot.playerId, priceMilli: slotCost(slot) })),
-        },
-      },
-    });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
-  }
-  return prisma.coachKingSquad.findUnique({
-    where: { userId_gameweekId: { userId, gameweekId: gameweek.id } },
+  await prisma.coachKingSquad.update({
+    where: { id: previous.id },
+    data: { isLive: true, unlocksAt: null },
+  });
+  return prisma.coachKingSquad.findFirst({
+    where: { id: previous.id },
     include: SQUAD_INCLUDE,
   });
 }
 
-async function loadSquad(userId: string, gameweek: CoachKingGameweek, now: Date = new Date()): Promise<LoadedSquad | null> {
-  const squad = await prisma.coachKingSquad.findUnique({
-    where: { userId_gameweekId: { userId, gameweekId: gameweek.id } },
-    include: SQUAD_INCLUDE,
-  });
-  if (squad) return squad;
-  return carryOverSquad(userId, gameweek, now);
-}
-
-/** Roll every active lineup into the new week so nobody misses its points. */
-export async function carryOverCoachKingSquads(gameweek: CoachKingGameweek, now: Date = new Date()): Promise<number> {
-  const owners = await prisma.coachKingSquad.findMany({
-    where: {
-      confirmedAt: { not: null },
-      gameweek: { startAt: { lt: gameweek.startAt } },
-      user: { coachKingSquads: { none: { gameweekId: gameweek.id } } },
-    },
-    distinct: ['userId'],
-    select: { userId: true },
-  });
-  let moved = 0;
-  for (const owner of owners) {
-    if (await carryOverSquad(owner.userId, gameweek, now)) moved += 1;
-  }
-  if (moved) invalidateBoard();
-  return moved;
+/** Weekly lineup copies are retired. The live squad persists across Tuesdays. */
+export async function carryOverCoachKingSquads(_gameweek: CoachKingGameweek, _now: Date = new Date()): Promise<number> {
+  return 0;
 }
 
 async function pointsByPlayer(gameweekId: string, playerIds: string[], coachId: string | null) {
@@ -487,26 +449,55 @@ async function pointsByPlayer(gameweekId: string, playerIds: string[], coachId: 
   };
 }
 
-function squadDto(squad: LoadedSquad | null, gameweek: CoachKingGameweek, lang: CkLanguage, scores: Awaited<ReturnType<typeof pointsByPlayer>>) {
-  const lockedUntil = gameweek.endAt.toISOString();
-  const playerPoints = (squad?.slots ?? []).reduce((sum, slot) => sum + (scores.players.get(slot.playerId) ?? 0), 0);
+type CkOpenMember = { slotKey: string | null; playerId: string | null; coachId: string | null };
+
+function squadDirty(squad: LoadedSquad, members: CkOpenMember[]): boolean {
+  const before = [
+    ...members.filter((member) => member.slotKey).map((member) => ({ slotKey: member.slotKey as string, id: member.playerId })),
+    { slotKey: 'coach', id: members.find((member) => member.slotKey == null)?.coachId ?? null },
+  ];
+  const after = [
+    ...squad.slots.map((slot) => ({ slotKey: slot.slotKey, id: slot.playerId as string | null })),
+    { slotKey: 'coach', id: squad.coachId },
+  ];
+  return lineupsDiffer(before, after);
+}
+
+function squadDto(
+  squad: LoadedSquad | null,
+  _gameweek: CoachKingGameweek,
+  lang: CkLanguage,
+  scores: Awaited<ReturnType<typeof pointsByPlayer>>,
+  now: Date = new Date(),
+  members: CkOpenMember[] = [],
+) {
+  const locked = squad ? isSquadEditLocked(squad.unlocksAt, now) : false;
+  const dirty = squad ? squadDirty(squad, members) : false;
+  const scoringPlayers = new Set(members.map((member) => member.playerId).filter((id): id is string => id != null));
+  const scoringCoach = members.some((member) => member.slotKey == null && member.coachId != null && member.coachId === squad?.coachId);
+  const playerPoints = (squad?.slots ?? []).reduce((sum, slot) => {
+    if (!scoringPlayers.has(slot.playerId) && squad?.confirmedAt) return sum;
+    return sum + (scores.players.get(slot.playerId) ?? 0);
+  }, 0);
   return {
     confirmed: squad?.confirmedAt != null,
     spentMilli: squadCost(squad),
-    points: squad?.confirmedAt ? playerPoints + (squad.coachId ? scores.coach : 0) : 0,
-    lockedUntil,
+    points: squad?.confirmedAt ? playerPoints + (scoringCoach || !squad?.coachId ? (squad?.coachId ? scores.coach : 0) : 0) : 0,
+    lockedUntil: squad?.unlocksAt?.toISOString() ?? null,
+    dirty,
+    readyToEdit: !locked,
     coach: squad?.coach
       ? {
         ...coachDto(squad.coach, lang),
         pricePaidMilli: coachCost(squad),
-        locked: squad.coachLockedAt != null,
+        locked,
         points: scores.coach,
       }
       : null,
     slots: (squad?.slots ?? []).map((slot) => ({
       slotKey: slot.slotKey,
       label: coachKingSlot(slot.slotKey)?.label ?? slot.slotKey,
-      locked: slot.lockedAt != null,
+      locked,
       pricePaidMilli: slotCost(slot),
       points: scores.players.get(slot.playerId) ?? 0,
       player: playerDto(slot.player, lang),
@@ -523,6 +514,12 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
     ensureCoachKingGameweek(now),
   ]);
   const squad = await loadSquad(user.id, gameweek, now);
+  const members = squad
+    ? await prisma.coachKingMembership.findMany({
+      where: { squadId: squad.id, removedAt: null },
+      select: { slotKey: true, playerId: true, coachId: true },
+    })
+    : [];
   const [scores, board] = await Promise.all([
     pointsByPlayer(gameweek.id, squad?.slots.map((slot) => slot.playerId) ?? [], squad?.coachId ?? null),
     cachedBoard(now).catch((error) => {
@@ -532,7 +529,7 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
   ]);
   const reserved = squadCost(squad);
   const remaining = coachKingRemainingMilli(wallet.balanceMilli, reserved);
-  const picksOpen = pickingOpen(gameweek, now);
+  const picksOpen = !isSquadEditLocked(squad?.unlocksAt, now);
 
   return {
     user: {
@@ -558,7 +555,7 @@ export async function getCoachKingHome(clerkUserId: string, lang: CkLanguage, no
       locked: !picksOpen,
       showTimer: coachKingTimerVisible(picksOpen),
     },
-    squad: squadDto(squad, gameweek, lang, scores),
+    squad: squadDto(squad, gameweek, lang, scores, now, members),
   };
 }
 
@@ -566,7 +563,7 @@ async function openSquad(userId: string, gameweek: CoachKingGameweek, now: Date)
   const existing = await loadSquad(userId, gameweek, now);
   if (existing) return existing;
   try {
-    await prisma.coachKingSquad.create({ data: { userId, gameweekId: gameweek.id } });
+    await prisma.coachKingSquad.create({ data: { userId, gameweekId: gameweek.id, isLive: true } });
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
   }
@@ -596,7 +593,6 @@ export async function pickCoachKingSlot(
   await ensureCoachKingSchema();
   const user = await requireUser(clerkUserId);
   const [wallet, gameweek] = await Promise.all([ensureWallet(user.id), ensureCoachKingGameweek(now)]);
-  if (!pickingOpen(gameweek, now)) throw new CoachKingError('SQUAD_LOCKED', 'This week is closed');
   const spec = coachKingSlot(input.slotKey);
   if (!spec) throw new CoachKingError('BAD_SLOT', 'Unknown slot');
 
@@ -607,9 +603,12 @@ export async function pickCoachKingSlot(
   }
 
   const squad = await openSquad(user.id, gameweek, now);
+  if (isSquadEditLocked(squad.unlocksAt, now)) throw new CoachKingError('SQUAD_LOCKED', 'Your squad is locked');
 
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT 1 FROM "coach_king_squads" WHERE id = ${squad.id} FOR UPDATE`;
+    const fresh = await tx.coachKingSquad.findUnique({ where: { id: squad.id }, select: { unlocksAt: true, version: true } });
+    if (!fresh || isSquadEditLocked(fresh.unlocksAt, now)) throw new CoachKingError('SQUAD_LOCKED', 'Your squad is locked');
     const lockedRows = await tx.$queryRaw<Array<{
       playerId: string;
       lockedAt: Date | null;
@@ -623,18 +622,6 @@ export async function pickCoachKingSlot(
       FOR UPDATE OF s
     `;
     const current = lockedRows[0] ?? null;
-    if (current?.lockedAt) {
-      // Idempotent re-confirm of the same locked pick.
-      if (current.playerId === player.id) return;
-      throw new CoachKingError('SLOT_LOCKED', 'This pick is locked until the week ends');
-    }
-
-    const started = await startedTeamIds(
-      [player.teamId, ...(current ? [current.teamId] : [])],
-      gameweek,
-      now,
-    );
-    if (started.size) throw new CoachKingError('MATCH_STARTED', 'This club already played this week');
 
     const keepPrice = current?.playerId === player.id;
     const priceMilli = keepPrice && current
@@ -654,12 +641,12 @@ export async function pickCoachKingSlot(
 
     await tx.coachKingSquadSlot.upsert({
       where: { squadId_slotKey: { squadId: squad.id, slotKey: spec.key } },
-      create: { squadId: squad.id, slotKey: spec.key, playerId: player.id, priceMilli, lockedAt: now },
-      update: { playerId: player.id, priceMilli, lockedAt: now },
+      create: { squadId: squad.id, slotKey: spec.key, playerId: player.id, priceMilli, lockedAt: null },
+      update: { playerId: player.id, priceMilli, lockedAt: null },
     });
     await tx.coachKingSquad.update({
       where: { id: squad.id },
-      data: { spentMilli: check.spentMilli, confirmedAt: squad.confirmedAt ?? now },
+      data: { spentMilli: check.spentMilli },
     });
   });
   invalidateBoard();
@@ -671,14 +658,11 @@ export async function pickCoachKingCoach(clerkUserId: string, coachId: string, l
   await ensureCoachKingSchema();
   const user = await requireUser(clerkUserId);
   const [wallet, gameweek] = await Promise.all([ensureWallet(user.id), ensureCoachKingGameweek(now)]);
-  if (!pickingOpen(gameweek, now)) throw new CoachKingError('SQUAD_LOCKED', 'This week is closed');
   const coach = await prisma.coachKingCoach.findFirst({ where: { id: coachId, active: true } });
   if (!coach) throw new CoachKingError('COACH_NOT_FOUND', 'Coach is not in the pool');
 
   const squad = await openSquad(user.id, gameweek, now);
-  if (squad.coachLockedAt) throw new CoachKingError('SLOT_LOCKED', 'The coach is locked until the week ends');
-  const started = await startedTeamIds([coach.teamId, ...(squad.coach ? [squad.coach.teamId] : [])], gameweek, now);
-  if (started.size) throw new CoachKingError('MATCH_STARTED', 'This club already played this week');
+  if (isSquadEditLocked(squad.unlocksAt, now)) throw new CoachKingError('SQUAD_LOCKED', 'Your squad is locked');
 
   const priceMilli = squad.coachId === coach.id ? coachCost(squad) : coach.priceMilli;
   const check = inspectCoachKingSquad({
@@ -696,11 +680,91 @@ export async function pickCoachKingCoach(clerkUserId: string, coachId: string, l
     data: {
       coachId: coach.id,
       coachPriceMilli: priceMilli,
-      coachLockedAt: now,
+      coachLockedAt: null,
       spentMilli: check.spentMilli,
-      confirmedAt: squad.confirmedAt ?? now,
     },
   });
+  invalidateBoard();
+  return getCoachKingHome(clerkUserId, lang, now);
+}
+
+/** Commit the draft. An identical lineup does not start a new 7-day lock. */
+export async function confirmCoachKingSquad(clerkUserId: string, lang: CkLanguage, now: Date = new Date()) {
+  await ensureCoachKingSchema();
+  const user = await requireUser(clerkUserId);
+  const [wallet, gameweek] = await Promise.all([ensureWallet(user.id), ensureCoachKingGameweek(now)]);
+  const squad = await openSquad(user.id, gameweek, now);
+  const members = await prisma.coachKingMembership.findMany({
+    where: { squadId: squad.id, removedAt: null },
+    select: { id: true, slotKey: true, playerId: true, coachId: true, priceMilli: true },
+  });
+  const before = [
+    ...members.filter((member) => member.slotKey).map((member) => ({ slotKey: member.slotKey as string, id: member.playerId })),
+    { slotKey: 'coach', id: members.find((member) => member.slotKey == null)?.coachId ?? null },
+  ];
+  const after = [
+    ...squad.slots.map((slot) => ({ slotKey: slot.slotKey, id: slot.playerId as string | null })),
+    { slotKey: 'coach', id: squad.coachId },
+  ];
+  const changed = lineupsDiffer(before, after);
+  if (!changed) return getCoachKingHome(clerkUserId, lang, now);
+  if (isSquadEditLocked(squad.unlocksAt, now)) throw new CoachKingError('SQUAD_LOCKED', 'Your squad is locked');
+  const next = nextConfirmedLock(
+    { confirmedAt: squad.confirmedAt, unlocksAt: squad.unlocksAt, version: squad.version },
+    changed,
+    now,
+  );
+  if (!next.ok) throw new CoachKingError('SQUAD_LOCKED', 'Your squad is locked');
+  if (changed) {
+    const check = inspectCoachKingSquad({
+      slots: draftOf(squad),
+      coachPriceMilli: squad.coach ? coachCost(squad) : null,
+      coachTeamId: squad.coach?.teamId ?? null,
+      balanceMilli: wallet.balanceMilli,
+      startedTeamIds: new Set(),
+      requireComplete: false,
+    });
+    if (!check.ok) throw new CoachKingError(check.code, 'Pick was rejected');
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.coachKingSquad.updateMany({
+        where: { id: squad.id, version: squad.version },
+        data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt, spentMilli: check.spentMilli },
+      });
+      if (claimed.count === 0) throw new CoachKingError('SQUAD_LOCKED', 'Your squad changed. Try again');
+      const keep = new Map(squad.slots.map((slot) => [slot.slotKey, slot]));
+      for (const member of members) {
+        if (member.slotKey == null) {
+          if (member.coachId === squad.coachId) continue;
+        } else if (keep.get(member.slotKey)?.playerId === member.playerId) {
+          keep.delete(member.slotKey);
+          continue;
+        }
+        await tx.coachKingMembership.update({ where: { id: member.id }, data: { removedAt: now } });
+      }
+      for (const slot of keep.values()) {
+        await tx.coachKingMembership.create({
+          data: {
+            squadId: squad.id,
+            slotKey: slot.slotKey,
+            playerId: slot.playerId,
+            selectedAt: now,
+            priceMilli: slotCost(slot),
+          },
+        });
+      }
+      const coachMember = members.find((member) => member.slotKey == null);
+      if (squad.coachId && coachMember?.coachId !== squad.coachId) {
+        await tx.coachKingMembership.create({
+          data: {
+            squadId: squad.id,
+            coachId: squad.coachId,
+            selectedAt: now,
+            priceMilli: coachCost(squad),
+          },
+        });
+      }
+    });
+  }
   invalidateBoard();
   return getCoachKingHome(clerkUserId, lang, now);
 }
@@ -823,7 +887,7 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
   await ensureCoachKingSchema();
   const current = await ensureCoachKingGameweek(now);
   const squads = await prisma.coachKingSquad.findMany({
-    where: { confirmedAt: { not: null } },
+    where: { confirmedAt: { not: null }, isLive: false },
     include: {
       slots: { select: { playerId: true } },
       user: { select: { id: true, displayName: true, username: true, avatar: true, level: true } },
@@ -876,6 +940,63 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
     }
   }
 
+  const liveSquads = await prisma.coachKingSquad.findMany({
+    where: { isLive: true, confirmedAt: { not: null } },
+    include: {
+      memberships: true,
+      user: { select: { id: true, displayName: true, username: true, avatar: true, level: true } },
+    },
+  });
+  if (liveSquads.length) {
+    const [livePerfs, liveCoach] = await Promise.all([
+      prisma.coachKingPerformance.findMany({
+        select: { gameweekId: true, playerId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+      }),
+      prisma.coachKingCoachScore.findMany({
+        select: { gameweekId: true, coachId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+      }),
+    ]);
+    for (const squad of liveSquads) {
+      let points = 0;
+      let weekPoints = 0;
+      const seen = new Set<string>();
+      for (const member of squad.memberships) {
+        const rowsForMember = member.playerId
+          ? livePerfs.filter((row) => row.playerId === member.playerId)
+          : liveCoach.filter((row) => row.coachId === member.coachId);
+        for (const row of rowsForMember) {
+          const key = `${row.gameweekId}:${'fixtureId' in row ? row.fixtureId : ''}:${member.playerId ?? member.coachId}`;
+          if (seen.has(key)) continue;
+          const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
+          const covered = membershipCoversKickoff(member, row.fixtureDate);
+          if (!legacy && !covered) continue;
+          seen.add(key);
+          points += row.points;
+          if (row.gameweekId === current.id) weekPoints += row.points;
+        }
+      }
+      const confirmedAt = squad.confirmedAt ?? squad.createdAt;
+      const prev = byUser.get(squad.userId);
+      if (!prev) {
+        byUser.set(squad.userId, {
+          userId: squad.userId,
+          username: squad.user.username,
+          name: squad.user.displayName || squad.user.username,
+          avatar: squad.user.avatar,
+          level: squad.user.level,
+          points,
+          weekPoints,
+          inWeek: true,
+          confirmedAt,
+        });
+      } else {
+        prev.points += points;
+        prev.weekPoints += weekPoints;
+        prev.inWeek = true;
+      }
+    }
+  }
+
   const rows = [...byUser.values()];
   const ranked = (list: BoardRow[], score: (row: BoardRow) => number): CoachKingBoardEntry[] => list
     .sort((a, b) => score(b) - score(a) || a.confirmedAt.getTime() - b.confirmedAt.getTime())
@@ -901,6 +1022,8 @@ export async function resetCoachKingCompetition(now: Date = new Date()): Promise
   await prisma.$transaction(async (tx) => {
     await tx.coachKingPerformance.deleteMany();
     await tx.coachKingCoachScore.deleteMany();
+    await tx.coachKingWeekPayout.deleteMany();
+    await tx.coachKingMembership.deleteMany();
     await tx.coachKingSquadSlot.deleteMany();
     await tx.coachKingSquad.deleteMany();
     await tx.coachKingFixture.deleteMany();
@@ -947,41 +1070,64 @@ export async function settleCoachKingGameweek(gameweekId: string, now: Date = ne
     if (!gameweek || gameweek.status !== 'COMPLETED' || gameweek.settledAt) return 0;
 
     const squads = await tx.coachKingSquad.findMany({
-      where: { gameweekId, confirmedAt: { not: null }, refundedAt: null },
-      include: { slots: { select: { playerId: true } } },
+      where: { isLive: true, confirmedAt: { not: null } },
+      include: { memberships: true },
     });
-    const playerIds = [...new Set(squads.flatMap((squad) => squad.slots.map((slot) => slot.playerId)))];
-    const coachIds = [...new Set(squads.map((squad) => squad.coachId).filter((id): id is string => id != null))];
+    const already = new Set(
+      (await tx.coachKingWeekPayout.findMany({ where: { gameweekId }, select: { userId: true } })).map((row) => row.userId),
+    );
     const [performances, coachScores] = await Promise.all([
-      playerIds.length
-        ? tx.coachKingPerformance.findMany({
-          where: { gameweekId, playerId: { in: playerIds } },
-          select: { playerId: true, points: true },
-        })
-        : Promise.resolve([]),
-      coachIds.length
-        ? tx.coachKingCoachScore.findMany({
-          where: { gameweekId, coachId: { in: coachIds } },
-          select: { coachId: true, points: true },
-        })
-        : Promise.resolve([]),
+      tx.coachKingPerformance.findMany({
+        where: { gameweekId },
+        select: { playerId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+      }),
+      tx.coachKingCoachScore.findMany({
+        where: { gameweekId },
+        select: { coachId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+      }),
     ]);
-    const playerPoints = new Map<string, number>();
-    for (const row of performances) playerPoints.set(row.playerId, (playerPoints.get(row.playerId) ?? 0) + row.points);
-    const coachPoints = new Map<string, number>();
-    for (const row of coachScores) coachPoints.set(row.coachId, (coachPoints.get(row.coachId) ?? 0) + row.points);
 
     for (const squad of squads) {
-      let points = squad.coachId ? coachPoints.get(squad.coachId) ?? 0 : 0;
-      for (const slot of squad.slots) points += playerPoints.get(slot.playerId) ?? 0;
+      if (already.has(squad.userId)) continue;
+      let points = 0;
+      const seen = new Set<string>();
+      for (const member of squad.memberships) {
+        if (member.playerId) {
+          for (const row of performances) {
+            if (row.playerId !== member.playerId) continue;
+            const key = `p:${row.fixtureId}:${row.playerId}`;
+            if (seen.has(key)) continue;
+            const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
+            const covered = membershipCoversKickoff(member, row.fixtureDate);
+            if (!legacy && !covered) continue;
+            seen.add(key);
+            points += row.points;
+          }
+        }
+        if (member.coachId) {
+          for (const row of coachScores) {
+            if (row.coachId !== member.coachId) continue;
+            const key = `c:${row.fixtureId}:${row.coachId}`;
+            if (seen.has(key)) continue;
+            const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
+            const covered = membershipCoversKickoff(member, row.fixtureDate);
+            if (!legacy && !covered) continue;
+            seen.add(key);
+            points += row.points;
+          }
+        }
+      }
       await tx.coachKingWallet.upsert({
         where: { userId: squad.userId },
         create: { userId: squad.userId, balanceMilli: CK_WEEKLY_BUDGET_MILLI },
         update: { balanceMilli: CK_WEEKLY_BUDGET_MILLI },
       });
+      await tx.coachKingWeekPayout.create({
+        data: { userId: squad.userId, gameweekId, points, settledAt: now },
+      });
       await tx.coachKingSquad.update({
         where: { id: squad.id },
-        data: { payoutMilli: points, refundedAt: now },
+        data: { payoutMilli: points },
       });
     }
     await tx.coachKingGameweek.update({ where: { id: gameweekId }, data: { settledAt: now } });

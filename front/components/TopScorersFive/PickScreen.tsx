@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
@@ -25,6 +25,7 @@ import {
   tsfLiveLeaguesFor,
   TsfApiError,
   topScorersFiveService,
+  type TsfApiSquadLock,
   type TsfApiTournament,
 } from '../../services/topScorersFive.service';
 import { useTranslation } from '../../src/i18n';
@@ -75,6 +76,7 @@ export default function TopScorersFivePickScreen() {
   const [confirming, setConfirming] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [lockedNotice, setLockedNotice] = useState<TsfLockedNotice | null>(null);
+  const [squadLock, setSquadLock] = useState<TsfApiSquadLock | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,7 +128,8 @@ export default function TopScorersFivePickScreen() {
           const data = await topScorersFiveService.getSelection(token, league, language);
           const pick = tsfPickFromSelection(data);
           if (cancelled) return;
-          setLeagueLocked((prev) => ({ ...prev, [league]: data.gameweek.locked }));
+          setLeagueLocked((prev) => ({ ...prev, [league]: data.squad?.locked ?? data.gameweek.locked }));
+          if (data.squad) setSquadLock(data.squad);
           setPicks((prev) => {
             const next = { ...prev };
             if (pick) next[league] = pick;
@@ -166,8 +169,13 @@ export default function TopScorersFivePickScreen() {
   }, []);
 
   const explainLocked = useCallback((league: TsfLeagueKey, player: TsfPlayer | undefined) => {
-    setLockedNotice({ league, player, reason: player?.confirmed ? 'confirmed' : 'gameweek' });
-  }, []);
+    setLockedNotice({
+      league,
+      player,
+      reason: player?.confirmed ? 'confirmed' : 'gameweek',
+      unlocksAt: squadLock?.unlocksAt ?? null,
+    });
+  }, [squadLock?.unlocksAt]);
 
   const closeLockedNotice = useCallback(() => setLockedNotice(null), []);
 
@@ -178,6 +186,7 @@ export default function TopScorersFivePickScreen() {
         const data = await topScorersFiveService.getSelection(token, league, language);
         const pick = tsfPickFromSelection(data);
         setPick(league, pick ?? undefined);
+        if (data.squad) setSquadLock(data.squad);
         return pick;
       } catch (error) {
         logger.warn('[TopScorersFive] selection reload failed', error);
@@ -248,7 +257,8 @@ export default function TopScorersFivePickScreen() {
       setConfirming(true);
       try {
         const data = await topScorersFiveService.saveSelection(token, league, player.id, language);
-        setPick(league, tsfPickFromSelection(data) ?? { ...player, locked: true, confirmed: true });
+        if (data.squad) setSquadLock(data.squad);
+        setPick(league, tsfPickFromSelection(data) ?? { ...player, locked: data.squad?.locked ?? true, confirmed: true });
         closePicker();
       } catch (error) {
         logger.warn('[TopScorersFive] confirm failed', error);
@@ -322,6 +332,33 @@ export default function TopScorersFivePickScreen() {
 
   const goToPitch = useCallback(() => setTab('pitch'), []);
 
+  const confirmEgyptSquad = useCallback(() => {
+    const league = liveLeagues[0];
+    if (!league || !squadLock?.dirty) return;
+    (async () => {
+      const token = isSignedIn ? await getTokenRef.current().catch(() => null) : null;
+      if (!token) return;
+      try {
+        const data = await topScorersFiveService.confirmSquad(token, league, language);
+        if (data.squad) {
+          setSquadLock(data.squad);
+          if (data.squad.locked) {
+            setLeagueLocked((prev) => {
+              const next = { ...prev };
+              for (const slot of liveLeagues) next[slot] = true;
+              return next;
+            });
+          }
+        }
+        const pick = tsfPickFromSelection(data);
+        if (pick) setPick(league, pick);
+      } catch (error) {
+        logger.warn('[TopScorersFive] squad confirm failed', error);
+        explainFailure(league, error);
+      }
+    })();
+  }, [explainFailure, isSignedIn, language, liveLeagues, setPick, squadLock?.dirty]);
+
   /** Design order, so a tab reads the same whichever one opened it. */
   const picked = useMemo(
     () =>
@@ -346,6 +383,23 @@ export default function TopScorersFivePickScreen() {
           onOpenLeague={handleOpenLeague}
           onRemove={handleRemove}
         />
+      ) : null}
+
+      {tab === 'pitch' && squadLock ? (
+        <View style={[styles.lockBanner, { top: insets.top + 52 }]} pointerEvents="box-none">
+          <Text style={styles.lockText}>
+            {squadLock.locked
+              ? pickCopy.lockedTitle
+              : squadLock.dirty
+                ? pickCopy.squadDirty
+                : pickCopy.squadReady}
+          </Text>
+          {mode === 'egypt' && squadLock.dirty && squadLock.readyToEdit ? (
+            <TouchableOpacity onPress={confirmEgyptSquad} accessibilityRole="button">
+              <Text style={styles.lockAction}>{pickCopy.confirmSquad}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : null}
 
       {tab === 'matches' ? (
@@ -384,4 +438,21 @@ export default function TopScorersFivePickScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
+  lockBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(12, 8, 24, 0.92)',
+    borderWidth: 1,
+    borderColor: '#B698FD',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  lockText: { color: '#FFFFFF', flex: 1, fontSize: 13 },
+  lockAction: { color: '#C4B5FD', fontSize: 13, fontWeight: '700' },
 });

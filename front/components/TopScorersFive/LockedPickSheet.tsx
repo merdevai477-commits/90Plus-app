@@ -32,10 +32,11 @@ const STROKE = '#B896FC';
 const LABEL = '#CF9BFC';
 
 export type TsfLockedNotice = {
-  /** `confirmed`: the user locked this pick in; `gameweek`: the round has kicked off. */
+  /** `confirmed`: the user locked this pick in; `gameweek`: the squad lock is active. */
   readonly reason: 'confirmed' | 'gameweek';
   readonly player?: TsfPlayer;
   readonly league?: TsfLeagueKey;
+  readonly unlocksAt?: string | null;
 };
 
 type LockedPickSheetProps = {
@@ -79,16 +80,19 @@ export function LockedPickSheet({ notice, scale, onClose, onViewProfile }: Locke
 
   if (!notice) return null;
 
-  const { player, league, reason } = notice;
+  const { player, league: _league, reason, unlocksAt } = notice;
   const canViewProfile = player?.athleteId != null;
   const confirmed = reason === 'confirmed' && player != null;
   const title = confirmed ? pickCopy.pickLockedTitle : pickCopy.lockedTitle;
-  const leagueName = league ? pickCopy.leagues[league] : '';
-  const body = confirmed
-    ? pickCopy.pickLockedBody.replace('{name}', player.name)
-    : leagueName
-      ? pickCopy.lockedBody.replace('{league}', leagueName)
-      : pickCopy.lockedBodyGeneric;
+  const left = unlocksAt ? Math.max(0, new Date(unlocksAt).getTime() - Date.now()) : 0;
+  const days = Math.floor(left / 86_400_000);
+  const hours = Math.floor((left % 86_400_000) / 3_600_000);
+  const time = unlocksAt ? (days > 0 ? `${days}d ${hours}h` : `${hours}h`) : '';
+  const when = unlocksAt ? new Date(unlocksAt).toLocaleString(isAr ? 'ar' : 'en') : '';
+  const body = (confirmed ? pickCopy.pickLockedBody : pickCopy.lockedBodyGeneric)
+    .replace('{name}', player?.name ?? '')
+    .replace('{time}', time)
+    .replace('{when}', when);
   const row = isAr ? 'row-reverse' : 'row';
   const textAlign = isAr ? 'right' : 'left';
 

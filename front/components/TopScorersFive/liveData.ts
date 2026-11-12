@@ -29,6 +29,7 @@ export function tsfPlayerFromApi(player: TsfApiPlayer): TsfPlayer {
     live: true,
     athleteId: player.externalPlayerId,
     teamId: player.teamId,
+    fixtureStatus: player.fixtureStatus ?? null,
   };
 }
 

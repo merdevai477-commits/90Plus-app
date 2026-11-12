@@ -445,6 +445,8 @@ const PlayerCard = memo(function PlayerCard({
   a11yLabel,
   onSelect,
 }: PlayerCardProps) {
+  const { t } = useTranslation();
+  const pickCopy = t.topScorersFive.pick;
   const s = (value: number) => value * scale;
   const box = (b: Box) => ({
     position: 'absolute' as const,
@@ -532,6 +534,17 @@ const PlayerCard = memo(function PlayerCard({
             </View>
           )}
         </View>
+        {player.fixtureStatus ? (
+          <Text style={[styles.name, { fontFamily: fontBold, fontSize: s(9), color: '#C4B5FD' }]} numberOfLines={1}>
+            {player.fixtureStatus === 'FINISHED'
+              ? pickCopy.fixtureFinished
+              : player.fixtureStatus === 'LIVE'
+                ? pickCopy.fixtureLive
+                : player.fixtureStatus === 'POSTPONED'
+                  ? pickCopy.fixturePostponed
+                  : pickCopy.fixtureUpcoming}
+          </Text>
+        ) : null}
       </View>
 
       {selected ? (

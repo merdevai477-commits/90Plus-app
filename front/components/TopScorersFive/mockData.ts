@@ -32,6 +32,8 @@ export type TsfPlayer = {
   readonly teamId?: number | null;
   /** A saved pick the user can no longer change this gameweek. */
   readonly locked?: boolean;
+  /** Informational match label. It does not block selection. */
+  readonly fixtureStatus?: 'FINISHED' | 'LIVE' | 'UPCOMING' | 'POSTPONED' | null;
   readonly confirmed?: boolean;
 };
 

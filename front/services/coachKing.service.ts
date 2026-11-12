@@ -87,7 +87,9 @@ export interface CkSquad {
   confirmed: boolean;
   spentMilli: number;
   points: number;
-  lockedUntil?: string;
+  lockedUntil?: string | null;
+  dirty?: boolean;
+  readyToEdit?: boolean;
   coach: CkSquadCoach | null;
   slots: CkSquadSlot[];
 }
@@ -259,6 +261,9 @@ export const coachKingService = {
 
   pickCoach: (token: string, lang: string, coachId: string) =>
     request<CkHome>(`/me/coach?lang=${lang}`, token, { method: 'POST', body: JSON.stringify({ coachId }) }),
+
+  confirmSquad: (token: string, lang: string) =>
+    request<CkHome>(`/me/confirm?lang=${lang}`, token, { method: 'POST', body: '{}' }),
 
   getUserSquad: (token: string, userId: string, lang: string) =>
     request<CkUserSquad>(`/users/${encodeURIComponent(userId)}/squad?lang=${lang}`, token),

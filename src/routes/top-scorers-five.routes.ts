@@ -18,6 +18,7 @@ import {
   listTsfEligiblePlayers,
   listTsfPlayerFixtures,
   listTsfUpcomingFixtures,
+  confirmTsfSquad,
   saveTsfSelection,
   type TsfErrorCode,
   type TsfLanguage,
@@ -106,6 +107,19 @@ router.put('/leagues/:leagueKey/selection', requireAuth, handle('save selection'
   syncTsfPickFixtures(leagueKey, data.selection?.player.teamId ?? null).catch((error) =>
     logger.warn(`[TopScorersFive] fixture sync after confirm failed: ${(error as Error)?.message}`),
   );
+}));
+
+/** POST /squad/confirm { leagueKey } — commit an Egypt draft and start the 7-day lock. */
+router.post('/squad/confirm', requireAuth, handle('confirm squad', async (req, res) => {
+  const id = clerkId(req, res);
+  if (!id) return;
+  const leagueKey = typeof req.body?.leagueKey === 'string' ? req.body.leagueKey.trim() : '';
+  if (!leagueKey) {
+    sendError(req, res, ErrorCode.VALIDATION, 'leagueKey is required');
+    return;
+  }
+  const data = await confirmTsfSquad(id, leagueKey, language(req));
+  res.json({ success: true, data });
 }));
 
 /** GET /leagues/:leagueKey/fixtures/upcoming — the league's fixtures in the next 7 days. */
