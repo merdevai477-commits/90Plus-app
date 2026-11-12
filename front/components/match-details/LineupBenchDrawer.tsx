@@ -15,6 +15,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { shortPlayerName, type LineupPitchPlayer } from '../../utils/lineupMatchState';
+import { useLocalizedName } from '../../hooks/useLocalizedName';
 import { LineupRatingBadge } from './LineupRatingBadge';
 
 const PANEL_RATIO = 0.8;
@@ -54,6 +55,7 @@ function BenchCell({
 }) {
   const subbedOff = player.subbedOff != null;
   const hasRating = player.rating != null && player.rating > 0;
+  const displayName = useLocalizedName(player.name);
   return (
     <TouchableOpacity
       style={[styles.cell, subbedOff && styles.cellOut]}
@@ -61,7 +63,7 @@ function BenchCell({
       disabled={!onPress || !player.id}
       activeOpacity={0.8}
       accessibilityRole="button"
-      accessibilityLabel={player.name}
+      accessibilityLabel={displayName}
     >
       <View style={styles.avatar}>
         <CachedAthletePhoto
@@ -85,7 +87,7 @@ function BenchCell({
         minimumFontScale={0.75}
         maxFontSizeMultiplier={1.1}
       >
-        {shortPlayerName(player.name, 12)}
+        {shortPlayerName(displayName, 12)}
       </Text>
       <View style={styles.metaRow}>
         {hasRating ? <LineupRatingBadge rating={player.rating as number} /> : null}

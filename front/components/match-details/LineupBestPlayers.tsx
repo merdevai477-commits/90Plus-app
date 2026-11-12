@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { PWGradientText } from '../predictAndWin/GradientText';
 import { shortPlayerName, type LineupPitchPlayer } from '../../utils/lineupMatchState';
+import { useLocalizedName } from '../../hooks/useLocalizedName';
 import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
 
 /** Figma node 550:2809 — card is 447 wide inside the 448 artboard. */
@@ -59,6 +60,7 @@ function BestPlayerCard({
 }) {
   const c = CARD[size];
   const radius = 10 * s;
+  const displayName = useLocalizedName(player.name);
   return (
     <TouchableOpacity
       style={[
@@ -75,7 +77,7 @@ function BestPlayerCard({
       disabled={!onPress || !player.id}
       activeOpacity={0.85}
       accessibilityRole="button"
-      accessibilityLabel={`${player.name} ${player.rating?.toFixed(1) ?? ''}`}
+      accessibilityLabel={`${displayName} ${player.rating?.toFixed(1) ?? ''}`}
     >
       <View style={[StyleSheet.absoluteFill, styles.photoWrap, { borderRadius: radius }]}>
         {photoUri ? (
@@ -117,7 +119,7 @@ function BestPlayerCard({
         minimumFontScale={0.75}
         maxFontSizeMultiplier={1.1}
       >
-        {shortPlayerName(player.name, size === 'lg' ? 12 : 10)}
+        {shortPlayerName(displayName, size === 'lg' ? 12 : 10)}
       </Text>
 
       <View

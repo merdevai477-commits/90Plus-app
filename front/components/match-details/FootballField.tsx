@@ -20,6 +20,7 @@ import {
   resolveFormationLabel,
 } from '../../utils/lineupGrid';
 import { shortPlayerName } from '../../utils/lineupMatchState';
+import { useLocalizedName } from '../../hooks/useLocalizedName';
 import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
 import { LineupRatingBadge } from './LineupRatingBadge';
 
@@ -207,6 +208,7 @@ function PitchPlayerCard({
   const goals = player.goals ?? 0;
   const assists = player.assists ?? 0;
   const hasRating = player.rating != null && player.rating > 0;
+  const displayName = useLocalizedName(player.name);
   const borderWidth = Math.max(1, 2 * u);
   const rise = AVATAR_RISE * u;
   const avatar = AVATAR * u;
@@ -222,7 +224,7 @@ function PitchPlayerCard({
       disabled={!onPress}
       activeOpacity={0.75}
       accessibilityRole="button"
-      accessibilityLabel={player.name}
+      accessibilityLabel={displayName}
     >
       <View
         style={[
@@ -241,7 +243,7 @@ function PitchPlayerCard({
           numberOfLines={1}
           maxFontSizeMultiplier={1.1}
         >
-          {shortPlayerName(player.name)}
+          {shortPlayerName(displayName)}
         </Text>
         {hasRating ? <LineupRatingBadge rating={player.rating as number} scale={u} /> : null}
       </View>

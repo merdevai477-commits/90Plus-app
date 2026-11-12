@@ -592,7 +592,12 @@ const MatchDetailsScreen = () => {
     const standingNames = standingsGroups.flatMap((g) =>
       g.standings.map((row) => row.team.name),
     );
-    const lineupNames = lineups.flatMap((l) => [l.team?.name, ...(l.startXI?.map((p) => p.player?.name) ?? [])]);
+    const lineupNames = lineups.flatMap((l) => [
+      l.team?.name,
+      l.coach?.name,
+      ...(l.startXI?.map((p) => p.player?.name) ?? []),
+      ...(l.substitutes?.map((p) => p.player?.name) ?? []),
+    ]);
     const eventNames = events.map((e) => e.team?.name);
     prefetchFootballTranslations(
       collectUniqueStrings(
