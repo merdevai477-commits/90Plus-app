@@ -759,7 +759,10 @@ export async function confirmCoachKingSquad(clerkUserId: string, lang: CkLanguag
         where: { id: squad.id, version: squad.version },
         data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt, spentMilli: check.spentMilli },
       });
-      if (claimed.count === 0) throw new CoachKingError('SQUAD_LOCKED', 'Your squad changed. Try again');
+      if (claimed.count === 0) {
+        logger.info('[fantasy.confirm.conflict] mode=coach-king');
+        throw new CoachKingError('SQUAD_LOCKED', 'Your squad changed. Try again');
+      }
       const keep = new Map(squad.slots.map((slot) => [slot.slotKey, slot]));
       for (const member of members) {
         if (member.slotKey == null) {
@@ -891,7 +894,7 @@ export type CoachKingBoardEntry = Omit<BoardRow, 'inWeek' | 'confirmedAt'> & { r
 const BOARD_TTL_MS = 60_000;
 let boardCache: { at: number; value: Promise<{ all: CoachKingBoardEntry[]; week: CoachKingBoardEntry[] }> } | null = null;
 
-function invalidateBoard(): void {
+export function invalidateBoard(): void {
   boardCache = null;
 }
 
@@ -1095,6 +1098,18 @@ export async function resetCoachKingCompetition(now: Date = new Date()): Promise
  * to a fresh 100M for the next gameweek (points never raise the budget).
  */
 export async function settleCoachKingGameweek(gameweekId: string, now: Date = new Date()): Promise<number> {
+  try {
+    return await settleCoachKingGameweekOnce(gameweekId, now);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      logger.info(`[fantasy.settle.duplicate] gameweekId=${gameweekId}`);
+      return 0;
+    }
+    throw error;
+  }
+}
+
+async function settleCoachKingGameweekOnce(gameweekId: string, now: Date): Promise<number> {
   return prisma.$transaction(async (tx) => {
     const gameweek = await tx.coachKingGameweek.findUnique({ where: { id: gameweekId } });
     if (!gameweek || gameweek.status !== 'COMPLETED' || gameweek.settledAt) return 0;

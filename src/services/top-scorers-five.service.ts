@@ -802,7 +802,10 @@ export async function saveTsfSelection(
       where: { id: squad.id, version: squad.version },
       data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt },
     });
-    if (claimed.count === 0) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
+    if (claimed.count === 0) {
+      logger.info(`[fantasy.confirm.conflict] mode=five league=${cfg.key}`);
+      throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
+    }
     if (current) {
       await tx.topScorersFiveSquadMember.updateMany({
         where: { id: current.id, removedAt: null },
@@ -953,6 +956,14 @@ export type TsfUserScoreDto = {
 
 type AttributedScore = { total: number; week: number; firstAt: number };
 
+const TSF_BOARD_TTL_MS = 30_000;
+let tsfBoardCache: { at: number; key: string; value: Map<string, Map<string, AttributedScore>> } | null = null;
+
+/** Drop the ranked page after a fixture's stored line changes. */
+export function invalidateTsfBoard(): void {
+  tsfBoardCache = null;
+}
+
 /**
  * User points from confirmed membership at kickoff.
  * Performances written before `legacyThrough` stay with the old selection row
@@ -962,61 +973,75 @@ async function attributeTsfPoints(
   slotKeys: string[],
   weekIds: Set<string>,
 ): Promise<Map<string, Map<string, AttributedScore>>> {
-  const [performances, members, legacy] = await Promise.all([
-    prisma.topScorersFivePerformance.findMany({
-      select: { gameweekId: true, playerId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
-    }),
-    prisma.topScorersFiveSquadMember.findMany({
-      where: { slotKey: { in: slotKeys } },
-      select: {
-        slotKey: true,
-        playerId: true,
-        selectedAt: true,
-        removedAt: true,
-        legacyThrough: true,
-        squad: { select: { userId: true, confirmedAt: true } },
-      },
-    }),
-    prisma.topScorersFiveSelection.findMany({
-      where: { leagueKey: { in: slotKeys }, legacyThrough: { not: null } },
-      select: { userId: true, gameweekId: true, playerId: true, leagueKey: true, legacyThrough: true, createdAt: true },
-    }),
-  ]);
-  const byUser = new Map<string, Map<string, AttributedScore>>();
-  const seen = new Set<string>();
-  const add = (userId: string, leagueKey: string, gameweekId: string, points: number, at: number) => {
-    const leagues = byUser.get(userId) ?? new Map<string, AttributedScore>();
-    const entry = leagues.get(leagueKey) ?? { total: 0, week: 0, firstAt: at };
-    entry.total += points;
-    if (weekIds.has(gameweekId)) entry.week += points;
-    if (at < entry.firstAt) entry.firstAt = at;
-    leagues.set(leagueKey, entry);
-    byUser.set(userId, leagues);
-  };
-
-  for (const perf of performances) {
-    for (const row of legacy) {
-      if (row.playerId !== perf.playerId || row.gameweekId !== perf.gameweekId || row.legacyThrough == null) continue;
-      if (perf.createdAt.getTime() > row.legacyThrough.getTime()) continue;
-      const key = `${row.userId}:${perf.gameweekId}:${perf.playerId}:${perf.fixtureId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      add(row.userId, row.leagueKey, perf.gameweekId, perf.points, row.createdAt.getTime());
-    }
-    for (const member of members) {
-      if (member.playerId !== perf.playerId) continue;
-      if (member.squad.confirmedAt == null) continue;
-      // Old weeks stay on legacy selection rows. A membership must not inherit them.
-      if (!membershipCoversKickoff(
-        { selectedAt: member.selectedAt, removedAt: member.removedAt },
-        perf.fixtureDate,
-      )) continue;
-      const key = `${member.squad.userId}:${perf.gameweekId}:${perf.playerId}:${perf.fixtureId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      add(member.squad.userId, member.slotKey, perf.gameweekId, perf.points, member.selectedAt.getTime());
-    }
+  if (slotKeys.length === 0) return new Map();
+  const key = `${[...slotKeys].sort().join(',')}|${[...weekIds].sort().join(',')}`;
+  if (tsfBoardCache && tsfBoardCache.key === key && Date.now() - tsfBoardCache.at < TSF_BOARD_TTL_MS) {
+    return tsfBoardCache.value;
   }
+  const started = Date.now();
+  const weekList = [...weekIds];
+  const rows = await prisma.$queryRaw<Array<{
+    userId: string;
+    leagueKey: string;
+    total: number | bigint;
+    week: number | bigint;
+    firstAt: Date;
+  }>>`
+    WITH credited AS (
+      SELECT s."userId" AS "userId",
+             s."leagueKey" AS "leagueKey",
+             p."gameweekId" AS "gameweekId",
+             p."points" AS points,
+             s."createdAt" AS "at"
+      FROM "top_scorers_five_performances" p
+      JOIN "top_scorers_five_selections" s
+        ON s."gameweekId" = p."gameweekId"
+       AND s."playerId" = p."playerId"
+       AND s."legacyThrough" IS NOT NULL
+       AND p."createdAt" <= s."legacyThrough"
+      WHERE s."leagueKey" IN (${Prisma.join(slotKeys)})
+      UNION ALL
+      SELECT sq."userId",
+             m."slotKey",
+             p."gameweekId",
+             p."points",
+             m."selectedAt"
+      FROM "top_scorers_five_performances" p
+      JOIN "top_scorers_five_squad_members" m ON m."playerId" = p."playerId"
+      JOIN "top_scorers_five_squads" sq ON sq."id" = m."squadId"
+      WHERE sq."confirmedAt" IS NOT NULL
+        AND m."slotKey" IN (${Prisma.join(slotKeys)})
+        AND p."fixtureDate" >= m."selectedAt"
+        AND (m."removedAt" IS NULL OR p."fixtureDate" < m."removedAt")
+        AND NOT EXISTS (
+          SELECT 1 FROM "top_scorers_five_selections" s
+          WHERE s."userId" = sq."userId"
+            AND s."gameweekId" = p."gameweekId"
+            AND s."playerId" = p."playerId"
+            AND s."legacyThrough" IS NOT NULL
+            AND p."createdAt" <= s."legacyThrough"
+        )
+    )
+    SELECT "userId",
+           "leagueKey",
+           COALESCE(SUM(points), 0) AS total,
+           COALESCE(SUM(points) FILTER (WHERE "gameweekId" IN (${weekList.length ? Prisma.join(weekList) : Prisma.sql`NULL`})), 0) AS week,
+           MIN("at") AS "firstAt"
+    FROM credited
+    GROUP BY "userId", "leagueKey"
+  `;
+  const byUser = new Map<string, Map<string, AttributedScore>>();
+  for (const row of rows) {
+    const leagues = byUser.get(row.userId) ?? new Map<string, AttributedScore>();
+    leagues.set(row.leagueKey, {
+      total: Number(row.total),
+      week: Number(row.week),
+      firstAt: row.firstAt ? new Date(row.firstAt).getTime() : 0,
+    });
+    byUser.set(row.userId, leagues);
+  }
+  tsfBoardCache = { at: Date.now(), key, value: byUser };
+  logger.info(`[fantasy.board.ms] mode=five durationMs=${Date.now() - started}`);
   return byUser;
 }
 

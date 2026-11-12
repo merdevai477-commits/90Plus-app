@@ -38,7 +38,8 @@ import {
   type TsfScorableGame,
 } from './top-scorers-five-scoring';
 import { computeTsfLockAt, ensureTsfGameweek } from './top-scorers-five.service';
-import { providerKickoff } from './squad-lock';
+import { providerKickoff, shouldRefetchScoredFixture, statLineHash } from './squad-lock';
+import { invalidateTsfBoard } from './top-scorers-five.service';
 
 const TICK_MS = 10 * 60 * 1000;
 /** A match is worth re-checking for a final whistle this long after kickoff. */
@@ -208,8 +209,8 @@ export async function processTsfFixture(
   fixture: TopScorersFiveFixture,
   deps: TsfProcessingDeps = defaultDeps,
 ): Promise<{ outcome: TsfFixtureOutcome; rows?: number }> {
-  if (fixture.processedAt) return { outcome: 'already_processed' };
   const now = deps.now();
+  if (!shouldRefetchScoredFixture(fixture, now)) return { outcome: 'already_processed' };
   if (fixture.kickoffAt > now) return { outcome: 'not_started' };
 
   if (isTsfVoidStatus(fixture.status)) {
@@ -289,14 +290,60 @@ export async function processTsfFixture(
     };
   });
 
-  const [{ count }] = await prisma.$transaction([
-    prisma.topScorersFivePerformance.createMany({ data: rows, skipDuplicates: true }),
-    prisma.topScorersFiveFixture.update({
+  const hash = statLineHash(rows.map((row) => ({
+    key: row.playerId,
+    goals: row.goals,
+    assists: row.assists,
+    points: row.points,
+    mark: row.participation ?? '',
+  })));
+  if (fixture.processedAt && fixture.sourceHash === hash) return { outcome: 'already_processed' };
+
+  let written = 0;
+  try {
+    written = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT 1 FROM "top_scorers_five_fixtures" WHERE id = ${fixture.id} FOR UPDATE`;
+    const current = await tx.topScorersFiveFixture.findUnique({
       where: { id: fixture.id },
-      data: { processedAt: now, status, lastError: null },
-    }),
-  ]);
-  return { outcome: 'scored', rows: count };
+      select: { sourceHash: true },
+    });
+    if (current?.sourceHash === hash) return 0;
+    let changed = 0;
+    for (const row of rows) {
+      await tx.topScorersFivePerformance.upsert({
+        where: { gameweekId_playerId_fixtureId: { gameweekId: row.gameweekId, playerId: row.playerId, fixtureId: row.fixtureId } },
+        create: row,
+        update: {
+          goals: row.goals,
+          assists: row.assists,
+          points: row.points,
+          participation: row.participation,
+          fixtureDate: row.fixtureDate,
+          status: row.status,
+        },
+      });
+      changed += 1;
+    }
+    await tx.topScorersFivePerformance.deleteMany({
+      where: rows.length === 0
+        ? { gameweekId: gameweek.id, fixtureId: fixture.fixtureId }
+        : { gameweekId: gameweek.id, fixtureId: fixture.fixtureId, playerId: { notIn: rows.map((row) => row.playerId) } },
+    });
+    await tx.topScorersFiveFixture.update({
+      where: { id: fixture.id },
+      data: { processedAt: fixture.processedAt ?? now, status, lastError: null, sourceHash: hash, revisedAt: fixture.sourceHash ? now : null },
+    });
+    return changed;
+    });
+  } catch (error) {
+    logger.error(`[fantasy.revision.failed] mode=five fixtureId=${fixture.fixtureId} gameweekId=${gameweek.id}`);
+    throw error;
+  }
+  if (fixture.sourceHash && fixture.sourceHash !== hash) {
+    invalidateTsfBoard();
+    logger.info(`[fantasy.revision.applied] mode=five fixtureId=${fixture.fixtureId} gameweekId=${gameweek.id}`);
+  }
+  return { outcome: 'scored', rows: written };
 }
 
 /**

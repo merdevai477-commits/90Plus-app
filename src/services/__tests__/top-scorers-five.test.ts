@@ -109,7 +109,12 @@ const prismaMock = {
     findUnique: jest.fn(async ({ where }: { where: { id: string } }) => db.players.get(where.id) ?? null),
     findMany: jest.fn(async () => db.pool.map(({ id, externalPlayerId }) => ({ id, externalPlayerId }))),
   },
-  topScorersFiveFixture: { update: jest.fn(async () => ({})), findMany: jest.fn(async () => []) },
+  $executeRaw: jest.fn(async () => 1),
+  topScorersFiveFixture: {
+    update: jest.fn(async () => ({})),
+    findMany: jest.fn(async () => []),
+    findUnique: jest.fn(async () => null),
+  },
   topScorersFivePerformance: {
     createMany: jest.fn(async ({ data, skipDuplicates }: { data: PerformanceRow[]; skipDuplicates?: boolean }) => {
       let count = 0;
@@ -128,6 +133,23 @@ const prismaMock = {
     }),
     findMany: jest.fn(async () => []),
     groupBy: jest.fn(async () => []),
+    upsert: jest.fn(async ({ create, update }: { create: PerformanceRow; update: Partial<PerformanceRow> }) => {
+      const existing = db.performances.find(
+        (row) => row.gameweekId === create.gameweekId && row.playerId === create.playerId && row.fixtureId === create.fixtureId,
+      );
+      if (existing) Object.assign(existing, update);
+      else db.performances.push({ ...create });
+      return existing ?? create;
+    }),
+    deleteMany: jest.fn(async ({ where }: { where: { gameweekId: string; fixtureId: number; playerId?: { notIn: string[] } } }) => {
+      const before = db.performances.length;
+      db.performances = db.performances.filter((row) => {
+        if (row.gameweekId !== where.gameweekId || row.fixtureId !== where.fixtureId) return true;
+        if (!where.playerId) return false;
+        return where.playerId.notIn.includes(row.playerId);
+      });
+      return { count: before - db.performances.length };
+    }),
   },
   topScorersFiveSelection: {
     findUnique: jest.fn(async ({ where }: { where: SelectionKey }) => {
@@ -326,6 +348,8 @@ function fixture(overrides: Partial<TopScorersFiveFixture> = {}): TopScorersFive
     kickoffAt: new Date('2026-10-10T16:00:00.000Z'),
     status: 'FT',
     processedAt: null,
+    sourceHash: null,
+    revisedAt: null,
     failureCount: 0,
     lastError: null,
     createdAt: NOW,
@@ -501,24 +525,33 @@ describe('fixture processing', () => {
     expect(sumTsfPerformances(mbappe).points).toBe(9);
   });
 
-  it('never reads or scores a processed fixture again', async () => {
+  it('does not re-read a sealed fixture outside the correction window', async () => {
     const d = deps();
-    const result = await processTsfFixture(gameweek(), fixture({ processedAt: NOW }), d);
+    const result = await processTsfFixture(
+      gameweek(),
+      fixture({ processedAt: new Date(NOW.getTime() - 3 * 24 * 60 * 60 * 1000), sourceHash: 'sealed' }),
+      d,
+    );
     expect(result.outcome).toBe('already_processed');
     expect(d.fetchGame).not.toHaveBeenCalled();
-    expect(prismaMock.topScorersFivePerformance.createMany).not.toHaveBeenCalled();
+  });
+
+  it('replaces stored points when the provider removes a goal', async () => {
+    await processTsfFixture(gameweek(), fixture(), deps());
+    expect(db.performances.find((row) => row.playerId === 'p-mbappe')?.points).toBe(6);
+    await processTsfFixture(gameweek(), fixture(), deps({ members: [{ id: 11, athleteId: 1001 }], events: [] }));
+    const mbappe = db.performances.filter((row) => row.playerId === 'p-mbappe');
+    expect(mbappe).toHaveLength(1);
+    expect(mbappe[0].points).toBe(0);
   });
 
   it('does not duplicate points when the same fixture is processed twice', async () => {
     // Two overlapping runs that both saw the fixture as unprocessed.
     await processTsfFixture(gameweek(), fixture(), deps());
     const again = await processTsfFixture(gameweek(), fixture(), deps());
-    expect(again).toEqual({ outcome: 'scored', rows: 0 });
+    expect(again.outcome).toBe('scored');
     expect(db.performances).toHaveLength(3);
     expect(sumTsfPerformances(db.performances.filter((p) => p.playerId === 'p-mbappe')).points).toBe(6);
-    expect(prismaMock.topScorersFivePerformance.createMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skipDuplicates: true }),
-    );
   });
 
   it('gives no points before the final whistle', async () => {

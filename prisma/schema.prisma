@@ -3268,6 +3268,9 @@ model TopScorersFiveFixture {
   kickoffAt    DateTime
   status       String                 @default("NS")
   processedAt  DateTime?
+  /// Fingerprint of the stored stat line. Null means the fixture may be re-read.
+  sourceHash   String?
+  revisedAt    DateTime?
   failureCount Int                    @default(0)
   lastError    String?
   createdAt    DateTime               @default(now())
@@ -3340,6 +3343,7 @@ model TopScorersFiveSquadMember {
 
   @@index([squadId, removedAt])
   @@index([playerId])
+  @@index([playerId, selectedAt])
   @@map("top_scorers_five_squad_members")
 }
 
@@ -3378,6 +3382,7 @@ model TopScorersFivePerformance {
 
   @@unique([gameweekId, playerId, fixtureId])
   @@index([playerId])
+  @@index([playerId, fixtureDate])
   @@map("top_scorers_five_performances")
 }
 
@@ -3489,6 +3494,8 @@ model CoachKingFixture {
   kickoffAt    DateTime
   status       String            @default("NS")
   processedAt  DateTime?
+  sourceHash   String?
+  revisedAt    DateTime?
   failureCount Int               @default(0)
   lastError    String?
   createdAt    DateTime          @default(now())

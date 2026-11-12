@@ -22,9 +22,10 @@ import {
   carryOverCoachKingSquads,
   ensureCoachKingGameweek,
   ensureCoachKingSchema,
+  invalidateBoard,
   settleCoachKingGameweek,
 } from './coach-king.service';
-import { providerKickoff } from './squad-lock';
+import { performanceCountsForMember, providerKickoff, shouldRefetchScoredFixture, statLineHash } from './squad-lock';
 import {
   TSF_EUROPE_LEAGUE_KEYS,
   TSF_LEAGUES,
@@ -103,7 +104,7 @@ async function storeFixtures(gameweekId: string, fixtures: Discovered[]): Promis
 }
 
 async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixture, now: Date): Promise<void> {
-  if (fixture.processedAt) return;
+  if (!shouldRefetchScoredFixture(fixture, now)) return;
   if (fixture.kickoffAt > now) return;
   if (isTsfVoidStatus(fixture.status)) {
     await prisma.coachKingFixture.update({ where: { id: fixture.id }, data: { processedAt: now } });
@@ -235,18 +236,121 @@ async function scoreFixture(gameweek: CoachKingGameweek, fixture: CoachKingFixtu
     }
   }
 
-  const writes: Prisma.PrismaPromise<unknown>[] = [];
-  if (performanceRows.length) {
-    writes.push(prisma.coachKingPerformance.createMany({ data: performanceRows, skipDuplicates: true }));
+  const hash = statLineHash([
+    ...performanceRows.map((row) => ({
+      key: `p:${row.playerId}`,
+      goals: row.goals,
+      assists: row.assists,
+      points: row.points,
+      mark: `${row.minutes}:${row.yellows}:${row.reds}:${row.ownGoals}:${row.cleanSheet}`,
+    })),
+    ...coachRows.map((row) => ({ key: `c:${row.coachId}`, goals: 0, assists: 0, points: row.points, mark: row.result })),
+  ]);
+  if (fixture.processedAt && fixture.sourceHash === hash) return;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT 1 FROM "coach_king_fixtures" WHERE id = ${fixture.id} FOR UPDATE`;
+      const current = await tx.coachKingFixture.findUnique({ where: { id: fixture.id }, select: { sourceHash: true } });
+      if (current?.sourceHash === hash) return;
+      for (const row of performanceRows) {
+        await tx.coachKingPerformance.upsert({
+          where: { gameweekId_playerId_fixtureId: { gameweekId: row.gameweekId, playerId: row.playerId, fixtureId: row.fixtureId } },
+          create: row,
+          update: {
+            minutes: row.minutes,
+            goals: row.goals,
+            assists: row.assists,
+            yellows: row.yellows,
+            reds: row.reds,
+            ownGoals: row.ownGoals,
+            cleanSheet: row.cleanSheet,
+            points: row.points,
+            fixtureDate: row.fixtureDate,
+          },
+        });
+      }
+      await tx.coachKingPerformance.deleteMany({
+        where: performanceRows.length === 0
+          ? { gameweekId: gameweek.id, fixtureId: fixture.fixtureId }
+          : { gameweekId: gameweek.id, fixtureId: fixture.fixtureId, playerId: { notIn: performanceRows.map((row) => row.playerId) } },
+      });
+      for (const row of coachRows) {
+        await tx.coachKingCoachScore.upsert({
+          where: { gameweekId_coachId_fixtureId: { gameweekId: row.gameweekId, coachId: row.coachId, fixtureId: row.fixtureId } },
+          create: row,
+          update: { result: row.result, points: row.points, fixtureDate: row.fixtureDate },
+        });
+      }
+      await tx.coachKingCoachScore.deleteMany({
+        where: coachRows.length === 0
+          ? { gameweekId: gameweek.id, fixtureId: fixture.fixtureId }
+          : { gameweekId: gameweek.id, fixtureId: fixture.fixtureId, coachId: { notIn: coachRows.map((row) => row.coachId) } },
+      });
+      await tx.coachKingFixture.update({
+        where: { id: fixture.id },
+        data: {
+          processedAt: fixture.processedAt ?? now,
+          status,
+          homeScore,
+          awayScore,
+          lastError: null,
+          sourceHash: hash,
+          revisedAt: fixture.sourceHash ? now : null,
+        },
+      });
+      if (fixture.sourceHash && fixture.sourceHash !== hash) {
+        const payouts = await tx.coachKingWeekPayout.findMany({ where: { gameweekId: gameweek.id }, select: { id: true, userId: true } });
+        if (payouts.length) {
+          const perfs = await tx.coachKingPerformance.findMany({
+            where: { gameweekId: gameweek.id },
+            select: { playerId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+          });
+          const scores = await tx.coachKingCoachScore.findMany({
+            where: { gameweekId: gameweek.id },
+            select: { coachId: true, fixtureId: true, points: true, fixtureDate: true, createdAt: true },
+          });
+          const squads = await tx.coachKingSquad.findMany({
+            where: { isLive: true, userId: { in: payouts.map((row) => row.userId) } },
+            include: { memberships: true },
+          });
+          for (const squad of squads) {
+            let points = 0;
+            const seen = new Set<string>();
+            for (const member of squad.memberships) {
+              for (const row of perfs) {
+                if (row.playerId !== member.playerId) continue;
+                const key = `p:${row.fixtureId}`;
+                if (seen.has(key)) continue;
+                if (!performanceCountsForMember({ kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId: gameweek.id }, member, squad.gameweekId)) continue;
+                seen.add(key);
+                points += row.points;
+              }
+              for (const row of scores) {
+                if (row.coachId !== member.coachId) continue;
+                const key = `c:${row.fixtureId}`;
+                if (seen.has(key)) continue;
+                if (!performanceCountsForMember({ kickoffAt: row.fixtureDate, createdAt: row.createdAt, gameweekId: gameweek.id }, member, squad.gameweekId)) continue;
+                seen.add(key);
+                points += row.points;
+              }
+            }
+            await tx.coachKingWeekPayout.updateMany({
+              where: { userId: squad.userId, gameweekId: gameweek.id },
+              data: { points },
+            });
+          }
+        }
+      }
+    });
+  } catch (error) {
+    logger.error(`[fantasy.revision.failed] mode=coach-king fixtureId=${fixture.fixtureId} gameweekId=${gameweek.id}`);
+    throw error;
   }
-  if (coachRows.length) {
-    writes.push(prisma.coachKingCoachScore.createMany({ data: coachRows, skipDuplicates: true }));
+  if (fixture.sourceHash && fixture.sourceHash !== hash) {
+    invalidateBoard();
+    logger.info(`[fantasy.revision.applied] mode=coach-king fixtureId=${fixture.fixtureId} gameweekId=${gameweek.id}`);
   }
-  writes.push(prisma.coachKingFixture.update({
-    where: { id: fixture.id },
-    data: { processedAt: now, status, homeScore, awayScore, lastError: null },
-  }));
-  await prisma.$transaction(writes);
 }
 
 export async function processCoachKing(now: Date = new Date()): Promise<void> {

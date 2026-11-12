@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 /**
  * Per-user squad edit lock and kickoff eligibility.
  * The lock is not a calendar week and not a league round.
@@ -51,6 +53,29 @@ export function performanceCountsForMember(
   if (member.legacyThrough == null || memberGameweekId == null) return false;
   if (row.gameweekId != null && row.gameweekId !== memberGameweekId) return false;
   return row.createdAt.getTime() <= member.legacyThrough.getTime();
+}
+
+/** How long a finished fixture is re-read for a provider correction. */
+export const SCORE_CORRECTION_WINDOW_MS = 36 * 60 * 60 * 1000;
+
+/** True when the worker should fetch the game again. A sealed hash outside the window stays put. */
+export function shouldRefetchScoredFixture(
+  fixture: { processedAt: Date | null; sourceHash: string | null },
+  now: Date,
+): boolean {
+  if (!fixture.processedAt || !fixture.sourceHash) return true;
+  return now.getTime() - fixture.processedAt.getTime() <= SCORE_CORRECTION_WINDOW_MS;
+}
+
+export type StatLine = { key: string; goals: number; assists: number; points: number; mark?: string };
+
+/** Stable fingerprint of the lines that will be stored. Identical lines are a duplicate delivery. */
+export function statLineHash(lines: readonly StatLine[]): string {
+  const body = [...lines]
+    .map((line) => `${line.key}:${line.goals}:${line.assists}:${line.points}:${line.mark ?? ''}`)
+    .sort()
+    .join('|');
+  return createHash('sha256').update(body).digest('hex');
 }
 
 /** Provider kickoff when a postponed match is given a new start. */
