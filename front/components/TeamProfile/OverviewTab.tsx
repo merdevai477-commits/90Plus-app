@@ -18,6 +18,7 @@ import type { TranslationKeys } from '../../src/i18n/utils';
 import type { Fixture, Competitor365Stats, Competitor365Coach, Stat365LeaderRow } from '../../services/apiFootball';
 import type { TeamMatches } from '../../hooks/useTeamProfile';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { statBoardLabel } from '../../utils/statBoardLabel';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
@@ -218,11 +219,13 @@ function TopScorers({
     stats,
     competitorId,
     t,
+    language,
     onOpenPlayer,
 }: {
     stats: Competitor365Stats | null | undefined;
     competitorId: number;
     t: TranslationKeys;
+    language: Language;
     onOpenPlayer: (athleteId: number, name: string, photo: string | null) => void;
 }) {
     // Prefer the goals board; fall back to the first available leaderboard.
@@ -252,11 +255,7 @@ function TopScorers({
     return (
         <Card>
             <SectionTitle
-                title={
-                    /^365\s*ratings?$/i.test((board.name || '').trim())
-                        ? '90plus ratings'
-                        : board.name || t.teamProfile.topScorers
-                }
+                title={statBoardLabel(board, language, t.teamProfile.topScorers)}
             />
             {rows.map((row, idx) => (
                 <TouchableOpacity
@@ -417,6 +416,7 @@ export default function OverviewTab({
                     stats={stats}
                     competitorId={competitorId}
                     t={t}
+                    language={language}
                     onOpenPlayer={onOpenPlayer}
                 />
             </View>

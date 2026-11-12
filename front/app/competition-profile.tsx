@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
 import { getLeagueDisplayName, getTeamDisplayName } from '../utils/i18nHelpers';
+import { statBoardLabel } from '../utils/statBoardLabel';
 import ApiFootballService, {
   type Standing365Row,
   type Stat365LeaderRow,
@@ -49,11 +50,8 @@ function sortBoards(boards: Stat365Leaderboard[]): Stat365Leaderboard[] {
   return [...boards].sort((a, b) => priority(a) - priority(b));
 }
 
-function boardLabel(board: Stat365Leaderboard, fallback: string): string {
-  const name = (board.name || '').trim();
-  // 365Scores brands the rating board; show our product name instead.
-  if (/^365\s*ratings?$/i.test(name)) return '90plus ratings';
-  return name || fallback;
+function boardLabel(board: Stat365Leaderboard, language: string, fallback: string): string {
+  return statBoardLabel(board, language, fallback);
 }
 
 export default function CompetitionProfileScreen() {
@@ -297,7 +295,7 @@ export default function CompetitionProfileScreen() {
                             style={[styles.boardChipText, active && styles.boardChipTextActive]}
                             numberOfLines={1}
                           >
-                            {boardLabel(board, cp.topScorers)}
+                            {boardLabel(board, language, cp.topScorers)}
                           </Text>
                         </TouchableOpacity>
                       );
