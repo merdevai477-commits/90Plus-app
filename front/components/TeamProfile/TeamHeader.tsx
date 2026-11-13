@@ -20,7 +20,12 @@ import {
 import type { Language } from '../../src/i18n/types';
 import type { TranslationKeys } from '../../src/i18n/utils';
 import TeamBadge from '../common/TeamBadge';
-import { getTeamDisplayName, getCountryDisplayName } from '../../utils/i18nHelpers';
+import { getCountryDisplayName } from '../../utils/i18nHelpers';
+import {
+    displayMatchTeamName,
+    isIsraelSeniorNationalTeam,
+    presentTeamLogo,
+} from '../../utils/maskedNationalTeam';
 import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
 
 interface TeamHeaderProps {
@@ -67,8 +72,10 @@ export default function TeamHeader({
     topInset,
     coachName,
 }: TeamHeaderProps) {
-    const displayName = getTeamDisplayName(name, language, competitorId);
-    const countryLabel = country ? getCountryDisplayName(country, language) : '';
+    const maskedTeam = isIsraelSeniorNationalTeam(name, competitorId, logo);
+    const displayName = displayMatchTeamName(name, language, competitorId, logo);
+    const crest = presentTeamLogo(name, logo, competitorId);
+    const countryLabel = !maskedTeam && country ? getCountryDisplayName(country, language) : '';
     const flagUri = country ? getCountryFlagUri(country, null, 40) : null;
     const flagEmoji = country ? getCountryFlagEmoji(country) : '';
 
@@ -90,7 +97,7 @@ export default function TeamHeader({
             <View style={styles.identityRow}>
                 <View style={styles.identityLeft}>
                     <View style={styles.logoGlow}>
-                        <TeamBadge name={name} logo={logo ?? undefined} size={64} color="transparent" />
+                        <TeamBadge name={displayName} logo={crest || undefined} size={64} color="transparent" />
                     </View>
                     <View style={styles.nameBlock}>
                         <Text style={styles.name} numberOfLines={2}>

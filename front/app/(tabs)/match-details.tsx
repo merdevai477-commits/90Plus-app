@@ -26,7 +26,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Lineup, Standing } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType } from '../../utils/i18nHelpers';
+import { getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType } from '../../utils/i18nHelpers';
+import { displayMatchTeamName as getTeamDisplayName, isIsraelSeniorNationalTeam, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
@@ -340,8 +341,16 @@ const MatchDetailsScreen = () => {
 
   const homeTeamName = fixture?.teams?.home?.name ?? '';
   const awayTeamName = fixture?.teams?.away?.name ?? '';
-  const homeTeamLogo = fixture?.teams?.home?.logo ?? '';
-  const awayTeamLogo = fixture?.teams?.away?.logo ?? '';
+  const homeTeamLogo = presentTeamLogo(
+    fixture?.teams?.home?.name,
+    fixture?.teams?.home?.logo ?? '',
+    fixture?.teams?.home?.id,
+  );
+  const awayTeamLogo = presentTeamLogo(
+    fixture?.teams?.away?.name,
+    fixture?.teams?.away?.logo ?? '',
+    fixture?.teams?.away?.id,
+  );
   const leagueName = fixture?.league?.name ?? '';
 
   const goalScorers = useMemo(() => {
@@ -1720,12 +1729,14 @@ const MatchDetailsScreen = () => {
       const team = side === 'home' ? fixture?.teams?.home : fixture?.teams?.away;
       if (!team || (!team.id && !team.name)) return;
       const navParams: Record<string, string> = {};
-      if (is365Fixture && team.id) navParams.id = String(team.id);
-      if (team.name) navParams.name = team.name;
-      if (team.logo) navParams.logo = team.logo;
+      const masked = isIsraelSeniorNationalTeam(team.name, team.id, team.logo);
+      if (!masked && is365Fixture && team.id) navParams.id = String(team.id);
+      if (team.name) navParams.name = getTeamDisplayName(team.name, language, team.id);
+      const crest = presentTeamLogo(team.name, team.logo, team.id);
+      if (crest) navParams.logo = crest;
       router.push({ pathname: '/team-profile' as any, params: navParams } as any);
     },
-    [router, fixture?.teams?.home, fixture?.teams?.away, is365Fixture],
+    [router, fixture?.teams?.home, fixture?.teams?.away, is365Fixture, language],
   );
 
   // League pill → competition profile (365 competitionId only).
@@ -1750,13 +1761,15 @@ const MatchDetailsScreen = () => {
       const team = row.team;
       if (!team?.id && !team?.name) return;
       const navParams: Record<string, string> = {};
+      const masked = isIsraelSeniorNationalTeam(team.name, team.id, team.logo);
       // Standings on 365 fixtures use 365 competitorIds; otherwise resolve by name.
-      if (is365Fixture && team.id) navParams.id = String(team.id);
-      if (team.name) navParams.name = team.name;
-      if (team.logo) navParams.logo = team.logo;
+      if (!masked && is365Fixture && team.id) navParams.id = String(team.id);
+      if (team.name) navParams.name = getTeamDisplayName(team.name, language, team.id);
+      const crest = presentTeamLogo(team.name, team.logo, team.id);
+      if (crest) navParams.logo = crest;
       router.push({ pathname: '/team-profile' as any, params: navParams } as any);
     },
-    [router, is365Fixture],
+    [router, is365Fixture, language],
   );
 
   const parseFormation = (formation: string | null): number[] => {

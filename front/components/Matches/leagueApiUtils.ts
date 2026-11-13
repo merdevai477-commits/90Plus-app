@@ -5,6 +5,7 @@
 
 import { Fixture, ApiFootballService, MAJOR_LEAGUES } from '../../services/apiFootball';
 import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
+import { presentTeamLogo, storedMatchTeamName } from '../../utils/maskedNationalTeam';
 import { cacheService, MATCHES_PAST_DISK_TTL_MS } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
 import { abortAfterForegroundMs } from '../../utils/abortAfterForegroundMs';
@@ -207,13 +208,29 @@ export const formatMatchTime = (fixtureDate: string): string =>
  */
 export const mapFixtureToMatch = (fixture: Fixture): Match => {
   const homeTeam: TeamInfo = {
-    name: fixture.teams.home.name,
-    logo: fixture.teams.home.logo,
+    name: storedMatchTeamName(
+      fixture.teams.home.name,
+      fixture.teams.home.logo,
+      fixture.teams.home.id,
+    ) || fixture.teams.home.name,
+    logo: presentTeamLogo(
+      fixture.teams.home.name,
+      fixture.teams.home.logo,
+      fixture.teams.home.id,
+    ),
   };
 
   const awayTeam: TeamInfo = {
-    name: fixture.teams.away.name,
-    logo: fixture.teams.away.logo,
+    name: storedMatchTeamName(
+      fixture.teams.away.name,
+      fixture.teams.away.logo,
+      fixture.teams.away.id,
+    ) || fixture.teams.away.name,
+    logo: presentTeamLogo(
+      fixture.teams.away.name,
+      fixture.teams.away.logo,
+      fixture.teams.away.id,
+    ),
   };
 
   const league: LeagueInfo = {

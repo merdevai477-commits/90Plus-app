@@ -57,7 +57,8 @@ import { useFavoriteLeagues } from '../../hooks/useFavoriteLeagues';
 import type { StoredFollowedLeague } from '../../src/storage/leagueFavorites.storage';
 import { pinFavoriteLeaguesInCountryGroups } from '../../utils/matchesCountrySort';
 import type { CountryGroup } from '../../hooks/useMatchesData';
-import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
+import { getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
+import { displayMatchTeamName, presentTeamLogo, storedMatchTeamName } from '../../utils/maskedNationalTeam';
 import { fetchLeagueMatchesByDate, resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { MatchListLiveClock } from '../../components/Matches/MatchListLiveClock';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
@@ -274,10 +275,10 @@ function filterCountryGroupsFor(
 // Fixture ref after groupedMatches rebuilds — MatchRow's React.memo can skip.
 const matchToFixture = createObjectRefMemo((m: Match): Fixture => ({
   id: m.id,
-  home: m.homeTeam?.name || 'Home',
-  away: m.awayTeam?.name || 'Away',
-  homeLogo: m.homeTeam?.logo || '',
-  awayLogo: m.awayTeam?.logo || '',
+  home: storedMatchTeamName(m.homeTeam?.name, m.homeTeam?.logo) || 'Home',
+  away: storedMatchTeamName(m.awayTeam?.name, m.awayTeam?.logo) || 'Away',
+  homeLogo: presentTeamLogo(m.homeTeam?.name, m.homeTeam?.logo),
+  awayLogo: presentTeamLogo(m.awayTeam?.name, m.awayTeam?.logo),
   homeScore: m.score?.home ?? 0,
   awayScore: m.score?.away ?? 0,
   status: mapStatus(m.status),
@@ -457,8 +458,8 @@ const MatchRow = memo(function MatchRow({
   const existingPrediction = predictionEntry?.type ?? null;
   const isSubmitting = submittingId === fixture.id;
   const { translate: t, language } = useTranslation();
-  const homeName = getTeamDisplayName(fixture.home, language);
-  const awayName = getTeamDisplayName(fixture.away, language);
+  const homeName = displayMatchTeamName(fixture.home, language);
+  const awayName = displayMatchTeamName(fixture.away, language);
   const sharedLivePulse = getSharedLivePulse();
 
   useEffect(() => {

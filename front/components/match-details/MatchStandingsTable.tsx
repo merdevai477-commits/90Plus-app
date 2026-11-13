@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { View, TouchableOpacity, Image, StyleSheet, useWindowDimensions } from 'react-native';
 import { Text } from './MatchText';
 import type { Standing } from '../../services/apiFootball';
-import { getTeamDisplayName } from '../../utils/i18nHelpers';
+import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { standingRowMatchesTeam } from '../../utils/standingsHelpers';
 import type { Language } from '../../src/i18n';
 
@@ -85,9 +85,12 @@ function MatchStandingsTableComponent({
           >
             <Text style={[styles.text, styles.num, { width: rankW }]}>{team.rank}</Text>
             <View style={styles.teamCell}>
-              <Image source={{ uri: team.team.logo }} style={styles.logo} />
+              <Image
+                source={{ uri: presentTeamLogo(team.team.name, team.team.logo, team.team.id) }}
+                style={styles.logo}
+              />
               <Text style={[styles.text, styles.teamName]} numberOfLines={1}>
-                {getTeamDisplayName(team.team.name, language as Language)}
+                {displayMatchTeamName(team.team.name, language as Language, team.team.id, team.team.logo)}
               </Text>
             </View>
             <Text style={[styles.text, styles.num, { width: colW }]}>{team.all.played}</Text>

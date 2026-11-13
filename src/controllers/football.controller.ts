@@ -37,6 +37,11 @@ import {
   noteFixturePullRefresh,
   noteListPullRefresh,
 } from '../services/pull-refresh.service';
+import {
+  maskFixtureDetailsForClient,
+  maskFixtureForClient,
+  maskFixturesForClient,
+} from '../utils/masked-national-team';
 
 /**
  * Football API Proxy Controller
@@ -273,7 +278,7 @@ export class FootballController {
         res.json({
           status: 'SUCCESS',
           results: fixtures.length,
-          response: fixtures,
+          response: maskFixturesForClient(fixtures),
           cached: true,
           degraded: fixtures.length === 0,
         });
@@ -293,7 +298,7 @@ export class FootballController {
         res.json({
           status: 'SUCCESS',
           results: fixtures.length,
-          response: fixtures,
+          response: maskFixturesForClient(fixtures),
           cached: true,
         });
         return;
@@ -341,7 +346,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
-        response: fixtures,
+        response: maskFixturesForClient(fixtures),
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -418,7 +423,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
-        response: fixtures,
+        response: maskFixturesForClient(fixtures),
         _meta: {
           dateRange: {
             from: fromKey,
@@ -562,7 +567,7 @@ export class FootballController {
         res.json({
           status: 'SUCCESS',
           results: redisLive.fixtures.length,
-          response: redisLive.fixtures,
+          response: maskFixturesForClient(redisLive.fixtures),
           cached: true,
           source:
             redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
@@ -596,7 +601,7 @@ export class FootballController {
         res.json({
           status: 'SUCCESS',
           results: redisLive.fixtures.length,
-          response: redisLive.fixtures,
+          response: maskFixturesForClient(redisLive.fixtures),
           cached: true,
           source: redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
           language,
@@ -664,7 +669,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
-        response: fixtures,
+        response: maskFixturesForClient(fixtures),
         cached: false,
         _meta: withDiagMeta({ elapsedMs }),
       });
@@ -703,7 +708,7 @@ export class FootballController {
         res.json({
           status: 'SUCCESS',
           results: 1,
-          response: [resolved.fixture],
+          response: [maskFixtureForClient(resolved.fixture)],
           cached: resolved.source !== null,
           source: resolved.source ?? undefined,
         });
@@ -739,7 +744,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: 1,
-        response: [fixture],
+        response: [maskFixtureForClient(fixture)],
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -834,7 +839,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
-        response: fixtures,
+        response: maskFixturesForClient(fixtures),
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -2007,12 +2012,13 @@ export class FootballController {
         } = fixture as Record<string, unknown>;
         return rest;
       });
+      const masked = maskFixturesForClient(trimmed);
       const response =
         view === 'list'
           ? (await import('../utils/matches-list-projection.util')).projectMatchesForListView(
-              trimmed,
+              masked,
             )
-          : trimmed;
+          : masked;
 
       const elapsedMs = Date.now() - startedAt;
       logger.info(
@@ -2086,7 +2092,7 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         results: matches.length,
-        response: matches,
+        response: maskFixturesForClient(matches),
         _meta: { date: dateString, leagueId, cached: true, available: matches.length > 0 },
       });
     } catch (error) {
@@ -2711,7 +2717,7 @@ export class FootballController {
 
       res.json({
         status: 'SUCCESS',
-        response: bundle,
+        response: bundle ? maskFixtureDetailsForClient(bundle) : bundle,
         _meta: withDiagMeta({
           ...(gameId
             ? {

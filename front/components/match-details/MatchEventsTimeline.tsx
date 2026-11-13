@@ -6,7 +6,8 @@ import { Text } from './MatchText';
 import { MatchEventIcon } from './MatchEventIcon';
 import TeamBadge from '../common/TeamBadge';
 import type { FixtureEvent } from '../../services/apiFootball';
-import { getLocalizedEventLabel, getTeamDisplayName } from '../../utils/i18nHelpers';
+import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
+import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import type { Language } from '../../src/i18n/types';
 
 const SWAP_ICON = require('../../assets/images/match-events/swap.svg');
@@ -41,8 +42,8 @@ function EventGlyph({ event, language }: { event: FixtureEvent; language: Langua
     return (
       <View style={styles.goalGlyph}>
         <TeamBadge
-          name={getTeamDisplayName(event.team.name, language)}
-          logo={event.team.logo}
+          name={displayMatchTeamName(event.team.name, language, event.team.id, event.team.logo)}
+          logo={presentTeamLogo(event.team.name, event.team.logo, event.team.id)}
           size={28}
           color="transparent"
         />
@@ -86,7 +87,7 @@ export function MatchEventsTimeline({
         />
         {events.map((event, index) => {
           const active = index === lastIndex;
-          const teamName = getTeamDisplayName(event.team.name, language);
+          const teamName = displayMatchTeamName(event.team.name, language, event.team.id, event.team.logo);
           const isSynthetic = event._synthetic === true;
 
           let title: string;

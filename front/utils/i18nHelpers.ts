@@ -83,6 +83,11 @@ export function getTeamDisplayName(
   const name = (originalName ?? '').trim();
   if (!name) return fallback;
 
+  // Already masked on the server. Don't send it through country lookup or translation.
+  if (name === 'غير معروف' || name === 'Unknown') {
+    return language === 'ar' ? 'غير معروف' : 'Unknown';
+  }
+
   if (language === 'ar') {
     const ar = lookupArabicLabel(name);
     if (ar) return ar;

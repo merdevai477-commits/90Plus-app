@@ -9,6 +9,7 @@ import { readLiveFixtureById } from './live-fixture-cache.service';
 import { matchCacheService, type FixtureFromAPI } from './match-cache.service';
 import { resolveVenueImage } from './stadium-image.service';
 import { logger } from '../utils/logger';
+import { maskTeamSide } from '../utils/masked-national-team';
 import { translateFootballNames } from './football-translation.service';
 
 export const WIDGET_MAX_TEAMS = 8;
@@ -205,6 +206,8 @@ export function toWidgetMatch(f: FixtureFromAPI): WidgetMatch {
   const short = f.fixture?.status?.short ?? 'NS';
   const status = toWidgetStatus(short);
   const hasScore = status !== 'upcoming' && status !== 'off';
+  const home = maskTeamSide(f.teams.home) ?? f.teams.home;
+  const away = maskTeamSide(f.teams.away) ?? f.teams.away;
   return {
     fixtureId: f.fixture.id,
     status,
@@ -212,8 +215,8 @@ export function toWidgetMatch(f: FixtureFromAPI): WidgetMatch {
     kickoffTs: f.fixture.timestamp ?? Math.floor(new Date(f.fixture.date).getTime() / 1000),
     elapsed: f.fixture.status?.elapsed ?? null,
     extra: f.fixture.status?.extra ?? null,
-    home: { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo || null },
-    away: { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo || null },
+    home: { id: home.id, name: home.name, logo: home.logo || null },
+    away: { id: away.id, name: away.name, logo: away.logo || null },
     score: hasScore ? { home: f.goals?.home ?? 0, away: f.goals?.away ?? 0 } : null,
     league: { id: f.league?.id ?? 0, name: f.league?.name ?? '', logo: f.league?.logo || null },
   };
