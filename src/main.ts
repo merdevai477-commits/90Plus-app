@@ -280,6 +280,7 @@ import authRoutes from './routes/auth.routes';
 import debugRoutes from './routes/debug.routes';
 import i18nRoutes from './routes/i18n.routes';
 import newsRoutes from './routes/news.routes';
+import fs from 'fs';
 import path from 'path';
 import { resolvePublicDir, resolveSiteFile, resolveWebDistDir } from './utils/public-path.util';
 import {
@@ -550,8 +551,9 @@ app.use('/diagnostics', (_req: Request, res: Response, next) => {
     next();
 });
 
-app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
-    const filePath = path.join(publicPath, 'ass', 'index.html');
+app.get(['/AsS', '/ass', '/ass/'], (_req: Request, res: Response) => {
+    const vitePage = path.join(resolveWebDistDir(), 'ass', 'index.html');
+    const filePath = fs.existsSync(vitePage) ? vitePage : path.join(publicPath, 'ass', 'index.html');
     res.set('Cache-Control', 'no-store');
     res.sendFile(filePath, (err) => {
         if (err) {

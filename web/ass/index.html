@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#000000" />
+    <title>90Plus · لوحة المراجعة</title>
+  </head>
+  <body>
+    <div id="login" class="login">
+      <form id="login-form" class="login-card" autocomplete="off">
+        <p class="brand">90Plus</p>
+        <h1>لوحة المراجعة</h1>
+        <p class="muted">دخول محدود لفريق المراجعة</p>
+        <label>
+          اسم المستخدم
+          <input id="username" name="username" type="text" required />
+        </label>
+        <label>
+          كلمة المرور
+          <input id="password" name="password" type="password" required />
+        </label>
+        <p id="login-error" class="error" hidden></p>
+        <button type="submit" id="login-btn" class="btn btn-live">دخول</button>
+      </form>
+    </div>
+
+    <div id="desk" class="desk" hidden>
+      <aside class="side">
+        <div class="side-head">
+          <p class="brand">90PLUS</p>
+          <button type="button" id="logout" class="btn btn-ghost">خروج</button>
+        </div>
+        <nav id="tabs">
+          <p class="nav-label">اللوحة</p>
+          <button type="button" data-tab="overview" class="nav-btn active">نظرة عامة</button>
+          <p class="nav-label">الإعلانات</p>
+          <button type="button" data-tab="DRAFT" class="nav-btn">مراجعة الإعلانات</button>
+          <button type="button" data-tab="PUBLISHED" class="nav-btn">منشور</button>
+          <button type="button" data-tab="LOCKED" class="nav-btn">مقفل</button>
+          <button type="button" data-tab="SETTLED" class="nav-btn">مكتمل</button>
+          <button type="button" data-tab="REJECTED" class="nav-btn">مرفوض</button>
+          <button type="button" data-tab="CANCELLED" class="nav-btn">ملغى</button>
+          <p class="nav-label">المحتوى</p>
+          <button type="button" data-tab="posts" class="nav-btn">منشورات المجتمع</button>
+          <button type="button" data-tab="comments" class="nav-btn">تعليقات المجتمع</button>
+          <button type="button" data-tab="reels" class="nav-btn">ريلز</button>
+          <button type="button" data-tab="reel-comments" class="nav-btn">تعليقات الريلز</button>
+          <button type="button" data-tab="activity" class="nav-btn">نشاط المسابقات</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="top">
+          <p class="eyebrow">مراجعة المحتوى</p>
+          <h1 id="page-title">نظرة عامة</h1>
+        </header>
+
+        <div id="post-filters" class="filters" hidden>
+          <div class="filter-group">
+            <span>ترتيب</span>
+            <button type="button" data-order="newest" class="chip active">الأحدث</button>
+            <button type="button" data-order="oldest" class="chip">الأقدم</button>
+          </div>
+          <div class="filter-group">
+            <span>فلتر</span>
+            <button type="button" data-filter="all" class="chip active">الكل</button>
+            <button type="button" data-filter="reported" class="chip">بلاغات</button>
+            <button type="button" data-filter="ai" class="chip">مشكوك AI</button>
+          </div>
+        </div>
+
+        <p id="desk-error" class="error banner" hidden></p>
+        <section id="overview"></section>
+        <section id="cards" class="list" hidden></section>
+        <section id="activity" class="activity" hidden></section>
+      </main>
+    </div>
+
+    <div id="drawer" class="drawer" hidden>
+      <button type="button" class="drawer-backdrop" data-act="close-drawer" aria-label="إغلاق"></button>
+      <aside id="drawer-panel" class="drawer-panel"></aside>
+    </div>
+
+    <div id="reject-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h2>رفض الإعلان</h2>
+        <p class="muted">السبب اختياري — هيظهر للمعلن في الإشعار لو كتبته.</p>
+        <textarea id="reject-reason" rows="4" maxlength="500" placeholder="سبب الرفض (اختياري)"></textarea>
+        <div class="modal-actions">
+          <button type="button" id="reject-cancel" class="btn btn-ghost">إلغاء</button>
+          <button type="button" id="reject-confirm" class="btn btn-danger">تأكيد الرفض</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="image-modal" class="modal" hidden>
+      <div class="modal-card wide">
+        <button type="button" id="image-close" class="btn btn-ghost">إغلاق</button>
+        <img id="image-preview" alt="معاينة" />
+        <p id="image-caption" class="muted"></p>
+        <div class="modal-actions">
+          <button type="button" id="image-delete" class="btn btn-danger">حذف المنشور</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="video-modal" class="modal" hidden>
+      <div class="modal-card wide">
+        <button type="button" id="video-close" class="btn btn-ghost">إغلاق</button>
+        <video id="reel-video" controls playsinline></video>
+        <p id="video-caption" class="muted"></p>
+        <p id="video-fallback" class="muted" hidden>الفيديو لسه بيتجهز أو مش متاح للتشغيل.</p>
+        <div class="modal-actions">
+          <button type="button" id="video-delete" class="btn btn-danger">حذف الريل</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="delete-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h2 id="delete-title">حذف المنشور</h2>
+        <p id="delete-hint" class="muted">الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.</p>
+        <textarea id="delete-reason" rows="4" maxlength="500" placeholder="سبب الحذف (اختياري)"></textarea>
+        <div class="modal-actions">
+          <button type="button" id="delete-cancel" class="btn btn-ghost">إلغاء</button>
+          <button type="button" id="delete-confirm" class="btn btn-danger">تأكيد الحذف</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="../src/desk/main.js"></script>
+  </body>
+</html>
