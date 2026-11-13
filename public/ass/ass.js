@@ -14,6 +14,10 @@ const deleteModal = document.getElementById('delete-modal');
 const deleteReason = document.getElementById('delete-reason');
 const deleteTitle = document.getElementById('delete-title');
 const deleteHint = document.getElementById('delete-hint');
+const videoModal = document.getElementById('video-modal');
+const reelVideo = document.getElementById('reel-video');
+const videoCaption = document.getElementById('video-caption');
+const videoFallback = document.getElementById('video-fallback');
 
 const STATE = {
   tab: 'DRAFT',
@@ -21,9 +25,12 @@ const STATE = {
   deleteId: null,
   deleteKind: 'post',
   previewPostId: null,
+  previewReelId: null,
   postFilter: 'all',
   postOrder: 'newest',
   postsById: {},
+  mediaById: {},
+  hls: null,
   inflight: null,
 };
 
@@ -165,6 +172,104 @@ function renderPosts(rows) {
     .join('');
 }
 
+function rememberMedia(id, media) {
+  if (!id || !media) return;
+  STATE.mediaById[id] = media;
+}
+
+function renderReels(rows) {
+  STATE.mediaById = {};
+  if (!rows.length) {
+    cardsEl.innerHTML = '<div class="empty">لا توجد ريلز في هذا الفلتر</div>';
+    return;
+  }
+  cardsEl.innerHTML = rows
+    .map((reel) => {
+      const name = reel.user?.displayName || reel.user?.username || 'مستخدم';
+      const handle = reel.user?.username ? `@${reel.user.username}` : '';
+      const text = (reel.caption || '').trim();
+      const preview = text.length > 180 ? `${text.slice(0, 180)}…` : text;
+      rememberMedia(reel.id, {
+        playbackUrl: reel.playbackUrl,
+        thumbnailUrl: reel.thumbnailUrl,
+        caption: `${name} · ${fmtDate(reel.createdAt)}`,
+      });
+      const thumb = reel.thumbnailUrl
+        ? `<button type="button" class="thumb post-thumb reel-thumb" data-act="play" data-id="${esc(reel.id)}" style="background-image:url('${esc(reel.thumbnailUrl)}')" aria-label="تشغيل الريل"><span class="play-mark">تشغيل</span></button>`
+        : `<button type="button" class="thumb post-thumb reel-thumb empty-thumb" data-act="play" data-id="${esc(reel.id)}">بدون صورة</button>`;
+      const processing = reel.status === 'PROCESSING' ? '<span class="tag warn">جاري المعالجة</span>' : '';
+      return `<article class="card post-card">
+        ${thumb}
+        <div class="card-body">
+          <div class="prize">${esc(name)} <span class="handle">${esc(handle)}</span></div>
+          <div class="badges"><span class="tag ok">ريل</span> ${processing} ${postBadges(reel)}</div>
+          <div class="post-text">${esc(preview) || '<span class="muted">بدون وصف</span>'}</div>
+          <div class="meta">
+            ▶ ${reel.views || 0} · ❤️ ${reel.likesCount || 0} · 💬 ${reel.commentsCount || 0}<br/>
+            ${fmtDate(reel.createdAt)}
+          </div>
+          <div class="actions">
+            <button class="ghost" data-act="play" data-id="${esc(reel.id)}">عرض الفيديو</button>
+            <button class="danger" data-act="delete-reel" data-id="${esc(reel.id)}">حذف</button>
+          </div>
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
+function renderReelComments(rows) {
+  STATE.mediaById = {};
+  if (!rows.length) {
+    cardsEl.innerHTML = '<div class="empty">لا توجد تعليقات ريلز في هذا الفلتر</div>';
+    return;
+  }
+  cardsEl.innerHTML = rows
+    .map((c) => {
+      const name = c.user?.displayName || c.user?.username || 'مستخدم';
+      const handle = c.user?.username ? `@${c.user.username}` : '';
+      const text = (c.content || '').trim();
+      const preview = text.length > 220 ? `${text.slice(0, 220)}…` : text;
+      const caption = (c.reel?.caption || '').trim();
+      const reelPreview = caption
+        ? caption.length > 100
+          ? `${caption.slice(0, 100)}…`
+          : caption
+        : 'ريل';
+      if (c.reel?.id) {
+        rememberMedia(c.reel.id, {
+          playbackUrl: c.reel.playbackUrl,
+          thumbnailUrl: c.reel.thumbnailUrl,
+          caption: reelPreview,
+        });
+      }
+      const parent = c.isReply
+        ? `<div class="parent-post">رد على: ${esc(c.parentContent || 'تعليق')}</div>`
+        : '';
+      const watch = c.reel?.playbackUrl
+        ? `<button class="ghost" data-act="play" data-id="${esc(c.reel.id)}">عرض الريل</button>`
+        : '';
+      return `<article class="card post-card comment-card">
+        <div class="card-body">
+          <div class="prize">${esc(name)} <span class="handle">${esc(handle)}</span></div>
+          <div class="badges"><span class="tag win">تعليق ريل</span> ${postBadges(c)}</div>
+          <div class="post-text">${esc(preview) || '<span class="muted">—</span>'}</div>
+          ${parent}
+          <div class="parent-post">على ريل: ${esc(reelPreview)}</div>
+          <div class="meta">
+            ❤️ ${c.likesCount || 0}<br/>
+            ${fmtDate(c.createdAt)}
+          </div>
+          <div class="actions">
+            ${watch}
+            <button class="danger" data-act="delete-reel-comment" data-id="${esc(c.id)}">حذف التعليق</button>
+          </div>
+        </div>
+      </article>`;
+    })
+    .join('');
+}
+
 function renderComments(rows) {
   if (!rows.length) {
     cardsEl.innerHTML = '<div class="empty">لا توجد تعليقات مبلّغ عنها أو مشكوك فيها</div>';
@@ -244,18 +349,58 @@ function openImagePreview(postId) {
   imageModal.hidden = false;
 }
 
+function stopVideo() {
+  if (STATE.hls) {
+    STATE.hls.destroy();
+    STATE.hls = null;
+  }
+  reelVideo.pause();
+  reelVideo.removeAttribute('src');
+  reelVideo.load();
+}
+
+function openVideoPreview(reelId) {
+  const media = STATE.mediaById[reelId];
+  if (!media) return;
+  stopVideo();
+  STATE.previewReelId = reelId;
+  videoCaption.textContent = media.caption || '';
+  videoFallback.hidden = !!media.playbackUrl;
+  reelVideo.poster = media.thumbnailUrl || '';
+  if (media.playbackUrl) {
+    const url = media.playbackUrl;
+    const isHls = /\.m3u8(\?|$)/i.test(url);
+    if (isHls && reelVideo.canPlayType('application/vnd.apple.mpegurl')) {
+      reelVideo.src = url;
+    } else if (isHls && window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls({ enableWorker: false });
+      hls.loadSource(url);
+      hls.attachMedia(reelVideo);
+      STATE.hls = hls;
+    } else {
+      reelVideo.src = url;
+    }
+  }
+  videoModal.hidden = false;
+}
+
+const DELETE_COPY = {
+  post: ['حذف المنشور', 'الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.'],
+  comment: ['حذف التعليق', 'الحذف فوري، وهيترسل تحذير لصاحب التعليق. سبب الحذف اختياري.'],
+  reel: ['حذف الريل', 'الحذف فوري، الفيديو هيختفي من التطبيق، وهيترسل تحذير لصاحب الريل. سبب الحذف اختياري.'],
+  'reel-comment': ['حذف تعليق الريل', 'الحذف فوري، وهيترسل تحذير لصاحب التعليق. سبب الحذف اختياري.'],
+};
+
 function openDeleteModal(id, kind = 'post') {
   STATE.deleteId = id;
   STATE.deleteKind = kind;
   deleteReason.value = '';
   imageModal.hidden = true;
-  if (kind === 'comment') {
-    deleteTitle.textContent = 'حذف التعليق';
-    deleteHint.textContent = 'الحذف فوري، وهيترسل تحذير لصاحب التعليق. سبب الحذف اختياري.';
-  } else {
-    deleteTitle.textContent = 'حذف المنشور';
-    deleteHint.textContent = 'الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.';
-  }
+  videoModal.hidden = true;
+  stopVideo();
+  const copy = DELETE_COPY[kind] || DELETE_COPY.post;
+  deleteTitle.textContent = copy[0];
+  deleteHint.textContent = copy[1];
   deleteModal.hidden = false;
 }
 
@@ -266,8 +411,10 @@ async function load() {
     try {
       const isPosts = STATE.tab === 'posts';
       const isComments = STATE.tab === 'comments';
+      const isReels = STATE.tab === 'reels';
+      const isReelComments = STATE.tab === 'reel-comments';
       const isActivity = STATE.tab === 'activity';
-      const showCommunityFilters = isPosts || isComments;
+      const showCommunityFilters = isPosts || isComments || isReels || isReelComments;
       postFiltersEl.hidden = !showCommunityFilters;
       if (showCommunityFilters) syncPostFilterChips();
 
@@ -282,13 +429,19 @@ async function load() {
       cardsEl.hidden = false;
       activityEl.hidden = true;
 
-      if (isPosts || isComments) {
+      if (isPosts || isComments || isReels || isReelComments) {
         const qs = new URLSearchParams({
           filter: STATE.postFilter,
           order: STATE.postOrder,
           limit: '100',
         });
-        if (isComments) {
+        if (isReelComments) {
+          const json = await api(`/reels/comments?${qs}`);
+          renderReelComments(json.data || []);
+        } else if (isReels) {
+          const json = await api(`/reels?${qs}`);
+          renderReels(json.data || []);
+        } else if (isComments) {
           const json = await api(`/community/comments?${qs}`);
           renderComments(json.data || []);
         } else {
@@ -388,12 +541,24 @@ cardsEl.addEventListener('click', async (e) => {
     openImagePreview(id);
     return;
   }
+  if (act === 'play') {
+    openVideoPreview(id);
+    return;
+  }
   if (act === 'delete-post') {
     openDeleteModal(id, 'post');
     return;
   }
   if (act === 'delete-comment') {
     openDeleteModal(id, 'comment');
+    return;
+  }
+  if (act === 'delete-reel') {
+    openDeleteModal(id, 'reel');
+    return;
+  }
+  if (act === 'delete-reel-comment') {
+    openDeleteModal(id, 'reel-comment');
     return;
   }
   if (act === 'reject') {
@@ -454,6 +619,17 @@ document.getElementById('image-delete').addEventListener('click', () => {
   openDeleteModal(STATE.previewPostId, 'post');
 });
 
+document.getElementById('video-close').addEventListener('click', () => {
+  videoModal.hidden = true;
+  STATE.previewReelId = null;
+  stopVideo();
+});
+
+document.getElementById('video-delete').addEventListener('click', () => {
+  if (!STATE.previewReelId) return;
+  openDeleteModal(STATE.previewReelId, 'reel');
+});
+
 document.getElementById('delete-cancel').addEventListener('click', () => {
   deleteModal.hidden = true;
   STATE.deleteId = null;
@@ -463,26 +639,37 @@ document.getElementById('delete-cancel').addEventListener('click', () => {
 document.getElementById('delete-confirm').addEventListener('click', async () => {
   if (!STATE.deleteId) return;
   const btn = document.getElementById('delete-confirm');
-  const kind = STATE.deleteKind === 'comment' ? 'comment' : 'post';
+  const kind = DELETE_COPY[STATE.deleteKind] ? STATE.deleteKind : 'post';
+  const deletePaths = {
+    post: `/community/posts/${STATE.deleteId}/delete`,
+    comment: `/community/comments/${STATE.deleteId}/delete`,
+    reel: `/reels/${STATE.deleteId}/delete`,
+    'reel-comment': `/reels/comments/${STATE.deleteId}/delete`,
+  };
+  const failText = {
+    post: 'فشل حذف المنشور',
+    comment: 'فشل حذف التعليق',
+    reel: 'فشل حذف الريل',
+    'reel-comment': 'فشل حذف تعليق الريل',
+  };
   btn.disabled = true;
   try {
-    const path =
-      kind === 'comment'
-        ? `/community/comments/${STATE.deleteId}/delete`
-        : `/community/posts/${STATE.deleteId}/delete`;
-    await api(path, {
+    await api(deletePaths[kind], {
       method: 'POST',
       body: JSON.stringify({ reason: deleteReason.value }),
     });
     deleteModal.hidden = true;
     imageModal.hidden = true;
+    videoModal.hidden = true;
+    stopVideo();
     STATE.deleteId = null;
     STATE.deleteKind = 'post';
     STATE.previewPostId = null;
+    STATE.previewReelId = null;
     await load();
   } catch (err) {
     deskError.hidden = false;
-    deskError.textContent = err.message || (kind === 'comment' ? 'فشل حذف التعليق' : 'فشل حذف المنشور');
+    deskError.textContent = err.message || failText[kind];
   } finally {
     btn.disabled = false;
   }

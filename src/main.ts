@@ -75,10 +75,11 @@ app.use(
                   directives: {
                       defaultSrc: ["'self'"],
                       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+                      mediaSrc: ["'self'", 'blob:', 'https://stream.mux.com', 'https://*.mux.com'],
                       scriptSrc: ["'self'"],
                       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
                       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-                      connectSrc: ["'self'"],
+                      connectSrc: ["'self'", 'https://stream.mux.com', 'https://*.mux.com'],
                   },
               }
             : false,

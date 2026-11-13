@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
     <title>90Plus · مراجعة المحتوى</title>
-    <link rel="stylesheet" href="/ass/ass.css?v=20261030b" />
+    <link rel="stylesheet" href="/ass/ass.css?v=20261113a" />
   </head>
   <body>
     <div id="login" class="login-wrap">
@@ -32,7 +32,7 @@
       <header class="topbar">
         <div>
           <div class="brand sm">90Plus</div>
-          <h1>مراجعة الإعلانات والمنشورات</h1>
+          <h1>مراجعة المحتوى</h1>
         </div>
         <button type="button" id="logout" class="ghost">خروج</button>
       </header>
@@ -44,6 +44,8 @@
         <button type="button" data-tab="SETTLED">مكتمل</button>
         <button type="button" data-tab="posts">منشورات المجتمع</button>
         <button type="button" data-tab="comments">تعليقات المجتمع</button>
+        <button type="button" data-tab="reels">ريلز</button>
+        <button type="button" data-tab="reel-comments">تعليقات الريلز</button>
         <button type="button" data-tab="activity">نشاط</button>
       </nav>
 
@@ -89,6 +91,18 @@
       </div>
     </div>
 
+    <div id="video-modal" class="modal" hidden>
+      <div class="modal-card image-modal-card">
+        <button type="button" id="video-close" class="ghost image-close" aria-label="إغلاق">إغلاق</button>
+        <video id="reel-video" controls playsinline></video>
+        <p id="video-caption" class="meta image-caption"></p>
+        <p id="video-fallback" class="muted" hidden>الفيديو لسه بيتجهز أو مش متاح للتشغيل.</p>
+        <div class="row">
+          <button type="button" id="video-delete" class="danger">حذف الريل</button>
+        </div>
+      </div>
+    </div>
+
     <div id="delete-modal" class="modal" hidden>
       <div class="modal-card">
         <h2 id="delete-title">حذف المنشور</h2>
@@ -101,6 +115,7 @@
       </div>
     </div>
 
-    <script src="/ass/ass.js?v=20261030b" defer></script>
+    <script src="/ass/hls.min.js?v=20261113a" defer></script>
+    <script src="/ass/ass.js?v=20261113a" defer></script>
   </body>
 </html>

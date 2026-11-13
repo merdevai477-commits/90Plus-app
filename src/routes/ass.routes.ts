@@ -24,6 +24,13 @@ import {
   listAssCommunityComments,
   listAssCommunityPosts,
 } from '../services/ass-community.service';
+import {
+  AssReelError,
+  assDeleteReel,
+  assDeleteReelComment,
+  listAssReelComments,
+  listAssReels,
+} from '../services/ass-reels.service';
 
 const router = Router();
 
@@ -218,6 +225,74 @@ router.get('/community/comments', requireAssSession, async (req: Request, res: R
   } catch (err) {
     logger.error('[AsS] list community comments failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to load comments' });
+  }
+});
+
+function assContentFilter(raw: unknown): 'all' | 'reported' | 'ai' {
+  return raw === 'reported' || raw === 'ai' ? raw : 'all';
+}
+
+router.get('/reels', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const orderRaw = typeof req.query.order === 'string' ? req.query.order : 'newest';
+    const reels = await listAssReels({
+      filter: assContentFilter(req.query.filter),
+      order: orderRaw === 'oldest' ? 'oldest' : 'newest',
+      limit: Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 80, 200),
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data: reels });
+  } catch (err) {
+    logger.error('[AsS] list reels failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load reels' });
+  }
+});
+
+router.post('/reels/:id/delete', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+    const result = await assDeleteReel(id, reason);
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof AssReelError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] delete reel failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to delete reel' });
+  }
+});
+
+router.get('/reels/comments', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const orderRaw = typeof req.query.order === 'string' ? req.query.order : 'newest';
+    const comments = await listAssReelComments({
+      filter: assContentFilter(req.query.filter),
+      order: orderRaw === 'oldest' ? 'oldest' : 'newest',
+      limit: Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 80, 200),
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data: comments });
+  } catch (err) {
+    logger.error('[AsS] list reel comments failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load reel comments' });
+  }
+});
+
+router.post('/reels/comments/:id/delete', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+    const result = await assDeleteReelComment(id, reason);
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof AssReelError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] delete reel comment failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to delete reel comment' });
   }
 });
 

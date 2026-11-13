@@ -169,6 +169,12 @@ export type PushTemplateKey =
     | 'moderationReelDeletedBody'
     | 'moderationCommentDeletedTitle'
     | 'moderationCommentDeletedBody'
+    | 'reelModeratorDeletedTitle'
+    | 'reelModeratorDeletedBody'
+    | 'reelModeratorDeletedBodyWithReason'
+    | 'reelCommentModeratorDeletedTitle'
+    | 'reelCommentModeratorDeletedBody'
+    | 'reelCommentModeratorDeletedBodyWithReason'
     | 'accountSuspendedTitle'
     | 'accountSuspendedBody'
     | 'accountSuspendedReason'
@@ -401,6 +407,16 @@ const en: TemplateMap = {
     moderationCommentDeletedTitle: 'Notice: your comment was removed',
     moderationCommentDeletedBody:
         'Your comment was removed because it received multiple reports ({reason}). Please follow community guidelines to avoid a permanent ban.',
+    reelModeratorDeletedTitle: 'Warning: your reel was removed',
+    reelModeratorDeletedBody:
+        'A moderator removed your reel for breaking the guidelines. Continued violations may lead to account suspension.',
+    reelModeratorDeletedBodyWithReason:
+        'A moderator removed your reel. Reason: {reason}. Continued violations may lead to account suspension.',
+    reelCommentModeratorDeletedTitle: 'Warning: your comment was removed',
+    reelCommentModeratorDeletedBody:
+        'A moderator removed your reel comment for breaking the guidelines. Continued violations may lead to account suspension.',
+    reelCommentModeratorDeletedBodyWithReason:
+        'A moderator removed your reel comment. Reason: {reason}. Continued violations may lead to account suspension.',
     accountSuspendedTitle: 'Your account has been suspended',
     accountSuspendedBody: 'Your account is suspended until {until}. Reason: {reason}',
     accountSuspendedReason: 'Reached {count} strikes',
@@ -635,6 +651,16 @@ const ar: TemplateMap = {
     moderationCommentDeletedTitle: 'تنبيه: تم حذف تعليقك',
     moderationCommentDeletedBody:
         'تم حذف تعليقك لتلقيه بلاغات متعددة ({reason}). تحذير: يرجى الالتزام بالقواعد لكي لا يتم حظر حسابك بصفة دائمة.',
+    reelModeratorDeletedTitle: 'تحذير: تم حذف ريلك',
+    reelModeratorDeletedBody:
+        'المراقب حذف ريلك لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    reelModeratorDeletedBodyWithReason:
+        'المراقب حذف ريلك. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    reelCommentModeratorDeletedTitle: 'تحذير: تم حذف تعليقك',
+    reelCommentModeratorDeletedBody:
+        'المراقب حذف تعليقك على الريل لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    reelCommentModeratorDeletedBodyWithReason:
+        'المراقب حذف تعليقك على الريل. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
     accountSuspendedTitle: 'تم تعليق حسابك',
     accountSuspendedBody: 'تم تعليق حسابك حتى {until}. السبب: {reason}',
     accountSuspendedReason: 'وصلت إلى {count} تحذيرات',
