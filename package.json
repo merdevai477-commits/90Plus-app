@@ -14,6 +14,7 @@
     "db:status": "prisma migrate status",
     "build:reliability": "npm run reliability:check && npm run build",
     "copy:public": "node scripts/copy-public.js",
+    "build:desk": "tailwindcss -i public/ass/desk.src.css -o public/ass/desk.css --minify",
     "verify:build": "node -e \"const fs = require('fs'); const exists = fs.existsSync('dist/src/main.js'); console.log(exists ? '✅ main.js exists' : '❌ main.js missing'); process.exit(exists ? 0 : 1);\"",
     "verify:auth": "tsx scripts/verify-emulator-auth.ts",
     "start": "node dist/src/main.js",
@@ -128,6 +129,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
     "@types/compression": "^1.7.5",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
@@ -148,6 +150,7 @@
     "nodemon": "^3.1.7",
     "prettier": "^3.4.2",
     "prisma": "^5.22.0",
+    "tailwindcss": "^4.3.5",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",

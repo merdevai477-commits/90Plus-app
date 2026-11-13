@@ -31,6 +31,7 @@ import {
   listAssReelComments,
   listAssReels,
 } from '../services/ass-reels.service';
+import { getAssOverview } from '../services/ass-overview.service';
 
 const router = Router();
 
@@ -88,6 +89,17 @@ router.get('/me', requireAssSession, (_req: Request, res: Response): void => {
 
 const STATUSES = ['DRAFT', 'PUBLISHED', 'LOCKED', 'SETTLED', 'REJECTED', 'CANCELLED'] as const;
 
+router.get('/overview', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await getAssOverview();
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] overview failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load overview' });
+  }
+});
+
 router.get('/competitions', requireAssSession, async (req: Request, res: Response): Promise<void> => {
   try {
     const statusRaw = typeof req.query.status === 'string' ? req.query.status : 'DRAFT';
@@ -98,9 +110,22 @@ router.get('/competitions', requireAssSession, async (req: Request, res: Respons
     const competitions = await prisma.competition.findMany({
       where: status ? { status } : {},
       include: {
-        sponsor: true,
+        sponsor: {
+          include: {
+            owner: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                email: true,
+                avatar: true,
+              },
+            },
+            _count: { select: { followers: true, competitions: true } },
+          },
+        },
         category: true,
-        _count: { select: { entries: true } },
+        _count: { select: { entries: true, views: true } },
       },
       orderBy: { createdAt: 'desc' },
       take,

@@ -18,9 +18,36 @@ const videoModal = document.getElementById('video-modal');
 const reelVideo = document.getElementById('reel-video');
 const videoCaption = document.getElementById('video-caption');
 const videoFallback = document.getElementById('video-fallback');
+const overviewEl = document.getElementById('overview');
+const pageTitleEl = document.getElementById('page-title');
+const imageDeleteBtn = document.getElementById('image-delete');
+
+const PAGE_TITLES = {
+  overview: 'نظرة عامة',
+  DRAFT: 'مراجعة الإعلانات',
+  PUBLISHED: 'إعلانات منشورة',
+  LOCKED: 'إعلانات مقفلة',
+  SETTLED: 'إعلانات مكتملة',
+  REJECTED: 'إعلانات مرفوضة',
+  CANCELLED: 'إعلانات ملغاة',
+  posts: 'منشورات المجتمع',
+  comments: 'تعليقات المجتمع',
+  reels: 'ريلز',
+  'reel-comments': 'تعليقات الريلز',
+  activity: 'نشاط المسابقات',
+};
+
+const AD_STATUS = {
+  DRAFT: 'بانتظار المراجعة',
+  PUBLISHED: 'منشور',
+  LOCKED: 'مقفل',
+  SETTLED: 'مكتمل',
+  REJECTED: 'مرفوض',
+  CANCELLED: 'ملغى',
+};
 
 const STATE = {
-  tab: 'DRAFT',
+  tab: 'overview',
   rejectId: null,
   deleteId: null,
   deleteKind: 'post',
@@ -87,6 +114,24 @@ function syncPostFilterChips() {
   );
 }
 
+function kv(label, value) {
+  const text = value == null || String(value).trim() === '' ? '—' : String(value);
+  return `<div class="kv"><b>${esc(label)}</b><span>${esc(text)}</span></div>`;
+}
+
+function yn(value, yes, no) {
+  return value ? yes : no;
+}
+
+function socialText(links) {
+  if (!links || typeof links !== 'object') return '';
+  const names = { facebook: 'فيسبوك', instagram: 'إنستجرام', whatsapp: 'واتساب', twitter: 'تويتر', tiktok: 'تيك توك', website: 'الموقع' };
+  return Object.entries(links)
+    .filter(([, value]) => typeof value === 'string' && value.trim())
+    .map(([key, value]) => `${names[key] || key}: ${value}`)
+    .join('\n');
+}
+
 function renderCards(rows) {
   if (!rows.length) {
     cardsEl.innerHTML = '<div class="empty">لا توجد إعلانات في هذا التبويب</div>';
@@ -94,32 +139,193 @@ function renderCards(rows) {
   }
   cardsEl.innerHTML = rows
     .map((c) => {
-      const img = c.prizeImageUrl
+      const sponsor = c.sponsor || {};
+      const owner = sponsor.owner || {};
+      const entrants = c._count?.entries ?? c.participantsCount ?? 0;
+      const views = c._count?.views ?? c.viewsCount ?? 0;
+      const mode = c.predictionMode === 'WINNER' ? 'الفائز فقط' : 'النتيجة بالضبط';
+      const cash = c.prizeCashAmount != null ? `${c.prizeCashAmount} جنيه` : '';
+      const score =
+        c.resultHomeScore == null || c.resultAwayScore == null
+          ? ''
+          : `${c.resultHomeScore} - ${c.resultAwayScore}`;
+      const hero = c.prizeImageUrl
         ? `style="background-image:url('${esc(c.prizeImageUrl)}')"`
         : '';
       const canReview = c.status === 'DRAFT';
-      return `<article class="card">
-        <div class="thumb" ${img}></div>
-        <div class="card-body">
-          <div class="prize">${esc(c.prizeName)}</div>
-          <div class="meta">
-            ${esc(c.sponsor?.name || '—')} · ${esc(c.prizeType || '')}<br/>
-            ${esc(c.homeTeam)} ضد ${esc(c.awayTeam)}<br/>
-            مشاركون: ${c._count?.entries ?? c.participantsCount ?? 0}
-            ${c.rejectionReason ? `<br/>سبب الرفض: ${esc(c.rejectionReason)}` : ''}
+      const zoom = c.prizeImageUrl
+        ? `<button type="button" class="absolute bottom-3 left-3 rounded-full bg-black/70 px-3 py-1 text-xs font-extrabold" data-act="preview-prize" data-url="${esc(c.prizeImageUrl)}" data-caption="${esc(c.prizeName)}">تكبير الصورة</button>`
+        : '';
+      return `<article class="review">
+        <div class="review-top">
+          <div class="review-hero" ${hero}>
+            ${c.sponsor?.logoUrl ? `<img src="${esc(sponsor.logoUrl)}" alt="" class="absolute right-3 top-3 h-14 w-14 rounded-2xl border border-white/20 bg-zinc-950 object-cover" />` : ''}
+            ${zoom}
           </div>
-          ${
-            canReview
-              ? `<div class="actions">
-                  <button class="approve" data-act="publish" data-id="${esc(c.id)}">موافقة</button>
-                  <button class="danger" data-act="reject" data-id="${esc(c.id)}">رفض</button>
-                </div>`
-              : `<div class="meta">${esc(c.status)} · ${fmtDate(c.createdAt)}</div>`
-          }
+          <div class="review-body">
+            <div class="review-head">
+              <div>
+                <div class="badges">
+                  <span class="tag win">${esc(AD_STATUS[c.status] || c.status)}</span>
+                  <span class="tag ok">${esc(yn(c.isFree, 'مجانية', 'مدفوعة'))}</span>
+                  ${sponsor.isVerified ? '<span class="tag ok">معلن موثّق</span>' : '<span class="tag warn">معلن غير موثّق</span>'}
+                </div>
+                <h2 class="mt-2 text-2xl font-extrabold">${esc(c.prizeName)}</h2>
+                <p class="meta">${esc(sponsor.name || '—')} · ${esc(c.category?.nameAr || c.prizeType || '')}</p>
+              </div>
+              <div class="text-left">
+                <div class="text-3xl font-extrabold">${entrants}</div>
+                <div class="text-xs font-bold text-zinc-400">مشترك · ${views} مشاهدة</div>
+              </div>
+            </div>
+            ${
+              canReview
+                ? `<div class="actions max-w-md">
+                    <button class="approve" data-act="publish" data-id="${esc(c.id)}">موافقة</button>
+                    <button class="danger" data-act="reject" data-id="${esc(c.id)}">رفض</button>
+                  </div>`
+                : ''
+            }
+            ${c.rejectionReason ? `<p class="rounded-2xl bg-rose-500/10 px-3 py-2 text-sm text-rose-200">سبب الرفض: ${esc(c.rejectionReason)}</p>` : ''}
+          </div>
+        </div>
+        <div class="grid gap-5 p-5 lg:grid-cols-3">
+          <section>
+            <div class="section-label">المعلن</div>
+            <div class="kv-grid lg:grid-cols-1">
+              ${kv('اسم النشاط', sponsor.name)}
+              ${kv('وصف النشاط', sponsor.description)}
+              ${kv('العنوان', sponsor.address)}
+              ${kv('التوصيل', sponsor.hasDelivery == null ? '' : yn(sponsor.hasDelivery, 'متاح', 'غير متاح'))}
+              ${kv('حالة الحساب', sponsor.isActive === false ? 'موقوف' : 'نشط')}
+              ${kv('متابعو الصفحة', sponsor._count?.followers ?? 0)}
+              ${kv('عدد إعلاناته', sponsor._count?.competitions ?? 0)}
+              ${kv('صاحب الحساب', owner.displayName || owner.username)}
+              ${kv('اسم المستخدم', owner.username ? '@' + owner.username : '')}
+              ${kv('البريد', owner.email)}
+              ${kv('روابط التواصل', socialText(sponsor.socialLinks))}
+            </div>
+          </section>
+          <section>
+            <div class="section-label">الجائزة</div>
+            <div class="kv-grid lg:grid-cols-1">
+              ${kv('اسم الجائزة', c.prizeName)}
+              ${kv('النوع', c.prizeType)}
+              ${kv('الفئة', c.category?.nameAr)}
+              ${kv('المبلغ النقدي', cash)}
+              ${kv('عدد الفائزين', c.winnersCount)}
+              ${kv('الدخول', yn(c.isFree, 'مجاني', 'مدفوع'))}
+              ${kv('وصف الجائزة', c.prizeDescription)}
+            </div>
+          </section>
+          <section>
+            <div class="section-label">المباراة والموعد</div>
+            <div class="kv-grid lg:grid-cols-1">
+              ${kv('المباراة', `${c.homeTeam || '—'} ضد ${c.awayTeam || '—'}`)}
+              ${kv('الدوري', c.leagueName)}
+              ${kv('موعد المباراة', fmtDate(c.matchDate))}
+              ${kv('حالة المباراة', c.matchStatus)}
+              ${kv('النتيجة', score)}
+              ${kv('نوع التوقع', mode)}
+              ${kv('آخر موعد للتوقع', fmtDate(c.predictionDeadline))}
+              ${kv('بداية المسابقة', fmtDate(c.startAt))}
+              ${kv('نهاية المسابقة', fmtDate(c.endAt))}
+              ${kv('رقم المباراة', c.apiMatchId)}
+              ${kv('تاريخ الإرسال', fmtDate(c.createdAt))}
+              ${kv('تاريخ النشر', fmtDate(c.publishedAt))}
+              ${kv('تاريخ المراجعة', fmtDate(c.reviewedAt))}
+            </div>
+          </section>
+        </div>
+        <div class="px-5 pb-5">
+          <div class="section-label">شروط المسابقة</div>
+          <div class="rules">${esc(c.rules || 'المعلن لم يكتب شروطاً.')}</div>
         </div>
       </article>`;
     })
     .join('');
+}
+
+function renderOverview(data) {
+  const users = data?.users || {};
+  const games = data?.games || [];
+  const comps = data?.competitions || [];
+  const totals = data?.competitionTotals || [];
+  const userCards = [
+    ['إجمالي المستخدمين', users.total],
+    ['جدد خلال 7 أيام', users.newWeek],
+    ['دخلوا خلال 7 أيام', users.activeWeek],
+    ['محظورون', users.banned],
+    ['موقوفون', users.suspended],
+  ]
+    .map(
+      ([label, value]) =>
+        `<article class="stat"><b>${Number(value || 0).toLocaleString('ar-EG')}</b><span>${esc(label)}</span></article>`,
+    )
+    .join('');
+  const gameCards = games
+    .map(
+      (game) => `<article class="game">
+        <h3>${esc(game.name)}</h3>
+        <div class="nums">
+          <div>
+            <div class="text-3xl font-extrabold">${Number(game.players || 0).toLocaleString('ar-EG')}</div>
+            <div class="text-xs font-bold text-zinc-400">مستخدم</div>
+          </div>
+          <div class="text-left">
+            <div class="text-xl font-extrabold">${Number(game.actions || 0).toLocaleString('ar-EG')}</div>
+            <div class="text-xs font-bold text-zinc-400">${esc(game.actionLabel)}</div>
+          </div>
+        </div>
+      </article>`,
+    )
+    .join('');
+  const totalChips = totals
+    .map(
+      (row) =>
+        `<button type="button" class="chip" data-goto="${esc(row.status)}">${esc(AD_STATUS[row.status] || row.status)} · ${row.competitions} مسابقة · ${row.participants} مشترك</button>`,
+    )
+    .join('');
+  const rows = comps
+    .map(
+      (c) => `<tr>
+        <td class="font-extrabold">${esc(c.prizeName)}</td>
+        <td>${esc(c.sponsorName)}</td>
+        <td>${esc(c.homeTeam)} ضد ${esc(c.awayTeam)}<div class="text-xs text-zinc-500">${esc(c.leagueName || '')}</div></td>
+        <td>${fmtDate(c.matchDate)}</td>
+        <td><span class="tag win">${esc(AD_STATUS[c.status] || c.status)}</span></td>
+        <td class="font-extrabold">${Number(c.participants || 0).toLocaleString('ar-EG')}</td>
+        <td>${Number(c.views || 0).toLocaleString('ar-EG')}</td>
+        <td>${c.winnersCount || 1}</td>
+      </tr>`,
+    )
+    .join('');
+  overviewEl.innerHTML = `
+    <section>
+      <h2 class="mb-3 text-sm font-extrabold text-zinc-400">المستخدمون</h2>
+      <div class="stat-grid">${userCards}</div>
+    </section>
+    <section>
+      <h2 class="mb-3 text-sm font-extrabold text-zinc-400">المستخدمون في كل لعبة</h2>
+      <div class="game-grid">${gameCards}</div>
+    </section>
+    <section>
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-extrabold text-zinc-400">كل المسابقات والمشتركون</h2>
+        <div class="flex flex-wrap gap-2">${totalChips}</div>
+      </div>
+      <div class="table-wrap">
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th>الجائزة</th><th>المعلن</th><th>المباراة</th><th>الموعد</th><th>الحالة</th><th>المشتركون</th><th>المشاهدات</th><th>الفائزون</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="8" class="empty">لا توجد مسابقات</td></tr>'}</tbody>
+        </table>
+      </div>
+      <p class="mt-2 text-xs text-zinc-500">آخر تحديث ${fmtDate(data?.generatedAt)} · الأرقام عدد المستخدمين المختلفين، والمسابقات مرتبة بالأكثر مشاركة.</p>
+    </section>`;
 }
 
 function postBadges(p) {
@@ -346,6 +552,7 @@ function openImagePreview(postId) {
   imagePreview.src = p.imageUrl;
   const name = p.user?.displayName || p.user?.username || '';
   imageCaption.textContent = `${name} · ${fmtDate(p.createdAt)}`;
+  imageDeleteBtn.hidden = false;
   imageModal.hidden = false;
 }
 
@@ -414,9 +621,23 @@ async function load() {
       const isReels = STATE.tab === 'reels';
       const isReelComments = STATE.tab === 'reel-comments';
       const isActivity = STATE.tab === 'activity';
+      const isOverview = STATE.tab === 'overview';
+      const isAds = ['DRAFT', 'PUBLISHED', 'LOCKED', 'SETTLED', 'REJECTED', 'CANCELLED'].includes(STATE.tab);
       const showCommunityFilters = isPosts || isComments || isReels || isReelComments;
       postFiltersEl.hidden = !showCommunityFilters;
       if (showCommunityFilters) syncPostFilterChips();
+      cardsEl.classList.toggle('stack', isAds);
+
+      if (isOverview) {
+        cardsEl.hidden = true;
+        activityEl.hidden = true;
+        overviewEl.hidden = false;
+        const json = await api('/overview');
+        renderOverview(json.data || {});
+        return;
+      }
+
+      overviewEl.hidden = true;
 
       if (isActivity) {
         cardsEl.hidden = true;
@@ -507,12 +728,20 @@ function setTab(tab) {
   document.querySelectorAll('#tabs button').forEach((b) =>
     b.classList.toggle('active', b.dataset.tab === tab),
   );
+  if (pageTitleEl) pageTitleEl.textContent = PAGE_TITLES[tab] || 'لوحة المراجعة';
 }
 
 document.getElementById('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
   if (!btn) return;
   setTab(btn.dataset.tab);
+  load();
+});
+
+overviewEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-goto]');
+  if (!btn) return;
+  setTab(btn.dataset.goto);
   load();
 });
 
@@ -539,6 +768,16 @@ cardsEl.addEventListener('click', async (e) => {
 
   if (act === 'preview') {
     openImagePreview(id);
+    return;
+  }
+  if (act === 'preview-prize') {
+    const url = btn.dataset.url;
+    if (!url) return;
+    STATE.previewPostId = null;
+    imagePreview.src = url;
+    imageCaption.textContent = btn.dataset.caption || '';
+    imageDeleteBtn.hidden = true;
+    imageModal.hidden = false;
     return;
   }
   if (act === 'play') {

@@ -4,118 +4,136 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
-    <title>90Plus · مراجعة المحتوى</title>
-    <link rel="stylesheet" href="/ass/ass.css?v=20261113a" />
+    <title>90Plus · لوحة المراجعة</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/ass/desk.css?v=20261113c" />
   </head>
-  <body>
-    <div id="login" class="login-wrap">
-      <div class="login-card">
-        <div class="brand">90Plus</div>
-        <h1>مراجعة المحتوى</h1>
-        <p class="muted">دخول محدود لفريق المراجعة</p>
-        <form id="login-form" autocomplete="off">
-          <label>
-            اسم المستخدم
-            <input id="username" name="username" type="text" inputmode="text" required />
-          </label>
-          <label>
-            كلمة المرور
-            <input id="password" name="password" type="password" required />
-          </label>
-          <p id="login-error" class="error" hidden></p>
-          <button type="submit" id="login-btn">دخول</button>
-        </form>
-      </div>
+  <body class="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+    <div id="login" class="grid min-h-screen place-items-center px-4 py-10">
+      <form id="login-form" class="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-900/80 p-8 shadow-2xl shadow-violet-950/40" autocomplete="off">
+        <div class="text-sm font-extrabold tracking-widest text-violet-300">90Plus</div>
+        <h1 class="mt-4 text-3xl font-extrabold">لوحة المراجعة</h1>
+        <p class="mt-2 text-sm text-zinc-400">دخول محدود لفريق المراجعة</p>
+        <label class="mt-6 block text-sm text-zinc-400">
+          اسم المستخدم
+          <input id="username" name="username" type="text" inputmode="text" required class="mt-2 w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-base text-zinc-100 outline-none focus:border-violet-500" />
+        </label>
+        <label class="mt-4 block text-sm text-zinc-400">
+          كلمة المرور
+          <input id="password" name="password" type="password" required class="mt-2 w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-base text-zinc-100 outline-none focus:border-violet-500" />
+        </label>
+        <p id="login-error" class="mt-3 text-sm text-rose-300" hidden></p>
+        <button type="submit" id="login-btn" class="mt-6 w-full rounded-2xl bg-violet-600 px-4 py-3 font-extrabold text-white hover:bg-violet-500">دخول</button>
+      </form>
     </div>
 
-    <div id="desk" class="desk" hidden>
-      <header class="topbar">
-        <div>
-          <div class="brand sm">90Plus</div>
-          <h1>مراجعة المحتوى</h1>
+    <div id="desk" class="min-h-screen lg:grid lg:grid-cols-[260px_1fr]" hidden>
+      <aside class="border-b border-white/10 bg-zinc-950/90 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-l lg:border-white/10">
+        <div class="flex items-center justify-between px-5 py-5">
+          <div>
+            <div class="text-xs font-extrabold tracking-[0.18em] text-violet-300">90PLUS</div>
+            <div class="mt-1 text-lg font-extrabold">لوحة المراجعة</div>
+          </div>
+          <button type="button" id="logout" class="rounded-full border border-white/10 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-white/5">خروج</button>
         </div>
-        <button type="button" id="logout" class="ghost">خروج</button>
-      </header>
+        <nav id="tabs" class="flex gap-1 overflow-x-auto px-3 pb-4 lg:block lg:space-y-1 lg:overflow-visible">
+          <p class="nav-label">اللوحة</p>
+          <button type="button" data-tab="overview" class="nav-btn active">نظرة عامة</button>
+          <p class="nav-label">الإعلانات</p>
+          <button type="button" data-tab="DRAFT" class="nav-btn">مراجعة الإعلانات</button>
+          <button type="button" data-tab="PUBLISHED" class="nav-btn">منشور</button>
+          <button type="button" data-tab="LOCKED" class="nav-btn">مقفل</button>
+          <button type="button" data-tab="SETTLED" class="nav-btn">مكتمل</button>
+          <button type="button" data-tab="REJECTED" class="nav-btn">مرفوض</button>
+          <button type="button" data-tab="CANCELLED" class="nav-btn">ملغى</button>
+          <p class="nav-label">المحتوى</p>
+          <button type="button" data-tab="posts" class="nav-btn">منشورات المجتمع</button>
+          <button type="button" data-tab="comments" class="nav-btn">تعليقات المجتمع</button>
+          <button type="button" data-tab="reels" class="nav-btn">ريلز</button>
+          <button type="button" data-tab="reel-comments" class="nav-btn">تعليقات الريلز</button>
+          <button type="button" data-tab="activity" class="nav-btn">نشاط المسابقات</button>
+        </nav>
+      </aside>
 
-      <nav class="tabs" id="tabs">
-        <button type="button" data-tab="DRAFT" class="active">مراجعة إعلانات</button>
-        <button type="button" data-tab="PUBLISHED">منشور</button>
-        <button type="button" data-tab="REJECTED">مرفوض</button>
-        <button type="button" data-tab="SETTLED">مكتمل</button>
-        <button type="button" data-tab="posts">منشورات المجتمع</button>
-        <button type="button" data-tab="comments">تعليقات المجتمع</button>
-        <button type="button" data-tab="reels">ريلز</button>
-        <button type="button" data-tab="reel-comments">تعليقات الريلز</button>
-        <button type="button" data-tab="activity">نشاط</button>
-      </nav>
+      <main class="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
+        <header class="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold text-violet-300">90Plus Desk</p>
+            <h1 id="page-title" class="text-2xl font-extrabold sm:text-3xl">نظرة عامة</h1>
+          </div>
+        </header>
 
-      <div id="post-filters" class="post-filters" hidden>
-        <div class="filter-group">
-          <span class="filter-label">ترتيب</span>
-          <button type="button" data-order="newest" class="chip active">الأحدث</button>
-          <button type="button" data-order="oldest" class="chip">الأقدم</button>
+        <div id="post-filters" class="mb-4 flex flex-wrap gap-3 rounded-2xl border border-white/10 bg-zinc-900/70 p-3" hidden>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-zinc-400">ترتيب</span>
+            <button type="button" data-order="newest" class="chip active">الأحدث</button>
+            <button type="button" data-order="oldest" class="chip">الأقدم</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-zinc-400">فلتر</span>
+            <button type="button" data-filter="all" class="chip active">الكل</button>
+            <button type="button" data-filter="reported" class="chip">بلاغات</button>
+            <button type="button" data-filter="ai" class="chip">مشكوك AI</button>
+          </div>
         </div>
-        <div class="filter-group">
-          <span class="filter-label">فلتر</span>
-          <button type="button" data-filter="all" class="chip active">الكل</button>
-          <button type="button" data-filter="reported" class="chip">بلاغات</button>
-          <button type="button" data-filter="ai" class="chip">مشكوك AI</button>
-        </div>
-      </div>
 
-      <p id="desk-error" class="error banner" hidden></p>
-      <section id="cards" class="cards"></section>
-      <section id="activity" class="activity" hidden></section>
+        <p id="desk-error" class="mb-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" hidden></p>
+        <section id="overview" class="space-y-6"></section>
+        <section id="cards" class="cards" hidden></section>
+        <section id="activity" class="space-y-2" hidden></section>
+      </main>
     </div>
 
     <div id="reject-modal" class="modal" hidden>
       <div class="modal-card">
-        <h2>رفض الإعلان</h2>
-        <p class="muted">السبب اختياري — هيظهر للمعلن في الإشعار لو كتبته.</p>
-        <textarea id="reject-reason" rows="4" maxlength="500" placeholder="سبب الرفض (اختياري)"></textarea>
-        <div class="row">
-          <button type="button" id="reject-cancel" class="ghost">إلغاء</button>
-          <button type="button" id="reject-confirm" class="danger">تأكيد الرفض</button>
+        <h2 class="text-xl font-extrabold">رفض الإعلان</h2>
+        <p class="mt-1 text-sm text-zinc-400">السبب اختياري — هيظهر للمعلن في الإشعار لو كتبته.</p>
+        <textarea id="reject-reason" rows="4" maxlength="500" placeholder="سبب الرفض (اختياري)" class="mt-4 w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-violet-500"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button" id="reject-cancel" class="rounded-2xl border border-white/10 px-4 py-2 font-bold text-zinc-300">إلغاء</button>
+          <button type="button" id="reject-confirm" class="rounded-2xl bg-rose-600 px-4 py-2 font-extrabold text-white">تأكيد الرفض</button>
         </div>
       </div>
     </div>
 
     <div id="image-modal" class="modal" hidden>
-      <div class="modal-card image-modal-card">
-        <button type="button" id="image-close" class="ghost image-close" aria-label="إغلاق">إغلاق</button>
-        <img id="image-preview" alt="معاينة المنشور" />
-        <p id="image-caption" class="meta image-caption"></p>
-        <div class="row">
-          <button type="button" id="image-delete" class="danger">حذف المنشور</button>
+      <div class="modal-card max-w-3xl">
+        <button type="button" id="image-close" class="mb-3 rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-300">إغلاق</button>
+        <img id="image-preview" alt="معاينة" class="max-h-[70vh] w-full rounded-2xl bg-zinc-950 object-contain" />
+        <p id="image-caption" class="mt-3 text-sm text-zinc-400"></p>
+        <div class="mt-4 flex justify-end">
+          <button type="button" id="image-delete" class="rounded-2xl bg-rose-600 px-4 py-2 font-extrabold text-white">حذف المنشور</button>
         </div>
       </div>
     </div>
 
     <div id="video-modal" class="modal" hidden>
-      <div class="modal-card image-modal-card">
-        <button type="button" id="video-close" class="ghost image-close" aria-label="إغلاق">إغلاق</button>
-        <video id="reel-video" controls playsinline></video>
-        <p id="video-caption" class="meta image-caption"></p>
-        <p id="video-fallback" class="muted" hidden>الفيديو لسه بيتجهز أو مش متاح للتشغيل.</p>
-        <div class="row">
-          <button type="button" id="video-delete" class="danger">حذف الريل</button>
+      <div class="modal-card max-w-3xl">
+        <button type="button" id="video-close" class="mb-3 rounded-full border border-white/10 px-3 py-1 text-sm text-zinc-300">إغلاق</button>
+        <video id="reel-video" controls playsinline class="max-h-[70vh] w-full rounded-2xl bg-black"></video>
+        <p id="video-caption" class="mt-3 text-sm text-zinc-400"></p>
+        <p id="video-fallback" class="mt-2 text-sm text-zinc-400" hidden>الفيديو لسه بيتجهز أو مش متاح للتشغيل.</p>
+        <div class="mt-4 flex justify-end">
+          <button type="button" id="video-delete" class="rounded-2xl bg-rose-600 px-4 py-2 font-extrabold text-white">حذف الريل</button>
         </div>
       </div>
     </div>
 
     <div id="delete-modal" class="modal" hidden>
       <div class="modal-card">
-        <h2 id="delete-title">حذف المنشور</h2>
-        <p id="delete-hint" class="muted">الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.</p>
-        <textarea id="delete-reason" rows="4" maxlength="500" placeholder="سبب الحذف (اختياري)"></textarea>
-        <div class="row">
-          <button type="button" id="delete-cancel" class="ghost">إلغاء</button>
-          <button type="button" id="delete-confirm" class="danger">تأكيد الحذف</button>
+        <h2 id="delete-title" class="text-xl font-extrabold">حذف المنشور</h2>
+        <p id="delete-hint" class="mt-1 text-sm text-zinc-400">الحذف فوري، وهيترسل تحذير لصاحب المنشور. سبب الحذف اختياري.</p>
+        <textarea id="delete-reason" rows="4" maxlength="500" placeholder="سبب الحذف (اختياري)" class="mt-4 w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-violet-500"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button" id="delete-cancel" class="rounded-2xl border border-white/10 px-4 py-2 font-bold text-zinc-300">إلغاء</button>
+          <button type="button" id="delete-confirm" class="rounded-2xl bg-rose-600 px-4 py-2 font-extrabold text-white">تأكيد الحذف</button>
         </div>
       </div>
     </div>
 
-    <script src="/ass/hls.min.js?v=20261113a" defer></script>
-    <script src="/ass/ass.js?v=20261113a" defer></script>
+    <script src="/ass/hls.min.js?v=20261113c" defer></script>
+    <script src="/ass/ass.js?v=20261113c" defer></script>
   </body>
 </html>
