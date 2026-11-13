@@ -32,6 +32,15 @@ import {
   listAssReels,
 } from '../services/ass-reels.service';
 import { getAssOverview } from '../services/ass-overview.service';
+import {
+  EliteBadgeError,
+  awardEliteBadge,
+  badgeDeskOverview,
+  listBadgeDefinitions,
+  revokeEliteBadge,
+} from '../services/elite-badge.service';
+import { listBadgeCandidates, listBadgeCompetitions } from '../services/elite-badge-candidates.service';
+import type { EliteAwardDuration } from '../data/elite-badge-catalog';
 
 const router = Router();
 
@@ -334,6 +343,93 @@ router.post('/community/comments/:id/delete', requireAssSession, async (req: Req
     }
     logger.error('[AsS] delete community comment failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to delete comment' });
+  }
+});
+
+router.get('/badges/definitions', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await listBadgeDefinitions();
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] badge definitions failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load badges' });
+  }
+});
+
+router.get('/badges/overview', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await badgeDeskOverview();
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] badge overview failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load badge overview' });
+  }
+});
+
+router.get('/badges/competitions', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await listBadgeCompetitions();
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] badge competitions failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load competitions' });
+  }
+});
+
+router.get('/badges/candidates', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const category = typeof req.query.category === 'string' ? req.query.category : 'points';
+    const period = req.query.period === '7d' || req.query.period === '30d' ? req.query.period : 'all';
+    const competitionId = typeof req.query.competitionId === 'string' ? req.query.competitionId : null;
+    const query = typeof req.query.q === 'string' ? req.query.q : '';
+    const data = await listBadgeCandidates({ category, period, competitionId, query });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] badge candidates failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load candidates' });
+  }
+});
+
+router.post('/badges/awards', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const duration: EliteAwardDuration =
+      req.body?.duration === '7' || req.body?.duration === '30' ? req.body.duration : 'permanent';
+    const result = await awardEliteBadge({
+      userId: String(req.body?.userId || ''),
+      badgeKey: String(req.body?.badgeKey || ''),
+      customTitle: String(req.body?.customTitle || ''),
+      description: typeof req.body?.description === 'string' ? req.body.description : null,
+      duration,
+      competitionId: typeof req.body?.competitionId === 'string' ? req.body.competitionId : null,
+      actor: 'ass',
+    });
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof EliteBadgeError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] award badge failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to award badge' });
+  }
+});
+
+router.post('/badges/awards/:id/revoke', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await revokeEliteBadge(id, 'ass');
+    res.json({ status: 'SUCCESS', data: result });
+  } catch (err: any) {
+    if (err instanceof EliteBadgeError) {
+      res.status(err.status).json({ status: 'ERROR', message: err.message, code: err.code });
+      return;
+    }
+    logger.error('[AsS] revoke badge failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to revoke badge' });
   }
 });
 

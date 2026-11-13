@@ -83,5 +83,6 @@ export function tsfLeaderboardRows(board: TsfApiLeaderboard): TsfLeaderboardRow[
     xp: entry.xp,
     isYou: board.me?.userId === entry.userId,
     avatar: entry.avatar,
+    identity: entry.identity,
   }));
 }

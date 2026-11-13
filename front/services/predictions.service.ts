@@ -98,7 +98,14 @@ export interface KingLeaderboardEntry {
   username: string | null;
   displayName: string | null;
   avatar: string | null;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
   xp: number;
+  identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string; nameAr: string; nameEn: string } | null;
+  };
 }
 
 export interface KingLeaderboard {

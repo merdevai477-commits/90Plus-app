@@ -188,7 +188,7 @@ function europeLeagueKey(leagueId: number): string | null {
   return EUROPE_LEAGUE_KEY_BY_ID.get(leagueId) ?? null;
 }
 
-const USER_SELECT = { id: true, displayName: true, username: true, avatar: true, level: true } as const;
+const USER_SELECT = { id: true, displayName: true, username: true, avatar: true, level: true, isVerified: true, isDeveloper: true } as const;
 
 async function requireUser(clerkUserId: string) {
   const user = await prisma.user.findFirst({
@@ -911,7 +911,23 @@ function cachedBoard(now: Date = new Date()) {
 
 export async function coachKingLeaderboard(period: 'week' | 'all', limit = 50, now: Date = new Date()) {
   const board = await cachedBoard(now);
-  return (period === 'week' ? board.week : board.all).slice(0, limit);
+  const rows = (period === 'week' ? board.week : board.all).slice(0, limit);
+  const { identityFor, loadFeaturedBadges } = await import('./elite-badge.service');
+  const flags = await prisma.user.findMany({
+    where: { id: { in: rows.map((row) => row.userId) } },
+    select: { id: true, isVerified: true, isDeveloper: true },
+  });
+  const byId = new Map(flags.map((row) => [row.id, row]));
+  const badges = await loadFeaturedBadges(rows.map((row) => row.userId));
+  return rows.map((row) => {
+    const user = byId.get(row.userId);
+    return {
+      ...row,
+      isVerified: !!user?.isVerified,
+      isDeveloper: !!user?.isDeveloper,
+      identity: identityFor({ id: row.userId, isVerified: user?.isVerified, isDeveloper: user?.isDeveloper }, badges),
+    };
+  });
 }
 
 async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week: CoachKingBoardEntry[] }> {
@@ -921,7 +937,7 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
     where: { confirmedAt: { not: null }, isLive: false },
     include: {
       slots: { select: { playerId: true } },
-      user: { select: { id: true, displayName: true, username: true, avatar: true, level: true } },
+      user: { select: USER_SELECT },
     },
   });
   if (squads.length === 0) return { all: [], week: [] };
@@ -975,7 +991,7 @@ async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week
     where: { isLive: true, confirmedAt: { not: null } },
     include: {
       memberships: true,
-      user: { select: { id: true, displayName: true, username: true, avatar: true, level: true } },
+      user: { select: USER_SELECT },
     },
   });
   if (liveSquads.length) {

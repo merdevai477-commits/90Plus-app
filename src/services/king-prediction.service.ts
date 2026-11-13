@@ -13,6 +13,7 @@ import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
 import { pickTopFixtures } from '../utils/fixture-importance';
 import { projectMatchesForListView } from '../utils/matches-list-projection.util';
 import { XP_VALUES } from './xp.service';
+import { identityFor, loadFeaturedBadges } from './elite-badge.service';
 import {
   cairoDayKey,
   cairoDayRange,
@@ -438,7 +439,14 @@ export interface KingLeaderboardEntry {
   username: string | null;
   displayName: string | null;
   avatar: string | null;
+  isVerified: boolean;
+  isDeveloper: boolean;
   xp: number;
+  identity: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string; nameAr: string; nameEn: string } | null;
+  };
 }
 
 export interface KingLeaderboardResult {
@@ -521,9 +529,10 @@ export async function getKingLeaderboard(params: {
   const top = ranked.slice(0, params.limit);
   const users = await prisma.user.findMany({
     where: { id: { in: top.map((row) => row.userId) } },
-    select: { id: true, username: true, displayName: true, avatar: true },
+    select: { id: true, username: true, displayName: true, avatar: true, isVerified: true, isDeveloper: true },
   });
   const usersById = new Map(users.map((user) => [user.id, user]));
+  const badges = await loadFeaturedBadges(users.map((user) => user.id));
 
   const entries: KingLeaderboardEntry[] = top.flatMap((row, index) => {
     const user = usersById.get(row.userId);
@@ -534,7 +543,10 @@ export async function getKingLeaderboard(params: {
       username: user.username,
       displayName: user.displayName,
       avatar: user.avatar,
+      isVerified: user.isVerified,
+      isDeveloper: user.isDeveloper,
       xp: row.xp,
+      identity: identityFor(user, badges),
     }];
   });
 

@@ -175,6 +175,8 @@ export type PushTemplateKey =
     | 'reelCommentModeratorDeletedTitle'
     | 'reelCommentModeratorDeletedBody'
     | 'reelCommentModeratorDeletedBodyWithReason'
+    | 'eliteBadgeAwardedTitle'
+    | 'eliteBadgeAwardedBody'
     | 'accountSuspendedTitle'
     | 'accountSuspendedBody'
     | 'accountSuspendedReason'
@@ -417,6 +419,8 @@ const en: TemplateMap = {
         'A moderator removed your reel comment for breaking the guidelines. Continued violations may lead to account suspension.',
     reelCommentModeratorDeletedBodyWithReason:
         'A moderator removed your reel comment. Reason: {reason}. Continued violations may lead to account suspension.',
+    eliteBadgeAwardedTitle: 'You earned a badge',
+    eliteBadgeAwardedBody: 'You received the {badge} badge. Your title: {title}.',
     accountSuspendedTitle: 'Your account has been suspended',
     accountSuspendedBody: 'Your account is suspended until {until}. Reason: {reason}',
     accountSuspendedReason: 'Reached {count} strikes',
@@ -661,6 +665,8 @@ const ar: TemplateMap = {
         'المراقب حذف تعليقك على الريل لأنه مخالف لقواعد المجتمع. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
     reelCommentModeratorDeletedBodyWithReason:
         'المراقب حذف تعليقك على الريل. السبب: {reason}. تكرار المخالفات ممكن يوصل لإيقاف الحساب.',
+    eliteBadgeAwardedTitle: 'مبروك! حصلت على شارة مميزة',
+    eliteBadgeAwardedBody: 'حصلت على شارة: {badge}. لقبك الجديد: {title}. استمر وحافظ على إنجازك!',
     accountSuspendedTitle: 'تم تعليق حسابك',
     accountSuspendedBody: 'تم تعليق حسابك حتى {until}. السبب: {reason}',
     accountSuspendedReason: 'وصلت إلى {count} تحذيرات',

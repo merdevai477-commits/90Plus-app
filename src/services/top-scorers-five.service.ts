@@ -1133,13 +1133,25 @@ export async function getTsfLeaderboard(params: {
   const top = ranked.slice(0, params.limit);
   const users = await prisma.user.findMany({
     where: { id: { in: top.map((row) => row.userId) } },
-    select: { id: true, username: true, displayName: true, avatar: true },
+    select: { id: true, username: true, displayName: true, avatar: true, isVerified: true, isDeveloper: true },
   });
   const usersById = new Map(users.map((user) => [user.id, user]));
+  const { identityFor, loadFeaturedBadges } = await import('./elite-badge.service');
+  const badges = await loadFeaturedBadges(users.map((user) => user.id));
   const entries = top.flatMap((row, index) => {
     const user = usersById.get(row.userId);
     if (!user) return [];
-    return [{ rank: index + 1, userId: user.id, username: user.username, displayName: user.displayName, avatar: user.avatar, xp: row.xp }];
+    return [{
+      rank: index + 1,
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatar: user.avatar,
+      isVerified: user.isVerified,
+      isDeveloper: user.isDeveloper,
+      xp: row.xp,
+      identity: identityFor(user, badges),
+    }];
   });
 
   return { period: params.period, entries, me: me ? { rank: meRank, xp: meXp, userId: me.id } : null };

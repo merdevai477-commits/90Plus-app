@@ -160,6 +160,13 @@ export interface CkBoardRow {
   weekPoints: number;
   totalPoints: number;
   isMe: boolean;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
+  identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string } | null;
+  };
 }
 
 export class CkApiError extends Error {

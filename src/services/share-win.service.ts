@@ -744,9 +744,16 @@ export interface LeaderboardRow {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
   participants: number;
   shares: number;
   score: number;
+  identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string; nameAr: string; nameEn: string } | null;
+  };
 }
 
 /**
@@ -826,20 +833,28 @@ export async function getLeaderboard(
       participantCount: true,
       score: true,
       user: {
-        select: { username: true, displayName: true, avatar: true, isDeleted: true },
+        select: { username: true, displayName: true, avatar: true, isDeleted: true, isVerified: true, isDeveloper: true },
       },
     },
   });
 
+  const { identityFor, loadFeaturedBadges } = await import('./elite-badge.service');
+  const badges = await loadFeaturedBadges(standings.map((row) => row.userId));
   return standings.map((row, index) => ({
     rank: offset + index + 1,
     userId: row.userId,
     username: row.user.isDeleted ? 'deleted_user' : row.user.username,
     displayName: row.user.isDeleted ? null : row.user.displayName,
     avatar: row.user.isDeleted ? null : row.user.avatar,
+    isVerified: row.user.isDeleted ? false : row.user.isVerified,
+    isDeveloper: row.user.isDeleted ? false : row.user.isDeveloper,
     participants: row.participantCount,
     shares: row.shareCount,
     score: row.score,
+    identity: identityFor(
+      { id: row.userId, isVerified: row.user.isVerified, isDeveloper: row.user.isDeveloper },
+      badges,
+    ),
   }));
 }
 

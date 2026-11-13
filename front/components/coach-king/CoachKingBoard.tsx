@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import type { CkBoardRow } from '../../services/coachKing.service';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ICON } from '../KingOfPredictions/assets';
+import UserIdentity from '../identity/UserIdentity';
 import { TSF_DESIGN_WIDTH } from '../TopScorersFive/assets';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
@@ -252,13 +253,12 @@ function BoardRow({
               { columnGap: s(4), flexDirection: isAr ? 'row' : 'row-reverse' },
             ]}
           >
-            <Text
-              numberOfLines={1}
-              style={[styles.name, { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize) }]}
-              maxFontSizeMultiplier={1.1}
-            >
-              {name}
-            </Text>
+            <UserIdentity
+              user={entry}
+              name={name}
+              variant="leaderboard"
+              nameStyle={[styles.name, { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize) }]}
+            />
             {entry.isMe ? (
               <Image source={KING_ICON.user} style={{ width: s(16), height: s(16) }} contentFit="contain" />
             ) : null}

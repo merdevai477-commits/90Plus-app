@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import type { KingLeaderboardEntry, KingPeriod } from '../../services/predictions.service';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ART, KING_ICON } from './assets';
+import UserIdentity from '../identity/UserIdentity';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
@@ -166,19 +167,18 @@ export const KingBoardRow = memo(function KingBoardRow({
       <View style={[styles.identity, { gap: tier ? 16 : 30 }]}>
         <View style={styles.person}>
           <View style={styles.nameWrap}>
-            <Text
-              maxFontSizeMultiplier={1.15}
-              style={[
+            <UserIdentity
+              user={entry}
+              name={name}
+              variant="leaderboard"
+              nameStyle={[
                 styles.name,
                 {
                   fontSize: tier?.nameSize ?? 16,
                   fontFamily: entry.rank === 1 ? fonts.bold : tier ? fonts.semi : fonts.regular,
                 },
               ]}
-              numberOfLines={1}
-            >
-              {name}
-            </Text>
+            />
             {mine ? <Image source={KING_ICON.user} style={styles.youIcon} contentFit="contain" /> : null}
           </View>
           <Image

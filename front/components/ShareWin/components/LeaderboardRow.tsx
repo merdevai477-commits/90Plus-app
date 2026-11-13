@@ -14,6 +14,7 @@ import { Image } from 'expo-image';
 
 import { MEDAL_BY_RANK, SW_ASSET } from '../assets';
 import { SW_COLOR, rowTier, useShareWinStyles } from '../styles';
+import UserIdentity from '../../identity/UserIdentity';
 
 export interface LeaderboardRowProps {
   rank: number;
@@ -32,6 +33,11 @@ export interface LeaderboardRowProps {
   solid?: boolean;
   onPress?: (username: string) => void;
   username: string;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
+  badgeKey?: string | null;
+  badgeTitle?: string | null;
+  badgeAccent?: string | null;
 }
 
 const LeaderboardRow = memo(function LeaderboardRow({
@@ -45,6 +51,11 @@ const LeaderboardRow = memo(function LeaderboardRow({
   solid = false,
   onPress,
   username,
+  isVerified,
+  isDeveloper,
+  badgeKey,
+  badgeTitle,
+  badgeAccent,
 }: LeaderboardRowProps) {
   const { sw, metrics } = useShareWinStyles();
   const { s, f } = metrics;
@@ -91,9 +102,18 @@ const LeaderboardRow = memo(function LeaderboardRow({
             cachePolicy="memory-disk"
             recyclingKey={username}
           />
-          <Text style={[sw.boardName, { fontSize: f(tier.name) }]} numberOfLines={1}>
-            {name}
-          </Text>
+          <UserIdentity
+            user={{
+              isVerified,
+              isDeveloper,
+              identity: badgeKey
+                ? { isVerified: !!isVerified, isDeveloper: !!isDeveloper, badge: { key: badgeKey, title: badgeTitle || '', accent: badgeAccent || '#f5b942' } }
+                : null,
+            }}
+            name={name}
+            variant="leaderboard"
+            nameStyle={[sw.boardName, { fontSize: f(tier.name) }]}
+          />
         </View>
       </View>
 

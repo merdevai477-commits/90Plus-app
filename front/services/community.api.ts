@@ -13,7 +13,13 @@ export interface CommunityAuthor {
   displayName: string | null;
   avatar: string | null;
   isVerified: boolean;
+  isDeveloper?: boolean;
   isFollowing: boolean;
+  identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string; nameAr: string; nameEn: string } | null;
+  };
 }
 
 export interface CommunityPoll {

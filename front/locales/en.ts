@@ -2694,6 +2694,14 @@ export const en = {
     developerFeature2: 'App creator',
     developerFeature3: 'Professional developer',
     developerBadgeCta: 'Got it',
+    eliteBadgesTitle: 'Badges',
+    eliteBadgesEmpty: 'No badges yet',
+    eliteBadgesActive: 'Active',
+    eliteBadgesPast: 'Past',
+    eliteBadgePermanent: 'Permanent',
+    eliteBadgeExpired: 'Expired',
+    eliteBadgeRevoked: 'Revoked',
+    eliteBadgeUntil: 'Until {date}',
 
     // Profile completion (steps shown in ProfileTasksModal + completion pill)
     completionTasksTitle: 'Profile tasks',

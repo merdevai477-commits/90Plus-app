@@ -123,6 +123,11 @@ export default function ShareWinLeaderboardScreen() {
         username={item.entry.username}
         name={item.name}
         avatar={item.entry.avatar}
+        isVerified={item.entry.isVerified || item.entry.identity?.isVerified}
+        isDeveloper={item.entry.isDeveloper || item.entry.identity?.isDeveloper}
+        badgeKey={item.entry.identity?.badge?.key}
+        badgeTitle={item.entry.identity?.badge?.title}
+        badgeAccent={item.entry.identity?.badge?.accent}
         scoreLabel={item.scoreLabel}
         scoreUnit={copy.boardUnit}
         tierIndex={index}

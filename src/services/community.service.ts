@@ -24,6 +24,7 @@ import {
     type CommunityContentKind,
 } from './community-moderation.service';
 import { markCommunitySafetyFlag } from './community-safety-flag';
+import { identityFor, loadFeaturedBadges } from './elite-badge.service';
 import { classifyCommunityImage, type CommunityImageVerdict } from './community-image-safety';
 import {
     consumeCommunityRate,
@@ -225,6 +226,7 @@ const authorSelect = {
     displayName: true,
     avatar: true,
     isVerified: true,
+    isDeveloper: true,
 } as const;
 
 const postSelect = {
@@ -255,7 +257,13 @@ export interface CommunityAuthorDto {
     displayName: string | null;
     avatar: string | null;
     isVerified: boolean;
+    isDeveloper: boolean;
     isFollowing: boolean;
+    identity?: {
+        isVerified: boolean;
+        isDeveloper: boolean;
+        badge: { key: string; title: string; accent: string; nameAr: string; nameEn: string } | null;
+    };
 }
 
 export type CommunityPostKindDto = 'TEXT' | 'TEAM_POLL';
@@ -350,6 +358,25 @@ export interface CommunityCommentDto {
     likedByMe: boolean;
     isMine: boolean;
     replies?: CommunityCommentDto[];
+}
+
+async function stampPostAuthors(items: CommunityPostDto[]): Promise<CommunityPostDto[]> {
+    const badges = await loadFeaturedBadges(items.map((item) => item.author.id));
+    return items.map((item) => ({
+        ...item,
+        author: { ...item.author, identity: identityFor(item.author, badges) },
+    }));
+}
+
+async function stampCommentAuthors(items: CommunityCommentDto[]): Promise<CommunityCommentDto[]> {
+    const ids = items.flatMap((item) => [item.author.id, ...(item.replies || []).map((reply) => reply.author.id)]);
+    const badges = await loadFeaturedBadges(ids);
+    const stamp = (item: CommunityCommentDto): CommunityCommentDto => ({
+        ...item,
+        author: { ...item.author, identity: identityFor(item.author, badges) },
+        replies: item.replies?.map(stamp),
+    });
+    return items.map(stamp);
 }
 
 function toCommentDto(row: CommentRow, viewerId: string, liked: Set<string>): CommunityCommentDto {
@@ -452,7 +479,10 @@ async function finishPostPage(rows: PostRow[], viewerId: string, nextCursor: str
         ),
         myPollVotes(viewerId, postIds),
     ]);
-    return { items: visible.map((r) => toPostDto(r, viewerId, liked, following, pollVotes)), nextCursor };
+    return {
+        items: await stampPostAuthors(visible.map((r) => toPostDto(r, viewerId, liked, following, pollVotes))),
+        nextCursor,
+    };
 }
 
 interface CachedFirstPage {
@@ -655,7 +685,7 @@ export async function searchCommunity(
             followingAuthorIds(viewerId, rows.map((r) => r.userId)),
             myPollVotes(viewerId, ids),
         ]);
-        out.posts = rows.map((r) => toPostDto(r, viewerId, liked, following, pollVotes));
+        out.posts = await stampPostAuthors(rows.map((r) => toPostDto(r, viewerId, liked, following, pollVotes)));
     }
 
     if (type === 'all' || type === 'hashtags') {
@@ -696,7 +726,8 @@ export async function getPost(viewerId: string, postId: string): Promise<Communi
         followingAuthorIds(viewerId, [row.userId]),
         myPollVotes(viewerId, [row.id]),
     ]);
-    return toPostDto(row, viewerId, liked, following, pollVotes);
+    const [post] = await stampPostAuthors([toPostDto(row, viewerId, liked, following, pollVotes)]);
+    return post;
 }
 
 // ─── Media ────────────────────────────────────────────────────────────────
@@ -1611,10 +1642,10 @@ export async function getComments(viewerId: string, postId: string, cursor: unkn
     const liked = await likedCommentIds(viewerId, allIds);
     const last = page[page.length - 1];
     return {
-        items: page.map(({ replies, ...c }) => ({
+        items: await stampCommentAuthors(page.map(({ replies, ...c }) => ({
             ...toCommentDto(c, viewerId, liked),
             replies: replies.map((r) => toCommentDto(r, viewerId, liked)),
-        })),
+        }))),
         nextCursor: hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
     };
 }
@@ -1638,7 +1669,7 @@ export async function getReplies(viewerId: string, commentId: string, cursor: un
     const liked = await likedCommentIds(viewerId, page.map((r) => r.id));
     const last = page[page.length - 1];
     return {
-        items: page.map((r) => toCommentDto(r, viewerId, liked)),
+        items: await stampCommentAuthors(page.map((r) => toCommentDto(r, viewerId, liked))),
         nextCursor: hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
     };
 }

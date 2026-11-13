@@ -37,6 +37,7 @@ import {
 import { SafeVideoPlayer as UnifiedVideoPlayer } from '../common/SafeVideoPlayer';
 import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
+import BadgeIcon from '../identity/BadgeIcon';
 import {
     COLORS,
     GRADIENTS,
@@ -516,6 +517,9 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                     {reel.user.verified && (
                                         <BadgeCheck size={15} color={COLORS.primary} fill={COLORS.purpleGlow} />
                                     )}
+                                    {reel.user.identity?.badge ? (
+                                        <BadgeIcon badgeKey={reel.user.identity.badge.key} accent={reel.user.identity.badge.accent} size={16} />
+                                    ) : null}
                                 </View>
                                 {typeof reel.user.followers === 'number' && reel.user.followers > 0 && (
                                     <Text style={styles.userFollowers}>

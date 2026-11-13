@@ -460,7 +460,9 @@ const ReelsFeed: React.FC = () => {
         username: reel.user?.username || 'user',
         name: reel.user?.displayName || reel.user?.username || 'User',
         avatar: reel.user?.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
-        verified: reel.user?.isVerified || false,
+        verified: reel.user?.isVerified || reel.user?.identity?.isVerified || false,
+        developer: reel.user?.isDeveloper || reel.user?.identity?.isDeveloper || false,
+        identity: reel.user?.identity || null,
         followers: 0,
         isFollowing: reel.user?.id ? followState.isFollowing(reel.user.id) : false
       },

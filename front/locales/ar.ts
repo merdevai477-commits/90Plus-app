@@ -2648,6 +2648,14 @@ export const ar = {
     developerFeature2: 'صاحب التطبيق',
     developerFeature3: 'مطوّر محترف',
     developerBadgeCta: 'حسناً',
+    eliteBadgesTitle: 'الشارات',
+    eliteBadgesEmpty: 'لا توجد شارات بعد',
+    eliteBadgesActive: 'سارية',
+    eliteBadgesPast: 'سابقة',
+    eliteBadgePermanent: 'دائمة',
+    eliteBadgeExpired: 'انتهت',
+    eliteBadgeRevoked: 'سُحبت',
+    eliteBadgeUntil: 'حتى {date}',
 
     // مهام إكمال البروفايل
     completionTasksTitle: 'مهام البروفايل',

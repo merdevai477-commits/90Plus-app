@@ -154,6 +154,11 @@ export type TsfLeaderboardRow = {
   /** The signed-in player's row; its label comes from the locale, not here. */
   readonly isYou?: boolean;
   readonly avatar?: string | null;
+  readonly identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string } | null;
+  };
 };
 
 /** Short name shown on a filled pitch card, e.g. "Erling Haaland" → "Haaland". */

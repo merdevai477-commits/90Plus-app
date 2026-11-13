@@ -14,6 +14,7 @@ import VideoGrid from '../../components/profile/VideoGrid';
 import { ProfileGridScrollProvider, useGridScrollReporter } from '../../components/profile/profileGridScroll';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import ProfileHero from '../../components/profile/ProfileHero';
+import EliteBadgeShelf from '../../components/profile/EliteBadgeShelf';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
@@ -1892,7 +1893,10 @@ function OwnProfileScreen() {
           )}
 
           {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
-            <ProfileAchievementsTab analytics={analytics} />
+            <>
+              <EliteBadgeShelf userId={userData.id} />
+              <ProfileAchievementsTab analytics={analytics} />
+            </>
           )}
         </View>
 

@@ -22,6 +22,7 @@ import { useAppFont } from '../../utils/fontSetup';
 import { logger } from '../../utils/logger';
 import { KING_ICON } from '../KingOfPredictions/assets';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
+import UserIdentity from '../identity/UserIdentity';
 
 import { TSF_DESIGN_WIDTH, TSF_PRIZE_SHIRT } from './assets';
 import { tsfLeaderboardRows } from './liveData';
@@ -480,16 +481,12 @@ function BoardRow({
               { columnGap: s(4), flexDirection: isAr ? 'row' : 'row-reverse' },
             ]}
           >
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.name,
-                { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize) },
-              ]}
-              maxFontSizeMultiplier={1.1}
-            >
-              {name}
-            </Text>
+            <UserIdentity
+              user={row}
+              name={name}
+              variant="leaderboard"
+              nameStyle={[styles.name, { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize) }]}
+            />
             {row.isYou ? (
               <Image
                 source={KING_ICON.user}

@@ -23,9 +23,16 @@ export interface ShareWinLeaderboardEntry {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
   participants: number;
   shares: number;
   score: number;
+  identity?: {
+    isVerified: boolean;
+    isDeveloper: boolean;
+    badge: { key: string; title: string; accent: string } | null;
+  };
 }
 
 export interface ShareWinPrize {

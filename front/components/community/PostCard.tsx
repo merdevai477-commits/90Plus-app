@@ -21,6 +21,7 @@ import { RichText } from './RichText';
 import { formatCount } from './format';
 import { LikersSheet } from './LikersSheet';
 import { AVATAR_SIZE, C, CARD_RADIUS, CI, POST_IMAGE_RADIUS } from './theme';
+import UserIdentity from '../identity/UserIdentity';
 
 export interface PostCardHandlers {
   onLike: (post: CommunityPost) => void;
@@ -326,10 +327,12 @@ function PostCardBase({
         <CommunityAvatar uri={post.author.avatar} name={name} size={AVATAR_SIZE} onPress={openProfile} />
         <Pressable onPress={openProfile} style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
           <View style={[styles.nameRow, { flexDirection: row }]}>
-            <Text style={[styles.name, { fontFamily: fonts.semibold }]} numberOfLines={1}>
-              {name}
-            </Text>
-            {post.author.isVerified && <Image source={CI.verified} style={styles.icon16} contentFit="contain" />}
+            <UserIdentity
+              user={post.author}
+              name={name}
+              variant="inline"
+              nameStyle={[styles.name, { fontFamily: fonts.semibold }]}
+            />
           </View>
           <View style={[styles.timeRow, { flexDirection: row }]}>
             <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>

@@ -29,6 +29,7 @@ export interface Comment {
         name: string;
         avatar?: string;
         verified?: boolean;
+        identity?: { badge: { key: string; accent: string } | null } | null;
     };
     text: string;
     timestamp: string;

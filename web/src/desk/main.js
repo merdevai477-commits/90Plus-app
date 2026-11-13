@@ -39,6 +39,7 @@ const PAGE_TITLES = {
   reels: 'ريلز',
   'reel-comments': 'تعليقات الريلز',
   activity: 'نشاط المسابقات',
+  badges: 'الشارات',
 };
 
 const AD_STATUS = {
@@ -97,6 +98,12 @@ const STATE = {
   mediaById: {},
   hls: null,
   inflight: null,
+  badgeCategory: 'points',
+  badgePeriod: 'all',
+  badgeQuery: '',
+  badgeCompetitionId: '',
+  badgeDefs: [],
+  candidates: [],
 };
 
 function esc(value) {
@@ -377,6 +384,135 @@ function renderOverview(data) {
   `;
 }
 
+const BADGE_CATEGORIES = [
+  ['points', 'النقاط'],
+  ['prediction_streak', 'سلسلة التوقعات'],
+  ['prediction_accuracy', 'دقة التوقعات'],
+  ['king_game', 'ملك اللعبة'],
+  ['king_results', 'ملك النتائج'],
+  ['scorers_europe', 'هدافين أوروبا'],
+  ['scorers_egypt', 'هدافين مصر'],
+  ['coach', 'ملك المدربين'],
+  ['posts', 'المنشورات'],
+  ['reels', 'الريلز'],
+  ['comments', 'التعليقات'],
+  ['shares', 'المشاركات'],
+  ['community_activity', 'المجتمع'],
+  ['daily_streak', 'سلسلة يومية'],
+  ['competition_champion', 'بطل مسابقة'],
+];
+
+async function renderBadges() {
+  const [overview, defs, competitions, candidates] = await Promise.all([
+    api('/badges/overview'),
+    api('/badges/definitions'),
+    api('/badges/competitions'),
+    api(`/badges/candidates?${new URLSearchParams({
+      category: STATE.badgeCategory,
+      period: STATE.badgePeriod,
+      competitionId: STATE.badgeCompetitionId,
+      q: STATE.badgeQuery,
+    })}`),
+  ]);
+  STATE.badgeDefs = defs.data || [];
+  STATE.candidates = candidates.data || [];
+  const stats = overview.data || {};
+  const cards = [
+    ['سارية', stats.active, 'live'],
+    ['منتهية', stats.expired, 'review'],
+    ['مستخدمون', stats.recognizedUsers, 'info'],
+    ['التعريفات', stats.definitions, 'reel'],
+  ].map(([label, value, tone]) => `<article class="stat tone-${tone}"><b>${num(value)}</b><span>${label}</span></article>`).join('');
+  const cats = BADGE_CATEGORIES.map(([key, label]) => `<button type="button" class="chip ${STATE.badgeCategory === key ? 'active' : ''}" data-badge-cat="${key}">${label}</button>`).join('');
+  const periods = [['all', 'كل الوقت'], ['30d', '30 يوم'], ['7d', '7 أيام']]
+    .map(([key, label]) => `<button type="button" class="chip ${STATE.badgePeriod === key ? 'active' : ''}" data-badge-period="${key}">${label}</button>`).join('');
+  const comps = (competitions.data || []).map((comp) => `<option value="${esc(comp.id)}" ${comp.id === STATE.badgeCompetitionId ? 'selected' : ''}>${esc(comp.prizeName)}</option>`).join('');
+  const rows = (candidates.data || []).map((person) => row(
+    person.isVerified ? 'live' : 'info',
+    person.displayName || person.username,
+    `@${person.username} · ${person.metricLabel} ${num(person.metricValue)}${person.badge ? ` · ${person.badge.title}` : ''}`,
+    `#${person.rank}`,
+    'open-candidate',
+    person.userId,
+  )).join('');
+  const recent = (stats.recent || []).map((item) => `<div class="event"><div><span class="tag tone-${item.active ? 'live' : 'review'}">${esc(item.badgeName)}</span> ${esc(item.displayName || item.username)} · ${esc(item.title)}</div>${item.active ? `<button type="button" class="btn btn-ghost" data-act="revoke-badge" data-id="${esc(item.id)}">سحب</button>` : ''}</div>`).join('');
+  overviewEl.innerHTML = `
+    <div class="stats">${cards}</div>
+    <div class="filters">
+      <div class="filter-group">${cats}</div>
+      <div class="filter-group">${periods}</div>
+      <input id="badge-search" placeholder="ابحث باسم المستخدم" value="${esc(STATE.badgeQuery)}" />
+      <select id="badge-competition"><option value="">كل المسابقات</option>${comps}</select>
+    </div>
+    <h2 class="section-title">أفضل 10 مرشحين</h2>
+    <div class="list">${rows || '<div class="empty">لا يوجد مرشحون بهذه البيانات</div>'}</div>
+    <h2 class="section-title">آخر المنح</h2>
+    ${recent || '<div class="empty">لا توجد منح بعد</div>'}
+  `;
+  overviewEl.querySelector('#badge-search')?.addEventListener('change', (event) => {
+    STATE.badgeQuery = event.target.value;
+    load();
+  });
+  overviewEl.querySelector('#badge-competition')?.addEventListener('change', (event) => {
+    STATE.badgeCompetitionId = event.target.value;
+    load();
+  });
+}
+
+function openCandidate(userId) {
+  const person = STATE.candidates.find((row) => row.userId === userId);
+  if (!person) return;
+  const options = STATE.badgeDefs.map((badge) => `<option value="${esc(badge.key)}">${esc(badge.nameAr)}</option>`).join('');
+  openDrawer(`
+    <button type="button" class="btn btn-ghost" data-act="close-drawer">رجوع</button>
+    <h2>${esc(person.displayName || person.username)}</h2>
+    <p class="muted">@${esc(person.username)} · ${esc(person.metricLabel)} ${num(person.metricValue)}</p>
+    <p class="muted">${person.isVerified ? 'موثّق' : 'غير موثّق'} · ${person.isDeveloper ? 'مطوّر' : 'مستخدم'}</p>
+    <form id="award-form" class="badge-form">
+      <label>الشارة<select name="badgeKey" required>${options}</select></label>
+      <label>اللقب<input name="customTitle" maxlength="80" required placeholder="ملك التوقعات" /></label>
+      <label>وصف<textarea name="description" maxlength="500" rows="3"></textarea></label>
+      <label>المدة
+        <select name="duration">
+          <option value="7">7 أيام</option>
+          <option value="30">30 يوم</option>
+          <option value="permanent" selected>دائمة</option>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-live">مراجعة ومنح</button>
+    </form>
+  `);
+  drawerPanel.querySelector('#award-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.target);
+    const badge = STATE.badgeDefs.find((item) => item.key === data.get('badgeKey'));
+    const title = String(data.get('customTitle') || '').trim();
+    const duration = String(data.get('duration') || 'permanent');
+    const days = duration === 'permanent' ? null : Number(duration);
+    const expiry = days ? new Date(Date.now() + days * 86400000).toLocaleDateString('ar-EG') : 'بدون انتهاء';
+    const ok = window.confirm(`منح ${person.username}\n${badge?.nameAr || ''}\n${title}\n${duration === 'permanent' ? 'دائمة' : duration + ' يوم'} · ${expiry}`);
+    if (!ok) return;
+    try {
+      await api('/badges/awards', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: person.userId,
+          badgeKey: data.get('badgeKey'),
+          customTitle: title,
+          description: data.get('description'),
+          duration,
+          competitionId: STATE.badgeCompetitionId || null,
+        }),
+      });
+      closeDrawer();
+      await load();
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر منح الشارة';
+    }
+  });
+}
+
 function badges(item) {
   const bits = [];
   if (item.status === 'HIDDEN') bits.push('<span class="tag tone-review">مخفي</span>');
@@ -606,11 +742,18 @@ async function load() {
   STATE.loadedTab = STATE.tab;
   STATE.inflight = (async () => {
     const content = ['posts', 'comments', 'reels', 'reel-comments'].includes(STATE.tab);
-    const overview = STATE.tab === 'overview';
+    const overview = STATE.tab === 'overview' || STATE.tab === 'badges';
     const activity = STATE.tab === 'activity';
     postFiltersEl.hidden = !content;
     if (content) syncFilters();
     try {
+        if (STATE.tab === 'badges') {
+        cardsEl.hidden = true;
+        activityEl.hidden = true;
+        overviewEl.hidden = false;
+        await renderBadges();
+        return;
+      }
       if (overview) {
         cardsEl.hidden = true;
         activityEl.hidden = true;
@@ -658,6 +801,18 @@ async function load() {
 async function onAct(act, id, button) {
   if (act === 'close-drawer') {
     closeDrawer();
+    return;
+  }
+  if (act === 'open-candidate') return openCandidate(id);
+  if (act === 'revoke-badge') {
+    if (!window.confirm('سحب هذه الشارة؟')) return;
+    try {
+      await api(`/badges/awards/${id}/revoke`, { method: 'POST', body: '{}' });
+      await load();
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر السحب';
+    }
     return;
   }
   if (act === 'open-ad') {
@@ -736,6 +891,28 @@ document.getElementById('tabs').addEventListener('click', (event) => {
 });
 
 overviewEl.addEventListener('click', (event) => {
+  const category = event.target.closest('[data-badge-cat]');
+  const period = event.target.closest('[data-badge-period]');
+  if (category) {
+    STATE.badgeCategory = category.dataset.badgeCat;
+    load();
+    return;
+  }
+  if (period) {
+    STATE.badgePeriod = period.dataset.badgePeriod;
+    load();
+    return;
+  }
+  const revoke = event.target.closest('[data-act="revoke-badge"]');
+  if (revoke) {
+    onAct('revoke-badge', revoke.dataset.id, revoke);
+    return;
+  }
+  const candidate = event.target.closest('[data-act="open-candidate"]');
+  if (candidate) {
+    onAct('open-candidate', candidate.dataset.id, candidate);
+    return;
+  }
   const button = event.target.closest('[data-goto]');
   if (!button) return;
   setTab(button.dataset.goto);

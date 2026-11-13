@@ -4,6 +4,12 @@ export interface User {
     username: string;
     avatar: string;
     verified: boolean;
+    developer?: boolean;
+    identity?: {
+        isVerified: boolean;
+        isDeveloper: boolean;
+        badge: { key: string; title: string; accent: string } | null;
+    } | null;
     followers?: number;
     isFollowing?: boolean;
 }

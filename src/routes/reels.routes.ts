@@ -169,6 +169,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
                         displayName: true,
                         avatar: true,
                         isVerified: true,
+                        isDeveloper: true,
                     }
                 },
                 _count: {
@@ -261,7 +262,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
         }
 
         // Format response
-        const formattedReels = playableData.map((reel: any) => {
+        const formattedReels = await stampReelIdentity(playableData.map((reel: any) => {
             return {
                 id: reel.id,
                 videoUrl: reel.videoUrl,
@@ -281,7 +282,7 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
             user: reel.user,
             createdAt: reel.createdAt,
             };
-        });
+        }));
 
         const responseData = {
             status: 'SUCCESS',
@@ -366,6 +367,7 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
                                 displayName: true,
                                 avatar: true,
                                 isVerified: true,
+                        isDeveloper: true,
                             }
                         },
                         _count: {
@@ -872,6 +874,16 @@ router.delete('/:id/like', requireAuth, writeLimiter, async (req: Request, res: 
 });
 
 /** Strip Prisma like relation and expose likesCount + liked for the viewer */
+async function stampReelIdentity(rows: any[]): Promise<any[]> {
+    const ids = rows.map((row) => row.user?.id).filter((id): id is string => !!id);
+    const { identityFor, loadFeaturedBadges } = await import('../services/elite-badge.service');
+    const badges = await loadFeaturedBadges(ids);
+    return rows.map((row) => {
+        if (!row.user?.id) return row;
+        return { ...row, user: { ...row.user, identity: identityFor(row.user as any, badges) } };
+    });
+}
+
 function formatCommentEngagement<T extends { likes?: { id: string }[]; _count?: { replies?: number; likes?: number } }>(
     c: T,
 ): Omit<T, 'likes' | '_count'> & { likesCount: number; liked: boolean } {
@@ -941,6 +953,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
                             displayName: true,
                             avatar: true,
                             isVerified: true,
+                        isDeveloper: true,
                         }
                     },
                     replies: {
@@ -961,6 +974,7 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
                                     displayName: true,
                                     avatar: true,
                                     isVerified: true,
+                        isDeveloper: true,
                                 }
                             },
                             ...commentLikeEngagementSelect(currentUser?.id),
@@ -980,11 +994,11 @@ router.get('/:id/comments', requireAuth, async (req: Request, res: Response): Pr
         const nextCursor = hasMore ? pageData[pageData.length - 1]?.id ?? null : null;
 
         // Format response
-        const formattedComments = pageData.map((c: any) => ({
+        const formattedComments = await stampReelIdentity(await Promise.all(pageData.map(async (c: any) => ({
             ...formatCommentEngagement(c),
             repliesCount: c._count?.replies ?? 0,
-            replies: (c.replies || []).map((r: any) => formatCommentEngagement(r)),
-        }));
+            replies: await stampReelIdentity((c.replies || []).map((r: any) => formatCommentEngagement(r))),
+        }))));
 
         res.json({
             status: 'SUCCESS',
@@ -1358,6 +1372,7 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
                         displayName: true,
                         avatar: true,
                         isVerified: true,
+                        isDeveloper: true,
                     }
                 },
                 ...commentLikeEngagementSelect(currentUser?.id),
@@ -1398,6 +1413,7 @@ router.get('/search/users', requireAuth, async (req: Request, res: Response): Pr
                 displayName: true,
                 avatar: true,
                 isVerified: true,
+                        isDeveloper: true,
             }
         });
 
@@ -1488,6 +1504,7 @@ router.get('/search', requireAuth, lenientLimiter, async (req: Request, res: Res
                             displayName: true,
                             avatar: true,
                             isVerified: true,
+                        isDeveloper: true,
                         }
                     },
                     _count: {
@@ -2011,6 +2028,7 @@ router.get('/saved', requireAuth, async (req: Request, res: Response): Promise<v
                                 displayName: true,
                                 avatar: true,
                                 isVerified: true,
+                        isDeveloper: true,
                             }
                         },
                         _count: {
@@ -2382,6 +2400,7 @@ router.get('/', requireAuth, lenientLimiter, async (req: Request, res: Response)
                         displayName: true,
                         avatar: true,
                         isVerified: true,
+                        isDeveloper: true,
                     }
                 },
                 _count: {
@@ -2551,6 +2570,7 @@ router.get('/:id', optionalAuth, lenientLimiter, async (req: Request, res: Respo
                         displayName: true,
                         avatar: true,
                         isVerified: true,
+                        isDeveloper: true,
                     },
                 },
                 _count: { select: { likes: true, comments: true } },

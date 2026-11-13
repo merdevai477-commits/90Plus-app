@@ -261,6 +261,7 @@ import topScorersFiveRoutes from './routes/top-scorers-five.routes';
 import coachKingRoutes from './routes/coach-king.routes';
 import competitionsRoutes from './routes/competitions.routes';
 import assRoutes from './routes/ass.routes';
+import eliteBadgeRoutes from './routes/elite-badges.routes';
 import coinsRoutes from './routes/coins.routes';
 
 import adminRoutes from './routes/admin.routes';
@@ -496,6 +497,7 @@ app.use(`${API_PREFIX}/top-scorers-five`, topScorersFiveRoutes);
 app.use(`${API_PREFIX}/coach-king`, coachKingRoutes);
 app.use(`${API_PREFIX}/competitions`, competitionsRoutes);
 app.use(`${API_PREFIX}/ass`, assRoutes);
+app.use(`${API_PREFIX}/elite-badges`, eliteBadgeRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
@@ -1151,6 +1153,18 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ Stuck Reel Cleanup Cron Job scheduled (every hour)');
+
+                    cron.schedule('20 * * * *', async () => {
+                        try {
+                            const { expireDueAwards } = await import('./services/elite-badge.service');
+                            const { evaluateEliteMilestones } = await import('./services/elite-badge-auto.service');
+                            await expireDueAwards();
+                            await evaluateEliteMilestones();
+                        } catch (error) {
+                            logger.error('❌ Elite badge cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Elite badge cron scheduled (hourly at :20)');
 
                     // Mux orphan reconciliation — reconnect PROCESSING reels missing muxUploadId
                     cron.schedule('*/10 * * * *', async () => {

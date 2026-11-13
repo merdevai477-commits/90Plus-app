@@ -8,6 +8,7 @@ import { LikeIcon } from './PostCard';
 import { RichText } from './RichText';
 import { formatCount } from './format';
 import { C, CI, COMMENT_AVATAR_SIZE } from './theme';
+import UserIdentity from '../identity/UserIdentity';
 
 export interface CommentHandlers {
   onLike: (c: CommunityComment) => void;
@@ -78,10 +79,12 @@ export const CommentItem = memo(
         style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
       >
         <View style={[styles.nameRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold }]} numberOfLines={1}>
-            {name}
-          </Text>
-          {comment.author.isVerified && <Image source={CI.verified} style={styles.icon16} contentFit="contain" />}
+          <UserIdentity
+            user={comment.author}
+            name={name}
+            variant="comment"
+            nameStyle={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold }]}
+          />
         </View>
         <View style={[styles.timeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
           <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>

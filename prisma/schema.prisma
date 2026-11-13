@@ -178,6 +178,7 @@ model User {
   communityMentions             CommunityMention[]        @relation("CommunityMentioned")
   communityMedia                CommunityMedia[]
   communityPostPollVotes        CommunityPostPollVote[]
+  eliteBadgeAwards              EliteBadgeAward[]
 
   @@index([email])
   @@index([username])
@@ -1908,6 +1909,7 @@ model Competition {
   entries            CompetitionEntry[]
   views              CompetitionView[]
   activities         CompetitionActivity[]
+  eliteBadgeAwards   EliteBadgeAward[]
 
   @@index([status, predictionDeadline])
   @@index([apiMatchId])
@@ -3699,4 +3701,81 @@ model DiagnosticEvent {
   @@index([sessionId, traceId])
   @@index([receivedAt])
   @@map("diagnostic_events")
+}
+
+enum EliteBadgeCategory {
+  PREDICTION
+  SCORERS
+  COACH
+  COMMUNITY
+  ENGAGEMENT
+  POINTS
+  COMPETITION
+}
+
+enum EliteBadgeRarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+/// Catalog of recognition badges. Awards carry the custom title, not this row.
+model EliteBadgeDefinition {
+  id        String             @id @default(uuid())
+  key       String             @unique
+  category  EliteBadgeCategory
+  rarity    EliteBadgeRarity
+  nameAr    String
+  nameEn    String
+  accent    String
+  createdAt DateTime           @default(now())
+  awards    EliteBadgeAward[]
+
+  @@index([category])
+  @@map("elite_badge_definitions")
+}
+
+/// One recognition grant. `activeSlot` is set only while the award is active,
+/// so Postgres can reject a second live grant and still keep history.
+model EliteBadgeAward {
+  id            String               @id @default(uuid())
+  userId        String
+  badgeId       String
+  customTitle   String
+  description   String?
+  competitionId String?
+  /// "ass" for a mentor grant, "system" for an automatic milestone. Null if unknown.
+  awardedBy     String?
+  startsAt      DateTime             @default(now())
+  /// Null means the award does not expire.
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  /// Present only while the award is the live one for this user, badge, and competition.
+  activeSlot    String?              @unique
+  createdAt     DateTime             @default(now())
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge         EliteBadgeDefinition @relation(fields: [badgeId], references: [id], onDelete: Restrict)
+  competition   Competition?         @relation(fields: [competitionId], references: [id], onDelete: SetNull)
+  logs          EliteBadgeAwardLog[]
+
+  @@index([userId, createdAt])
+  @@index([badgeId])
+  @@index([competitionId])
+  @@index([expiresAt])
+  @@map("elite_badge_awards")
+}
+
+model EliteBadgeAwardLog {
+  id        String          @id @default(uuid())
+  awardId   String
+  action    String
+  actor     String?
+  metadata  Json?
+  createdAt DateTime        @default(now())
+  award     EliteBadgeAward @relation(fields: [awardId], references: [id], onDelete: Cascade)
+
+  @@index([awardId])
+  @@index([createdAt])
+  @@map("elite_badge_award_logs")
 }

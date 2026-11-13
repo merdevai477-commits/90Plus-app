@@ -20,6 +20,7 @@ import { X, Heart, Send, CheckCircle, AlertCircle, MessageCircle, ChevronDown, C
 import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import { useHaptic } from '@/hooks/useHaptic';
 import { Comment } from '../../contexts/VideosContext';
+import BadgeIcon from '../identity/BadgeIcon';
 import { globalState } from '../../globalState';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@clerk/clerk-expo';
@@ -68,7 +69,7 @@ function mapBackendComment(c: {
     content?: string;
     text?: string;
     createdAt: string;
-    user?: { id: string; displayName?: string; username: string; avatar?: string; isVerified?: boolean };
+    user?: { id: string; displayName?: string; username: string; avatar?: string; isVerified?: boolean; isDeveloper?: boolean; identity?: { isVerified: boolean; isDeveloper: boolean; badge: { key: string; title: string; accent: string } | null } | null };
     likesCount?: number;
     likes?: number;
     liked?: boolean;
@@ -80,7 +81,8 @@ function mapBackendComment(c: {
             id: user?.id || 'unknown',
             name: user?.displayName || user?.username || 'User',
             avatar: user?.avatar,
-            verified: user?.isVerified,
+            verified: user?.isVerified || user?.identity?.isVerified,
+            identity: user?.identity || null,
         },
         text: c.content || c.text || '',
         timestamp: formatTimestamp(c.createdAt),
@@ -109,6 +111,7 @@ interface Reply {
         name: string;
         avatar?: string;
         verified?: boolean;
+        identity?: { badge: { key: string; accent: string } | null } | null;
     };
     text: string;
     timestamp: string;
@@ -1101,6 +1104,7 @@ export default function CommentsModal({
                         <View style={styles.commentUserInfo}>
                             <Text style={styles.replyUsername}>{reply.user.name}</Text>
                             {reply.user.verified && <CheckCircle size={10} color={COLORS.info} />}
+                            {reply.user.identity?.badge ? <BadgeIcon badgeKey={reply.user.identity.badge.key} accent={reply.user.identity.badge.accent} size={12} /> : null}
                         </View>
                         <View style={styles.replyHeaderRight}>
                             <Text style={styles.replyTimestamp}>{reply.timestamp}</Text>
@@ -1188,6 +1192,7 @@ export default function CommentsModal({
                                 <View style={styles.commentUserInfo}>
                                     <Text style={styles.commentUsername}>{item.user.name}</Text>
                                     {item.user.verified && <CheckCircle size={12} color={COLORS.info} />}
+                                    {item.user.identity?.badge ? <BadgeIcon badgeKey={item.user.identity.badge.key} accent={item.user.identity.badge.accent} size={14} /> : null}
                                 </View>
                                 <View style={styles.commentHeaderRight}>
                                     <Text style={styles.commentTimestamp}>{item.timestamp}</Text>
