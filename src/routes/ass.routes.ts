@@ -39,7 +39,7 @@ import {
   listBadgeDefinitions,
   revokeEliteBadge,
 } from '../services/elite-badge.service';
-import { listBadgeCandidates, listBadgeCompetitions } from '../services/elite-badge-candidates.service';
+import { listBadgeCandidates, listBadgeCompetitions, searchBadgeUsers } from '../services/elite-badge-candidates.service';
 import { clearAppUpdateNotice, getAppUpdateNotice, publishAppUpdateNotice } from '../services/app-update-notice.service';
 import type { EliteAwardDuration } from '../data/elite-badge-catalog';
 
@@ -377,6 +377,18 @@ router.get('/badges/competitions', requireAssSession, async (_req: Request, res:
   } catch (err) {
     logger.error('[AsS] badge competitions failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to load competitions' });
+  }
+});
+
+router.get('/badges/users', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = typeof req.query.q === 'string' ? req.query.q : '';
+    const data = await searchBadgeUsers(query);
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data });
+  } catch (err) {
+    logger.error('[AsS] badge user search failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to search users' });
   }
 });
 

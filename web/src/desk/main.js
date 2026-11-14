@@ -105,6 +105,7 @@ const STATE = {
   badgeCompetitionId: '',
   badgeDefs: [],
   candidates: [],
+  peopleById: {},
 };
 
 function esc(value) {
@@ -412,11 +413,11 @@ async function renderBadges() {
       category: STATE.badgeCategory,
       period: STATE.badgePeriod,
       competitionId: STATE.badgeCompetitionId,
-      q: STATE.badgeQuery,
     })}`),
   ]);
   STATE.badgeDefs = defs.data || [];
   STATE.candidates = candidates.data || [];
+  for (const person of STATE.candidates) STATE.peopleById[person.userId] = person;
   const stats = overview.data || {};
   const cards = [
     ['سارية', stats.active, 'live'],
@@ -439,10 +440,16 @@ async function renderBadges() {
   const recent = (stats.recent || []).map((item) => `<div class="event"><div><span class="tag tone-${item.active ? 'live' : 'review'}">${esc(item.badgeName)}</span> ${esc(item.displayName || item.username)} · ${esc(item.title)}</div>${item.active ? `<button type="button" class="btn btn-ghost" data-act="revoke-badge" data-id="${esc(item.id)}">سحب</button>` : ''}</div>`).join('');
   overviewEl.innerHTML = `
     <div class="stats">${cards}</div>
+    <form id="badge-user-search" class="filters">
+      <label class="search-label">منح لشخص محدد
+        <input id="badge-search" name="q" placeholder="الاسم أو @username" value="${esc(STATE.badgeQuery)}" autocomplete="off" />
+      </label>
+      <button type="submit" class="btn btn-live">بحث</button>
+    </form>
+    <div id="badge-user-results"></div>
     <div class="filters">
       <div class="filter-group">${cats}</div>
       <div class="filter-group">${periods}</div>
-      <input id="badge-search" placeholder="ابحث باسم المستخدم" value="${esc(STATE.badgeQuery)}" />
       <select id="badge-competition"><option value="">كل المسابقات</option>${comps}</select>
     </div>
     <h2 class="section-title">أفضل 10 مرشحين</h2>
@@ -450,18 +457,57 @@ async function renderBadges() {
     <h2 class="section-title">آخر المنح</h2>
     ${recent || '<div class="empty">لا توجد منح بعد</div>'}
   `;
-  overviewEl.querySelector('#badge-search')?.addEventListener('change', (event) => {
-    STATE.badgeQuery = event.target.value;
-    load();
+  overviewEl.querySelector('#badge-user-search')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    STATE.badgeQuery = overviewEl.querySelector('#badge-search')?.value || '';
+    await searchBadgePeople(STATE.badgeQuery);
   });
   overviewEl.querySelector('#badge-competition')?.addEventListener('change', (event) => {
     STATE.badgeCompetitionId = event.target.value;
     load();
   });
+  if (STATE.badgeQuery.trim()) searchBadgePeople(STATE.badgeQuery);
+}
+
+function paintBadgePeople(people, query) {
+  const host = document.getElementById('badge-user-results');
+  if (!host) return;
+  for (const person of people) STATE.peopleById[person.userId] = person;
+  if (!query.trim()) {
+    host.innerHTML = '';
+    return;
+  }
+  const rows = people.map((person) => row(
+    person.isVerified ? 'live' : 'info',
+    person.displayName || person.username,
+    `@${person.username}${person.badge ? ` · ${person.badge.title}` : ''}`,
+    'منح',
+    'open-candidate',
+    person.userId,
+  )).join('');
+  host.innerHTML = `
+    <h2 class="section-title">نتائج البحث</h2>
+    <div class="list">${rows || '<div class="empty">لا يوجد مستخدم بهذا الاسم أو اليوزر</div>'}</div>
+  `;
+}
+
+async function searchBadgePeople(query) {
+  const host = document.getElementById('badge-user-results');
+  if (query.trim().replace(/^@+/, '').length < 2) {
+    if (host) host.innerHTML = '<p class="muted">اكتب حرفين على الأقل من الاسم أو اليوزر.</p>';
+    return;
+  }
+  if (host) host.innerHTML = '<p class="muted">جاري البحث…</p>';
+  try {
+    const json = await api(`/badges/users?q=${encodeURIComponent(query.trim())}`);
+    paintBadgePeople(json.data || [], query);
+  } catch (err) {
+    if (host) host.innerHTML = `<p class="error">${esc(err.message || 'تعذر البحث')}</p>`;
+  }
 }
 
 function openCandidate(userId) {
-  const person = STATE.candidates.find((row) => row.userId === userId);
+  const person = STATE.peopleById[userId] || STATE.candidates.find((row) => row.userId === userId);
   if (!person) return;
   const options = STATE.badgeDefs.map((badge) => `<option value="${esc(badge.key)}">${esc(badge.nameAr)}</option>`).join('');
   openDrawer(`

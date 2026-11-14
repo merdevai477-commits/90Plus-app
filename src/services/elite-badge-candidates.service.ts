@@ -160,6 +160,46 @@ async function predictionCandidates(kind: 'correct' | 'accuracy' | 'streak', per
         .sort((a, b) => b.metricValue - a.metricValue);
 }
 
+export async function searchBadgeUsers(query: string): Promise<BadgeCandidate[]> {
+    const needle = query.trim().replace(/^@+/, '');
+    if (needle.length < 2) return [];
+    const users = await prisma.user.findMany({
+        where: {
+            isDeleted: false,
+            OR: [
+                { username: { contains: needle, mode: 'insensitive' } },
+                { displayName: { contains: needle, mode: 'insensitive' } },
+            ],
+        },
+        orderBy: [{ isVerified: 'desc' }, { username: 'asc' }],
+        take: 20,
+        select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatar: true,
+            isVerified: true,
+            isDeveloper: true,
+        },
+    });
+    const badges = await loadFeaturedBadges(users.map((user) => user.id));
+    return users.map((user, index) => {
+        const badge = badges.get(user.id);
+        return {
+            rank: index + 1,
+            userId: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            avatar: user.avatar,
+            isVerified: user.isVerified,
+            isDeveloper: user.isDeveloper,
+            metricLabel: 'مستخدم',
+            metricValue: 0,
+            badge: badge ? { key: badge.key, title: badge.title } : null,
+        };
+    });
+}
+
 export async function listBadgeCompetitions() {
     const rows = await prisma.competition.findMany({
         orderBy: { createdAt: 'desc' },
