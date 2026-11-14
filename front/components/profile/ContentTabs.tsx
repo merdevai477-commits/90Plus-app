@@ -18,39 +18,32 @@ interface ContentTabsProps {
 const ContentTabs = memo(function ContentTabs({
   activeTab,
   onTabChange,
-  isOwnProfile = true,
-  showPublicAnalytics = false,
 }: ContentTabsProps) {
-  const { t } = useTranslation();
-  const showPredictions = isOwnProfile || showPublicAnalytics;
+  const { t, language } = useTranslation();
   const tabs = [
+    {
+      id: 'posts',
+      label: t.profile.postsTab,
+      icon: PROFILE_ICONS.tabBullseye,
+      iconActive: PROFILE_ICONS.tabBullseyeActive,
+    },
+    {
+      id: 'videos',
+      label: t.profile.reels,
+      icon: PROFILE_ICONS.tabVideo,
+      iconActive: PROFILE_ICONS.tabVideoActive,
+    },
     {
       id: 'achievements',
       label: t.profile.achievements,
       icon: PROFILE_ICONS.tabTrophy,
       iconActive: PROFILE_ICONS.tabTrophyActive,
     },
-    ...(showPredictions
-      ? [
-          {
-            id: 'predictions',
-            label: t.profile.predictionsTab,
-            icon: PROFILE_ICONS.tabBullseye,
-            iconActive: PROFILE_ICONS.tabBullseyeActive,
-          },
-        ]
-      : []),
-    {
-      id: 'videos',
-      label: isOwnProfile ? t.profile.reels : t.profile.videos,
-      icon: PROFILE_ICONS.tabVideo,
-      iconActive: PROFILE_ICONS.tabVideoActive,
-    },
   ];
 
   return (
     <View style={styles.container}>
-      <View style={[styles.tabsWrapper, LTR_ROW]}>
+      <View style={[styles.tabsWrapper, language === 'ar' ? RTL_ROW : LTR_ROW]}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -94,6 +87,7 @@ export default ContentTabs;
 
 // Inline, not in StyleSheet.create: react-native-web rejects `direction` there.
 const LTR_ROW = { direction: 'ltr' } as const;
+const RTL_ROW = { direction: 'rtl' } as const;
 
 const styles = StyleSheet.create({
   container: {

@@ -2389,6 +2389,7 @@ export const en = {
     longestStreak: 'Longest streak',
     predictionRate: 'Prediction accuracy',
     predictionsTab: 'Predictions',
+    postsTab: 'Posts',
     followerShort: 'Followers',
     followingShort: 'Following',
     emailCopied: 'Email copied',

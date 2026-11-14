@@ -21,6 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 
 import ProfileHero from '../../components/profile/ProfileHero';
+import { ProfileCollapsedBar, bindProfileScroll } from '../../components/profile/ProfileCollapsedBar';
+import { ProfilePostsPane } from '../../components/profile/ProfilePostsPane';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
@@ -51,7 +53,6 @@ import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
-import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
 import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
 import { ProfilePublicMoreModal } from '../../components/profile/ProfilePublicMoreModal';
 import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
@@ -121,7 +122,8 @@ function UserProfileScreen() {
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [viewerImageUrl, setViewerImageUrl] = useState('');
-  const [activeTab, setActiveTab] = useState('videos');
+  const [activeTab, setActiveTab] = useState('posts');
+  const profileScrollY = useRef(new Animated.Value(0)).current;
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
   const [showStreakInfo, setShowStreakInfo] = useState(false);
@@ -595,13 +597,20 @@ function UserProfileScreen() {
         />
       )}
 
+      <ProfileCollapsedBar
+        scrollY={profileScrollY}
+        name={user.displayName || user.username}
+        avatarUri={user.avatar}
+        onBack={() => router.back()}
+      />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        scrollEventThrottle={32}
-        onScroll={(e) => gridScroll.onScroll(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
+        decelerationRate="normal"
+        onScroll={bindProfileScroll(profileScrollY, gridScroll.onScroll)}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -751,7 +760,7 @@ function UserProfileScreen() {
               icon: PROFILE_ICONS.bullseye,
               value: `${Math.round(publicPredictionStats.accuracy <= 1 && publicPredictionStats.accuracy > 0 ? publicPredictionStats.accuracy * 100 : publicPredictionStats.accuracy || 0)}%`,
               label: t.profile.predictionRate,
-              onPress: () => openTabAndScroll('predictions'),
+              onPress: () => openTabAndScroll('posts'),
             },
             {
               key: 'achievements',
@@ -783,6 +792,10 @@ function UserProfileScreen() {
         </View>
 
         <View style={s.contentPanel}>
+        {activeTab === 'posts' && user.username ? (
+          <ProfilePostsPane username={user.username} />
+        ) : null}
+
         {activeTab === 'videos' && (
           <>
         {isLoadingVideos ? (
@@ -828,13 +841,6 @@ function UserProfileScreen() {
           </>
         )}
 
-        {activeTab === 'predictions' && (
-          <ProfileAnalyticsTab
-            predictionStats={publicPredictionStats}
-            predictions={publicPredictions}
-          />
-        )}
-
         {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
           <ProfileAchievementsTab analytics={null} />
         )}
@@ -845,7 +851,7 @@ function UserProfileScreen() {
         )}
 
         <View style={{ height: 100 }} />
-      </ScrollView>
+      </Animated.ScrollView>
       </ProfileGridScrollProvider>
 
       {user.id ? (

@@ -2345,6 +2345,7 @@ export const ar = {
     longestStreak: 'أطول سلسلة',
     predictionRate: 'دقة التوقعات',
     predictionsTab: 'التوقعات',
+    postsTab: 'منشورات',
     followerShort: 'متابعون',
     followingShort: 'متابعة',
     emailCopied: 'تم نسخ الإيميل',

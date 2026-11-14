@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
@@ -10,6 +10,8 @@ import { UploadProgressModal } from '../../components/common/UploadProgressModal
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ContentTabs from '../../components/profile/ContentTabs';
+import { ProfileCollapsedBar, bindProfileScroll } from '../../components/profile/ProfileCollapsedBar';
+import { ProfilePostsPane } from '../../components/profile/ProfilePostsPane';
 import VideoGrid from '../../components/profile/VideoGrid';
 import { ProfileGridScrollProvider, useGridScrollReporter } from '../../components/profile/profileGridScroll';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
@@ -78,7 +80,6 @@ import QRCodeModal from '../../components/profile/QRCodeModal';
 import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
 import { TopClub } from '../../data/top5LeaguesClubs';
 import { DiamondProfile } from '../../types/profile';
-import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
 import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
 import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
 import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
@@ -338,7 +339,8 @@ function OwnProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState('videos');
+  const [activeTab, setActiveTab] = useState('posts');
+  const profileScrollY = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
   const gridScroll = useGridScrollReporter();
   const tabsOffsetY = useRef(0);
@@ -1705,13 +1707,19 @@ function OwnProfileScreen() {
         </View>
       )}
 
+      <ProfileCollapsedBar
+        scrollY={profileScrollY}
+        name={userData?.displayName || userData?.username || ''}
+        avatarUri={localImage || userData?.avatar || null}
+      />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        scrollEventThrottle={32}
-        onScroll={(e) => gridScroll.onScroll(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
+        decelerationRate="normal"
+        onScroll={bindProfileScroll(profileScrollY, gridScroll.onScroll)}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1816,7 +1824,7 @@ function OwnProfileScreen() {
               icon: PROFILE_ICONS.bullseye,
               value: `${(predictionStats?.accuracy ?? 0) <= 1 && (predictionStats?.accuracy ?? 0) > 0 ? Math.round((predictionStats?.accuracy ?? 0) * 100) : Math.round(predictionStats?.accuracy || 0)}%`,
               label: t.profile.predictionRate,
-              onPress: () => openTabAndScroll('predictions'),
+              onPress: () => openTabAndScroll('posts'),
             },
             {
               key: 'achievements',
@@ -1861,6 +1869,10 @@ function OwnProfileScreen() {
         </View>
 
         <View style={styles.contentPanel}>
+          {activeTab === 'posts' && userData?.username ? (
+            <ProfilePostsPane username={userData.username} />
+          ) : null}
+
           {activeTab === 'videos' && (
             <VideoGrid
               videos={myVideos}
@@ -1885,20 +1897,13 @@ function OwnProfileScreen() {
             />
           )}
 
-          {activeTab === 'predictions' && (
-            <ProfileAnalyticsTab
-              predictionStats={predictionStats}
-              predictions={allPredictions}
-            />
-          )}
-
           {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
             <ProfileAchievementsTab analytics={analytics} />
           )}
         </View>
 
         <View style={{ height: 100 }} />
-      </ScrollView>
+      </Animated.ScrollView>
       </ProfileGridScrollProvider>
 
       <LevelInfoModal
