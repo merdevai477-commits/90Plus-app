@@ -545,7 +545,7 @@ const EMPTY_PUBLIC_PREDICTIONS = {
 
 /**
  * GET /api/predictions/public/:username
- * Public prediction stats + recent history for another user's profile
+ * Public prediction accuracy for another user's profile. The history list is no longer loaded.
  */
 router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
@@ -582,52 +582,13 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
             }
         }
 
-        const [stats, predictions] = await Promise.all([
-            buildPredictionStatsForUser(targetUser.id),
-            prisma.prediction.findMany({
-                where: { userId: targetUser.id },
-                orderBy: { createdAt: 'desc' },
-                take: 50,
-                select: {
-                    id: true,
-                    apiMatchId: true,
-                    predictionType: true,
-                    homeTeam: true,
-                    awayTeam: true,
-                    homeTeamLogo: true,
-                    awayTeamLogo: true,
-                    matchDate: true,
-                    leagueName: true,
-                    isCorrect: true,
-                    coinsWon: true,
-                    coinsSpent: true,
-                    createdAt: true,
-                },
-            }),
-        ]);
-
-        const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({
-            id: p.id,
-            apiMatchId: p.apiMatchId,
-            predictionType: p.predictionType,
-            homeTeam: p.homeTeam,
-            awayTeam: p.awayTeam,
-            homeTeamLogo: p.homeTeamLogo,
-            awayTeamLogo: p.awayTeamLogo,
-            matchDate: p.matchDate?.toISOString() ?? null,
-            leagueName: p.leagueName,
-            isCorrect: p.isCorrect,
-            coinsWon: p.coinsWon,
-            coinsSpent: p.coinsSpent,
-            createdAt: p.createdAt.toISOString(),
-            source: 'match',
-        }));
+        const stats = await buildPredictionStatsForUser(targetUser.id);
 
         res.json({
             success: true,
             data: {
                 stats,
-                predictions: regularRows,
+                predictions: [],
             },
         });
     } catch (error) {

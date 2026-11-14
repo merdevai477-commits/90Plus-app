@@ -163,11 +163,7 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
 
         preloadProfilePredictionsInFlight = (async () => {
             try {
-                const { fetchUserPredictions, fetchPredictionStats } = get();
-                await Promise.all([
-                    fetchUserPredictions(token, userId),
-                    fetchPredictionStats(token, userId),
-                ]);
+                await get().fetchPredictionStats(token, userId);
             } finally {
                 preloadProfilePredictionsInFlight = null;
             }

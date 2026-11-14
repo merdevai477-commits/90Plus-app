@@ -150,7 +150,6 @@ function UserProfileScreen() {
   const canViewPredictions = !!user && !blockedMe && !isBlocked;
   const {
     stats: publicPredictionStats,
-    predictions: publicPredictions,
     refresh: refreshPublicPredictions,
   } = usePublicUserPredictions(username, getToken, canViewPredictions);
 

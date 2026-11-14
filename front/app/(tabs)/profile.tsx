@@ -810,7 +810,6 @@ function OwnProfileScreen() {
 
   // Predictions store — hydrate from cache on mount for instant analytics
   const predictionStats = usePredictionsStore((s) => s.stats);
-  const allPredictions = usePredictionsStore((s) => s.allPredictions);
   const hydratePredictionsCache = usePredictionsStore((s) => s.hydrateFromCache);
 
   const PREDICTIONS_REFRESH_MS = 30_000;

@@ -301,7 +301,7 @@ class PreloadManagerClass {
         // Also fetch user's videos
         const reels = await AuthService.getUserReels(token, userResult.username);
 
-        // Preload predictions for instant analytics tab
+        // Accuracy chip only — the predictions list tab is gone.
         try {
           const { usePredictionsStore } = await import('../src/store/usePredictionsStore');
           void usePredictionsStore.getState().preloadProfilePredictions(token, userResult.clerkUserId);
