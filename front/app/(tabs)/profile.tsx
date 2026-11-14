@@ -408,6 +408,7 @@ function OwnProfileScreen() {
     error: cacheError,
     refresh: refreshCache,
     loadVideos,
+    removeCachedVideo,
     updateUserData: updateCachedUserData,
     updateFollowStats: updateCachedFollowStats,
     updateCooldowns: updateCachedCooldowns,
@@ -737,10 +738,14 @@ function OwnProfileScreen() {
 
   const myVideos = React.useMemo(() => {
     const cached = cachedVideos || [];
-    const uploaded = uploadedVideos || [];
-
-    // Merge uploaded videos first (they have priority for optimistic updates)
-    const allVideos = [...uploaded, ...cached];
+    const serverIds = new Set(cached.map((video: { id?: string }) => String(video.id)));
+    const pending = (uploadedVideos || []).filter(
+      (video) => video.isUploading && !serverIds.has(String(video.id)),
+    );
+    const finishedLocal = (uploadedVideos || []).filter(
+      (video) => !video.isUploading && !serverIds.has(String(video.id)),
+    );
+    const allVideos = [...pending, ...cached, ...finishedLocal];
 
     // O(n) deduplication using Map instead of O(n²) reduce+find
     const seen = new Map<string, boolean>();
@@ -915,7 +920,7 @@ function OwnProfileScreen() {
   }, [userData, clerkUser?.id, updateCachedUserData]);
 
   useEffect(() => {
-    if (!userData) return;
+    if (!userData || avatarHoldRef.current) return;
     if (userData.avatar) {
       setLocalImage(userData.avatar);
       globalState.setLocalAvatar(userData.avatar);
@@ -956,6 +961,8 @@ function OwnProfileScreen() {
   // ✅ FIX: Prevent refresh when image/video picker is open
   const isPickerActiveRef = useRef(false);
   const reelUploadInFlightRef = useRef(false);
+  const reelUploadEpochRef = useRef(0);
+  const avatarHoldRef = useRef(false);
   const lastGridProgressRef = useRef(-1);
   const lastUploadUiProgressRef = useRef(-1);
   useEffect(() => {
@@ -1102,7 +1109,9 @@ function OwnProfileScreen() {
       });
       finalUri = compressed.uri;
     } catch { finalUri = imageUri; }
-    // UX Fix 1: Show preview before uploading
+    avatarHoldRef.current = true;
+    setLocalImage(finalUri);
+    globalState.setLocalAvatar(finalUri);
     setPreviewUri(finalUri);
     setPendingUploadFn(() => () => _executeAvatarUpload(finalUri));
     setIsPreviewVisible(true);
@@ -1134,12 +1143,15 @@ function OwnProfileScreen() {
         });
         // Clear busy immediately — XP / cache refresh must not hold the spinner.
         setIsAvatarUploading(false);
-        toastManager.showUploadSuccess('image');
+        avatarHoldRef.current = false;
+        toastManager.showUploadSuccess('avatar');
         refreshCache(false).catch(err => logger.error('Background refresh error:', err));
         void refreshXp();
         return;
       } else {
+        avatarHoldRef.current = false;
         setLocalImage(originalAvatar || null);
+        if (originalAvatar) globalState.setLocalAvatar(originalAvatar);
         const errorMessage = uploadResult.error || t.profile.avatarUploadFailed;
         if (isCooldownApiError(uploadResult.data)) {
           toastManager.showWarning(t.profile.waitABit, errorMessage);
@@ -1149,7 +1161,9 @@ function OwnProfileScreen() {
       }
     } catch (err: any) {
       logger.error('Avatar upload exception:', err);
+      avatarHoldRef.current = false;
       setLocalImage(originalAvatar || null);
+      if (originalAvatar) globalState.setLocalAvatar(originalAvatar);
       toastManager.showError(t.common.error, t.profile.avatarUploadFailed || t.profile.avatarUploadFailedFallback);
     } finally {
       setIsAvatarUploading(false);
@@ -1222,6 +1236,7 @@ function OwnProfileScreen() {
     toastManager.showSuccess(t.profile.videoSelectedTitle, t.profile.videoSelectedMessage);
 
     reelUploadInFlightRef.current = true;
+    const uploadEpoch = ++reelUploadEpochRef.current;
     lastUploadUiProgressRef.current = -1;
     lastGridProgressRef.current = -1;
 
@@ -1316,6 +1331,7 @@ function OwnProfileScreen() {
         hashtags.map((h: string) => h.replace('#', '')),
         mentions.map((m: string) => m.replace('@', '')),
         (progress: number) => {
+          if (reelUploadEpochRef.current !== uploadEpoch) return;
           syncReelProgress(progress);
           const rounded = Math.round(progress);
           if (rounded === lastGridProgressRef.current && rounded < 100) return;
@@ -1333,18 +1349,17 @@ function OwnProfileScreen() {
       );
 
       if (uploadResult.success) {
-        // UX Fix 4: Start polling for Mux processing status
+        reelUploadEpochRef.current += 1;
         const reelId = (uploadResult as any)?.reelId || (uploadResult as any)?.data?.reelId;
+        removeVideo(newVideo.id);
         if (reelId) {
           setPollingReelId(reelId);
-          // Swap temp tile → real id instead of remove+reload flicker
           addVideo({
             ...tempVideo,
             id: reelId,
             isUploading: false,
-            uploadProgress: 100,
+            uploadProgress: undefined,
           });
-          removeVideo(newVideo.id);
         }
 
         setVideoUploadMessage(t.profile.uploadSuccessPhase);
@@ -1368,6 +1383,7 @@ function OwnProfileScreen() {
           void loadVideos(userData.username, true);
         }
       } else {
+        reelUploadEpochRef.current += 1;
         removeVideo(newVideo.id);
         setIsVideoUploading(false);
         const errMsg = uploadResult.error || '';
@@ -1382,6 +1398,7 @@ function OwnProfileScreen() {
       }
     } catch (error: any) {
       logger.error('Video upload error:', error);
+      reelUploadEpochRef.current += 1;
       removeVideo(newVideo.id);
       setIsVideoUploading(false);
       const msg = error.message || t.profile.videoUploadError;
@@ -1497,9 +1514,27 @@ function OwnProfileScreen() {
   }, []);
 
   const handleDeleteVideo = useCallback((videoId: string) => {
+    const pending = uploadedVideos.some((video) => video.id === videoId && video.isUploading);
     removeVideo(videoId);
-    toastManager.showDeleteSuccess('video');
-  }, [removeVideo]);
+    if (pending) return;
+    removeCachedVideo(videoId);
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const result = await AuthService.deleteReel(token, videoId);
+        if (!result.success) {
+          toastManager.showError(t.common.error, result.message || t.profile.videoUploadError);
+          if (userData?.username) void loadVideos(userData.username, true);
+          return;
+        }
+        toastManager.showDeleteSuccess('video');
+      } catch (error) {
+        logger.error('Delete reel error:', error);
+        if (userData?.username) void loadVideos(userData.username, true);
+      }
+    })();
+  }, [loadVideos, removeCachedVideo, removeVideo, t.common.error, t.profile.videoUploadError, uploadedVideos, userData?.username]);
 
   // CRITICAL: Compute social links BEFORE early returns to avoid hooks count mismatch
   const socialLinks = useMemo(() => {
@@ -1995,6 +2030,9 @@ function OwnProfileScreen() {
           if (pendingUploadFn) pendingUploadFn();
         }}
         onCancel={() => {
+          avatarHoldRef.current = false;
+          setLocalImage(userData?.avatar || null);
+          if (userData?.avatar) globalState.setLocalAvatar(userData.avatar);
           setIsPreviewVisible(false);
           setPreviewUri(null);
           setPendingUploadFn(null);

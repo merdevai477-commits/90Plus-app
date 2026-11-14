@@ -140,11 +140,14 @@ export function VideosProvider({ children }: { children: ReactNode }) {
 
             if (videosJson) {
                 const videos = JSON.parse(videosJson);
-                // Convert createdAt strings back to Date objects
-                setUploadedVideos(videos.map((v: any) => ({
+                const kept = (Array.isArray(videos) ? videos : []).filter((v: any) => !v?.isUploading);
+                setUploadedVideos(kept.map((v: any) => ({
                     ...v,
                     createdAt: new Date(v.createdAt)
                 })));
+                if (kept.length !== videos.length) {
+                    await AsyncStorage.setItem(storageKeys.UPLOADED_VIDEOS, JSON.stringify(kept));
+                }
             }
             if (userDataJson) setUserVideoDataState(JSON.parse(userDataJson));
             if (commentsJson) setReelComments(JSON.parse(commentsJson));
@@ -185,18 +188,19 @@ export function VideosProvider({ children }: { children: ReactNode }) {
     const saveVideos = useCallback(async (videos: UploadedVideo[]) => {
         if (!userId) return;
         try {
-            await AsyncStorage.setItem(storageKeys.UPLOADED_VIDEOS, JSON.stringify(videos));
+            const finished = videos.filter((video) => !video.isUploading);
+            await AsyncStorage.setItem(storageKeys.UPLOADED_VIDEOS, JSON.stringify(finished));
         } catch (error) {
             console.error('Error saving videos:', error);
         }
     }, [userId, storageKeys.UPLOADED_VIDEOS]);
 
-    const saveVideosDebounced = useCallback((videos: UploadedVideo[]) => {
-        if (saveVideosDebounceRef.current) clearTimeout(saveVideosDebounceRef.current);
-        saveVideosDebounceRef.current = setTimeout(() => {
-            void saveVideos(videos);
-        }, 2000);
-    }, [saveVideos]);
+    const cancelVideoSave = useCallback(() => {
+        if (saveVideosDebounceRef.current) {
+            clearTimeout(saveVideosDebounceRef.current);
+            saveVideosDebounceRef.current = null;
+        }
+    }, []);
 
     // Save user data to AsyncStorage
     const saveUserData = async (data: UserVideoData | null) => {
@@ -250,26 +254,26 @@ export function VideosProvider({ children }: { children: ReactNode }) {
                 }
                 const newVideos = [...prev];
                 newVideos[existingIndex] = video;
-                if (video.isUploading) {
-                    saveVideosDebounced(newVideos);
-                } else {
+                if (!video.isUploading) {
+                    cancelVideoSave();
                     void saveVideos(newVideos);
                 }
                 return newVideos;
             }
             const newVideos = [video, ...prev];
-            void saveVideos(newVideos);
+            if (!video.isUploading) void saveVideos(newVideos);
             return newVideos;
         });
-    }, [saveVideos, saveVideosDebounced]);
+    }, [cancelVideoSave, saveVideos]);
 
     const removeVideo = useCallback((videoId: string) => {
+        cancelVideoSave();
         setUploadedVideos(prev => {
             const newVideos = prev.filter(v => v.id !== videoId);
             void saveVideos(newVideos);
             return newVideos;
         });
-    }, [saveVideos]);
+    }, [cancelVideoSave, saveVideos]);
 
     const clearVideos = async () => {
         setUploadedVideos([]);

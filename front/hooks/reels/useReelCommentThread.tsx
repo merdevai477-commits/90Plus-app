@@ -196,7 +196,11 @@ export function useReelCommentThread(
     if (rootId) {
       setReplyState((state) => ({
         ...state,
-        [rootId]: { items: [...(state[rootId]?.items ?? []), temp], loading: false, loadedOnce: true },
+        [rootId]: {
+          items: [...(state[rootId]?.items ?? []), temp],
+          loading: false,
+          loadedOnce: state[rootId]?.loadedOnce ?? false,
+        },
       }));
       setRoots((list) => list.map((comment) => (
         comment.id === rootId ? { ...comment, repliesCount: comment.repliesCount + 1 } : comment

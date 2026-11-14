@@ -299,6 +299,7 @@ export interface UseProfileCacheResult {
   error: string | null;
   refresh: (forceRefresh?: boolean) => Promise<void>;
   loadVideos: (username: string, bustCache?: boolean) => Promise<void>;
+  removeCachedVideo: (videoId: string) => void;
   updateUserData: (updates: Partial<ProfileUserData>) => void;
   updateFollowStats: (stats: FollowStats) => void;
   updateCooldowns: (updates: Partial<CooldownsResponse>) => void;
@@ -855,6 +856,29 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     }
   }, [transformReels, saveToCache]);
 
+  const removeCachedVideo = useCallback((videoId: string): void => {
+    setVideos((prev) => prev.filter((video) => video.id !== videoId));
+    const mem = getFromMemoryCache(cacheKey);
+    if (mem) {
+      setMemoryCache(cacheKey, {
+        ...mem,
+        videos: (mem.videos || []).filter((video) => video.id !== videoId),
+      });
+    }
+    void (async () => {
+      try {
+        const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
+        if (!currentCache) return;
+        await saveToCache({
+          ...currentCache,
+          videos: (currentCache.videos || []).filter((video) => video.id !== videoId),
+        });
+      } catch (error) {
+        console.warn('Failed to drop cached video:', error);
+      }
+    })();
+  }, [cacheKey, saveToCache]);
+
   /**
    * Update user data locally (for optimistic updates)
    * Also updates cache immediately
@@ -948,6 +972,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     error,
     refresh,
     loadVideos,
+    removeCachedVideo,
     updateUserData,
     updateFollowStats,
     updateCooldowns,
