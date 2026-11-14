@@ -497,7 +497,7 @@ class PreloadManagerClass {
     // is heavier, so keep its look-ahead smaller to avoid bandwidth contention
     // that causes the active reel to stutter on lower-end devices.
     const THUMB_LOOKAHEAD = 4;
-    const VIDEO_LOOKAHEAD = Platform.OS === 'android' ? 3 : 0;
+    const VIDEO_LOOKAHEAD = Platform.OS === 'android' ? 3 : 1;
 
     // Thumbnails only on iOS — no parallel HLS fetch (AVPlayer crash risk).
     for (let i = 1; i <= THUMB_LOOKAHEAD; i++) {
@@ -508,10 +508,6 @@ class PreloadManagerClass {
           Image.prefetch(reel.thumbnail).catch(() => {});
         }
       }
-    }
-
-    if (Platform.OS === 'ios') {
-      return;
     }
 
     const videosToPreload: string[] = [];

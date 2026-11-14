@@ -20,6 +20,7 @@ const MAX_LEN = 1000;
 export interface CommentComposerHandle {
   focus: () => void;
   replyTo: (c: CommunityComment) => void;
+  startEdit: (c: CommunityComment) => void;
 }
 
 interface Props {
@@ -33,21 +34,24 @@ interface Props {
     everyone: string;
     everyoneHint: string;
     noPages: string;
+    editing?: string;
   };
   /** Resolves when saved; rejects with CommunityApiError to keep the text. */
   onSubmit: (text: string, replyTo: CommunityComment | null) => Promise<unknown>;
+  onEdit?: (comment: CommunityComment, text: string) => Promise<unknown>;
   onError: (err: unknown) => void;
   bottomInset?: number;
 }
 
 export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function CommentComposer(
-  { isAr, fonts, labels, onSubmit, onError, bottomInset = 0 },
+  { isAr, fonts, labels, onSubmit, onEdit, onError, bottomInset = 0 },
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
   const [replyTarget, setReplyTarget] = useState<CommunityComment | null>(null);
+  const [editTarget, setEditTarget] = useState<CommunityComment | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -61,9 +65,16 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
     replyTo: (c) => {
+      setEditTarget(null);
       setReplyTarget(c);
       const handle = `@${c.author.username} `;
       setText((t) => (t.startsWith(handle) ? t : handle + t.replace(/^@\S+\s/, '')));
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    startEdit: (c) => {
+      setReplyTarget(null);
+      setEditTarget(c);
+      setText(c.content);
       requestAnimationFrame(() => inputRef.current?.focus());
     },
   }));
@@ -113,19 +124,23 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
     if (!canSend) return;
     const content = trimmed;
     const target = replyTarget;
+    const editing = editTarget;
     setText('');
     setReplyTarget(null);
+    setEditTarget(null);
     setShowEmoji(false);
-    onSubmit(content, target).catch((err) => {
+    const save = editing && onEdit ? onEdit(editing, content) : onSubmit(content, target);
+    save.catch((err) => {
       setText((t) => (t ? t : content));
-      setReplyTarget((r) => r ?? target);
+      if (editing) setEditTarget((current) => current ?? editing);
+      else setReplyTarget((r) => r ?? target);
       if (err instanceof CommunityApiError && err.retryAfterSec) {
         setCooldownUntil(Date.now() + err.retryAfterSec * 1000);
         setNow(Date.now());
       }
       onError(err);
     });
-  }, [canSend, onError, onSubmit, replyTarget, trimmed]);
+  }, [canSend, editTarget, onEdit, onError, onSubmit, replyTarget, trimmed]);
 
   const row = isAr ? 'row-reverse' : 'row';
   const replyName = replyTarget ? replyTarget.author.displayName || replyTarget.author.username : '';
@@ -150,15 +165,16 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
         />
       )}
 
-      {replyTarget && (
+      {(replyTarget || editTarget) && (
         <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)} style={[styles.chip, { flexDirection: row }]}>
           <Text style={[styles.chipText, { fontFamily: fonts.regular }]} numberOfLines={1}>
-            {fillTemplate(labels.replyingTo, { name: replyName })}
+            {editTarget ? (labels.editing || 'Edit') : fillTemplate(labels.replyingTo, { name: replyName })}
           </Text>
           <Pressable
             onPress={() => {
               setReplyTarget(null);
-              setText((t) => t.replace(/^@\S+\s/, ''));
+              setEditTarget(null);
+              setText((t) => (editTarget ? '' : t.replace(/^@\S+\s/, '')));
             }}
             hitSlop={10}
           >

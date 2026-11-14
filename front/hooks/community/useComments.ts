@@ -200,6 +200,17 @@ export function useComments(postId: string, enabled = true) {
     [dropLocalReply, getToken, postId, qc],
   );
 
+  const edit = useCallback(
+    async (comment: CommunityComment, content: string) => {
+      const saved = await communityApi.updateComment(getToken, comment.id, content);
+      const apply = (current: CommunityComment) => ({ ...current, ...saved, replies: current.replies });
+      updateCommentEverywhere(qc, postId, comment.id, apply);
+      patchLocalReply(comment.id, apply);
+      return saved;
+    },
+    [getToken, patchLocalReply, postId, qc],
+  );
+
   const hideLocally = useCallback(
     (comment: CommunityComment) => {
       removeComment(qc, postId, comment.id);
@@ -208,5 +219,5 @@ export function useComments(postId: string, enabled = true) {
     [dropLocalReply, postId, qc],
   );
 
-  return { ...query, rows, loadMoreReplies, toggleLike, submit, remove, hideLocally };
+  return { ...query, rows, loadMoreReplies, toggleLike, submit, edit, remove, hideLocally };
 }

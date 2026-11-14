@@ -110,6 +110,7 @@ function buildVideoSource(url: string): VideoSource {
   return {
     uri: url,
     ...(isHls ? { contentType: 'hls' as const } : {}),
+    useCaching: true,
   };
 }
 
@@ -192,6 +193,13 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         p.loop = VIDEO_DEFAULTS.looping;
         p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
         p.audioMixingMode = 'auto';
+        Object.assign(p, {
+          bufferOptions: {
+            preferredForwardBufferDuration: 6,
+            waitsToMinimizeStalling: false,
+            minBufferForPlayback: 0.4,
+          },
+        });
       } catch (e) {
         logger.warn('[UnifiedVideoPlayer] Player init failed:', e);
       }

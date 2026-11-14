@@ -23,7 +23,7 @@ import { suspendUser } from './moderation.service';
 
 const DEFAULT_SAFETY_MODEL = 'nvidia/nemotron-3.5-content-safety:free';
 
-export type CommunityContentKind = 'post' | 'comment';
+export type CommunityContentKind = 'post' | 'comment' | 'reel_comment';
 
 export type CommunityTextVerdict =
     | { ok: true }

@@ -1602,6 +1602,30 @@ export class ReelsService {
     /**
      * Delete a comment (own comments only)
      */
+    static async updateComment(
+        token: string,
+        commentId: string,
+        content: string,
+    ): Promise<{ success: boolean; comment?: any; error?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/reels/comments/${commentId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ content }),
+            });
+            const data = await response.json();
+            if (response.ok && data.status === 'SUCCESS') {
+                return { success: true, comment: data.data.comment };
+            }
+            return { success: false, error: data.message || 'تعذر تعديل التعليق' };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
+
     static async deleteComment(token: string, commentId: string): Promise<{ success: boolean; message?: string }> {
         try {
             const response = await fetch(`${API_URL}/reels/comments/${commentId}`, {

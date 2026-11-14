@@ -100,6 +100,9 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
         onPress: () => actions.askReport('comment', menu.id, () => thread.hideLocally(menu)),
       });
     }
+    if (menu.isMine) {
+      items.unshift({ key: 'edit', label: s.editComment, onPress: () => composerRef.current?.startEdit(menu) });
+    }
     if (menu.isMine || post?.isMine) {
       items.push({
         key: 'delete',
@@ -120,6 +123,7 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
       everyone: s.everyoneMention,
       everyoneHint: s.everyoneHint,
       noPages: s.noPages,
+      editing: s.editingComment,
     }),
     [s],
   );
@@ -142,6 +146,7 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
     composerRef,
     composerLabels,
     submit,
+    edit: (comment: CommunityComment, text: string) => thread.edit(comment, text),
     onError,
     menu,
     menuItems,

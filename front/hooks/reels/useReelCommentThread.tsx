@@ -325,6 +325,9 @@ export function useReelCommentThread(
       items.push({ key: 'profile', label: s.viewProfile, onPress: () => navigateUserProfile(menu.author.username) });
       items.push({ key: 'report', label: s.reportComment, destructive: true, onPress: () => setReportTarget(menu) });
     }
+    if (menu.isMine) {
+      items.unshift({ key: 'edit', label: s.editComment, onPress: () => composerRef.current?.startEdit(menu) });
+    }
     if (menu.isMine || options?.canModerate) {
       items.push({ key: 'delete', label: s.delete, destructive: true, onPress: () => setDeleteTarget(menu) });
     }
@@ -357,8 +360,18 @@ export function useReelCommentThread(
       everyone: s.everyoneMention,
       everyoneHint: s.everyoneHint,
       noPages: s.noPages,
+      editing: s.editingComment,
     },
     submit: (text: string, replyTo: CommunityComment | null) => submit(text, replyTo),
+    edit: async (comment: CommunityComment, content: string) => {
+      const token = await getClerkBearerToken(getTokenRef.current);
+      if (!token || !reelId) throw new Error('AUTH');
+      const result = await ReelsService.updateComment(token, comment.id, content);
+      if (!result.success || !result.comment) throw new Error(result.error || 'FAILED');
+      const saved = mapReelComment({ ...result.comment, parentId: comment.parentId }, reelId, me.id);
+      patch(comment.id, (current) => ({ ...current, ...saved, isMine: true, replies: current.replies }));
+      return saved;
+    },
     onError: (err: unknown) => toastManager.showError(s.comments, err instanceof Error ? err.message : s.failedToPost),
     menu,
     menuItems,

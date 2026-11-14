@@ -1982,6 +1982,34 @@ export async function createComment(
     return { ...toCommentDto(comment, actor.id, new Set()), replies: [] };
 }
 
+export async function updateComment(
+    actor: CommunityActor,
+    commentId: string,
+    input: { content?: unknown },
+): Promise<CommunityCommentDto> {
+    assertCanWrite(actor);
+    const content = normalizeCommunityText(input.content);
+    if (!content) throw new CommunityError(400, 'EMPTY_COMMENT', 'Comment cannot be empty');
+    if (content.length > COMMENT_MAX_LENGTH) {
+        throw new CommunityError(400, 'COMMENT_TOO_LONG', `Comments are limited to ${COMMENT_MAX_LENGTH} characters`, { max: COMMENT_MAX_LENGTH });
+    }
+    await moderateOrThrow(actor.id, 'comment', content);
+    const existing = await prisma.communityComment.findUnique({
+        where: { id: commentId },
+        select: { id: true, userId: true, status: true, postId: true },
+    });
+    if (!existing || existing.status !== 'ACTIVE') throw new CommunityError(404, 'COMMENT_NOT_FOUND', 'Comment not found');
+    if (existing.userId !== actor.id) throw new CommunityError(403, 'FORBIDDEN', 'You can only edit your own comments');
+    const comment = await prisma.communityComment.update({
+        where: { id: commentId },
+        data: { content },
+        select: commentSelect,
+    });
+    void enqueueCommunityAiModeration({ kind: 'comment', id: comment.id, userId: actor.id, text: content });
+    void invalidateFeedCache();
+    return { ...toCommentDto(comment, actor.id, new Set()), replies: [] };
+}
+
 /** Takes a comment out of circulation and keeps every counter in sync. */
 async function removeComment(commentId: string, status: Exclude<CommunityContentStatus, 'ACTIVE'>): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
@@ -2133,6 +2161,13 @@ export async function reportContent(
 }
 
 registerCommunityHideHandler(async (kind, id) => {
+    if (kind === 'reel_comment') {
+        const hidden = await prisma.comment.updateMany({
+            where: { id, isDeleted: false },
+            data: { isDeleted: true, deletedAt: new Date(), content: '[removed]' },
+        });
+        return hidden.count > 0;
+    }
     if (kind === 'post') return hidePost(id);
     const hidden = await removeComment(id, 'HIDDEN');
     if (hidden) await invalidateFeedCache();

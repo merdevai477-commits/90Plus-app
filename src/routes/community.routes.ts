@@ -206,6 +206,13 @@ router.get(
     handle((req, _res, actor) => community.getReplies(actor.id, param(req, 'id'), req.query.cursor)),
 );
 
+router.patch(
+    '/comments/:id',
+    requireAuth,
+    writeLimiter,
+    handle((req, _res, actor) => community.updateComment(actor, param(req, 'id'), req.body ?? {})),
+);
+
 router.delete(
     '/comments/:id',
     requireAuth,

@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { TextModerationService } from '../services/text-moderation.service';
+import { checkCommunityText, recordBlockedAttempt } from '../services/community-moderation.service';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
@@ -23,6 +24,23 @@ export const moderateComment = async (
         if (!content || !userId) {
             next();
             return;
+        }
+
+        const dbUser = await prisma.user.findUnique({
+            where: { clerkUserId: userId },
+            select: { id: true },
+        });
+        if (dbUser) {
+            const verdict = checkCommunityText(content);
+            if (!verdict.ok) {
+                void recordBlockedAttempt(dbUser.id, 'reel_comment', verdict);
+                res.status(422).json({
+                    status: 'ERROR',
+                    message: 'تم رفض التعليق بسبب محتوى غير لائق',
+                    code: verdict.code,
+                });
+                return;
+            }
         }
 
         // Moderate text

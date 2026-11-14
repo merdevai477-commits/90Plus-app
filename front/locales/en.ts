@@ -3941,6 +3941,8 @@ export const en = {
     writeComment: 'Write a comment…',
     replyingTo: 'Replying to {name}',
     reply: 'Reply',
+    editComment: 'Edit',
+    editingComment: 'Editing comment',
     like: 'Like',
     viewReplies: 'View {count} more replies',
     viewReply: 'View 1 more reply',

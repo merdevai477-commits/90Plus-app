@@ -266,6 +266,13 @@ export const communityApi = {
   deleteComment: (getToken: GetTokenFn, id: string) =>
     request<{ deleted: true }>(getToken, `/comments/${id}`, { method: 'DELETE' }),
 
+  updateComment: (getToken: GetTokenFn, id: string, content: string) =>
+    request<CommunityComment>(getToken, `/comments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }),
+
   likeComment: (getToken: GetTokenFn, id: string, like: boolean) =>
     request<{ likesCount: number; liked: boolean }>(getToken, `/comments/${id}/like`, { method: like ? 'POST' : 'DELETE' }),
 

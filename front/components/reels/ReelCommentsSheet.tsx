@@ -162,6 +162,7 @@ export function ReelCommentsSheet({ reelId, onClose, canModerate, onAdded, onRem
               fonts={fonts}
               labels={ctx.composerLabels}
               onSubmit={ctx.submit}
+              onEdit={ctx.edit}
               onError={ctx.onError}
               bottomInset={keyboardH > 0 ? 0 : insets.bottom}
             />

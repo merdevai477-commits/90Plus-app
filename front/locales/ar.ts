@@ -3850,6 +3850,8 @@ export const ar = {
     writeComment: 'اكتب تعليقا...',
     replyingTo: 'الرد على {name}',
     reply: 'رد',
+    editComment: 'تعديل',
+    editingComment: 'تعديل التعليق',
     like: 'أعجبني',
     viewReplies: 'عرض {count} ردود أخرى',
     viewReply: 'عرض رد آخر',

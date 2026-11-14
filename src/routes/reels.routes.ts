@@ -1330,6 +1330,15 @@ router.post('/:id/comments', requireAuth, writeLimiter, moderateComment, async (
             });
         });
 
+        void import('../services/community-moderation.service').then(({ enqueueCommunityAiModeration }) =>
+            enqueueCommunityAiModeration({
+                kind: 'reel_comment',
+                id: comment.id,
+                userId: user.id,
+                text: content.trim(),
+            }),
+        ).catch(() => undefined);
+
         res.status(201).json({ status: 'SUCCESS', data: { comment } });
     } catch (error: any) {
         logger.error('Add comment error:', error);
@@ -1703,6 +1712,64 @@ router.delete('/comments/:commentId/like', requireAuth, writeLimiter, async (req
         res.json({ status: 'SUCCESS', data: { likesCount } });
     } catch (error: any) {
         logger.error('Unlike comment error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * PATCH /api/reels/comments/:commentId
+ * Edit your own reel comment. Same profanity gate as creating one.
+ */
+router.patch('/comments/:commentId', requireAuth, writeLimiter, moderateComment, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const commentIdStr = ensureString(req.params.commentId);
+        const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+        if (!content) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Comment content is required');
+            return;
+        }
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: req.auth?.userId || '' },
+            select: { id: true },
+        });
+        if (!user) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+        const existing = await prisma.comment.findUnique({
+            where: { id: commentIdStr },
+            select: { id: true, userId: true, isDeleted: true, reelId: true },
+        });
+        if (!existing || existing.isDeleted) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Comment not found');
+            return;
+        }
+        if (existing.userId !== user.id) {
+            sendError(req, res, ErrorCode.AUTHORIZATION, 'You can only edit your own comments');
+            return;
+        }
+        const comment = await prisma.comment.update({
+            where: { id: commentIdStr },
+            data: { content },
+            select: {
+                id: true,
+                content: true,
+                parentId: true,
+                createdAt: true,
+                user: { select: { id: true, username: true, displayName: true, avatar: true, isVerified: true, isDeveloper: true } },
+            },
+        });
+        void import('../services/community-moderation.service').then(({ enqueueCommunityAiModeration }) =>
+            enqueueCommunityAiModeration({
+                kind: 'reel_comment',
+                id: comment.id,
+                userId: user.id,
+                text: content,
+            }),
+        ).catch(() => undefined);
+        res.json({ status: 'SUCCESS', data: { comment } });
+    } catch (error: any) {
+        logger.error('Edit comment error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
