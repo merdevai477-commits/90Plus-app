@@ -14,6 +14,7 @@ import { ErrorCode, sendError } from '../constants/errors';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 import { getBlockRelation } from '../services/block.service';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
+import { countReceivedLikes } from '../utils/profile-likes';
 import { AuditService } from '../services/audit.service';
 import { OnboardingService } from '../services/onboarding.service';
 
@@ -754,6 +755,8 @@ router.get('/user/:username', optionalAuth, async (req: Request, res: Response):
             return;
         }
 
+        const likesPromise = countReceivedLikes(user.id);
+
         // Check if current user is following this user AND if this user is following current user
         let isFollowing = false;
         let isFollowingMe = false;
@@ -789,6 +792,7 @@ router.get('/user/:username', optionalAuth, async (req: Request, res: Response):
                     country: user.country || null,
                     ...followCountsFromPrisma(user._count),
                     reelsCount: user._count.reels,
+                    totalLikes: await likesPromise,
                     isFollowing,
                     isFollowingMe,
                     blockStatus,

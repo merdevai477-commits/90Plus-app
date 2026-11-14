@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { communityApi, type CommunityPost } from '../../services/community.api';
 import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
@@ -7,6 +7,7 @@ import { usePostActions } from '../../hooks/community/usePostActions';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { CommentsSheet } from '../community/CommentsSheet';
+import { useFeedMetrics } from '../community/CommunityFeedList';
 import { PostCard } from '../community/PostCard';
 import { formatRelativeTime } from '../community/format';
 
@@ -15,7 +16,7 @@ export function ProfilePostsPane({ username }: { username: string }) {
   const actions = usePostActions();
   const { t, language } = useTranslation();
   const s = t.community;
-  const { width } = useWindowDimensions();
+  const metrics = useFeedMetrics();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,12 +72,12 @@ export function ProfilePostsPane({ username }: { username: string }) {
   }
 
   return (
-    <View style={styles.list}>
+    <View style={[styles.list, { paddingHorizontal: metrics.sidePad }]}>
       {posts.map((post, index) => (
         <PostCard
           key={post.id}
           post={post}
-          contentWidth={Math.max(280, width - 40)}
+          contentWidth={metrics.contentWidth}
           isAr={isAr}
           timeLabel={formatRelativeTime(post.createdAt, s)}
           fonts={fonts}

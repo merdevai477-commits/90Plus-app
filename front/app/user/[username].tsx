@@ -600,6 +600,7 @@ function UserProfileScreen() {
         scrollY={profileScrollY}
         name={user.displayName || user.username}
         avatarUri={user.avatar}
+        userId={user.id}
         onBack={() => router.back()}
       />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
@@ -723,7 +724,7 @@ function UserProfileScreen() {
             {
               key: 'likes',
               icon: PROFILE_ICONS.heart,
-              value: userVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
+              value: user.totalLikes ?? userVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
               label: t.profile.likes,
             },
           ]}
@@ -790,11 +791,10 @@ function UserProfileScreen() {
           />
         </View>
 
-        <View style={s.contentPanel}>
         {activeTab === 'posts' && user.username ? (
           <ProfilePostsPane username={user.username} />
-        ) : null}
-
+        ) : (
+        <View style={s.contentPanel}>
         {activeTab === 'videos' && (
           <>
         {isLoadingVideos ? (
@@ -844,6 +844,7 @@ function UserProfileScreen() {
           <ProfileAchievementsTab analytics={null} />
         )}
         </View>
+        )}
           </>
         )}
           </>

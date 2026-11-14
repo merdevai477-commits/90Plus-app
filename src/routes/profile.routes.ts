@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
+import { countReceivedLikes } from '../utils/profile-likes';
 import { ProfileController } from '../controllers/profile.controller';
 import { moderateBio } from '../middleware/content-moderation.middleware';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
@@ -431,10 +432,8 @@ router.get('/analytics', requireAuth, responseCacheMiddleware({ ttl: 2 * 60 * 10
                 where: { userId: user.id },
                 _sum: { views: true },
             }),
-            // Count total likes across all user's reels
-            prisma.like.count({
-                where: { reel: { userId: user.id } },
-            }),
+            // Reel likes plus community post likes
+            countReceivedLikes(user.id),
             // Count total comments across all user's reels
             prisma.comment.count({
                 where: { reel: { userId: user.id } },

@@ -19,8 +19,6 @@ import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
-import ProfileSpinAndWin from '../../components/profile/ProfileSpinAndWin';
-import SpinAndWinButton from '../../components/profile/SpinAndWinButton';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
@@ -667,7 +665,6 @@ function OwnProfileScreen() {
   const [showStreakInfo, setShowStreakInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showLuckyWheel, setShowLuckyWheel] = useState(false);
   const addLinkPlatform = addLinkOpen;
   const setAddLinkPlatform = useCallback((platform?: unknown) => {
     if (platform === null || platform === false) {
@@ -1710,6 +1707,7 @@ function OwnProfileScreen() {
         scrollY={profileScrollY}
         name={userData?.displayName || userData?.username || ''}
         avatarUri={localImage || userData?.avatar || null}
+        userId={userData?.id}
       />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
       <Animated.ScrollView
@@ -1835,17 +1833,6 @@ function OwnProfileScreen() {
           ]}
         />
 
-        <ProfileSpinAndWin
-          visible={showLuckyWheel}
-          onClose={() => setShowLuckyWheel(false)}
-          button={
-            <SpinAndWinButton
-              label={t.profile.spinAndWinCta}
-              onPress={() => setShowLuckyWheel(true)}
-            />
-          }
-        />
-
         <ProfileConnectCard
           links={socialLinks}
           isOwnProfile
@@ -1867,11 +1854,10 @@ function OwnProfileScreen() {
           />
         </View>
 
+        {activeTab === 'posts' && userData?.username ? (
+          <ProfilePostsPane username={userData.username} />
+        ) : (
         <View style={styles.contentPanel}>
-          {activeTab === 'posts' && userData?.username ? (
-            <ProfilePostsPane username={userData.username} />
-          ) : null}
-
           {activeTab === 'videos' && (
             <VideoGrid
               videos={myVideos}
@@ -1900,6 +1886,7 @@ function OwnProfileScreen() {
             <ProfileAchievementsTab analytics={analytics} />
           )}
         </View>
+        )}
 
         <View style={{ height: 100 }} />
       </Animated.ScrollView>

@@ -788,6 +788,7 @@ export interface SearchUserResult {
     followersCount?: number;
     followingCount?: number;
     reelsCount?: number;
+    totalLikes?: number;
     isFollowing?: boolean;
     isFollowingMe?: boolean; // True if this user is following the current user
     // FIFA Card fields
