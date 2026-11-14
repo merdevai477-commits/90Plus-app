@@ -1708,6 +1708,8 @@ function OwnProfileScreen() {
         name={userData?.displayName || userData?.username || ''}
         avatarUri={localImage || userData?.avatar || null}
         userId={userData?.id}
+        isVerified={userData?.isVerified || false}
+        isDeveloper={userData?.isDeveloper || false}
       />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
       <Animated.ScrollView

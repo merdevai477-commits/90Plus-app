@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, I18nManager, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassRim, GlassSheen } from '../navigation/glass';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import DeveloperBadge from './DeveloperBadge';
 import ProfileEliteMarks from './ProfileEliteMarks';
+import VerifiedBadge from './VerifiedBadge';
 
 const REVEAL_START = 120;
 const REVEAL_END = 200;
@@ -46,12 +48,16 @@ export function ProfileCollapsedBar({
   name,
   avatarUri,
   userId,
+  isVerified = false,
+  isDeveloper = false,
   onBack,
 }: {
   scrollY: Animated.Value;
   name: string;
   avatarUri?: string | null;
   userId?: string | null;
+  isVerified?: boolean;
+  isDeveloper?: boolean;
   onBack?: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -119,6 +125,8 @@ export function ProfileCollapsedBar({
               <Text style={[styles.name, { fontFamily: nameFont }]} numberOfLines={1}>
                 {name}
               </Text>
+              {isVerified ? <VerifiedBadge size={16} /> : null}
+              {isDeveloper ? <DeveloperBadge size={16} /> : null}
               <ProfileEliteMarks userId={userId} />
             </View>
           </View>
@@ -180,14 +188,13 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   identity: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarSlot: {
     position: 'absolute',
-    left: 10,
+    ...(I18nManager.isRTL ? { right: 10 } : { left: 10 }),
     top: 0,
     bottom: 0,
     justifyContent: 'center',
@@ -197,7 +204,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    maxWidth: '58%',
+    maxWidth: '64%',
   },
   pressed: {
     transform: [{ scale: 0.92 }],

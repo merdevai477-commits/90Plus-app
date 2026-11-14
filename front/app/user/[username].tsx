@@ -601,6 +601,8 @@ function UserProfileScreen() {
         name={user.displayName || user.username}
         avatarUri={user.avatar}
         userId={user.id}
+        isVerified={user.isVerified}
+        isDeveloper={user.isDeveloper}
         onBack={() => router.back()}
       />
       <ProfileGridScrollProvider tick={gridScroll.tick}>
