@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { communityApi, type CommunityPost } from '../../services/community.api';
-import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
+import { type CommunityPost } from '../../services/community.api';
+import { useCommunityPosts } from '../../hooks/community/useCommunityFeed';
 import { usePostActions } from '../../hooks/community/usePostActions';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
@@ -12,16 +12,11 @@ import { PostCard } from '../community/PostCard';
 import { formatRelativeTime } from '../community/format';
 
 export function ProfilePostsPane({ username }: { username: string }) {
-  const getToken = useCommunityToken();
   const actions = usePostActions();
   const { t, language } = useTranslation();
   const s = t.community;
   const metrics = useFeedMetrics();
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const feed = useCommunityPosts({ kind: 'user', username });
   const [sheetPost, setSheetPost] = useState<CommunityPost | null>(null);
   const isAr = language === 'ar';
   const fonts = useMemo(
@@ -40,40 +35,19 @@ export function ProfilePostsPane({ username }: { username: string }) {
     [s],
   );
 
-  const load = useCallback(async (next: string | null, append: boolean) => {
-    if (append) setLoadingMore(true);
-    else setLoading(true);
-    setFailed(false);
-    try {
-      const page = await communityApi.userPosts(getToken, username, next);
-      setPosts((prev) => (append ? [...prev, ...page.items] : page.items));
-      setCursor(page.nextCursor);
-    } catch {
-      if (!append) setPosts([]);
-      setFailed(true);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [getToken, username]);
-
-  useEffect(() => {
-    void load(null, false);
-  }, [load]);
-
-  if (loading) {
+  if (feed.isLoading) {
     return <ActivityIndicator color="#C4B5FD" style={styles.pad} />;
   }
-  if (failed && posts.length === 0) {
+  if (feed.isError && feed.posts.length === 0) {
     return <Text style={styles.empty}>{s.errorTitle}</Text>;
   }
-  if (!posts.length) {
+  if (!feed.posts.length) {
     return <Text style={styles.empty}>{s.emptyTitle}</Text>;
   }
 
   return (
     <View style={[styles.list, { paddingHorizontal: metrics.sidePad }]}>
-      {posts.map((post, index) => (
+      {feed.posts.map((post, index) => (
         <PostCard
           key={post.id}
           post={post}
@@ -98,15 +72,14 @@ export function ProfilePostsPane({ username }: { username: string }) {
           onVote={actions.votePoll}
         />
       ))}
-      {cursor ? (
+      {feed.hasNextPage ? (
         <Text
           style={styles.more}
-          onPress={() => { if (!loadingMore) void load(cursor, true); }}
+          onPress={() => { if (!feed.isFetchingNextPage) void feed.fetchNextPage(); }}
         >
-          {loadingMore ? '…' : s.loadMore}
+          {feed.isFetchingNextPage ? '…' : s.loadMore}
         </Text>
       ) : null}
-      {failed ? <Text style={styles.empty}>{s.errorTitle}</Text> : null}
       <CommentsSheet post={sheetPost} onClose={() => setSheetPost(null)} />
     </View>
   );

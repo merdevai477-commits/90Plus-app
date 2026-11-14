@@ -105,18 +105,22 @@ export function ProfileCollapsedBar({
       <View pointerEvents="box-none" style={[styles.row, { flexDirection: rowDirection }]}>
         {isRTL ? null : back}
         <GlassIsland style={styles.titleIsland}>
-          <View style={[styles.identity, { flexDirection: rowDirection }]}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.initial}>{(name || '?').slice(0, 1)}</Text>
-              </View>
-            )}
-            <Text style={[styles.name, { fontFamily: nameFont }]} numberOfLines={1}>
-              {name}
-            </Text>
-            <ProfileEliteMarks userId={userId} />
+          <View style={styles.identity}>
+            <View style={styles.avatarSlot}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text style={styles.initial}>{(name || '?').slice(0, 1)}</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.nameCluster}>
+              <Text style={[styles.name, { fontFamily: nameFont }]} numberOfLines={1}>
+                {name}
+              </Text>
+              <ProfileEliteMarks userId={userId} />
+            </View>
           </View>
         </GlassIsland>
         {isRTL ? back : null}
@@ -176,10 +180,24 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   identity: {
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
     width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarSlot: {
+    position: 'absolute',
+    left: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  nameCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    maxWidth: '58%',
   },
   pressed: {
     transform: [{ scale: 0.92 }],
