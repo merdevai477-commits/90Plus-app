@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   },
   avatarSlot: {
     position: 'absolute',
-    ...(I18nManager.isRTL ? { right: 10 } : { left: 10 }),
+    ...(I18nManager.isRTL ? { left: 10 } : { right: 10 }),
     top: 0,
     bottom: 0,
     justifyContent: 'center',
