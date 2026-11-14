@@ -2656,6 +2656,8 @@ export const ar = {
     eliteBadgeExpired: 'انتهت',
     eliteBadgeRevoked: 'سُحبت',
     eliteBadgeUntil: 'حتى {date}',
+    eliteBadgeMeaningFallback: 'شارة تقدير يختارها فريق 90+ لهذا الحساب.',
+    eliteBadgeClose: 'حسناً',
 
     // مهام إكمال البروفايل
     completionTasksTitle: 'مهام البروفايل',

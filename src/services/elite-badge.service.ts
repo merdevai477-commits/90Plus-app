@@ -1,5 +1,5 @@
 /**
- * Mentor and automatic recognition awards.
+ * Mentor recognition awards. Automatic milestones do not create badges.
  * Does not change prediction, XP, or coin scoring.
  */
 
@@ -10,6 +10,7 @@ import {
     activeSlotFor,
     expiresAtFor,
     isAwardActive,
+    isMentorAward,
     type EliteAwardDuration,
 } from '../data/elite-badge-catalog';
 
@@ -66,13 +67,14 @@ export async function loadFeaturedBadges(userIds: string[]): Promise<Map<string,
             userId: { in: ids },
             revokedAt: null,
             activeSlot: { not: null },
+            awardedBy: { not: 'system' },
             OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
         },
         orderBy: { createdAt: 'desc' },
         include: { badge: true },
     });
     for (const row of rows) {
-        if (map.has(row.userId) || !isAwardActive(row, now)) continue;
+        if (map.has(row.userId) || !isMentorAward(row.awardedBy) || !isAwardActive(row, now)) continue;
         map.set(row.userId, featuredFrom(row));
     }
     return map;
@@ -298,11 +300,11 @@ export async function badgeDeskOverview() {
 export async function listUserEliteBadges(userId: string) {
     const now = new Date();
     const rows = await prisma.eliteBadgeAward.findMany({
-        where: { userId },
+        where: { userId, awardedBy: { not: 'system' } },
         orderBy: { createdAt: 'desc' },
         include: { badge: true, competition: { select: { id: true, prizeName: true } } },
     });
-    return rows.map((row) => ({
+    return rows.filter((row) => isMentorAward(row.awardedBy)).map((row) => ({
         id: row.id,
         key: row.badge.key,
         nameAr: row.badge.nameAr,

@@ -21,7 +21,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 
 import ProfileHero from '../../components/profile/ProfileHero';
-import EliteBadgeShelf from '../../components/profile/EliteBadgeShelf';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
@@ -620,6 +619,7 @@ function UserProfileScreen() {
           username={user.username}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}
+          userId={user.id}
           isOwnProfile={false}
           level={userLevel}
           xp={userXp}
@@ -689,7 +689,6 @@ function UserProfileScreen() {
           </View>
         )}
 
-        <EliteBadgeShelf userId={user.id} />
         <ProfileMetricStrip
           items={[
             {

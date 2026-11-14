@@ -36,6 +36,11 @@ export function activeSlotFor(userId: string, badgeId: string, competitionId?: s
     return `${userId}:${badgeId}:${competitionId || 'global'}`;
 }
 
+/** Mentor grants use actor "ass". Automatic milestones used "system" and must stay hidden. */
+export function isMentorAward(awardedBy: string | null | undefined): boolean {
+    return typeof awardedBy === 'string' && awardedBy.length > 0 && awardedBy !== 'system';
+}
+
 export function isAwardActive(
     award: { revokedAt: Date | null; expiresAt: Date | null; activeSlot?: string | null },
     now = new Date(),

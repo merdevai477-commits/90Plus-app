@@ -2702,6 +2702,8 @@ export const en = {
     eliteBadgeExpired: 'Expired',
     eliteBadgeRevoked: 'Revoked',
     eliteBadgeUntil: 'Until {date}',
+    eliteBadgeMeaningFallback: 'A recognition badge chosen by the 90Plus team for this account.',
+    eliteBadgeClose: 'Got it',
 
     // Profile completion (steps shown in ProfileTasksModal + completion pill)
     completionTasksTitle: 'Profile tasks',

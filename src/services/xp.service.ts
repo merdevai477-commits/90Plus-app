@@ -590,10 +590,6 @@ export async function awardDailyLogin(userId: string, timezone: string): Promise
     where: { id: userId },
     data: { consecutiveLoginDays: streak.current, lastLoginDate: new Date() },
   });
-  void import('./elite-badge-auto.service')
-    .then((mod) => mod.awardLoginStreakMilestone(userId, streak.current))
-    .catch(() => undefined);
-
   // Award XP based on streak day
   const xpAmount = getLoginStreakXp(streak.current);
 

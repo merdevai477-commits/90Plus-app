@@ -16,6 +16,7 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import { PROFILE_STADIUM_COVER, PROFILE_ICONS } from './profileV2Assets';
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
+import ProfileEliteMarks from './ProfileEliteMarks';
 import { formatProfileStat } from './formatProfileStat';
 import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
@@ -73,6 +74,7 @@ export interface ProfileHeroProps {
   username: string;
   isVerified?: boolean;
   isDeveloper?: boolean;
+  userId?: string | null;
   isOwnProfile?: boolean;
   level: number;
   xp: number;
@@ -107,6 +109,7 @@ const ProfileHero = memo(function ProfileHero({
   username,
   isVerified = false,
   isDeveloper = false,
+  userId = null,
   isOwnProfile = false,
   level,
   xp,
@@ -402,6 +405,7 @@ const ProfileHero = memo(function ProfileHero({
             </Text>
             {isVerified && <VerifiedBadge size={18} />}
             {isDeveloper && <DeveloperBadge size={18} />}
+            <ProfileEliteMarks userId={userId} />
           </View>
           <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={1.2}>
             @{username}

@@ -1,4 +1,4 @@
-import { activeSlotFor, expiresAtFor, isAwardActive, takeTop } from '../elite-badge-catalog';
+import { activeSlotFor, expiresAtFor, isAwardActive, isMentorAward, takeTop } from '../elite-badge-catalog';
 
 describe('elite badge catalog', () => {
     it('keeps permanent awards open and expires timed ones', () => {
@@ -8,6 +8,13 @@ describe('elite badge catalog', () => {
         expect(isAwardActive({ revokedAt: null, expiresAt: null, activeSlot: 'slot' }, now)).toBe(true);
         expect(isAwardActive({ revokedAt: now, expiresAt: null, activeSlot: 'slot' }, now)).toBe(false);
         expect(isAwardActive({ revokedAt: null, expiresAt: new Date('2026-11-01T00:00:00Z'), activeSlot: 'slot' }, now)).toBe(false);
+    });
+
+    it('shows a badge only when a mentor chose the recipient', () => {
+        expect(isMentorAward('ass')).toBe(true);
+        expect(isMentorAward('system')).toBe(false);
+        expect(isMentorAward(null)).toBe(false);
+        expect(isMentorAward('')).toBe(false);
     });
 
     it('does not invent candidates beyond the rows that exist', () => {

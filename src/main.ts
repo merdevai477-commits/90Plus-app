@@ -1157,9 +1157,7 @@ async function startServer() {
                     cron.schedule('20 * * * *', async () => {
                         try {
                             const { expireDueAwards } = await import('./services/elite-badge.service');
-                            const { evaluateEliteMilestones } = await import('./services/elite-badge-auto.service');
                             await expireDueAwards();
-                            await evaluateEliteMilestones();
                         } catch (error) {
                             logger.error('❌ Elite badge cron failed:', error);
                         }

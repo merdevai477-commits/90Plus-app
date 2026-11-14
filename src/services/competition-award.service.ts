@@ -161,10 +161,6 @@ export async function awardWinner(
   });
   const winnerLabel = winnerUser?.displayName || winnerUser?.username || 'winner';
 
-  void import('./elite-badge-auto.service')
-    .then((mod) => mod.awardCompetitionChampion(entry.userId, competitionId, competition.prizeName))
-    .catch((err: any) => logger.warn('[elite-badge] competition champion skipped', err?.message));
-
   await recordCompetitionActivity(competitionId, 'WINNER_AWARDED', {
     entryId: entry.id,
     userId: entry.userId,
