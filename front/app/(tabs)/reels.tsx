@@ -377,7 +377,7 @@ const ReelsFeed: React.FC = () => {
   const haptic = useHaptic();
   const { t } = useTranslation();
   const { getToken } = useAuth();
-  const { uploadedVideos, userVideoData, reelComments, addComment, toggleCommentLike, likedReelIds, toggleReelLike } = useVideos();
+  const { uploadedVideos, userVideoData, likedReelIds, toggleReelLike } = useVideos();
 
   const ownReelIds = useMemo(
     () => new Set(uploadedVideos.map((v) => v.id)),
@@ -397,9 +397,6 @@ const ReelsFeed: React.FC = () => {
       toastManager.showReportSuccess();
     }
   });
-
-  // ✅ Ref to track previous comments for each reel to prevent unnecessary re-renders
-  const commentsRef = useRef<Record<string, Comment[]>>({});
 
   // ✅ FIX: Memoize callbacks to prevent infinite focus/unfocus loop
   const handlePauseAll = useCallback(() => {
@@ -1273,23 +1270,6 @@ const ReelsFeed: React.FC = () => {
     }
   }, [haptic, getToken, t.reels.unsaved, t.reels.saved]);
 
-  // Handle Add Comment
-  const handleAddComment = useCallback((reelId: string, comment: Comment) => {
-    addComment(reelId, comment);
-
-    // Update comment count in reel
-    setReels(prevReels => prevReels.map(reel =>
-      reel.id === reelId
-        ? { ...reel, comments: reel.comments + 1 }
-        : reel
-    ));
-  }, [addComment]);
-
-  // Handle Toggle Comment Like
-  const handleToggleCommentLike = useCallback((reelId: string, commentId: string) => {
-    toggleCommentLike(reelId, commentId);
-  }, [toggleCommentLike]);
-
   // Handle Hashtag Press
   const handleHashtagPress = useCallback((tag: string) => {
     haptic.trigger('light');
@@ -1383,33 +1363,6 @@ const ReelsFeed: React.FC = () => {
       Alert.alert(t.common.error, t.reels.editFailed);
     }
   }, [getToken]);
-
-  // ✅ Get comments for modal with stable reference - only updates when IDs actually change
-  // ✅ FIX: Use refs to prevent infinite loop by avoiding dependency on object property
-  const prevCommentsIdsRef = useRef<string>('');
-  const prevCommentsResultRef = useRef<Comment[]>([]);
-
-  const commentsForModal = useMemo(() => {
-    if (!selectedReelId) {
-      prevCommentsIdsRef.current = '';
-      prevCommentsResultRef.current = [];
-      return [];
-    }
-
-    const currentComments = reelComments[selectedReelId] || [];
-    const currentIds = currentComments.map(c => c.id).join(',');
-
-    // ✅ Only return new array reference if IDs actually changed
-    if (currentIds === prevCommentsIdsRef.current) {
-      return prevCommentsResultRef.current;
-    }
-
-    // Update refs and return new comments
-    prevCommentsIdsRef.current = currentIds;
-    prevCommentsResultRef.current = currentComments;
-    commentsRef.current[selectedReelId] = currentComments;
-    return currentComments;
-  }, [selectedReelId, reelComments]); // ✅ Depend on full object, but use refs to prevent unnecessary updates
 
   // Handle Refresh - reload from backend (skip cache for fresh data)
   const handleRefresh = useCallback(async () => {
@@ -1747,9 +1700,17 @@ const ReelsFeed: React.FC = () => {
           setHighlightReplyId(null);
         }}
         reelId={selectedReelId}
-        comments={commentsForModal} // ✅ Use memoized comments
-        onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
-        onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
+        canModerate={reels.find((reel) => reel.id === selectedReelId)?.user.id === currentUserId}
+        onAddComment={() => {
+          setReels((prev) => prev.map((reel) => (
+            reel.id === selectedReelId ? { ...reel, comments: reel.comments + 1 } : reel
+          )));
+        }}
+        onRemoved={() => {
+          setReels((prev) => prev.map((reel) => (
+            reel.id === selectedReelId ? { ...reel, comments: Math.max(0, reel.comments - 1) } : reel
+          )));
+        }}
         highlightCommentId={highlightCommentId}
         highlightReplyId={highlightReplyId}
       />

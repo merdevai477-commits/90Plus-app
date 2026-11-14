@@ -1381,7 +1381,7 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
 
         res.json({
             status: 'SUCCESS',
-            data: { replies: replies.map((r) => formatCommentEngagement(r)) },
+            data: { replies: await stampReelIdentity(replies.map((r) => formatCommentEngagement(r))) },
         });
     } catch (error: any) {
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
@@ -1738,7 +1738,11 @@ router.delete('/comments/:commentId', requireAuth, strictLimiter, async (req: Re
             return;
         }
 
-        if (comment.userId !== user.id) {
+        const reelOwner = await prisma.reel.findUnique({
+            where: { id: comment.reelId },
+            select: { userId: true },
+        });
+        if (comment.userId !== user.id && reelOwner?.userId !== user.id) {
             sendError(req, res, ErrorCode.AUTHORIZATION, 'You can only delete your own comments');
             return;
         }

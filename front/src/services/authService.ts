@@ -1377,10 +1377,12 @@ export class ReelsService {
     static async getComments(
         token: string,
         reelId: string,
-        limit: number = 3,
-    ): Promise<{ comments: any[]; error?: string }> {
+        limit: number = 20,
+        cursor?: string | null,
+    ): Promise<{ comments: any[]; nextCursor?: string | null; totalCount?: number; error?: string }> {
         try {
-            const response = await fetch(`${API_URL}/reels/${reelId}/comments?limit=${limit}`, {
+            const cursorQuery = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+            const response = await fetch(`${API_URL}/reels/${reelId}/comments?limit=${limit}${cursorQuery}`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -1390,7 +1392,11 @@ export class ReelsService {
 
             const data = await response.json();
             if (response.ok && data.status === 'SUCCESS') {
-                return { comments: data.data.comments || [] };
+                return {
+                    comments: data.data.comments || [],
+                    nextCursor: data.data.nextCursor ?? null,
+                    totalCount: data.data.totalCount,
+                };
             }
             return {
                 comments: [],
