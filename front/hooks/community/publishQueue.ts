@@ -45,6 +45,7 @@ export interface PendingPost {
   kind?: 'TEXT' | 'TEAM_POLL';
   pollOptionA?: string;
   pollOptionB?: string;
+  pollOptions?: string[];
   image: LocalImage | null;
   author: CommunityAuthor;
   createdAt: string;
@@ -155,6 +156,7 @@ interface PublishInput {
   kind?: 'TEXT' | 'TEAM_POLL';
   pollOptionA?: string;
   pollOptionB?: string;
+  pollOptions?: string[];
   author: CommunityAuthor;
   onPublished?: (post: CommunityPost) => void;
 }
@@ -172,6 +174,7 @@ export function publishPost(input: PublishInput): void {
     kind,
     pollOptionA: input.pollOptionA,
     pollOptionB: input.pollOptionB,
+    pollOptions: input.pollOptions,
     image: isPoll ? null : (draft?.local ?? null),
     author: input.author,
     createdAt: new Date().toISOString(),
@@ -200,7 +203,11 @@ export function publishPost(input: PublishInput): void {
         clientId,
         kind,
         ...(isPoll
-          ? { pollOptionA: input.pollOptionA?.trim(), pollOptionB: input.pollOptionB?.trim() }
+          ? {
+              pollOptionA: input.pollOptions?.[0]?.trim() ?? input.pollOptionA?.trim(),
+              pollOptionB: input.pollOptions?.[1]?.trim() ?? input.pollOptionB?.trim(),
+              pollOptions: input.pollOptions?.map((option) => option.trim()).filter(Boolean),
+            }
           : {}),
       });
       uploads.delete(clientId);

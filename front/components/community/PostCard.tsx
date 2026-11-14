@@ -1,7 +1,6 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ChevronLeft } from 'lucide-react-native';
@@ -15,7 +14,9 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 
-import type { CommunityPost } from '../../services/community.api';
+import { pollChoices, pollTotal, pollVotedIndex, type CommunityPost } from '../../services/community.api';
+import { useTranslation } from '../../src/i18n';
+import { PollVotersSheet } from './PollVotersSheet';
 import { CommunityAvatar } from './CommunityAvatar';
 import { RichText } from './RichText';
 import { formatCount } from './format';
@@ -34,7 +35,7 @@ export interface PostCardHandlers {
   onHashtag: (tag: string) => void;
   onMention: (username: string) => void;
   onFollow?: (post: CommunityPost) => void;
-  onVote?: (post: CommunityPost, choice: 'A' | 'B') => void;
+  onVote?: (post: CommunityPost, optionIndex: number) => void;
 }
 
 export interface PostCardLabels {
@@ -175,68 +176,67 @@ function PollOptions({
   isAr,
   fonts,
   onVote,
+  onProfile,
 }: {
   post: CommunityPost;
   isAr: boolean;
   fonts: Props['fonts'];
-  onVote?: (post: CommunityPost, choice: 'A' | 'B') => void;
+  onVote?: (post: CommunityPost, optionIndex: number) => void;
+  onProfile: (username: string) => void;
 }) {
+  const { t } = useTranslation();
+  const [votersFor, setVotersFor] = useState<number | null>(null);
   const poll = post.poll;
   if (!poll) return null;
 
-  const total = poll.votesA + poll.votesB;
-  const showPct = poll.votedByMe !== null || total > 0;
-  const pctA = total > 0 ? Math.round((poll.votesA / total) * 100) : 0;
-  const pctB = total > 0 ? Math.round((poll.votesB / total) * 100) : 0;
+  const options = pollChoices(poll);
+  const total = pollTotal(poll);
+  const voted = pollVotedIndex(poll);
   const row = isAr ? 'row-reverse' : 'row';
-
-  const renderOption = (choice: 'A' | 'B', label: string, pct: number) => {
-    const selected = poll.votedByMe === choice;
-    const onPress = () => {
-      if (!onVote || selected) return;
-      onVote(post, choice);
-    };
-    const inner = (
-      <View style={styles.pollInner}>
-        <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
-          {label}
-        </Text>
-        {showPct ? (
-          <Text style={[styles.pollPct, { fontFamily: fonts.medium }]}>{pct}%</Text>
-        ) : null}
-      </View>
-    );
-    if (selected) {
-      return (
-        <Pressable
-          key={choice}
-          onPress={onPress}
-          style={[styles.pollBtn, { flex: 1 }]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: true }}
-        >
-          <LinearGradient colors={[C.accent, C.accentDeep]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.pollGradient}>
-            {inner}
-          </LinearGradient>
-        </Pressable>
-      );
-    }
-    return (
-      <Pressable
-        key={choice}
-        onPress={onPress}
-        style={[styles.pollBtn, styles.pollIdle, { flex: 1 }]}
-        accessibilityRole="button"
-      >
-        {inner}
-      </Pressable>
-    );
-  };
+  const voterOption = options.find((option) => option.index === votersFor) ?? null;
 
   return (
-    <View style={[styles.pollRow, { flexDirection: row }]}>
-      {renderOption('A', poll.optionA, pctA)}
-      {renderOption('B', poll.optionB, pctB)}
+    <View style={styles.pollStack}>
+      {options.map((option) => {
+        const selected = voted === option.index;
+        const pct = total > 0 ? Math.round((option.votes / total) * 100) : 0;
+        return (
+          <View key={option.index} style={[styles.pollOption, selected && styles.pollOptionSelected]}>
+            <View style={[styles.pollFill, { width: `${pct}%` }]} />
+            <Pressable
+              onPress={() => onVote?.(post, option.index)}
+              style={[styles.pollLabelHit, { flexDirection: row }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <Text style={[styles.pollText, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left' }]} numberOfLines={2}>
+                {option.label}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => option.votes > 0 && setVotersFor(option.index)}
+              disabled={option.votes === 0}
+              hitSlop={8}
+              style={styles.pollCountHit}
+              accessibilityRole="button"
+              accessibilityLabel={`${option.votes}`}
+            >
+              <Text style={[styles.pollPct, { fontFamily: fonts.medium }]}>{option.votes}</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+      <Text style={[styles.pollTotal, { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' }]}>
+        {t.community.pollVotesCount.replace('{n}', String(total))}
+      </Text>
+      <PollVotersSheet
+        postId={post.id}
+        optionIndex={votersFor}
+        optionLabel={voterOption?.label ?? ''}
+        visible={votersFor != null}
+        onClose={() => setVotersFor(null)}
+        onProfile={onProfile}
+      />
     </View>
   );
 }
@@ -372,7 +372,9 @@ function PostCardBase({
                 seeLessLabel={seeLess}
               />
             )}
-            {post.kind === 'TEAM_POLL' && <PollOptions post={post} isAr={isAr} fonts={fonts} onVote={onVote} />}
+            {post.kind === 'TEAM_POLL' && (
+              <PollOptions post={post} isAr={isAr} fonts={fonts} onVote={onVote} onProfile={onProfile} />
+            )}
           </View>
         )}
         <PostImage
@@ -535,6 +537,43 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 28,
     fontWeight: '500',
+  },
+  pollStack: {
+    gap: 8,
+    width: '100%',
+  },
+  pollOption: {
+    minHeight: 48,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: C.pollIdle,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pollOptionSelected: {
+    backgroundColor: 'rgba(94, 63, 190, 0.35)',
+  },
+  pollFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(139, 92, 246, 0.28)',
+  },
+  pollLabelHit: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pollCountHit: {
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  pollTotal: {
+    color: C.muted,
+    fontSize: 13,
   },
   pollRow: {
     gap: 8,

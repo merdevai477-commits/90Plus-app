@@ -107,17 +107,17 @@ export const GhostPostCard = memo(function GhostPostCard({
         )}
 
         {isPoll && (
-          <View style={[styles.pollRow, { flexDirection: row }]}>
-            <View style={[styles.pollBox, { flex: 1 }]}>
-              <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
-                {pending.pollOptionA ?? '…'}
-              </Text>
-            </View>
-            <View style={[styles.pollBox, { flex: 1 }]}>
-              <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
-                {pending.pollOptionB ?? '…'}
-              </Text>
-            </View>
+          <View style={styles.pollStack}>
+            {(pending.pollOptions?.length
+              ? pending.pollOptions
+              : [pending.pollOptionA ?? '…', pending.pollOptionB ?? '…']
+            ).map((label, index) => (
+              <View key={`${label}-${index}`} style={styles.pollBox}>
+                <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
+                  {label}
+                </Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -220,6 +220,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 23,
     paddingVertical: 10,
+  },
+  pollStack: {
+    gap: 8,
+    width: '100%',
   },
   pollRow: {
     gap: 10,

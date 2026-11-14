@@ -22,12 +22,41 @@ export interface CommunityAuthor {
   };
 }
 
+export interface CommunityPollOption {
+  index: number;
+  label: string;
+  votes: number;
+}
+
 export interface CommunityPoll {
   optionA: string;
   optionB: string;
   votesA: number;
   votesB: number;
   votedByMe: 'A' | 'B' | null;
+  options?: CommunityPollOption[];
+  votedIndex?: number | null;
+  totalVotes?: number;
+}
+
+export function pollChoices(poll: CommunityPoll): CommunityPollOption[] {
+  if (poll.options && poll.options.length >= 2) return poll.options;
+  return [
+    { index: 0, label: poll.optionA, votes: poll.votesA },
+    { index: 1, label: poll.optionB, votes: poll.votesB },
+  ];
+}
+
+export function pollVotedIndex(poll: CommunityPoll): number | null {
+  if (typeof poll.votedIndex === 'number') return poll.votedIndex;
+  if (poll.votedByMe === 'A') return 0;
+  if (poll.votedByMe === 'B') return 1;
+  return null;
+}
+
+export function pollTotal(poll: CommunityPoll): number {
+  if (typeof poll.totalVotes === 'number') return poll.totalVotes;
+  return pollChoices(poll).reduce((sum, option) => sum + option.votes, 0);
 }
 
 export interface CommunityImage {
@@ -179,11 +208,21 @@ export const communityApi = {
       kind?: 'TEXT' | 'TEAM_POLL';
       pollOptionA?: string;
       pollOptionB?: string;
+      pollOptions?: string[];
     },
   ) => request<CommunityPost>(getToken, '/posts', json(body)),
 
-  votePoll: (getToken: GetTokenFn, id: string, choice: 'A' | 'B') =>
-    request<CommunityPoll>(getToken, `/posts/${id}/vote`, json({ choice })),
+  votePoll: (getToken: GetTokenFn, id: string, optionIndex: number) =>
+    request<CommunityPoll>(getToken, `/posts/${id}/vote`, json({
+      optionIndex,
+      ...(optionIndex === 0 ? { choice: 'A' } : optionIndex === 1 ? { choice: 'B' } : {}),
+    })),
+
+  pollVoters: (getToken: GetTokenFn, id: string, optionIndex: number, cursor?: string | null) =>
+    request<CommunityPage<CommunityAuthor>>(
+      getToken,
+      `/posts/${id}/poll/voters${qs({ option: String(optionIndex), cursor })}`,
+    ),
 
   updatePost: (
     getToken: GetTokenFn,

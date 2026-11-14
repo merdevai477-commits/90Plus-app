@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { buildCommunityPostShareUrl } from '../../constants/shareLinks';
-import { communityApi, type CommunityPost, type ReportReason } from '../../services/community.api';
+import { communityApi, pollChoices, pollVotedIndex, type CommunityPost, type ReportReason } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
 import { FollowService } from '../../src/services/authService';
@@ -232,21 +232,30 @@ export function usePostActions() {
   );
 
   const votePoll = useCallback(
-    async (post: CommunityPost, choice: 'A' | 'B') => {
+    async (post: CommunityPost, optionIndex: number) => {
       const current = findPost(qc, post.id) ?? post;
-      if (!current.poll || current.poll.votedByMe === choice) return;
+      if (!current.poll) return;
       const prev = current.poll;
-      const from = prev.votedByMe;
+      const choices = pollChoices(prev);
+      const from = pollVotedIndex(prev);
+      if (from === optionIndex || optionIndex < 0 || optionIndex >= choices.length) return;
+      const options = choices.map((option) => ({
+        ...option,
+        votes: option.votes + (option.index === optionIndex ? 1 : 0) - (option.index === from ? 1 : 0),
+      }));
       const optimistic = {
         ...prev,
-        votedByMe: choice,
-        votesA: prev.votesA + (choice === 'A' ? 1 : 0) - (from === 'A' ? 1 : 0),
-        votesB: prev.votesB + (choice === 'B' ? 1 : 0) - (from === 'B' ? 1 : 0),
+        options,
+        votedIndex: optionIndex,
+        votedByMe: optionIndex === 0 ? 'A' as const : optionIndex === 1 ? 'B' as const : null,
+        votesA: options[0]?.votes ?? prev.votesA,
+        votesB: options[1]?.votes ?? prev.votesB,
+        totalVotes: options.reduce((sum, option) => sum + option.votes, 0),
       };
       updatePostEverywhere(qc, post.id, (p) => (p.poll ? { ...p, poll: optimistic } : p));
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
-        const poll = await communityApi.votePoll(getToken, post.id, choice);
+        const poll = await communityApi.votePoll(getToken, post.id, optionIndex);
         updatePostEverywhere(qc, post.id, (p) => ({ ...p, poll }));
       } catch (err) {
         updatePostEverywhere(qc, post.id, (p) => (p.poll ? { ...p, poll: prev } : p));

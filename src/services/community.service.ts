@@ -236,6 +236,8 @@ const postSelect = {
     kind: true,
     pollOptionA: true,
     pollOptionB: true,
+    pollOptions: true,
+    pollVoteCounts: true,
     pollVotesA: true,
     pollVotesB: true,
     imageUrl: true,
@@ -269,12 +271,97 @@ export interface CommunityAuthorDto {
 export type CommunityPostKindDto = 'TEXT' | 'TEAM_POLL';
 export type CommunityPollChoiceDto = 'A' | 'B';
 
+export interface CommunityPollOptionDto {
+    index: number;
+    label: string;
+    votes: number;
+}
+
 export interface CommunityTeamPollDto {
     optionA: string;
     optionB: string;
     votesA: number;
     votesB: number;
     votedByMe: CommunityPollChoiceDto | null;
+    options: CommunityPollOptionDto[];
+    votedIndex: number | null;
+    totalVotes: number;
+}
+
+export const POLL_MIN_OPTIONS = 2;
+export const POLL_MAX_OPTIONS = 6;
+
+function asLabelList(value: unknown): string[] | null {
+    if (!Array.isArray(value)) return null;
+    const labels = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    return labels.length >= POLL_MIN_OPTIONS ? labels : null;
+}
+
+function asCountList(value: unknown, length: number): number[] | null {
+    if (!Array.isArray(value) || value.length !== length) return null;
+    if (!value.every((item) => typeof item === 'number' && Number.isFinite(item))) return null;
+    return value.map((item) => Math.max(0, Math.floor(item)));
+}
+
+function pollLabels(row: {
+    pollOptionA: string | null;
+    pollOptionB: string | null;
+    pollOptions?: unknown;
+}): string[] {
+    return asLabelList(row.pollOptions) ?? (row.pollOptionA && row.pollOptionB ? [row.pollOptionA, row.pollOptionB] : []);
+}
+
+function pollCounts(
+    row: { pollVotesA: number; pollVotesB: number; pollVoteCounts?: unknown },
+    length: number,
+): number[] {
+    const stored = asCountList(row.pollVoteCounts, length);
+    if (stored) return stored;
+    return Array.from({ length }, (_, index) => {
+        if (index === 0) return Math.max(0, row.pollVotesA);
+        if (index === 1) return Math.max(0, row.pollVotesB);
+        return 0;
+    });
+}
+
+function choiceForIndex(index: number): CommunityPollChoiceDto | null {
+    if (index === 0) return 'A';
+    if (index === 1) return 'B';
+    return null;
+}
+
+function indexFromVote(vote: { optionIndex: number | null; choice: CommunityPollChoiceDto | null }): number | null {
+    if (typeof vote.optionIndex === 'number' && vote.optionIndex >= 0) return vote.optionIndex;
+    if (vote.choice === 'A') return 0;
+    if (vote.choice === 'B') return 1;
+    return null;
+}
+
+function toPollDto(
+    row: {
+        pollOptionA: string | null;
+        pollOptionB: string | null;
+        pollOptions?: unknown;
+        pollVotesA: number;
+        pollVotesB: number;
+        pollVoteCounts?: unknown;
+    },
+    votedIndex: number | null,
+): CommunityTeamPollDto | null {
+    const labels = pollLabels(row);
+    if (labels.length < POLL_MIN_OPTIONS) return null;
+    const counts = pollCounts(row, labels.length);
+    const options = labels.map((label, index) => ({ index, label, votes: counts[index] ?? 0 }));
+    return {
+        optionA: labels[0],
+        optionB: labels[1] ?? labels[0],
+        votesA: counts[0] ?? 0,
+        votesB: counts[1] ?? 0,
+        votedByMe: votedIndex === 0 ? 'A' : votedIndex === 1 ? 'B' : null,
+        options,
+        votedIndex,
+        totalVotes: counts.reduce((sum, count) => sum + count, 0),
+    };
 }
 
 export interface CommunityPostDto {
@@ -297,7 +384,7 @@ function toPostDto(
     viewerId: string,
     liked: Set<string>,
     following: Set<string>,
-    myPollVotes: Map<string, CommunityPollChoiceDto>,
+    myPollVotes: Map<string, number>,
 ): CommunityPostDto {
     const kind: CommunityPostKindDto = row.kind === 'TEAM_POLL' ? 'TEAM_POLL' : 'TEXT';
     return {
@@ -313,16 +400,7 @@ function toPostDto(
                   placeholder: row.imagePlaceholder,
               }
             : null,
-        poll:
-            kind === 'TEAM_POLL' && row.pollOptionA && row.pollOptionB
-                ? {
-                      optionA: row.pollOptionA,
-                      optionB: row.pollOptionB,
-                      votesA: row.pollVotesA,
-                      votesB: row.pollVotesB,
-                      votedByMe: myPollVotes.get(row.id) ?? null,
-                  }
-                : null,
+        poll: kind === 'TEAM_POLL' ? toPollDto(row, myPollVotes.get(row.id) ?? null) : null,
         author: { ...row.user, isFollowing: following.has(row.userId) },
         likesCount: row.likesCount,
         commentsCount: row.commentsCount,
@@ -413,13 +491,21 @@ async function followingAuthorIds(viewerId: string, authorIds: string[]): Promis
     return new Set(rows.map((r) => r.followingId));
 }
 
-async function myPollVotes(viewerId: string, postIds: string[]): Promise<Map<string, CommunityPollChoiceDto>> {
+async function myPollVotes(viewerId: string, postIds: string[]): Promise<Map<string, number>> {
     if (!postIds.length) return new Map();
     const rows = await prisma.communityPostPollVote.findMany({
         where: { userId: viewerId, postId: { in: postIds } },
-        select: { postId: true, choice: true },
+        select: { postId: true, choice: true, optionIndex: true },
     });
-    return new Map(rows.map((r) => [r.postId, r.choice as CommunityPollChoiceDto]));
+    const map = new Map<string, number>();
+    for (const row of rows) {
+        const index = indexFromVote({
+            optionIndex: row.optionIndex,
+            choice: row.choice === 'A' || row.choice === 'B' ? row.choice : null,
+        });
+        if (index != null) map.set(row.postId, index);
+    }
+    return map;
 }
 
 async function likedCommentIds(viewerId: string, commentIds: string[]): Promise<Set<string>> {
@@ -434,7 +520,7 @@ async function likedCommentIds(viewerId: string, commentIds: string[]): Promise<
 // ─── Feed ─────────────────────────────────────────────────────────────────
 
 export const FEED_PAGE_SIZE = 15;
-const FIRST_PAGE_CACHE_KEY = 'community:feed:first:v2';
+const FIRST_PAGE_CACHE_KEY = 'community:feed:first:v3';
 const FIRST_PAGE_TTL_MS = 45_000;
 export const POLL_OPTION_MAX_LENGTH = 40;
 
@@ -1099,6 +1185,34 @@ function cleanPollOption(raw: unknown): string {
     return raw.replace(/\s+/g, ' ').trim().slice(0, POLL_OPTION_MAX_LENGTH);
 }
 
+function parsePollOptions(input: { pollOptions?: unknown; pollOptionA?: unknown; pollOptionB?: unknown }): string[] {
+    const fromList = Array.isArray(input.pollOptions) ? input.pollOptions.map(cleanPollOption).filter(Boolean) : [];
+    const options = fromList.length
+        ? fromList
+        : [cleanPollOption(input.pollOptionA), cleanPollOption(input.pollOptionB)].filter(Boolean);
+    if (options.length < POLL_MIN_OPTIONS) {
+        throw new CommunityError(400, 'POLL_OPTIONS_REQUIRED', 'Add at least two options');
+    }
+    if (options.length > POLL_MAX_OPTIONS) {
+        throw new CommunityError(400, 'POLL_OPTIONS_LIMIT', `Polls allow up to ${POLL_MAX_OPTIONS} options`);
+    }
+    const seen = new Set<string>();
+    for (const option of options) {
+        const key = option.toLowerCase();
+        if (seen.has(key)) throw new CommunityError(400, 'POLL_OPTIONS_SAME', 'Options must be different');
+        seen.add(key);
+    }
+    return options;
+}
+
+function parseVoteIndex(choiceRaw: unknown, optionIndexRaw: unknown, optionCount: number): number {
+    const numeric = typeof optionIndexRaw === 'number' ? optionIndexRaw : Number(optionIndexRaw);
+    if (Number.isInteger(numeric) && numeric >= 0 && numeric < optionCount) return numeric;
+    if (choiceRaw === 'A' && optionCount > 0) return 0;
+    if (choiceRaw === 'B' && optionCount > 1) return 1;
+    throw new CommunityError(400, 'INVALID_VOTE', 'Pick one of the options');
+}
+
 export async function createPost(
     actor: CommunityActor,
     input: {
@@ -1108,6 +1222,7 @@ export async function createPost(
         kind?: unknown;
         pollOptionA?: unknown;
         pollOptionB?: unknown;
+        pollOptions?: unknown;
     },
 ): Promise<CommunityPostDto> {
     assertCanWrite(actor);
@@ -1118,16 +1233,11 @@ export async function createPost(
     const kind = parsePostKind(input.kind);
     const content = normalizeCommunityText(input.content);
     const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
-    const pollOptionA = kind === 'TEAM_POLL' ? cleanPollOption(input.pollOptionA) : '';
-    const pollOptionB = kind === 'TEAM_POLL' ? cleanPollOption(input.pollOptionB) : '';
+    const pollOptions = kind === 'TEAM_POLL' ? parsePollOptions(input) : [];
+    const pollOptionA = pollOptions[0] ?? '';
+    const pollOptionB = pollOptions[1] ?? '';
 
     if (kind === 'TEAM_POLL') {
-        if (!pollOptionA || !pollOptionB) {
-            throw new CommunityError(400, 'POLL_OPTIONS_REQUIRED', 'Enter both team names');
-        }
-        if (pollOptionA.toLowerCase() === pollOptionB.toLowerCase()) {
-            throw new CommunityError(400, 'POLL_OPTIONS_SAME', 'Team names must be different');
-        }
         if (mediaId) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
         if (content.length > POST_MAX_LENGTH) {
             throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
@@ -1135,8 +1245,7 @@ export async function createPost(
             });
         }
         if (content) await moderateOrThrow(actor.id, 'post', content);
-        await moderateOrThrow(actor.id, 'post', pollOptionA);
-        await moderateOrThrow(actor.id, 'post', pollOptionB);
+        for (const option of pollOptions) await moderateOrThrow(actor.id, 'post', option);
     } else {
         if (!content && !mediaId) throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
         if (content.length > POST_MAX_LENGTH) {
@@ -1170,6 +1279,8 @@ export async function createPost(
                 kind,
                 pollOptionA: kind === 'TEAM_POLL' ? pollOptionA : null,
                 pollOptionB: kind === 'TEAM_POLL' ? pollOptionB : null,
+                pollOptions: kind === 'TEAM_POLL' ? pollOptions : undefined,
+                pollVoteCounts: kind === 'TEAM_POLL' ? pollOptions.map(() => 0) : undefined,
                 imageUrl: media?.url ?? null,
                 imageStoragePath: media?.storagePath ?? null,
                 imageWidth: media?.width ?? null,
@@ -1202,7 +1313,7 @@ export async function createPost(
         kind: 'post',
         id: post.id,
         userId: actor.id,
-        text: kind === 'TEAM_POLL' ? [content, pollOptionA, pollOptionB].filter(Boolean).join('\n') : content,
+        text: kind === 'TEAM_POLL' ? [content, ...pollOptions].filter(Boolean).join('\n') : content,
         imageUrl: post.imageUrl,
     });
 
@@ -1238,70 +1349,146 @@ export async function createPost(
     return getPost(actor.id, post.id);
 }
 
-/** Cast or switch a vote on a TEAM_POLL post. */
+/** Cast or switch a single vote on a TEAM_POLL post. */
 export async function votePoll(
     actor: CommunityActor,
     postId: string,
     choiceRaw: unknown,
+    optionIndexRaw?: unknown,
 ): Promise<CommunityTeamPollDto> {
-    const choice: CommunityPollChoiceDto | null = choiceRaw === 'A' || choiceRaw === 'B' ? choiceRaw : null;
-    if (!choice) throw new CommunityError(400, 'INVALID_VOTE', 'Pick team A or B');
-
     const post = await prisma.communityPost.findFirst({
         where: { id: postId, status: 'ACTIVE', kind: 'TEAM_POLL' },
-        select: { id: true, pollOptionA: true, pollOptionB: true, pollVotesA: true, pollVotesB: true },
+        select: {
+            id: true,
+            pollOptionA: true,
+            pollOptionB: true,
+            pollOptions: true,
+            pollVotesA: true,
+            pollVotesB: true,
+            pollVoteCounts: true,
+        },
     });
-    if (!post?.pollOptionA || !post.pollOptionB) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
+    const labels = post ? pollLabels(post) : [];
+    if (!post || labels.length < POLL_MIN_OPTIONS) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
 
+    const index = parseVoteIndex(choiceRaw, optionIndexRaw, labels.length);
     const blocked = await blockedPairIds(actor.id);
     const owner = await prisma.communityPost.findUnique({ where: { id: postId }, select: { userId: true } });
     if (owner && blocked.has(owner.userId)) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
 
-    const result = await prisma.$transaction(async (tx) => {
+    const current = await prisma.$transaction(async (tx) => {
         const existing = await tx.communityPostPollVote.findUnique({
             where: { userId_postId: { userId: actor.id, postId } },
-            select: { choice: true },
+            select: { choice: true, optionIndex: true },
         });
-        if (existing?.choice === choice) {
-            const current = await tx.communityPost.findUniqueOrThrow({
-                where: { id: postId },
-                select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+        const previous = existing
+            ? indexFromVote({
+                  optionIndex: existing.optionIndex,
+                  choice: existing.choice === 'A' || existing.choice === 'B' ? existing.choice : null,
+              })
+            : null;
+        if (previous !== index) {
+            const choice = choiceForIndex(index);
+            if (!existing) {
+                await tx.communityPostPollVote.create({
+                    data: { userId: actor.id, postId, choice, optionIndex: index },
+                });
+            } else {
+                await tx.communityPostPollVote.update({
+                    where: { userId_postId: { userId: actor.id, postId } },
+                    data: { choice, optionIndex: index },
+                });
+            }
+            const grouped = await tx.communityPostPollVote.groupBy({
+                by: ['optionIndex'],
+                where: { postId },
+                _count: { _all: true },
             });
-            return { current, votedByMe: choice };
-        }
-
-        if (!existing) {
-            await tx.communityPostPollVote.create({ data: { userId: actor.id, postId, choice } });
-            const current = await tx.communityPost.update({
+            const counts = labels.map((_, option) => grouped.find((row) => row.optionIndex === option)?._count._all ?? 0);
+            return tx.communityPost.update({
                 where: { id: postId },
-                data: choice === 'A' ? { pollVotesA: { increment: 1 } } : { pollVotesB: { increment: 1 } },
-                select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+                data: {
+                    pollVotesA: counts[0] ?? 0,
+                    pollVotesB: counts[1] ?? 0,
+                    pollVoteCounts: counts,
+                    pollOptions: labels,
+                },
+                select: {
+                    pollOptionA: true,
+                    pollOptionB: true,
+                    pollOptions: true,
+                    pollVotesA: true,
+                    pollVotesB: true,
+                    pollVoteCounts: true,
+                },
             });
-            return { current, votedByMe: choice };
         }
-
-        await tx.communityPostPollVote.update({
-            where: { userId_postId: { userId: actor.id, postId } },
-            data: { choice },
-        });
-        const current = await tx.communityPost.update({
+        return tx.communityPost.findUniqueOrThrow({
             where: { id: postId },
-            data:
-                choice === 'A'
-                    ? { pollVotesA: { increment: 1 }, pollVotesB: { decrement: 1 } }
-                    : { pollVotesB: { increment: 1 }, pollVotesA: { decrement: 1 } },
-            select: { pollVotesA: true, pollVotesB: true, pollOptionA: true, pollOptionB: true },
+            select: {
+                pollOptionA: true,
+                pollOptionB: true,
+                pollOptions: true,
+                pollVotesA: true,
+                pollVotesB: true,
+                pollVoteCounts: true,
+            },
         });
-        return { current, votedByMe: choice };
     });
 
     void invalidateFeedCache();
+    const dto = toPollDto(current, index);
+    if (!dto) throw new CommunityError(404, 'POST_NOT_FOUND', 'Poll not found');
+    return dto;
+}
+
+/** Who voted for one option. Visible to every reader, including the publisher. */
+export async function listPollVoters(
+    viewerId: string,
+    postId: string,
+    optionRaw: unknown,
+    cursorRaw: unknown,
+): Promise<FeedPage<CommunityAuthorDto>> {
+    await activePostOrThrow(postId);
+    const optionIndex = typeof optionRaw === 'number' ? optionRaw : Number(optionRaw);
+    if (!Number.isInteger(optionIndex) || optionIndex < 0) {
+        throw new CommunityError(400, 'INVALID_VOTE', 'Pick one of the options');
+    }
+    const cursor = decodeCursor(cursorRaw);
+    const blocked = await blockedPairIds(viewerId);
+    const blockedIds = [...blocked];
+    const rows = await prisma.communityPostPollVote.findMany({
+        where: {
+            postId,
+            ...(blockedIds.length ? { userId: { notIn: blockedIds } } : {}),
+            AND: [
+                {
+                    OR: [
+                        { optionIndex },
+                        ...(optionIndex === 0 ? [{ optionIndex: null, choice: 'A' as const }] : []),
+                        ...(optionIndex === 1 ? [{ optionIndex: null, choice: 'B' as const }] : []),
+                    ],
+                },
+                ...(cursor
+                    ? [{
+                          OR: [
+                              { createdAt: { lt: cursor.createdAt } },
+                              { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                          ],
+                      }]
+                    : []),
+            ],
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: LIKERS_PAGE_SIZE + 1,
+        select: { id: true, createdAt: true, user: { select: authorSelect } },
+    });
+    const hasMore = rows.length > LIKERS_PAGE_SIZE;
+    const page = hasMore ? rows.slice(0, LIKERS_PAGE_SIZE) : rows;
+    const last = page[page.length - 1];
     return {
-        optionA: result.current.pollOptionA!,
-        optionB: result.current.pollOptionB!,
-        votesA: Math.max(0, result.current.pollVotesA),
-        votesB: Math.max(0, result.current.pollVotesB),
-        votedByMe: result.votedByMe,
+        items: page.map((row) => ({ ...row.user, isFollowing: false })),
+        nextCursor: hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
     };
 }
 

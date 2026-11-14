@@ -98,13 +98,13 @@ export default function ComposeScreen() {
     if (pending) return pending.content;
     return existing?.content ?? '';
   });
-  const [teamA, setTeamA] = useState(() => {
+  const [options, setOptions] = useState<string[]>(() => {
     const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
-    return pending?.pollOptionA ?? existing?.poll?.optionA ?? '';
-  });
-  const [teamB, setTeamB] = useState(() => {
-    const pending = usePublishStore.getState().pending.find((x) => x.clientId === params.restore);
-    return pending?.pollOptionB ?? existing?.poll?.optionB ?? '';
+    const saved = pending?.pollOptions?.filter(Boolean);
+    if (saved && saved.length >= 2) return saved;
+    const fromPost = existing?.poll?.options?.map((option) => option.label).filter(Boolean);
+    if (fromPost && fromPost.length >= 2) return fromPost;
+    return [pending?.pollOptionA ?? existing?.poll?.optionA ?? '', pending?.pollOptionB ?? existing?.poll?.optionB ?? ''];
   });
   const [caret, setCaret] = useState(0);
   const [keepRemoteImage, setKeepRemoteImage] = useState(() => !!existing?.image);
@@ -152,7 +152,11 @@ export default function ComposeScreen() {
   const hasRemoteImage = editing && keepRemoteImage && !!existing?.image && !hasLocalImage;
   const hasImage = !isPollMode && (hasLocalImage || hasRemoteImage);
   const trimmed = text.trim();
-  const teamsReady = teamA.trim().length > 0 && teamB.trim().length > 0;
+  const trimmedOptions = options.map((option) => option.trim());
+  const teamsReady =
+    trimmedOptions.length >= 2 &&
+    trimmedOptions.every(Boolean) &&
+    new Set(trimmedOptions.map((option) => option.toLowerCase())).size === trimmedOptions.length;
   const dirty =
     !editing ||
     trimmed !== (existing?.content ?? '').trim() ||
@@ -240,15 +244,16 @@ export default function ComposeScreen() {
         clientId,
         content: trimmed,
         kind: 'TEAM_POLL',
-        pollOptionA: teamA.trim(),
-        pollOptionB: teamB.trim(),
+        pollOptionA: trimmedOptions[0],
+        pollOptionB: trimmedOptions[1],
+        pollOptions: trimmedOptions,
         author: me,
       });
     } else {
       publishPost({ getToken, queryClient: qc, clientId, content: trimmed, author: me });
     }
     router.back();
-  }, [canPost, clientId, editing, getToken, isPollMode, me, qc, router, saveEdit, teamA, teamB, trimmed]);
+  }, [canPost, clientId, editing, getToken, isPollMode, me, qc, router, saveEdit, trimmed, trimmedOptions]);
 
   const mention = activeMentionQuery(text, caret);
   const slash = mention ? null : activeSlashQuery(text, caret);
@@ -387,30 +392,43 @@ export default function ComposeScreen() {
 
         {isPollMode && (
           <View style={styles.pollFields}>
-            <TextInput
-              value={teamA}
-              onChangeText={setTeamA}
-              placeholder={s.teamAPlaceholder}
-              placeholderTextColor={C.placeholder}
-              editable={!editingPoll}
-              style={[
-                styles.teamInput,
-                { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
-                editingPoll && styles.teamInputLocked,
-              ]}
-            />
-            <TextInput
-              value={teamB}
-              onChangeText={setTeamB}
-              placeholder={s.teamBPlaceholder}
-              placeholderTextColor={C.placeholder}
-              editable={!editingPoll}
-              style={[
-                styles.teamInput,
-                { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
-                editingPoll && styles.teamInputLocked,
-              ]}
-            />
+            {options.map((value, index) => (
+              <View key={index} style={[styles.optionRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <TextInput
+                  value={value}
+                  onChangeText={(next) => setOptions((current) => current.map((item, i) => (i === index ? next : item)))}
+                  placeholder={s.pollOptionPlaceholder.replace('{n}', String(index + 1))}
+                  placeholderTextColor={C.placeholder}
+                  editable={!editingPoll}
+                  maxLength={40}
+                  style={[
+                    styles.teamInput,
+                    styles.optionInput,
+                    { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
+                    editingPoll && styles.teamInputLocked,
+                  ]}
+                />
+                {!editingPoll && options.length > 2 ? (
+                  <Pressable
+                    onPress={() => setOptions((current) => current.filter((_, i) => i !== index))}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={s.removePhoto}
+                  >
+                    <X size={18} color={C.muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            {!editingPoll && options.length < 6 ? (
+              <Pressable
+                onPress={() => setOptions((current) => [...current, ''])}
+                style={styles.addOption}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.addOptionText, { fontFamily: fonts.semibold }]}>{s.pollAddOption}</Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
 
@@ -670,6 +688,22 @@ const styles = StyleSheet.create({
   },
   pollFields: {
     gap: 10,
+  },
+  optionRow: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  optionInput: {
+    flex: 1,
+  },
+  addOption: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  addOptionText: {
+    color: C.accentSoft,
+    fontSize: 15,
   },
   teamInput: {
     color: C.text,

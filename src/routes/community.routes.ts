@@ -155,7 +155,18 @@ router.post(
     '/posts/:id/vote',
     requireAuth,
     writeLimiter,
-    handle((req, _res, actor) => community.votePoll(actor, param(req, 'id'), req.body?.choice)),
+    handle((req, _res, actor) =>
+        community.votePoll(actor, param(req, 'id'), req.body?.choice, req.body?.optionIndex),
+    ),
+);
+
+router.get(
+    '/posts/:id/poll/voters',
+    requireAuth,
+    lenientLimiter,
+    handle((req, _res, actor) =>
+        community.listPollVoters(actor.id, param(req, 'id'), req.query.option, req.query.cursor),
+    ),
 );
 
 router.post(

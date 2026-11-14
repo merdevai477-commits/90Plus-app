@@ -4025,7 +4025,12 @@ export const en = {
     teamAPlaceholder: 'Team A',
     teamBPlaceholder: 'Team B',
     pollQuestionPlaceholder: 'Ask a question (optional)',
-    pollNeedTeams: 'Enter both team names',
+    pollNeedTeams: 'Add at least two options',
+    pollAddOption: 'Add option',
+    pollOptionPlaceholder: 'Option {n}',
+    pollVotesCount: '{n} votes',
+    pollVotersTitle: 'Voted for {option}',
+    pollNoVoters: 'No votes yet',
     voteFailed: "Couldn't register your vote",
     followFailed: "Couldn't update follow",
     feedSort: {

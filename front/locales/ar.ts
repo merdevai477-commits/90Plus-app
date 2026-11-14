@@ -3934,7 +3934,12 @@ export const ar = {
     teamAPlaceholder: 'الفريق الأول',
     teamBPlaceholder: 'الفريق الثاني',
     pollQuestionPlaceholder: 'سؤال (اختياري)',
-    pollNeedTeams: 'أدخل اسمي الفريقين',
+    pollNeedTeams: 'اكتب اختيارين على الأقل',
+    pollAddOption: 'خيار جديد',
+    pollOptionPlaceholder: 'خيار {n}',
+    pollVotesCount: '{n} صوت',
+    pollVotersTitle: 'صوّتوا لـ {option}',
+    pollNoVoters: 'لسه محدش صوّت',
     voteFailed: 'تعذر تسجيل تصويتك',
     followFailed: 'تعذر تحديث المتابعة',
     feedSort: {

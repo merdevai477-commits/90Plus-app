@@ -995,10 +995,14 @@ model CommunityPost {
   userId           String
   content          String
   kind             CommunityPostKind      @default(TEXT)
-  /// Team A name for TEAM_POLL posts (no logos — names only).
+  /// Team A name for TEAM_POLL posts (no logos — names only). First option, kept for older clients.
   pollOptionA      String?
-  /// Team B name for TEAM_POLL posts.
+  /// Team B name for TEAM_POLL posts. Second option, kept for older clients.
   pollOptionB      String?
+  /// All poll labels, in order. Null on older two-option polls.
+  pollOptions      Json?
+  /// Vote totals parallel to pollOptions. Null falls back to pollVotesA/B.
+  pollVoteCounts   Json?
   pollVotesA       Int                    @default(0)
   pollVotesB       Int                    @default(0)
   imageUrl         String?
@@ -1029,11 +1033,14 @@ model CommunityPost {
 }
 
 model CommunityPostPollVote {
-  id        String               @id @default(uuid())
-  userId    String
-  postId    String
-  choice    CommunityPollChoice
-  createdAt DateTime             @default(now())
+  id          String               @id @default(uuid())
+  userId      String
+  postId      String
+  /// A/B for the first two options. Null when the vote is for a later option.
+  choice      CommunityPollChoice?
+  /// Zero-based option. Source of truth once set.
+  optionIndex Int?
+  createdAt   DateTime             @default(now())
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      CommunityPost        @relation(fields: [postId], references: [id], onDelete: Cascade)
 
