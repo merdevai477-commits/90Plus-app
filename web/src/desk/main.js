@@ -40,6 +40,7 @@ const PAGE_TITLES = {
   'reel-comments': 'تعليقات الريلز',
   activity: 'نشاط المسابقات',
   badges: 'الشارات',
+  'app-update': 'تحديث التطبيق',
 };
 
 const AD_STATUS = {
@@ -735,6 +736,56 @@ function openDelete(id, kind) {
   deleteModal.hidden = false;
 }
 
+async function renderAppUpdate() {
+  let notice = null;
+  try {
+    notice = (await api('/app-update')).data;
+  } catch {
+    notice = null;
+  }
+  const status = notice
+    ? `آخر إرسال: ${fmtDate(notice.sentAt)} — وصل لـ ${num(notice.devices)} جهاز`
+    : 'مفيش تنبيه ظاهر دلوقتي';
+  overviewEl.innerHTML = `
+    <form id="app-update-form" style="max-width:560px;display:grid;gap:12px">
+      <h2 style="margin:0">إرسال تحديث لكل المستخدمين</h2>
+      <p class="muted">هيظهر بوب أب في أي صفحة: «لاحقاً» أو «تحديث». التحديث يفتح متجر الآيفون أو جوجل بلاي، وكمان يتبعت إشعار.</p>
+      <label style="display:grid;gap:6px;font-weight:700">
+        نص الرسالة
+        <textarea id="app-update-message" rows="4" maxlength="280" placeholder="تحديث متاح — نزّل آخر نسخة" style="width:100%;border-radius:16px;padding:12px;border:1px solid rgba(255,255,255,.12);background:#0b0b10;color:inherit">${esc(notice?.message || 'تحديث متاح')}</textarea>
+      </label>
+      <p class="muted">${esc(status)}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-live" id="app-update-send">إرسال للجميع</button>
+        <button type="button" class="btn btn-ghost" id="app-update-clear">إيقاف البوب أب</button>
+      </div>
+    </form>`;
+  document.getElementById('app-update-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('app-update-send');
+    const message = document.getElementById('app-update-message').value.trim();
+    button.disabled = true;
+    deskError.hidden = true;
+    try {
+      await api('/app-update', { method: 'POST', body: JSON.stringify({ message }) });
+      await renderAppUpdate();
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر الإرسال';
+      button.disabled = false;
+    }
+  });
+  document.getElementById('app-update-clear').addEventListener('click', async () => {
+    try {
+      await api('/app-update/clear', { method: 'POST', body: '{}' });
+      await renderAppUpdate();
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر الإيقاف';
+    }
+  });
+}
+
 async function load() {
   if (STATE.inflight) return STATE.inflight;
   deskError.hidden = true;
@@ -752,6 +803,13 @@ async function load() {
         activityEl.hidden = true;
         overviewEl.hidden = false;
         await renderBadges();
+        return;
+      }
+      if (STATE.tab === 'app-update') {
+        cardsEl.hidden = true;
+        activityEl.hidden = true;
+        overviewEl.hidden = false;
+        await renderAppUpdate();
         return;
       }
       if (overview) {

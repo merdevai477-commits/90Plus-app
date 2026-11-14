@@ -10,6 +10,7 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/admin.middleware';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import { getAppUpdateNotice } from '../services/app-update-notice.service';
 
 const router = Router();
 
@@ -113,6 +114,12 @@ router.get('/status', async (req: Request, res: Response): Promise<void> => {
  * GET /api/app/features
  * Public feature flags (World Cup tab unlock, etc.)
  */
+router.get('/update-notice', async (_req: Request, res: Response): Promise<void> => {
+    const notice = await getAppUpdateNotice();
+    res.set('Cache-Control', 'no-store');
+    res.json({ status: 'SUCCESS', data: notice });
+});
+
 router.get('/features', (_req: Request, res: Response): void => {
     res.json({
         status: 'SUCCESS',

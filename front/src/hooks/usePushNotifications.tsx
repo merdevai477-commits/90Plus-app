@@ -268,6 +268,12 @@ export function usePushNotifications(): PushNotificationState {
             }).catch(() => {});
         }
 
+        if (data.type === 'APP_UPDATE' && data.noticeId) {
+            const { emitAppUpdateNotice } = require('../../services/appUpdateSignal');
+            emitAppUpdateNotice({ id: String(data.noticeId), message: '' });
+            return;
+        }
+
         handleDeepLinking(data);
     }).current;
 
@@ -382,6 +388,13 @@ export function usePushNotifications(): PushNotificationState {
             }
 
             logger.debug('🔔 Notification received in foreground:', incoming.request.identifier);
+            if (data?.type === 'APP_UPDATE' && data.noticeId) {
+                const { emitAppUpdateNotice } = require('../../services/appUpdateSignal');
+                emitAppUpdateNotice({
+                    id: String(data.noticeId),
+                    message: String(incoming.request.content.body || ''),
+                });
+            }
             setNotification(incoming);
         });
 

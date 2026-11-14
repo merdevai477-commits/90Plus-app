@@ -40,6 +40,7 @@ import {
   revokeEliteBadge,
 } from '../services/elite-badge.service';
 import { listBadgeCandidates, listBadgeCompetitions } from '../services/elite-badge-candidates.service';
+import { clearAppUpdateNotice, getAppUpdateNotice, publishAppUpdateNotice } from '../services/app-update-notice.service';
 import type { EliteAwardDuration } from '../data/elite-badge-catalog';
 
 const router = Router();
@@ -431,6 +432,26 @@ router.post('/badges/awards/:id/revoke', requireAssSession, async (req: Request,
     logger.error('[AsS] revoke badge failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to revoke badge' });
   }
+});
+
+router.get('/app-update', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  const notice = await getAppUpdateNotice();
+  res.json({ status: 'SUCCESS', data: notice });
+});
+
+router.post('/app-update', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (message.length < 2 || message.length > 280) {
+    res.status(400).json({ status: 'ERROR', message: 'اكتب رسالة التحديث (من حرفين إلى 280)' });
+    return;
+  }
+  const notice = await publishAppUpdateNotice(message);
+  res.json({ status: 'SUCCESS', data: notice });
+});
+
+router.post('/app-update/clear', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  await clearAppUpdateNotice();
+  res.json({ status: 'SUCCESS' });
 });
 
 export default router;

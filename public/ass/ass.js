@@ -35,6 +35,7 @@ const PAGE_TITLES = {
   reels: 'ريلز',
   'reel-comments': 'تعليقات الريلز',
   activity: 'نشاط المسابقات',
+  'app-update': 'تحديث التطبيق',
 };
 
 const AD_STATUS = {
@@ -627,6 +628,39 @@ async function load() {
       postFiltersEl.hidden = !showCommunityFilters;
       if (showCommunityFilters) syncPostFilterChips();
       cardsEl.classList.toggle('stack', isAds);
+
+      if (STATE.tab === 'app-update') {
+        cardsEl.hidden = true;
+        activityEl.hidden = true;
+        overviewEl.hidden = false;
+        const json = await api('/app-update');
+        const notice = json.data;
+        const status = notice
+          ? `آخر إرسال: ${notice.sentAt || ''} — ${notice.devices || 0} جهاز`
+          : 'مفيش تنبيه ظاهر دلوقتي';
+        overviewEl.innerHTML = `
+          <form id="app-update-form" style="max-width:560px;display:grid;gap:12px">
+            <h2 style="margin:0">إرسال تحديث لكل المستخدمين</h2>
+            <p class="text-sm text-zinc-400">هيظهر بوب أب في أي صفحة: «لاحقاً» أو «تحديث»، ويفتح المتجر المناسب، ومعاه إشعار.</p>
+            <textarea id="app-update-message" rows="4" maxlength="280" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm">${notice?.message || 'تحديث متاح'}</textarea>
+            <p class="text-sm text-zinc-400">${status}</p>
+            <div class="flex gap-2">
+              <button type="submit" id="app-update-send" class="rounded-2xl bg-violet-600 px-4 py-2 font-extrabold text-white">إرسال للجميع</button>
+              <button type="button" id="app-update-clear" class="rounded-2xl border border-white/10 px-4 py-2 font-bold">إيقاف البوب أب</button>
+            </div>
+          </form>`;
+        document.getElementById('app-update-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const message = document.getElementById('app-update-message').value.trim();
+          await api('/app-update', { method: 'POST', body: JSON.stringify({ message }) });
+          await load();
+        });
+        document.getElementById('app-update-clear').addEventListener('click', async () => {
+          await api('/app-update/clear', { method: 'POST', body: '{}' });
+          await load();
+        });
+        return;
+      }
 
       if (isOverview) {
         cardsEl.hidden = true;
