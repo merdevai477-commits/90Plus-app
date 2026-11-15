@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import {
   isWorldCupHistoricalOnlyMode,
 } from '../config/world-cup-only-mode.config';
+import { isLmtGloballyDisabled } from '../config/lmt.config';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 import {
@@ -3894,6 +3895,7 @@ export async function getScores365LmtWidgetForGameId(
   gameId: number,
   options?: { language?: string | null; force?: boolean },
 ): Promise<Scores365LmtWidgetInfo | null> {
+  if (isLmtGloballyDisabled()) return null;
   if (!isScores365ExperimentEnabled()) return null;
 
   const language = options?.language ?? 'ar';
@@ -3942,6 +3944,7 @@ export async function getScores365LmtWidgetForFixtureId(
   fixtureId: number,
   options?: { language?: string | null; force?: boolean },
 ): Promise<Scores365LmtWidgetInfo | null> {
+  if (isLmtGloballyDisabled()) return null;
   const durable = await prisma.cachedFixture.findUnique({
     where: { fixtureId },
     select: { fullData: true },

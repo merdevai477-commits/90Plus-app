@@ -22,6 +22,7 @@ import { resolveEventsFeedAvailability } from '../services/synthetic-goals.servi
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { customizeScores365LmtWidgetHtml } from '../utils/scores365-lmt-brand';
+import { isLmtGloballyDisabled } from '../config/lmt.config';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-rollout.config';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
@@ -2930,6 +2931,15 @@ export class FootballController {
         res.status(400).json({ status: 'ERROR', message: 'Invalid game ID' });
         return;
       }
+      // Kill switch: hide SportRadar pitch app-wide until branded client ships.
+      if (isLmtGloballyDisabled()) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'LMT temporarily disabled',
+          code: 'LMT_DISABLED',
+        });
+        return;
+      }
       if (!isScores365ExperimentEnabled()) {
         res.status(503).json({ status: 'ERROR', message: '365Scores experiment disabled' });
         return;
@@ -2961,6 +2971,14 @@ export class FootballController {
       const fixtureId = parseInt(ensureString(req.params.id));
       if (isNaN(fixtureId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+      if (isLmtGloballyDisabled()) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'LMT temporarily disabled',
+          code: 'LMT_DISABLED',
+        });
         return;
       }
       if (!isScores365ExperimentEnabled()) {
