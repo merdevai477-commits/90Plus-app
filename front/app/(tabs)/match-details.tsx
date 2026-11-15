@@ -2815,7 +2815,8 @@ const MatchDetailsScreen = () => {
           process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
         }
         brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
-        coverBrand={false}
+        // URI fallback only — covers raw 365 VLMT splash if HTML rewrite fails.
+        coverBrand
         loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
         unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
         retryLabel={t.matchDetails.retry || t.common.retry}

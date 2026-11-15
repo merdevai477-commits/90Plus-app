@@ -48,7 +48,7 @@ img.sr-lmt-1-pitchlogo__wrapper{opacity:.9!important}
  * serving a cached failed response for an unchanged URL (e.g. the SPA HTML
  * fallback returned before the asset was deployed).
  */
-const LMT_BRAND_ASSET_VERSION = '2';
+const LMT_BRAND_ASSET_VERSION = '3';
 
 function backendOrigin(): string {
   return getApiUrl().replace(/\/$/, '').replace(/\/api$/i, '');
@@ -86,6 +86,7 @@ export function resolveLmtBannerUrl(): string {
  * Matches GetWidget shape:
  *   pitchLogo: "..."
  *   goalBannerImage: "..."
+ *   vlmtLoaderImageUrl: "..."   ← black splash shows 365-LogoNew without this
  *   widgetProps.vlmtCourtBannerUrl = "...";
  *
  * Also neutralize 365's iOS callback:
@@ -100,16 +101,30 @@ export function customizeScores365LmtWidgetHtml(
   const logo = logoUrl.replace(/"/g, '\\"');
   const banner = bannerUrl.replace(/"/g, '\\"');
   const branded = html
-    .replace(/pitchLogo:\s*"[^"]*"/, `pitchLogo: "${logo}"`)
-    .replace(/goalBannerImage:\s*"[^"]*"/, `goalBannerImage: "${banner}"`)
+    .replace(/pitchLogo:\s*(["'])[^"']*\1/g, `pitchLogo: "${logo}"`)
+    .replace(/goalBannerImage:\s*(["'])[^"']*\1/g, `goalBannerImage: "${banner}"`)
+    // VLMT black loading splash — this is the centered white "365Scores" mark users see.
+    .replace(/vlmtLoaderImageUrl:\s*(["'])[^"']*\1/g, `vlmtLoaderImageUrl: "${logo}"`)
     .replace(
-      /widgetProps\.vlmtCourtBannerUrl\s*=\s*"[^"]*";/,
+      /widgetProps\.vlmtCourtBannerUrl\s*=\s*(["'])[^"']*\1\s*;/g,
       `widgetProps.vlmtCourtBannerUrl = "${banner}";`,
     )
     .replace(
       /window\.location\.href\s*=\s*["']widgetrender:\/\/[^"']*["']/g,
       '/* 90plus: blocked widgetrender:// for WKWebView */ void 0',
     );
+
+  if (/vlmtLoaderImageUrl:\s*(["'])[^"']*365[^"']*\1/i.test(branded)) {
+    throw new Error('GetWidget HTML still has 365 vlmtLoaderImageUrl after branding');
+  }
+  if (
+    /pitchLogo:\s*(["'])[^"']*(?:365|ALL_SPORT_TYPES_PITCH_LOGO)[^"']*\1/i.test(
+      branded,
+    )
+  ) {
+    throw new Error('GetWidget HTML still has 365 pitchLogo after branding');
+  }
+
   return /<\/head>/i.test(branded)
     ? branded.replace(/<\/head>/i, `${LMT_CUSTOM_CSS}</head>`)
     : `${LMT_CUSTOM_CSS}${branded}`;

@@ -54,10 +54,11 @@ export function buildScores365LmtEmbedHtml(opts: {
     .brand-cover {
       position: absolute;
       left: 50%;
-      top: 58%;
+      /* Center covers VLMT black splash (vlmtLoaderImageUrl) and mid-pitch mark. */
+      top: 50%;
       transform: translate(-50%, -50%);
-      width: min(50%, 200px);
-      height: min(18%, 70px);
+      width: min(56%, 220px);
+      height: min(22%, 80px);
       z-index: 6;
       pointer-events: none;
       background: rgba(255, 255, 255, 0.12);

@@ -527,7 +527,8 @@ const styles = StyleSheet.create({
   brandCover: {
     position: 'absolute',
     left: '50%',
-    top: '58%',
+    // Match VLMT loader center (black splash with 365Scores wordmark).
+    top: '50%',
     zIndex: 5,
     alignItems: 'center',
     justifyContent: 'center',
