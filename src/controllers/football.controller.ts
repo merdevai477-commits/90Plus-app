@@ -16,11 +16,12 @@ import {
   shouldRescueLiveListFromApiFootball,
   writeLiveFixturesSnapshot,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, fetchScores365LmtWidgetHtml } from '../services/scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { resolveEventsFeedAvailability } from '../services/synthetic-goals.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
+import { customizeScores365LmtWidgetHtml } from '../utils/scores365-lmt-brand';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-rollout.config';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
@@ -129,6 +130,10 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     ? null
     : process.env.LMT_PITCH_LOGO_URL?.trim() ||
       (publicBase ? `${publicBase}/90plus-lmt-pitch-wordmark.png` : null);
+  const brandBannerUrl = hideBrand
+    ? null
+    : process.env.LMT_BANNER_URL?.trim() ||
+      (publicBase ? `${publicBase}/90plus-lmt-banner.png` : null);
 
   if (format === 'json') {
     res.json({
@@ -136,9 +141,10 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'html-iframe-getwidget',
+        embedMode: 'branded-getwidget-html',
         brandLogoUrl,
-        note: 'Default HTML iframes widgetUrl and covers the mid-pitch 365 mark with brandLogoUrl.',
+        brandBannerUrl,
+        note: 'Default HTML rewrites GetWidget pitch/loader/banner marks to 90PLUS.',
       },
     });
     return;
@@ -150,6 +156,34 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     return;
   }
 
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=15');
+
+  // Prefer fully rewritten GetWidget HTML so 365Scores never paints.
+  if (brandLogoUrl) {
+    try {
+      const raw = await fetchScores365LmtWidgetHtml(
+        info.partnerId,
+        info.langId,
+        info.sportTypeId ?? 1,
+      );
+      if (raw && /pitchLogo\s*:/.test(raw)) {
+        const branded = customizeScores365LmtWidgetHtml(
+          raw,
+          brandLogoUrl,
+          brandBannerUrl || brandLogoUrl,
+        );
+        res.status(200).send(branded);
+        return;
+      }
+    } catch (err: unknown) {
+      logger.warn(
+        '[LMT] branded GetWidget rewrite failed, falling back to cover shell:',
+        (err as Error)?.message,
+      );
+    }
+  }
+
   const html = buildScores365LmtEmbedHtml({
     widgetUrl: info.widgetUrl,
     partnerId: info.partnerId,
@@ -157,8 +191,6 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     awayName: info.awayName,
     brandLogoUrl,
   });
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=15');
   res.status(200).send(html);
 }
 

@@ -261,25 +261,26 @@ export function MatchLmtWebView({
         error: err instanceof Error ? err.message : String(err),
       });
       setBrandedHtml(null);
-      setMode('uri');
-      setUriFallback(widgetUrl);
+      // Never load raw GetWidget URI — that shows 365Scores branding.
+      // Prefer backend embed shell (has 90PLUS cover); otherwise fail closed.
+      if (embedUrl?.trim()) {
+        setMode('uri');
+        setUriFallback(embedUrl);
+      } else {
+        setMode('html');
+        setFailed(true);
+        setLoading(false);
+      }
     }
-  }, [widgetUrl, hideBrand, brandLogoUrl]);
+  }, [widgetUrl, embedUrl, hideBrand, brandLogoUrl]);
 
   useEffect(() => {
     void prepareHtml();
   }, [prepareHtml, reloadKey]);
 
   const handleRetry = useCallback(() => {
-    if (mode === 'uri' && embedUrl && uriFallback === widgetUrl) {
-      setUriFallback(embedUrl);
-      setReloadKey((k) => k + 1);
-      setFailed(false);
-      setLoading(true);
-      return;
-    }
     setReloadKey((k) => k + 1);
-  }, [mode, embedUrl, uriFallback, widgetUrl]);
+  }, []);
 
   const webSource = useMemo((): WebSource => {
     if (mode === 'html' && brandedHtml) {
@@ -298,30 +299,33 @@ export function MatchLmtWebView({
     });
   }, [mode, webSource]);
 
-  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
+  // URI embed fallback only — branded HTML already rewrites every 365 mark.
+  // Never skip this when coverBrand is on: raw GetWidget must stay covered.
+  const showOverlayFallback =
+    coverBrand && mode === 'uri' && !loading && !failed && !hideBrand;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
 
   const onWebError = useCallback(() => {
     // iOS WKWebView often fires onError for subresources even when branded HTML
-    // loaded fine. Falling back to uri showed raw 365 + a green cover — keep HTML.
+    // loaded fine. Keep branded HTML — never drop to raw 365 GetWidget.
     if (mode === 'html' && brandedHtml) {
       remoteLog('[LMT] WebView error ignored (keeping branded html)', { mode });
       setLoading(false);
       return;
     }
-    if (mode === 'html') {
-      remoteLog('[LMT] WebView error → fallback triggered', { mode });
+    if (mode === 'html' && embedUrl?.trim()) {
+      remoteLog('[LMT] WebView error → branded embed fallback', { mode });
       setMode('uri');
       setBrandedHtml(null);
-      setUriFallback(widgetUrl);
+      setUriFallback(embedUrl);
       setLoading(true);
       return;
     }
     setLoading(false);
     setFailed(true);
-  }, [mode, brandedHtml, widgetUrl]);
+  }, [mode, brandedHtml, embedUrl]);
 
   const onWebHttpError = useCallback(
     (code: number) => {

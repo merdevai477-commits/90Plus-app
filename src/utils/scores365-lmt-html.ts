@@ -57,20 +57,19 @@ export function buildScores365LmtEmbedHtml(opts: {
       /* Center covers VLMT black splash (vlmtLoaderImageUrl) and mid-pitch mark. */
       top: 50%;
       transform: translate(-50%, -50%);
-      width: min(56%, 220px);
-      height: min(22%, 80px);
+      width: min(62%, 240px);
+      height: min(26%, 88px);
       z-index: 6;
       pointer-events: none;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 6px;
-      padding: 6px 10px;
+      /* Opaque enough to fully hide any leftover 365Scores wordmark. */
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      padding: 8px 12px;
       box-sizing: border-box;
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
     }
     .brand-cover img {
       display: block;

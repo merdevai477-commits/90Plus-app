@@ -1,6 +1,6 @@
 /**
  * 365Scores SportRadar Live Match Tracker (LMT).
- * Resolves partnerId via backend; brands GetWidget HTML like c:\DD\js\app.js.
+ * Resolves partnerId via backend; brands GetWidget HTML so 365 marks never show.
  */
 
 import { getApiUrl } from '../config/api.config';
@@ -17,7 +17,7 @@ export type Scores365LmtInfo = {
   homeName: string | null;
   awayName: string | null;
   statusText: string | null;
-  /** Backend HTML shell (optional). Prefer widgetUrl / branded html in WebView. */
+  /** Backend HTML shell — preferred URI fallback (never raw GetWidget). */
   embedUrl: string;
 };
 
@@ -37,18 +37,30 @@ export const LMT_BALL_TRAIL_COLOR = '#8B5CF6';
 /**
  * SportRadar draws the ball trail as `polyline.sr-lmt-bspot__line` with
  * stroke="#fff" presentation attributes — CSS rules override those.
+ * Also hard-hide leftover 365 brand assets if SportRadar injects them later.
  */
 const LMT_CUSTOM_CSS = `<style id="90plus-lmt">
 .sr-lmt-bspot__line{stroke:${LMT_BALL_TRAIL_COLOR}!important;stroke-opacity:.95!important}
 img.sr-lmt-1-pitchlogo__wrapper{opacity:.9!important}
+img[src*="365-LogoNew"],
+img[src*="ALL_SPORT_TYPES_PITCH_LOGO"],
+img[src*="Branding/365"],
+img[src*="Widgets/Sportradar/365"]{
+  opacity:0!important;
+  visibility:hidden!important;
+}
 </style>`;
+
+const THREE_SIX_FIVE_BRAND_URL =
+  /https:\/\/(?:imagescache|imagecache)\.365scores\.com\/[^"'\\\s]*(?:365-LogoNew|ALL_SPORT_TYPES_PITCH_LOGO|Widgets\/Sportradar\/365)[^"'\\\s]*/gi;
+const THREE_SIX_FIVE_COURT_BANNER =
+  /https:\/\/[^"'\\\s]*Branding\/365\/[^"'\\\s]*/gi;
 
 /**
  * Bump when replacing a brand image under public/. Android WebView keeps
- * serving a cached failed response for an unchanged URL (e.g. the SPA HTML
- * fallback returned before the asset was deployed).
+ * serving a cached failed response for an unchanged URL.
  */
-const LMT_BRAND_ASSET_VERSION = '3';
+const LMT_BRAND_ASSET_VERSION = '4';
 
 function backendOrigin(): string {
   return getApiUrl().replace(/\/$/, '').replace(/\/api$/i, '');
@@ -67,7 +79,7 @@ function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   return `${base}/${path}`;
 }
 
-/** Transparent "90 PLUS" wordmark shown mid-pitch. */
+/** Transparent "90 PLUS" wordmark shown mid-pitch / VLMT splash. */
 export function resolveLmtBrandLogoUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim();
   if (fromEnv) return fromEnv;
@@ -82,52 +94,62 @@ export function resolveLmtBannerUrl(): string {
 }
 
 /**
- * Same replacements as DD `customizeWidgetHtml`.
- * Matches GetWidget shape:
- *   pitchLogo: "..."
- *   goalBannerImage: "..."
- *   vlmtLoaderImageUrl: "..."   ← black splash shows 365-LogoNew without this
- *   widgetProps.vlmtCourtBannerUrl = "...";
- *
- * Also neutralize 365's iOS callback:
- *   window.location.href = "widgetrender://postrender"
- * WKWebView treats that custom scheme as NSURLErrorUnsupportedURL (-1002).
+ * Rewrite GetWidget HTML:
+ *   pitchLogo / vlmtLoaderImageUrl → 90PLUS wordmark
+ *   goalBannerImage / vlmtCourtBannerUrl → 90PLUS banner
+ * plus a nuclear URL sweep + CSS hide for any leftover 365 assets.
  */
 export function customizeScores365LmtWidgetHtml(
   html: string,
   logoUrl: string,
   bannerUrl: string = logoUrl,
 ): string {
-  const logo = logoUrl.replace(/"/g, '\\"');
-  const banner = bannerUrl.replace(/"/g, '\\"');
+  const logoProp = logoUrl.replace(/"/g, '\\"');
+  const bannerProp = bannerUrl.replace(/"/g, '\\"');
   const branded = html
-    .replace(/pitchLogo:\s*(["'])[^"']*\1/g, `pitchLogo: "${logo}"`)
-    .replace(/goalBannerImage:\s*(["'])[^"']*\1/g, `goalBannerImage: "${banner}"`)
-    // VLMT black loading splash — this is the centered white "365Scores" mark users see.
-    .replace(/vlmtLoaderImageUrl:\s*(["'])[^"']*\1/g, `vlmtLoaderImageUrl: "${logo}"`)
+    .replace(/pitchLogo:\s*(["'])[^"']*\1/g, `pitchLogo: "${logoProp}"`)
+    .replace(/goalBannerImage:\s*(["'])[^"']*\1/g, `goalBannerImage: "${bannerProp}"`)
+    .replace(/vlmtLoaderImageUrl:\s*(["'])[^"']*\1/g, `vlmtLoaderImageUrl: "${logoProp}"`)
     .replace(
       /widgetProps\.vlmtCourtBannerUrl\s*=\s*(["'])[^"']*\1\s*;/g,
-      `widgetProps.vlmtCourtBannerUrl = "${banner}";`,
+      `widgetProps.vlmtCourtBannerUrl = "${bannerProp}";`,
     )
+    .replace(THREE_SIX_FIVE_BRAND_URL, logoUrl)
+    .replace(THREE_SIX_FIVE_COURT_BANNER, bannerUrl)
     .replace(
       /window\.location\.href\s*=\s*["']widgetrender:\/\/[^"']*["']/g,
       '/* 90plus: blocked widgetrender:// for WKWebView */ void 0',
     );
 
-  if (/vlmtLoaderImageUrl:\s*(["'])[^"']*365[^"']*\1/i.test(branded)) {
-    throw new Error('GetWidget HTML still has 365 vlmtLoaderImageUrl after branding');
-  }
-  if (
-    /pitchLogo:\s*(["'])[^"']*(?:365|ALL_SPORT_TYPES_PITCH_LOGO)[^"']*\1/i.test(
-      branded,
-    )
-  ) {
-    throw new Error('GetWidget HTML still has 365 pitchLogo after branding');
-  }
+  assertNo365BrandAssets(branded);
 
   return /<\/head>/i.test(branded)
     ? branded.replace(/<\/head>/i, `${LMT_CUSTOM_CSS}</head>`)
     : `${LMT_CUSTOM_CSS}${branded}`;
+}
+
+export function assertNo365BrandAssets(html: string): void {
+  if (/vlmtLoaderImageUrl:\s*(["'])[^"']*365[^"']*\1/i.test(html)) {
+    throw new Error('GetWidget HTML still has 365 vlmtLoaderImageUrl after branding');
+  }
+  if (
+    /pitchLogo:\s*(["'])[^"']*(?:365|ALL_SPORT_TYPES_PITCH_LOGO)[^"']*\1/i.test(html)
+  ) {
+    throw new Error('GetWidget HTML still has 365 pitchLogo after branding');
+  }
+  if (/goalBannerImage:\s*(["'])[^"']*365[^"']*\1/i.test(html)) {
+    throw new Error('GetWidget HTML still has 365 goalBannerImage after branding');
+  }
+  if (/vlmtCourtBannerUrl\s*=\s*(["'])[^"']*365[^"']*\1/i.test(html)) {
+    throw new Error('GetWidget HTML still has 365 court banner after branding');
+  }
+  if (
+    /https?:\/\/[^"'\\\s]*(?:365-LogoNew|ALL_SPORT_TYPES_PITCH_LOGO|Branding\/365)/i.test(
+      html,
+    )
+  ) {
+    throw new Error('GetWidget HTML still contains 365 brand asset URLs');
+  }
 }
 
 export function resolveLmtBrandLogoForHtml(options?: {
@@ -137,7 +159,6 @@ export function resolveLmtBrandLogoForHtml(options?: {
   if (options?.hideBrand) return LMT_TRANSPARENT_LOGO;
   const custom = options?.brandLogoUrl?.trim();
   if (custom) return custom;
-  // Prefer https host over data: SVG — safer for SportRadar/WKWebView asset loads.
   return resolveLmtBrandLogoUrl();
 }
 
@@ -146,7 +167,7 @@ export function resolveLmtBannerForHtml(options?: { hideBrand?: boolean }): stri
   return resolveLmtBannerUrl();
 }
 
-/** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
+/** Fetch official GetWidget HTML and rewrite pitch branding. */
 async function fetchBrandedLmtHtmlOnce(
   widgetUrl: string,
   options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
@@ -185,7 +206,6 @@ async function fetchLmtJson(
   options?: { language?: string; force?: boolean },
 ): Promise<Omit<Scores365LmtInfo, 'embedUrl'> | null> {
   const params = new URLSearchParams({ format: 'json' });
-  // Backend resolveAppLanguage() reads `language` (not `lang`).
   if (options?.language) params.set('language', options.language);
   if (options?.force) params.set('fresh', '1');
 
