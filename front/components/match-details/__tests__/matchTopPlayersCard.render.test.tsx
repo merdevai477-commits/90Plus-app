@@ -14,6 +14,7 @@ const homeStats: Competitor365Stats = {
     {
       key: 1,
       name: 'Goals',
+      typeId: 1,
       rows: [
         {
           rank: 1,
@@ -21,6 +22,16 @@ const homeStats: Competitor365Stats = {
           name: 'Kylian Mbappe',
           photo: null,
           value: '8',
+          competitorId: 1,
+          leftClub: false,
+          positionName: 'Forward',
+        },
+        {
+          rank: 2,
+          athleteId: 11,
+          name: 'Ousmane Dembele',
+          photo: null,
+          value: '4',
           competitorId: 1,
           leftClub: false,
           positionName: 'Forward',
@@ -36,6 +47,7 @@ const awayStats: Competitor365Stats = {
     {
       key: 1,
       name: 'Goals',
+      typeId: 1,
       rows: [
         {
           rank: 1,
@@ -69,6 +81,8 @@ import { MatchTopPlayersCard } from '../MatchTopPlayersCard';
 
 const labels = {
   title: 'Top Players',
+  byPosition: 'By position',
+  hint: 'Pick a position to compare each team’s top players',
   attack: 'Attack',
   midfield: 'Midfield',
   defense: 'Defense',
@@ -95,12 +109,15 @@ describe('MatchTopPlayersCard', () => {
 
     expect(screen.getByTestId('match-top-players')).toBeTruthy();
     expect(screen.getByText('Top Players')).toBeTruthy();
+    expect(screen.getByText('By position')).toBeTruthy();
+    expect(screen.getByText('France')).toBeTruthy();
+    expect(screen.getByText('Argentina')).toBeTruthy();
     expect(screen.getByText('Kylian Mbappe')).toBeTruthy();
     expect(screen.getByText('Lautaro Martinez')).toBeTruthy();
-    expect(screen.getByText('8')).toBeTruthy();
-    expect(screen.getByText('6')).toBeTruthy();
+    expect(screen.getByText('Ousmane Dembele')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('top-players-tab-midfield'));
-    expect(screen.getByText('Midfield')).toBeTruthy();
+    expect(screen.getByTestId('top-players-tab-midfield')).toBeTruthy();
+    expect(screen.getAllByText('Midfield').length).toBeGreaterThan(0);
   });
 });

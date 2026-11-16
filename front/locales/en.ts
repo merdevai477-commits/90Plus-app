@@ -492,6 +492,8 @@ export const en = {
     broadcastRegionHint: 'Egypt & Middle East',
     chatClosedPlaceholder: 'Chat is closed. The match has ended.',
     topPlayersTitle: 'Top Players',
+    topPlayersByPosition: 'By position',
+    topPlayersHint: 'Pick a position to compare each team’s top players',
     topPlayersAttack: 'Attack',
     topPlayersMidfield: 'Midfield',
     topPlayersDefense: 'Defense',

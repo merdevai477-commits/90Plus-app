@@ -1898,6 +1898,10 @@ const MatchDetailsScreen = () => {
           rtl={language === 'ar'}
           labels={{
             title: t.matchDetails.topPlayersTitle,
+            byPosition: t.matchDetails.topPlayersByPosition || 'By position',
+            hint:
+              t.matchDetails.topPlayersHint ||
+              'Pick a position to compare each team’s top players',
             attack: t.matchDetails.topPlayersAttack,
             midfield: t.matchDetails.topPlayersMidfield,
             defense: t.matchDetails.topPlayersDefense,

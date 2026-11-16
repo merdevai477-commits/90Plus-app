@@ -729,6 +729,8 @@ export const ar = {
     broadcastRegionHint: 'مصر والشرق الأوسط',
     chatClosedPlaceholder: 'المحادثة اتقفلت بعد نهاية المباراة.',
     topPlayersTitle: 'أهم اللاعبين',
+    topPlayersByPosition: 'حسب المركز',
+    topPlayersHint: 'اختر المركز لعرض المقارنة وأبرز لاعبي كل فريق',
     topPlayersAttack: 'الهجوم',
     topPlayersMidfield: 'الوسط',
     topPlayersDefense: 'الدفاع',

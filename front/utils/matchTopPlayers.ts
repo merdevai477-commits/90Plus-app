@@ -18,6 +18,9 @@ export type MatchTopPlayer = {
   assists: number;
   /** null = 365 has no rating for this player in this competition. */
   rating: number | null;
+  jerseyNumber: number | null;
+  /** Squad / board position label for the Figma role line. */
+  positionLabel: string | null;
 };
 
 const GOALS_TYPE_ID = 1;
@@ -135,13 +138,14 @@ function scorePlayer(player: MatchTopPlayer, tab: MatchTopPlayersTab): number {
   return rating * 100 + player.goals + player.assists;
 }
 
-export function pickMatchTopPlayer(
+export function pickMatchTopPlayers(
   stats: Competitor365Stats | null | undefined,
   squad: Competitor365Squad | null | undefined,
   competitorId: number,
   tab: MatchTopPlayersTab,
-): MatchTopPlayer | null {
-  if (!competitorId) return null;
+  limit = 2,
+): MatchTopPlayer[] {
+  if (!competitorId || limit <= 0) return [];
   const boards = stats?.leaderboards ?? [];
   const goalsBoard = findBoard(boards, GOALS_TYPE_ID, GOALS_NAME_RE);
   const assistsBoard = findBoard(boards, ASSISTS_TYPE_ID, ASSISTS_NAME_RE);
@@ -165,19 +169,33 @@ export function pickMatchTopPlayer(
     athleteId: number,
     name: string,
     photo: string | null,
+    positionLabel: string | null,
+    jerseyNumber: number | null,
     existing?: MatchTopPlayer,
-  ): MatchTopPlayer => ({
-    athleteId,
-    name: name || existing?.name || '—',
-    photo: photo ?? existing?.photo ?? null,
-    goals: goalsById.get(athleteId) ?? existing?.goals ?? 0,
-    assists: assistsById.get(athleteId) ?? existing?.assists ?? 0,
-    rating: (ratingById.get(athleteId) || null) ?? existing?.rating ?? null,
-  });
+  ): MatchTopPlayer => {
+    const fromSquad = squadById.get(athleteId);
+    return {
+      athleteId,
+      name: name || existing?.name || '—',
+      photo: photo ?? existing?.photo ?? fromSquad?.photo ?? null,
+      goals: goalsById.get(athleteId) ?? existing?.goals ?? 0,
+      assists: assistsById.get(athleteId) ?? existing?.assists ?? 0,
+      rating: (ratingById.get(athleteId) || null) ?? existing?.rating ?? null,
+      jerseyNumber: jerseyNumber ?? existing?.jerseyNumber ?? fromSquad?.jerseyNumber ?? null,
+      positionLabel:
+        positionLabel ||
+        existing?.positionLabel ||
+        fromSquad?.position ||
+        null,
+    };
+  };
 
   for (const player of squad?.groups[wanted] ?? []) {
     if (player.athleteId <= 0) continue;
-    byId.set(player.athleteId, toPlayer(player.athleteId, player.name, player.photo));
+    byId.set(
+      player.athleteId,
+      toPlayer(player.athleteId, player.name, player.photo, player.position, player.jerseyNumber),
+    );
   }
 
   for (const board of boards) {
@@ -186,16 +204,55 @@ export function pickMatchTopPlayer(
       const group = playerPosition(row.athleteId, row.positionName, squadById);
       const allowUnclassified = isPrimary && group === 'other' && !hasSquad;
       if (group !== wanted && !allowUnclassified) continue;
-      byId.set(row.athleteId, toPlayer(row.athleteId, row.name, row.photo, byId.get(row.athleteId)));
+      byId.set(
+        row.athleteId,
+        toPlayer(
+          row.athleteId,
+          row.name,
+          row.photo,
+          row.positionName,
+          null,
+          byId.get(row.athleteId),
+        ),
+      );
     }
   }
 
   let ranked = [...byId.values()].sort((a, b) => scorePlayer(b, tab) - scorePlayer(a, tab));
   if (ranked.length === 0 && !hasSquad) {
     ranked = ownRows(primary, competitorId).map((row) =>
-      toPlayer(row.athleteId, row.name, row.photo),
+      toPlayer(row.athleteId, row.name, row.photo, row.positionName, null),
     );
   }
 
-  return ranked[0] ?? null;
+  return ranked.slice(0, limit);
+}
+
+export function pickMatchTopPlayer(
+  stats: Competitor365Stats | null | undefined,
+  squad: Competitor365Squad | null | undefined,
+  competitorId: number,
+  tab: MatchTopPlayersTab,
+): MatchTopPlayer | null {
+  return pickMatchTopPlayers(stats, squad, competitorId, tab, 1)[0] ?? null;
+}
+
+/** Figma role line under the name: "Position · 3 goals" style when stats exist. */
+export function formatTopPlayerRole(
+  player: MatchTopPlayer,
+  tab: MatchTopPlayersTab,
+  labels: { goals: string; assists: string; rating: string },
+  fallbackPosition: string,
+): string {
+  const position = (player.positionLabel ?? '').trim() || fallbackPosition;
+  if (tab === 'attack' && player.goals > 0) {
+    return `${position} · ${formatTopPlayerStat(player.goals, 'int')} ${labels.goals}`;
+  }
+  if (tab === 'midfield' && player.assists > 0) {
+    return `${position} · ${formatTopPlayerStat(player.assists, 'int')} ${labels.assists}`;
+  }
+  if (tab === 'defense' && player.rating != null && player.rating > 0) {
+    return `${position} · ${formatTopPlayerStat(player.rating, 'rating')}`;
+  }
+  return position;
 }
