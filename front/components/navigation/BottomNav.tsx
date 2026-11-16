@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -9,12 +9,10 @@ import { useTranslation } from '@/src/i18n';
 import { prefetchCommunityFeed } from '@/hooks/community/useCommunityFeed';
 import { prefetchRoute, prefetchRoutes } from '@/utils/routePrefetcher';
 
-import { AI_CHAT_FAB_WIDTH, AiChatFab } from './AiChatFab';
 import {
   GlassCapsuleNav,
   useGlassNavColors,
   type GlassCapsuleItem,
-  type GlassCapsuleItemLayout,
   type GlassCapsuleMetrics,
 } from './GlassCapsuleNav';
 import { BuiltInTabIcon, LIQUID_TAB_ITEMS } from './LiquidGlassTabBar';
@@ -22,55 +20,50 @@ import { TAB_BAR_HEIGHT, TAB_BAR_HORIZONTAL_MARGIN } from './liquidGlassTabBar.c
 import type { LiquidTabId } from './liquidGlassTabBar.types';
 import { useProfileTabAvatar } from './useProfileTabAvatar';
 
-/** AI lives on the floating FAB — keep the capsule to the other five tabs. */
-const BAR_TAB_ITEMS = LIQUID_TAB_ITEMS.filter((tab) => tab.id !== 'ai');
-const AI_TAB = LIQUID_TAB_ITEMS.find((tab) => tab.id === 'ai')!;
-const AI_ROUTE = String(AI_TAB.route);
-
-/** Five tabs share the row, so the capsule runs a touch roomier than six. */
+/** Six tabs share the row — AI sits before profile, as in the original bar. */
 const MAIN_METRICS: Partial<GlassCapsuleMetrics> = {
   height: TAB_BAR_HEIGHT,
   pad: 5,
   gap: 2,
-  idle: 52,
-  minIdle: 40,
+  idle: 48,
+  minIdle: 38,
   icon: 20,
   font: 12,
   labelGap: 6,
   trail: 14,
 };
 
-/** Lift the FAB clear of the capsule so it reads as floating, not docked. */
-const FAB_LIFT = TAB_BAR_HEIGHT + 8;
-
 function resolveActiveIndex(pathname: string | null): number {
   const p = (pathname ?? '').toLowerCase();
 
   if (p.includes('match-details') || (p.includes('matches') && !p.includes('predict-and-win'))) {
-    return BAR_TAB_ITEMS.findIndex((t) => t.id === 'matches');
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'matches');
   }
   if (p.includes('reels')) {
-    return BAR_TAB_ITEMS.findIndex((t) => t.id === 'reels');
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'reels');
   }
   if (p.includes('community')) {
-    return BAR_TAB_ITEMS.findIndex((t) => t.id === 'community');
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'community');
+  }
+  if (p.includes('chat')) {
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'ai');
   }
   if (
     p.includes('/profile') ||
     p.includes('/notifications') ||
     p.includes('/settings')
   ) {
-    return BAR_TAB_ITEMS.findIndex((t) => t.id === 'profile');
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'profile');
   }
   if (
     p.includes('/rank') ||
     p.includes('king-of-predictions') ||
     p.includes('predict-and-win')
   ) {
-    return BAR_TAB_ITEMS.findIndex((t) => t.id === 'rank');
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'rank');
   }
 
-  const found = BAR_TAB_ITEMS.findIndex((tab) => {
+  const found = LIQUID_TAB_ITEMS.findIndex((tab) => {
     const route = String(tab.route).toLowerCase();
     const stripped = route.replace(/\/\([^)]+\)/g, '');
     return p === route || p === stripped || p.endsWith(stripped);
@@ -105,7 +98,7 @@ const BottomNav = memo(function BottomNav() {
     (index: number) => {
       if (index === activeIndex) return;
 
-      const tab = BAR_TAB_ITEMS[index];
+      const tab = LIQUID_TAB_ITEMS[index];
       if (!tab) return;
 
       const p = (pathname ?? '').toLowerCase();
@@ -124,22 +117,17 @@ const BottomNav = memo(function BottomNav() {
     [activeIndex, pathname, router],
   );
 
-  const openAiChat = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.navigate(AI_ROUTE as any);
-  }, [router]);
-
   const qc = useQueryClient();
   const { getToken, isSignedIn } = useAuth();
 
   const handleTabPressIn = useCallback(
     (index: number) => {
       if (index === activeIndex) return;
-      const tab = BAR_TAB_ITEMS[index];
+      const tab = LIQUID_TAB_ITEMS[index];
       if (!tab) return;
 
       prefetchRoute(String(tab.route)).catch(() => {});
-      const adjacent = [BAR_TAB_ITEMS[index - 1], BAR_TAB_ITEMS[index + 1]]
+      const adjacent = [LIQUID_TAB_ITEMS[index - 1], LIQUID_TAB_ITEMS[index + 1]]
         .filter(Boolean)
         .map((t) => String(t!.route));
       if (adjacent.length > 0) prefetchRoutes(adjacent).catch(() => {});
@@ -150,17 +138,13 @@ const BottomNav = memo(function BottomNav() {
     [activeIndex, getToken, isSignedIn, qc],
   );
 
-  const prefetchAi = useCallback(() => {
-    prefetchRoute(AI_ROUTE).catch(() => {});
-  }, []);
-
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const labels = t.bottomNav;
 
   const items = useMemo<GlassCapsuleItem<LiquidTabId>[]>(
     () =>
-      BAR_TAB_ITEMS.map((tab) => ({
+      LIQUID_TAB_ITEMS.map((tab) => ({
         key: tab.id,
         label: labels[tab.id],
         testID: `bottom-nav-${tab.id}`,
@@ -178,42 +162,22 @@ const BottomNav = memo(function BottomNav() {
     [labels, navColors.iconActive, navColors.iconIdle, profileAvatarUrl],
   );
 
-  const indexOf = useCallback(
-    (key: LiquidTabId) => BAR_TAB_ITEMS.findIndex((tab) => tab.id === key),
-    [],
-  );
-
-  const [profileCenterX, setProfileCenterX] = useState<number | null>(null);
-
-  const handleItemLayout = useCallback((layout: GlassCapsuleItemLayout<LiquidTabId>) => {
-    if (layout.key !== 'profile') return;
-    setProfileCenterX((prev) => (prev != null && Math.abs(prev - layout.centerX) < 0.5 ? prev : layout.centerX));
-  }, []);
+  const indexOf = useCallback((key: LiquidTabId) => LIQUID_TAB_ITEMS.findIndex((tab) => tab.id === key), []);
 
   if (hidden) return null;
 
-  const activeKey = BAR_TAB_ITEMS[activeIndex]?.id ?? BAR_TAB_ITEMS[0]!.id;
-  const fabLeft =
-    profileCenterX != null ? profileCenterX - AI_CHAT_FAB_WIDTH / 2 : undefined;
+  const activeKey = LIQUID_TAB_ITEMS[activeIndex]?.id ?? LIQUID_TAB_ITEMS[0]!.id;
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { bottom: Math.max(insets.bottom, 16) }]}>
-      <View pointerEvents="box-none" style={styles.navAnchor}>
-        {fabLeft != null ? (
-          <View pointerEvents="box-none" style={[styles.fabWrap, { left: fabLeft }]}>
-            <AiChatFab onPress={openAiChat} onPressIn={prefetchAi} />
-          </View>
-        ) : null}
-        <GlassCapsuleNav
-          items={items}
-          activeKey={activeKey}
-          onChange={(key) => handleNavigate(indexOf(key))}
-          onPressIn={(key) => handleTabPressIn(indexOf(key))}
-          onItemLayout={handleItemLayout}
-          metrics={MAIN_METRICS}
-          maxWidth={width - TAB_BAR_HORIZONTAL_MARGIN * 2}
-        />
-      </View>
+      <GlassCapsuleNav
+        items={items}
+        activeKey={activeKey}
+        onChange={(key) => handleNavigate(indexOf(key))}
+        onPressIn={(key) => handleTabPressIn(indexOf(key))}
+        metrics={MAIN_METRICS}
+        maxWidth={width - TAB_BAR_HORIZONTAL_MARGIN * 2}
+      />
     </View>
   );
 });
@@ -226,15 +190,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 9999,
     elevation: 100,
-  },
-  navAnchor: {
-    alignSelf: 'center',
-    position: 'relative',
-  },
-  fabWrap: {
-    position: 'absolute',
-    bottom: FAB_LIFT,
-    zIndex: 2,
   },
 });
 
