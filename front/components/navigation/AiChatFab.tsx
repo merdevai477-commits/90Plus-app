@@ -9,8 +9,10 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useAppFont } from '@/utils/fontSetup';
 
-const FAB_W = 55;
-const FAB_H = 53;
+export const AI_CHAT_FAB_WIDTH = 55;
+export const AI_CHAT_FAB_HEIGHT = 53;
+const FAB_W = AI_CHAT_FAB_WIDTH;
+const FAB_H = AI_CHAT_FAB_HEIGHT;
 const GRADIENT = ['#6A2BD9', '#4B1FA3'] as const;
 
 function AiMagicIcon({ size = 24 }: { size?: number }) {

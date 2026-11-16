@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -9,11 +9,12 @@ import { useTranslation } from '@/src/i18n';
 import { prefetchCommunityFeed } from '@/hooks/community/useCommunityFeed';
 import { prefetchRoute, prefetchRoutes } from '@/utils/routePrefetcher';
 
-import { AiChatFab } from './AiChatFab';
+import { AI_CHAT_FAB_WIDTH, AiChatFab } from './AiChatFab';
 import {
   GlassCapsuleNav,
   useGlassNavColors,
   type GlassCapsuleItem,
+  type GlassCapsuleItemLayout,
   type GlassCapsuleMetrics,
 } from './GlassCapsuleNav';
 import { BuiltInTabIcon, LIQUID_TAB_ITEMS } from './LiquidGlassTabBar';
@@ -182,23 +183,37 @@ const BottomNav = memo(function BottomNav() {
     [],
   );
 
+  const [profileCenterX, setProfileCenterX] = useState<number | null>(null);
+
+  const handleItemLayout = useCallback((layout: GlassCapsuleItemLayout<LiquidTabId>) => {
+    if (layout.key !== 'profile') return;
+    setProfileCenterX((prev) => (prev != null && Math.abs(prev - layout.centerX) < 0.5 ? prev : layout.centerX));
+  }, []);
+
   if (hidden) return null;
 
   const activeKey = BAR_TAB_ITEMS[activeIndex]?.id ?? BAR_TAB_ITEMS[0]!.id;
+  const fabLeft =
+    profileCenterX != null ? profileCenterX - AI_CHAT_FAB_WIDTH / 2 : undefined;
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { bottom: Math.max(insets.bottom, 16) }]}>
-      <View pointerEvents="box-none" style={styles.fabWrap}>
-        <AiChatFab onPress={openAiChat} onPressIn={prefetchAi} />
+      <View pointerEvents="box-none" style={styles.navAnchor}>
+        {fabLeft != null ? (
+          <View pointerEvents="box-none" style={[styles.fabWrap, { left: fabLeft }]}>
+            <AiChatFab onPress={openAiChat} onPressIn={prefetchAi} />
+          </View>
+        ) : null}
+        <GlassCapsuleNav
+          items={items}
+          activeKey={activeKey}
+          onChange={(key) => handleNavigate(indexOf(key))}
+          onPressIn={(key) => handleTabPressIn(indexOf(key))}
+          onItemLayout={handleItemLayout}
+          metrics={MAIN_METRICS}
+          maxWidth={width - TAB_BAR_HORIZONTAL_MARGIN * 2}
+        />
       </View>
-      <GlassCapsuleNav
-        items={items}
-        activeKey={activeKey}
-        onChange={(key) => handleNavigate(indexOf(key))}
-        onPressIn={(key) => handleTabPressIn(indexOf(key))}
-        metrics={MAIN_METRICS}
-        maxWidth={width - TAB_BAR_HORIZONTAL_MARGIN * 2}
-      />
     </View>
   );
 });
@@ -212,9 +227,12 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     elevation: 100,
   },
+  navAnchor: {
+    alignSelf: 'center',
+    position: 'relative',
+  },
   fabWrap: {
     position: 'absolute',
-    right: 0,
     bottom: FAB_LIFT,
     zIndex: 2,
   },

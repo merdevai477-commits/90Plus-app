@@ -67,11 +67,20 @@ const DEFAULT_METRICS: GlassCapsuleMetrics = {
 const FALLBACK_LABEL = 90;
 const SPRING = { damping: 18, stiffness: 210, mass: 0.9 };
 
+export type GlassCapsuleItemLayout<K extends string> = {
+  key: K;
+  /** Center X of the tab slot, relative to the nav root. */
+  centerX: number;
+  width: number;
+};
+
 type GlassCapsuleNavProps<K extends string> = {
   items: readonly GlassCapsuleItem<K>[];
   activeKey: K;
   onChange: (key: K) => void;
   onPressIn?: (key: K) => void;
+  /** Fires when a tab slot lays out — used to pin floating UI above a tab. */
+  onItemLayout?: (layout: GlassCapsuleItemLayout<K>) => void;
   scale?: number;
   metrics?: Partial<GlassCapsuleMetrics>;
   /** Closed slots narrow (down to `minIdle`) so the bar fits this width in px. */
@@ -84,6 +93,7 @@ export function GlassCapsuleNav<K extends string>({
   activeKey,
   onChange,
   onPressIn,
+  onItemLayout,
   scale = 1,
   metrics: metricsProp,
   maxWidth,
@@ -210,6 +220,17 @@ export function GlassCapsuleNav<K extends string>({
               fontFamily={fontSemi}
               labelColor={navTheme.label}
               testID={item.testID}
+              onLayout={
+                onItemLayout
+                  ? (layout) =>
+                      onItemLayout({
+                        key: item.key,
+                        // Tab x is inside the bar's padded content box — add pad for nav-root coords.
+                        centerX: pad + layout.x + layout.width / 2,
+                        width: layout.width,
+                      })
+                  : undefined
+              }
               onPressIn={onPressIn ? () => onPressIn(item.key) : undefined}
               onPress={() => {
                 if (!active) onChange(item.key);
@@ -234,6 +255,7 @@ type TabButtonProps = {
   fontFamily: string;
   labelColor: string;
   testID?: string;
+  onLayout?: (layout: { x: number; width: number }) => void;
   onPressIn?: () => void;
   onPress: () => void;
 };
@@ -250,6 +272,7 @@ function TabButton({
   fontFamily,
   labelColor,
   testID,
+  onLayout,
   onPressIn,
   onPress,
 }: TabButtonProps) {
@@ -287,6 +310,14 @@ function TabButton({
       onPressOut={() => {
         press.value = withSpring(1, SPRING);
       }}
+      onLayout={
+        onLayout
+          ? (event) => {
+              const { x, width: w } = event.nativeEvent.layout;
+              onLayout({ x, width: w });
+            }
+          : undefined
+      }
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
