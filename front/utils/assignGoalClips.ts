@@ -8,6 +8,7 @@ export interface GoalClipMedia {
 
 type GoalEvent = {
   type: string;
+  time?: { elapsed?: number | null } | null;
   player?: { name?: string | null } | null;
 };
 
@@ -19,8 +20,19 @@ function foldName(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
+function clipText(clip: GoalClipMedia): string {
+  return `${clip.title} ${clip.description ?? ''}`;
+}
+
+function clipMinute(clip: GoalClipMedia): number | null {
+  const matches = clipText(clip).match(/\b(\d{1,3})\b/g);
+  if (!matches?.length) return null;
+  const minute = Number(matches[matches.length - 1]);
+  return minute >= 1 && minute <= 130 ? minute : null;
+}
+
 function clipMatchesPlayer(clip: GoalClipMedia, playerName: string): boolean {
-  const haystack = foldName(`${clip.title} ${clip.description ?? ''}`);
+  const haystack = foldName(clipText(clip));
   if (!haystack) return false;
   const tokens = playerName
     .split(/[^\p{L}\p{N}]+/u)
@@ -29,11 +41,17 @@ function clipMatchesPlayer(clip: GoalClipMedia, playerName: string): boolean {
   return tokens.some((token) => haystack.includes(token));
 }
 
+function minuteAgrees(clip: GoalClipMedia, elapsed: number | null | undefined): boolean {
+  const minute = clipMinute(clip);
+  if (minute == null || elapsed == null) return true;
+  return minute === elapsed;
+}
+
 /**
  * Pair published goal videos with goal events.
- * A name match wins. Leftover clips are used only when they line up 1:1
- * with the goals that are still unmatched, so a single extra clip is not
- * stuck on the wrong goal.
+ * A clip that names a minute only goes on the goal from that minute, so two
+ * goals by the same player do not share one video. Leftover clips are used
+ * only when they line up 1:1 with the goals still unmatched.
  */
 export function assignGoalClips(events: GoalEvent[], clips: GoalClipMedia[]): Array<GoalClipMedia | null> {
   const assigned: Array<GoalClipMedia | null> = events.map(() => null);
@@ -42,18 +60,29 @@ export function assignGoalClips(events: GoalEvent[], clips: GoalClipMedia[]): Ar
   const goalIndexes = events.flatMap((event, index) => (event.type === 'Goal' ? [index] : []));
 
   for (const index of goalIndexes) {
-    const playerName = events[index]?.player?.name ?? '';
-    const clipIndex = usable.findIndex(
-      (clip, candidate) => !used.has(candidate) && clipMatchesPlayer(clip, playerName),
-    );
-    if (clipIndex < 0) continue;
-    used.add(clipIndex);
-    assigned[index] = usable[clipIndex];
+    const event = events[index];
+    const elapsed = event?.time?.elapsed;
+    const candidates = usable.flatMap((clip, candidate) => {
+      if (used.has(candidate)) return [];
+      if (!minuteAgrees(clip, elapsed)) return [];
+      if (!clipMatchesPlayer(clip, event?.player?.name ?? '')) return [];
+      return [{ clip, candidate, exactMinute: clipMinute(clip) != null && clipMinute(clip) === elapsed }];
+    });
+    const exact = candidates.filter((candidate) => candidate.exactMinute);
+    const pick = exact.length === 1 ? exact[0] : exact.length === 0 && candidates.length === 1 ? candidates[0] : null;
+    if (!pick) continue;
+    used.add(pick.candidate);
+    assigned[index] = pick.clip;
   }
 
   const openGoals = goalIndexes.filter((index) => assigned[index] == null);
   const openClips = usable.filter((_, index) => !used.has(index));
-  if (openGoals.length > 0 && openGoals.length === openClips.length) {
+  const minutesConflict = openGoals.some((eventIndex, offset) => {
+    const clip = openClips[offset];
+    if (!clip) return false;
+    return !minuteAgrees(clip, events[eventIndex]?.time?.elapsed);
+  });
+  if (openGoals.length > 0 && openGoals.length === openClips.length && !minutesConflict) {
     openGoals.forEach((eventIndex, offset) => {
       assigned[eventIndex] = openClips[offset];
     });

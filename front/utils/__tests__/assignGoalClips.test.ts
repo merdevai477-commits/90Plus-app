@@ -1,7 +1,37 @@
 import { assignGoalClips } from '../assignGoalClips';
 
 describe('assignGoalClips', () => {
-  const goal = (name: string) => ({ type: 'Goal', player: { name } });
+  const goal = (name: string, elapsed?: number) => ({
+    type: 'Goal',
+    player: { name },
+    time: { elapsed: elapsed ?? null },
+  });
+
+  it('keeps two goals by the same player on the clip that names that minute', () => {
+    const clips = [
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'D Scherhant 41', url: 'https://example.com/41' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'N Schlotterbeck 65', url: 'https://example.com/65' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'F Wirtz 71', url: 'https://example.com/71' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'B Gruda 77', url: 'https://example.com/77' },
+    ];
+    const assigned = assignGoalClips(
+      [
+        goal('Scherhant', 41),
+        goal('Wirtz', 60),
+        goal('Schlotterbeck', 65),
+        goal('Wirtz', 71),
+        goal('Gruda', 77),
+      ],
+      clips,
+    );
+    expect(assigned.map((clip) => clip?.url ?? null)).toEqual([
+      'https://example.com/41',
+      null,
+      'https://example.com/65',
+      'https://example.com/71',
+      'https://example.com/77',
+    ]);
+  });
 
   it('attaches a clip to the scorer named in the title and leaves other events alone', () => {
     const clips = [
