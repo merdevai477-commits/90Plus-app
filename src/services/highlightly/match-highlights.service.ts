@@ -1,5 +1,6 @@
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { isHighlightCoverageFixture } from './highlight-coverage';
 import {
   isFinishedHighlightStatus,
   pickGoals,
@@ -34,7 +35,14 @@ export async function getFixtureHighlights(
 ): Promise<FixtureHighlightsResult> {
   const fixture = await prisma.cachedFixture.findUnique({
     where: { fixtureId },
-    select: { status: true, matchDate: true },
+    select: {
+      status: true,
+      matchDate: true,
+      leagueName: true,
+      leagueCountry: true,
+      homeTeamName: true,
+      awayTeamName: true,
+    },
   });
   if (!fixture || !isFinishedHighlightStatus(fixture.status)) return EMPTY;
 
@@ -59,6 +67,10 @@ export async function getFixtureHighlights(
   const stored = clips as StoredHighlightClip[];
   const summary = pickSummary(stored);
   const goals = pickGoals(stored);
+  const covered = isHighlightCoverageFixture(fixture);
+  if (!covered && summary == null && goals.length === 0) {
+    return { status: 'unavailable', summary: null, goals: [], checkedAt: null };
+  }
   const status = resolveReadStatus({
     finished: true,
     hasUsefulClips: summary != null || goals.length > 0,

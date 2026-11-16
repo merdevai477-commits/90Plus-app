@@ -365,7 +365,7 @@ describe('highlight sync and read path', () => {
     process.env.HIGHLIGHTLY_API_KEY = 'test-key';
     resetHighlightQuotaForTests({ day: utcDayKey(now), used: 0, lastTickMs: null });
     mockPrisma.cachedFixture.findMany.mockResolvedValue([
-      { fixtureId: 42, homeTeamName: 'Al Ahly', awayTeamName: 'Zamalek', matchDate: kickoff },
+      { fixtureId: 42, homeTeamName: 'Al Ahly', awayTeamName: 'Zamalek', leagueName: 'Egyptian Premier League', leagueCountry: 'Egypt', matchDate: kickoff },
     ]);
     mockPrisma.fixtureHighlightSync.findMany.mockResolvedValue([]);
     const fetchPage = jest.fn().mockRejectedValue(new HighlightlyRequestError(401));
@@ -385,7 +385,7 @@ describe('highlight sync and read path', () => {
     const highlights = new Map<number, { fixtureId: number | null; category: string }>();
     const syncRows = new Map<number, { status: string; attempts: number }>();
     mockPrisma.cachedFixture.findMany.mockResolvedValue([
-      { fixtureId: 42, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', matchDate: kickoff },
+      { fixtureId: 42, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff },
     ]);
     mockPrisma.fixtureHighlightSync.findMany.mockResolvedValue([]);
     mockPrisma.matchHighlight.findMany.mockResolvedValue([]);
@@ -484,7 +484,14 @@ describe('highlight sync and read path', () => {
     const fetchMock = jest.fn();
     global.fetch = fetchMock as typeof fetch;
     const now = new Date('2026-11-16T22:00:00.000Z');
-    mockPrisma.cachedFixture.findUnique.mockResolvedValue({ status: 'FT', matchDate: kickoff });
+    mockPrisma.cachedFixture.findUnique.mockResolvedValue({
+      status: 'FT',
+      matchDate: kickoff,
+      leagueName: 'La Liga',
+      leagueCountry: 'Spain',
+      homeTeamName: 'Barcelona',
+      awayTeamName: 'Real Madrid',
+    });
     mockPrisma.matchHighlight.findMany.mockResolvedValue([]);
     mockPrisma.fixtureHighlightSync.findUnique.mockResolvedValue({
       fixtureId: 42,
@@ -509,8 +516,8 @@ describe('highlight sync and read path', () => {
     const now = new Date('2026-11-16T20:00:00.000Z');
     resetHighlightQuotaForTests({ day: utcDayKey(now), used: 0, lastTickMs: null });
     mockPrisma.cachedFixture.findMany.mockResolvedValue([
-      { fixtureId: 1, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', matchDate: kickoff },
-      { fixtureId: 2, homeTeamName: 'Sevilla', awayTeamName: 'Betis', matchDate: kickoff },
+      { fixtureId: 1, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff },
+      { fixtureId: 2, homeTeamName: 'Sevilla', awayTeamName: 'Betis', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff },
     ]);
     mockPrisma.fixtureHighlightSync.findMany.mockResolvedValue([]);
     mockPrisma.matchHighlight.findMany.mockResolvedValue([]);

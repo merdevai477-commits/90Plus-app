@@ -20,6 +20,7 @@ import {
   recordHighlightRequest,
   type HighlightAllowance,
 } from './highlightly.quota';
+import { isHighlightCoverageFixture } from './highlight-coverage';
 import {
   FINISHED_HIGHLIGHT_STATUSES,
   GOAL_CATEGORY,
@@ -120,23 +121,26 @@ async function syncUnderLease(
       fixtureId: true,
       homeTeamName: true,
       awayTeamName: true,
+      leagueName: true,
+      leagueCountry: true,
       matchDate: true,
     },
     orderBy: { matchDate: 'desc' },
     take: FIXTURE_SCAN_LIMIT,
   });
+  const covered = fixtures.filter((fixture) => isHighlightCoverageFixture(fixture));
   if (fixtures.length === FIXTURE_SCAN_LIMIT) {
     logger.warn('[Highlightly] finished-fixture scan hit the safety cap');
   }
 
-  if (!fixtures.length) return { skipped: null, requests: 0, dates: [] };
+  if (!covered.length) return { skipped: null, requests: 0, dates: [] };
 
   const syncRows = await prisma.fixtureHighlightSync.findMany({
-    where: { fixtureId: { in: fixtures.map((fixture) => fixture.fixtureId) } },
+    where: { fixtureId: { in: covered.map((fixture) => fixture.fixtureId) } },
   });
   const syncByFixture = new Map(syncRows.map((row) => [row.fixtureId, row]));
   const due: DueFixture[] = [];
-  const datePlanInput = fixtures.map((fixture) => {
+  const datePlanInput = covered.map((fixture) => {
     const state = syncByFixture.get(fixture.fixtureId);
     const isDue = isFixtureDue(state, now);
     if (isDue) {
@@ -160,7 +164,7 @@ async function syncUnderLease(
   const dates = selectSyncDates(datePlanInput);
   if (!dates.length) return { skipped: null, requests: 0, dates: [] };
 
-  const candidates: HighlightFixtureCandidate[] = fixtures.map((fixture) => ({
+  const candidates: HighlightFixtureCandidate[] = covered.map((fixture) => ({
     fixtureId: fixture.fixtureId,
     homeTeamName: fixture.homeTeamName,
     awayTeamName: fixture.awayTeamName,
@@ -258,10 +262,13 @@ async function persistClips(
   for (const clip of clips) {
     if (!USEFUL_CATEGORIES.has(clip.category)) continue;
     const link = linkHighlightToFixture(clip, fixtures);
-    if (link.ambiguous) {
-      logger.warn(
-        `[Highlightly] skipped ambiguous clip ${clip.highlightlyId} candidates=${link.candidateIds.join(',')}`,
-      );
+    if (link.fixtureId == null) {
+      if (link.ambiguous) {
+        logger.warn(
+          `[Highlightly] skipped ambiguous clip ${clip.highlightlyId} candidates=${link.candidateIds.join(',')}`,
+        );
+      }
+      continue;
     }
     const shared = {
       highlightlyMatchId: clip.highlightlyMatchId,
