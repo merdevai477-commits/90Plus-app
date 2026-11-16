@@ -64,7 +64,7 @@ export const AUTH_LIGHT: AuthPalette = {
   closeIcon: '#FFFFFF',
 };
 
-/** Dark adaptation of the same Login structure */
+/** Dark adaptation of the same Login / Landing structure */
 export const AUTH_DARK: AuthPalette = {
   pageBg: '#08060F',
   headerGradient: ['#4B1FA3', '#100729'],
@@ -82,9 +82,10 @@ export const AUTH_DARK: AuthPalette = {
   inputBorder: '#2A2040',
   inputPlaceholder: '#696571',
   inputIcon: 'rgba(255,255,255,0.45)',
-  socialBg: 'rgba(56,54,54,0.2)',
-  socialBorder: '#170E2E',
-  divider: 'rgba(87,87,87,0.5)',
+  // Solid dark surfaces so landing secondary/social stay readable (not white-on-white).
+  socialBg: '#120A22',
+  socialBorder: '#2A2040',
+  divider: 'rgba(255,255,255,0.14)',
   checkboxBg: '#0A0618',
   checkboxBorder: '#868686',
   statusBar: 'light',

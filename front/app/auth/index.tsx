@@ -25,15 +25,15 @@ import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 const LANDING_HERO = require('../../assets/images/auth/figma/auth-landing-hero.png');
 
 /**
- * Auth landing — Figma 1620:5898.
- * First screen of /auth: stadium hero → Sign up / Log in → social.
+ * Auth landing — Figma 1620:5898 (light) + dark adaptation of the same layout.
+ * Stadium hero → Sign up / Log in → social → legal.
  */
 function AuthLandingInner() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { language } = useTranslation();
   const isRTL = language === 'ar';
-  const { colors } = useAuthTheme();
+  const { colors, isDark } = useAuthTheme();
   const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
 
   const copy = {
@@ -71,21 +71,28 @@ function AuthLandingInner() {
     }
   };
 
-  // Landing chrome is always the Figma light palette (1620:5898).
+  const pageBg = colors.pageBg;
   const muted = colors.textSecondary;
   const primary = colors.primary;
 
+  const fadeColors = isDark
+    ? (['transparent', 'rgba(8,6,15,0)', pageBg] as const)
+    : (['transparent', 'rgba(252,252,252,0)', pageBg] as const);
+
   return (
-    <View style={[styles.root, { backgroundColor: '#FCFCFC' }]}>
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
       <StatusBar style="light" />
       <ImageBackground
         source={LANDING_HERO}
         style={styles.hero}
         resizeMode="cover"
       >
+        {isDark ? (
+          <View style={styles.darkHeroScrim} pointerEvents="none" />
+        ) : null}
         <LinearGradient
-          colors={['transparent', 'rgba(252,252,252,0)', '#FCFCFC']}
-          locations={[0.599, 0.72, 0.869]}
+          colors={[...fadeColors]}
+          locations={[0.55, 0.72, 0.9]}
           style={StyleSheet.absoluteFill}
         />
       </ImageBackground>
@@ -95,7 +102,7 @@ function AuthLandingInner() {
           styles.actions,
           {
             paddingBottom: Math.max(insets.bottom, 16) + 12,
-            backgroundColor: '#FCFCFC',
+            backgroundColor: pageBg,
           },
         ]}
       >
@@ -114,7 +121,7 @@ function AuthLandingInner() {
           </LinearGradient>
         </Pressable>
 
-        {/* Figma 1620:6000 — white outlined login CTA */}
+        {/* Figma 1620:6000 — outlined login CTA (theme-aware) */}
         <AuthSecondaryButton
           label={copy.login}
           onPress={() => router.push('/auth/login')}
@@ -159,7 +166,17 @@ function AuthLandingInner() {
       </View>
 
       {oauthLoading ? (
-        <View style={styles.oauthOverlay} pointerEvents="none">
+        <View
+          style={[
+            styles.oauthOverlay,
+            {
+              backgroundColor: isDark
+                ? 'rgba(8,6,15,0.35)'
+                : 'rgba(255,255,255,0.25)',
+            },
+          ]}
+          pointerEvents="none"
+        >
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : null}
@@ -168,10 +185,8 @@ function AuthLandingInner() {
 }
 
 export default function AuthLandingScreen() {
-  // Figma 1620:5898 is light-only — never inherit app/system dark tokens
-  // (that was painting white text on white secondary/social buttons).
   return (
-    <AuthThemeProvider forceScheme="light">
+    <AuthThemeProvider>
       <AuthLandingInner />
     </AuthThemeProvider>
   );
@@ -185,6 +200,10 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     minHeight: 420,
+  },
+  darkHeroScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8, 6, 15, 0.42)',
   },
   actions: {
     paddingHorizontal: 20,
@@ -231,6 +250,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.25)',
   },
 });

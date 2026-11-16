@@ -427,7 +427,7 @@ function createAuthPrimitiveStyles(
       borderRadius: s(18),
       borderWidth: 1,
       borderColor: colors.inputBorder,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.cardBg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
