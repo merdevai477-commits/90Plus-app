@@ -320,11 +320,15 @@ function RootLayoutNav() {
         options={{ 
           headerShown: false,
           gestureEnabled: false, // Prevent swipe back
+          contentStyle: { backgroundColor: 'transparent' },
         }} 
       />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="delete-account" options={{ headerShown: false }} />
-      <Stack.Screen name="auth-callback" options={{ headerShown: false, animation: 'none' }} />
+      <Stack.Screen
+        name="auth-callback"
+        options={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: 'transparent' } }}
+      />
       <Stack.Screen name="user" options={{ headerShown: false }} />
       <Stack.Screen name="player-profile" options={{ headerShown: false }} />
       <Stack.Screen name="player-career" options={{ headerShown: false }} />

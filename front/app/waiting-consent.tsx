@@ -24,6 +24,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,11 +34,17 @@ import { captureException } from '../services/sentry.service';
 import { getApiEndpoint } from '../config/api.config';
 import { useParentalConsentPoll } from '../hooks/useParentalConsentPoll';
 import { fetchParentalConsentStatus } from '../hooks/useAgeVerification';
+import {
+  GATE_THEME,
+  useResolvedAppScheme,
+} from '../hooks/useResolvedAppScheme';
 
 export default function WaitingConsentScreen() {
   const { getToken } = useAuth();
   const { translate: t, language, isRTL } = useTranslation();
   const params = useLocalSearchParams();
+  const { isDark } = useResolvedAppScheme();
+  const theme = isDark ? GATE_THEME.dark : GATE_THEME.light;
   
   const [parentEmail] = useState(params.parentEmail as string || '');
   const [expiresAt] = useState(params.expiresAt as string || '');
@@ -152,14 +159,15 @@ export default function WaitingConsentScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar style={theme.statusBar} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#22c55e"
+            tintColor={theme.primary}
           />
         }
       >
@@ -169,20 +177,25 @@ export default function WaitingConsentScreen() {
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>
+        <Text style={[styles.title, { color: theme.text }]}>
           {t('waitingConsent.title') || 'Waiting for Parent'}
         </Text>
 
         {/* Email Info */}
-        <View style={styles.emailBox}>
-          <Text style={styles.emailLabel}>
+        <View
+          style={[
+            styles.emailBox,
+            { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 },
+          ]}
+        >
+          <Text style={[styles.emailLabel, { color: theme.textMuted }]}>
             {t('waitingConsent.emailSentTo') || 'We sent an email to:'}
           </Text>
           <Text style={styles.emailText}>{parentEmail}</Text>
         </View>
 
         {/* Instructions */}
-        <Text style={styles.instructions}>
+        <Text style={[styles.instructions, { color: theme.textMuted }]}>
           {t('waitingConsent.instructions') || 'Please ask your parent to check their email and confirm.'}
         </Text>
 
@@ -235,39 +248,47 @@ export default function WaitingConsentScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.changeButton}
+            style={[
+              styles.changeButton,
+              { backgroundColor: theme.surface, borderColor: theme.primary },
+            ]}
             onPress={handleChangeEmail}
             disabled={loading}
           >
-            <Ionicons name="create-outline" size={20} color="#22c55e" />
-            <Text style={styles.changeButtonText}>
+            <Ionicons name="create-outline" size={20} color={theme.primary} />
+            <Text style={[styles.changeButtonText, { color: theme.primary }]}>
               {t('waitingConsent.changeEmail') || 'Change Email'}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Help Text */}
-        <View style={styles.helpBox}>
-          <Ionicons name="help-circle-outline" size={24} color="#6b7280" />
+        <View
+          style={[
+            styles.helpBox,
+            { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 },
+          ]}
+        >
+          <Ionicons name="help-circle-outline" size={24} color={theme.textMuted} />
           <View style={styles.helpContent}>
-            <Text style={styles.helpTitle}>
+            <Text style={[styles.helpTitle, { color: theme.text }]}>
               {t('waitingConsent.helpTitle') || "Didn't receive the email?"}
             </Text>
-            <Text style={styles.helpText}>
+            <Text style={[styles.helpText, { color: theme.textMuted }]}>
               {t('waitingConsent.helpText') || 'Check spam folder or try resending'}
             </Text>
           </View>
         </View>
 
         {stopReason === 'cap' && (
-          <Text style={styles.pullHint}>
+          <Text style={[styles.pullHint, { color: theme.textMuted }]}>
             {t('waitingConsent.autoPollPaused') ||
               'Automatic checks paused to save data. Pull down to check status anytime.'}
           </Text>
         )}
 
         {/* Pull to Refresh Hint */}
-        <Text style={styles.pullHint}>
+        <Text style={[styles.pullHint, { color: theme.textMuted }]}>
           {t('waitingConsent.pullToRefresh') || 'Pull down to check status'}
         </Text>
 
@@ -284,7 +305,6 @@ export default function WaitingConsentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   scrollContent: {
     flexGrow: 1,
@@ -298,12 +318,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
     textAlign: 'center',
     marginBottom: 32,
   },
   emailBox: {
-    backgroundColor: '#1f2937',
     borderRadius: 12,
     padding: 20,
     marginBottom: 24,
@@ -311,7 +329,6 @@ const styles = StyleSheet.create({
   },
   emailLabel: {
     fontSize: 14,
-    color: '#9ca3af',
     marginBottom: 8,
   },
   emailText: {
@@ -321,7 +338,6 @@ const styles = StyleSheet.create({
   },
   instructions: {
     fontSize: 16,
-    color: '#d1d5db',
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 20,
@@ -399,21 +415,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f2937',
     borderWidth: 2,
-    borderColor: '#22c55e',
     borderRadius: 12,
     paddingVertical: 16,
   },
   changeButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#22c55e',
     marginLeft: 8,
   },
   helpBox: {
     flexDirection: 'row',
-    backgroundColor: '#1f2937',
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
@@ -425,17 +437,14 @@ const styles = StyleSheet.create({
   helpTitle: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#fff',
     marginBottom: 4,
   },
   helpText: {
     fontSize: 12,
-    color: '#9ca3af',
     lineHeight: 18,
   },
   pullHint: {
     fontSize: 12,
-    color: '#6b7280',
     textAlign: 'center',
     fontStyle: 'italic',
   },

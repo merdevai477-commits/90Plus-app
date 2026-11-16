@@ -2,6 +2,12 @@ import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useTranslation } from '@/src/i18n';
+import {
+  GATE_THEME,
+  useResolvedAppScheme,
+} from '@/hooks/useResolvedAppScheme';
 
 /**
  * OAuth redirect target for Google/Apple sign-in.
@@ -9,6 +15,11 @@ import { useRouter } from 'expo-router';
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  const { language } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const theme = isDark ? GATE_THEME.dark : GATE_THEME.light;
+  const label =
+    language === 'ar' ? 'جاري تسجيل الدخول…' : 'Signing you in…';
 
   useEffect(() => {
     WebBrowser.maybeCompleteAuthSession();
@@ -26,9 +37,10 @@ export default function AuthCallbackScreen() {
   }, [router]);
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#7c3aed" />
-      <Text style={styles.label}>Signing you in…</Text>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar style={theme.statusBar} />
+      <ActivityIndicator size="large" color={theme.primary} />
+      <Text style={[styles.label, { color: theme.textMuted }]}>{label}</Text>
     </View>
   );
 }
@@ -38,11 +50,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0a0612',
     gap: 16,
   },
   label: {
-    color: 'rgba(255,255,255,0.7)',
     fontSize: 15,
     fontWeight: '600',
   },
