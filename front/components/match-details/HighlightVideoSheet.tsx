@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
@@ -16,11 +16,18 @@ type Props = {
   closeLabel?: string;
 };
 
-/** Plays the clip itself: an MP4 in the native player, or a YouTube embed with no watch page. */
+const PLAYER_AGENT =
+  'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36';
+
+/** Plays the clip itself: an MP4 in the native player, or a YouTube player with no watch page. */
 export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close' }: Props) {
   const fileUrl = resolveHighlightPlaybackUrl(url);
   const embedUrl = youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl);
   const direct = !embedUrl && isDirectHighlightFile(fileUrl);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [url]);
 
   return (
     <Modal
@@ -32,32 +39,42 @@ export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close
     >
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
-        {visible && embedUrl ? (
+        {visible && embedUrl && !failed ? (
           <View style={styles.player}>
             <WebView
-              source={{ html: youtubePlayerHtml(embedUrl), baseUrl: 'https://90plus.pro' }}
+              source={{
+                uri: embedUrl,
+                headers: { Referer: 'https://90plus.pro' },
+              }}
               style={styles.video}
+              userAgent={PLAYER_AGENT}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
+              thirdPartyCookiesEnabled
+              sharedCookiesEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
               allowsFullscreenVideo
               javaScriptEnabled
               domStorageEnabled
+              onError={() => setFailed(true)}
+              onHttpError={() => setFailed(true)}
             />
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
-        {visible && direct ? (
+        {visible && direct && !failed ? (
           <DirectClipPlayer url={fileUrl} onClose={onClose} closeLabel={closeLabel} />
+        ) : null}
+        {visible && (failed || (!embedUrl && !direct)) ? (
+          <View style={styles.player}>
+            <Text style={styles.error}>تعذر تشغيل الفيديو</Text>
+            <CloseButton onClose={onClose} label={closeLabel} />
+          </View>
         ) : null}
       </View>
     </Modal>
   );
-}
-
-function youtubePlayerHtml(embedUrl: string): string {
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;background:#000;height:100%;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${embedUrl}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></body></html>`;
 }
 
 function DirectClipPlayer({
@@ -117,11 +134,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   video: {
     width: '100%',
     height: '100%',
     backgroundColor: '#000000',
+  },
+  error: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   close: {
     position: 'absolute',

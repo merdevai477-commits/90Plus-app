@@ -53,6 +53,8 @@ export async function fetchHighlightPage(params: {
   limit?: number;
   timezone?: string;
   signal?: AbortSignal;
+  homeTeamName?: string;
+  awayTeamName?: string;
 }): Promise<HighlightlyPage> {
   const apiKey = process.env.HIGHLIGHTLY_API_KEY?.trim();
   if (!apiKey) throw new HighlightlyRequestError(0);
@@ -62,6 +64,8 @@ export async function fetchHighlightPage(params: {
   url.searchParams.set('timezone', params.timezone ?? HIGHLIGHT_TIMEZONE);
   url.searchParams.set('limit', String(params.limit ?? HIGHLIGHT_PAGE_LIMIT));
   url.searchParams.set('offset', String(params.offset ?? 0));
+  if (params.homeTeamName) url.searchParams.set('homeTeamName', params.homeTeamName);
+  if (params.awayTeamName) url.searchParams.set('awayTeamName', params.awayTeamName);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

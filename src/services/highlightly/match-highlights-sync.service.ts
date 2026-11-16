@@ -189,37 +189,44 @@ async function syncUnderLease(
     allowance = await readHighlightAllowance(now);
 
     const firstPass = await persistClips(page.clips, candidates);
-    const covered = new Set(firstPass.summaryFixtureIds);
-    const stillOpen = dueOnDate.some((fixture) => !covered.has(fixture.fixtureId));
-    const more = page.offset + page.clips.length < page.totalCount;
+    const summaries = new Set(firstPass.summaryFixtureIds);
+    const linked = new Set(firstPass.linkedFixtureIds);
+    const missed = dueOnDate.filter((fixture) => !linked.has(fixture.fixtureId));
     if (
-      more &&
-      stillOpen &&
+      missed.length > 0 &&
       requests < MAX_REQUESTS_PER_TICK &&
       allowanceAllows(allowance, now) &&
       !isLost() &&
       !signal.aborted
     ) {
+      const target = missed[0];
       try {
-        const second = await pullPage(
+        const focused = await pullPage(
           fetchPage,
-          { date, offset: HIGHLIGHT_PAGE_LIMIT, signal },
+          {
+            date,
+            offset: 0,
+            homeTeamName: target.homeTeamName,
+            awayTeamName: target.awayTeamName,
+            signal,
+          },
           now,
         );
         requests += 1;
         allowance = await readHighlightAllowance(now);
-        const extra = await persistClips(second.clips, candidates);
-        for (const fixtureId of extra.summaryFixtureIds) covered.add(fixtureId);
+        const extra = await persistClips(focused.clips, candidates);
+        for (const fixtureId of extra.summaryFixtureIds) summaries.add(fixtureId);
+        for (const fixtureId of extra.linkedFixtureIds) linked.add(fixtureId);
       } catch (error) {
         logPullFailure(date, error);
-        await markDateChecked(dueOnDate, covered, now);
+        await markDateChecked(dueOnDate, summaries, now);
         break;
       }
     }
 
-    await markDateChecked(dueOnDate, covered, now);
+    await markDateChecked(dueOnDate, summaries, now);
     logger.info(
-      `[Highlightly] date=${date} requests=${requests} summaries=${covered.size} due=${dueOnDate.length}`,
+      `[Highlightly] date=${date} requests=${requests} linked=${linked.size} due=${dueOnDate.length}`,
     );
   }
 
@@ -228,7 +235,13 @@ async function syncUnderLease(
 
 async function pullPage(
   fetchPage: FetchPage,
-  params: { date: string; offset: number; signal: AbortSignal },
+  params: {
+    date: string;
+    offset: number;
+    signal: AbortSignal;
+    homeTeamName?: string;
+    awayTeamName?: string;
+  },
   now: Date,
 ): Promise<HighlightlyPage> {
   try {
@@ -237,6 +250,8 @@ async function pullPage(
       offset: params.offset,
       limit: HIGHLIGHT_PAGE_LIMIT,
       timezone: HIGHLIGHT_TIMEZONE,
+      homeTeamName: params.homeTeamName,
+      awayTeamName: params.awayTeamName,
       signal: params.signal,
     });
     await noteHighlightUpstream(now, { remaining: page.upstreamRemaining, tier: page.tier });
@@ -257,8 +272,9 @@ async function pullPage(
 async function persistClips(
   clips: NormalizedHighlight[],
   fixtures: HighlightFixtureCandidate[],
-): Promise<{ summaryFixtureIds: number[] }> {
+): Promise<{ summaryFixtureIds: number[]; linkedFixtureIds: number[] }> {
   const summaryFixtureIds: number[] = [];
+  const linkedFixtureIds: number[] = [];
   for (const clip of clips) {
     if (!USEFUL_CATEGORIES.has(clip.category)) continue;
     const link = linkHighlightToFixture(clip, fixtures);
@@ -298,11 +314,12 @@ async function persistClips(
         ...(link.fixtureId != null ? { fixtureId: link.fixtureId } : {}),
       },
     });
+    if (link.fixtureId != null) linkedFixtureIds.push(link.fixtureId);
     if (link.fixtureId != null && clip.category === SUMMARY_CATEGORY) {
       summaryFixtureIds.push(link.fixtureId);
     }
   }
-  return { summaryFixtureIds };
+  return { summaryFixtureIds, linkedFixtureIds };
 }
 
 async function markDateChecked(

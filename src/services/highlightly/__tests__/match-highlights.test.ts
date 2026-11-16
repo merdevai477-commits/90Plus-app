@@ -566,7 +566,11 @@ describe('highlight sync and read path', () => {
     expect(outcome.requests).toBe(2);
     expect(fetchPage).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ date: highlightDateKey(kickoff), offset: 40 }),
+      expect.objectContaining({
+        date: highlightDateKey(kickoff),
+        homeTeamName: 'Sevilla',
+        awayTeamName: 'Betis',
+      }),
     );
   });
 
