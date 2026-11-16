@@ -23,7 +23,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "179",
+      "buildNumber": "1801",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true,
@@ -85,7 +85,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 134,
+      "versionCode": 135,
       "softwareKeyboardLayoutMode": "resize",
       "intentFilters": [
         {
@@ -249,20 +249,22 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash/splash-logo-v3.png",
-          "imageWidth": 220,
+          "image": "./assets/images/splash/splash-logo-engraved.jpg",
+          "imageWidth": 260,
           "resizeMode": "contain",
-          "backgroundColor": "#0d0529",
+          "backgroundColor": "#F8F7FF",
           "dark": {
-            "backgroundColor": "#0d0529"
+            "backgroundColor": "#F8F7FF",
+            "image": "./assets/images/splash/splash-logo-engraved.jpg"
           },
           "android": {
-            "backgroundColor": "#0d0529",
-            "image": "./assets/images/splash/splash-logo-v3.png",
-            "imageWidth": 220,
+            "backgroundColor": "#F8F7FF",
+            "image": "./assets/images/splash/splash-logo-engraved.jpg",
+            "imageWidth": 260,
             "resizeMode": "contain",
             "dark": {
-              "backgroundColor": "#0d0529"
+              "backgroundColor": "#F8F7FF",
+              "image": "./assets/images/splash/splash-logo-engraved.jpg"
             }
           }
         }

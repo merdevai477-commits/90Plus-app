@@ -5,13 +5,16 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import Animated from 'react-native-reanimated';
 
-/** Matches Figma splash (node 1007:2693) base fill. */
-export const SPLASH_BG_COLOR = '#0d0529';
+/**
+ * Figma Splash / Logo Screen (1593:4238) — light surface with engraved logo.
+ * Surface token from Design System: #F8F7FF.
+ */
+export const SPLASH_BG_COLOR = '#F8F7FF';
 
-const LOGO_SIZE = 254;
+const LOGO_SIZE = 280;
 
-/** Single source for native + JS splash — bump the filename when the artwork changes. */
-export const SPLASH_LOGO = require('../../assets/images/splash/splash-logo-v3.png');
+/** Engraved 90PLUS mark — bump filename when artwork changes. */
+export const SPLASH_LOGO = require('../../assets/images/splash/splash-logo-engraved.jpg');
 
 interface SplashScreenLayoutProps {
   children?: React.ReactNode;
@@ -19,7 +22,7 @@ interface SplashScreenLayoutProps {
 }
 
 /**
- * Shared splash layout: dark purple base, stadium photo overlay, centered 90Plus logo.
+ * Shared splash layout: light lavender base + centered engraved 90Plus logo.
  *
  * Keep the native splash up until this logo has painted, otherwise a cold start
  * can briefly show the baked native logo then swap to a stale JS/disk-cached one.
@@ -44,19 +47,12 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
       <View style={styles.baseBg} pointerEvents="none" />
 
-      <View style={styles.stadiumWrap} pointerEvents="none">
-        <Image
-          source={require('../../assets/images/splash/splash-background.png')}
-          style={styles.stadiumImage}
-          contentFit="cover"
-          priority="high"
-          cachePolicy="memory"
-        />
-      </View>
+      {/* Soft ambient glow behind the engraved mark */}
+      <View style={styles.glow} pointerEvents="none" />
 
       <LogoWrap style={[styles.logoContainer, logoAnimatedStyle]} pointerEvents="none">
         <Image
@@ -64,7 +60,6 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
           style={styles.logo}
           contentFit="contain"
           priority="high"
-          // Avoid a stale disk-cached v2 logo flashing after a rebrand.
           cachePolicy={Platform.OS === 'android' ? 'none' : 'memory'}
           onLoad={() => setLogoReady(true)}
         />
@@ -87,17 +82,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: SPLASH_BG_COLOR,
   },
-  stadiumWrap: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.54,
-    overflow: 'hidden',
-  },
-  stadiumImage: {
+  glow: {
     position: 'absolute',
-    width: '116.14%',
-    height: '106.51%',
-    left: '-10.73%',
-    top: '-0.02%',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: 'rgba(106, 43, 217, 0.06)',
   },
   logoContainer: {
     width: LOGO_SIZE,
