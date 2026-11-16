@@ -1837,12 +1837,13 @@ const MatchDetailsScreen = () => {
           totalVotes: Number(crowdRaw?.totalVotes) || null,
           home: { name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo },
           away: { name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo },
-          title: t.matchDetails.crowdVoteTitle || 'Match result vote',
+          title: t.matchDetails.crowdVoteTitle || 'Fan vote results',
           subtitle: t.matchDetails.crowdVoteSubtitle || 'Who will win the match?',
           drawLabel: t.matchDetails.crowdVoteDraw || 'Draw',
           votesUnit: t.matchDetails.crowdVoteUnit || 'votes',
           tapHint: t.matchDetails.crowdVoteTap || 'Tap a card to vote',
-          votedHint: t.matchDetails.crowdVoteDone || 'Your vote is in',
+          votedHint: t.matchDetails.crowdVoteDone || 'Your vote was recorded successfully',
+          lockedHint: t.matchDetails.crowdVoteLocked || 'You cannot vote again',
           voteKey: fixtureId || null,
         }
       : null;

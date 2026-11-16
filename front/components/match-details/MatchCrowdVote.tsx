@@ -1,18 +1,30 @@
 /**
- * Fan 1-X-2 vote (365 "Who will win?") — header, three equal tiles, split bar, footer.
+ * Fan 1-X-2 vote (365 "Who will win?") — Figma 1700:12127.
+ * Light card: option tiles + percent labels above a split bar + footer.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from './MatchText';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 export type CrowdVoteChoice = 'home' | 'draw' | 'away';
 
 const VOTE_STORAGE_PREFIX = 'match-crowd-vote:';
+const CHART_ICON = require('../../assets/images/match-vote/voting-chart.svg');
+
+const INK = '#24104E';
+const MUTED = '#6B7280';
+const BORDER = '#EADFFC';
+const TRACK = '#E9D5FF';
+const PRIMARY = '#6A2BD9';
+const PRIMARY_DEEP = '#381773';
+const HOME_BAR: [string, string] = ['#A855F7', '#6A2BD9'];
+const AWAY_BAR: [string, string] = ['#456FC7', '#2D4D94'];
+const DRAW_BAR = '#8791A3';
 
 function isVoteChoice(value: unknown): value is CrowdVoteChoice {
   return value === 'home' || value === 'draw' || value === 'away';
@@ -33,40 +45,14 @@ export type MatchCrowdVoteData = {
   votesUnit: string;
   tapHint?: string;
   votedHint?: string;
+  lockedHint?: string;
   /** Fixture id; the user's single vote is remembered per match under this key. */
   voteKey?: string | number | null;
 };
 
 type Props = MatchCrowdVoteData & { rtl: boolean };
 
-type Tone = { color: string; border: string; soft: string; strong: string; gradient: [string, string] };
-
-const TONE: Record<CrowdVoteChoice, Tone> = {
-  home: {
-    color: '#A855F7',
-    border: 'rgba(168,85,247,0.28)',
-    soft: 'rgba(168,85,247,0.12)',
-    strong: 'rgba(168,85,247,0.30)',
-    gradient: ['#B46CFF', '#7C3AED'],
-  },
-  draw: {
-    color: '#94A3B8',
-    border: 'rgba(148,163,184,0.24)',
-    soft: 'rgba(148,163,184,0.10)',
-    strong: 'rgba(148,163,184,0.26)',
-    gradient: ['#A8B3C4', '#64748B'],
-  },
-  away: {
-    color: '#3B82F6',
-    border: 'rgba(59,130,246,0.30)',
-    soft: 'rgba(59,130,246,0.12)',
-    strong: 'rgba(59,130,246,0.30)',
-    gradient: ['#60A5FA', '#2563EB'],
-  },
-};
-
 const CHOICES: CrowdVoteChoice[] = ['home', 'draw', 'away'];
-const CHOICE_MARK: Record<CrowdVoteChoice, string> = { home: '1', draw: 'X', away: '2' };
 
 function formatVotes(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
@@ -91,13 +77,23 @@ function roundToHundred(values: Record<CrowdVoteChoice, number>): Record<CrowdVo
   return { home: floored[0], draw: floored[1], away: floored[2] };
 }
 
-function Crest({ team }: { team: CrowdVoteTeam }) {
+function Crest({
+  team,
+  size,
+  selected,
+  isDark,
+}: {
+  team: CrowdVoteTeam;
+  size: number;
+  selected: boolean;
+  isDark: boolean;
+}) {
   const [failed, setFailed] = useState(false);
   if (team.logo && !failed) {
     return (
       <Image
         source={{ uri: team.logo }}
-        style={styles.crest}
+        style={{ width: size, height: size }}
         contentFit="contain"
         cachePolicy="memory-disk"
         recyclingKey={team.logo}
@@ -106,109 +102,118 @@ function Crest({ team }: { team: CrowdVoteTeam }) {
     );
   }
   return (
-    <View style={[styles.crest, styles.crestFallback]}>
-      <Text style={styles.crestFallbackText}>{team.name.slice(0, 2).toUpperCase()}</Text>
-    </View>
-  );
-}
-
-function DrawMark() {
-  return (
-    <View style={[styles.crest, styles.drawMark]}>
-      <Text style={styles.drawMarkText}>X</Text>
+    <View
+      style={[
+        styles.crestFallback,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: selected
+            ? 'rgba(255,255,255,0.22)'
+            : isDark
+              ? 'rgba(167,139,250,0.22)'
+              : 'rgba(106,43,217,0.12)',
+        },
+      ]}
+    >
+      <Text style={[styles.crestFallbackText, selected && styles.crestFallbackTextSelected]}>
+        {team.name.slice(0, 2).toUpperCase()}
+      </Text>
     </View>
   );
 }
 
 function VoteTile({
-  choice,
   media,
   name,
-  percent,
-  votes,
-  votesUnit,
-  leading,
   selected,
   locked,
   dimmed,
+  isDark,
   onPress,
 }: {
-  choice: CrowdVoteChoice;
   media: React.ReactNode;
   name: string;
-  percent: number;
-  votes: number | null;
-  votesUnit: string;
-  leading: boolean;
   selected: boolean;
   locked: boolean;
   dimmed: boolean;
+  isDark: boolean;
   onPress: () => void;
 }) {
-  const tone = TONE[choice];
   const [pressed, setPressed] = useState(false);
+  const idleBorder = isDark ? 'rgba(167,139,250,0.28)' : BORDER;
+  const idleBg = isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF';
+  const nameColor = selected ? '#FFFFFF' : isDark ? '#FFFFFF' : INK;
+
   return (
     <View
       style={[
         styles.tile,
-        { borderColor: selected ? tone.color : tone.border },
+        {
+          borderColor: selected ? 'transparent' : idleBorder,
+          backgroundColor: selected ? 'transparent' : idleBg,
+        },
         dimmed && styles.tileDimmed,
         pressed && styles.tilePressed,
+        !isDark && styles.tileShadow,
       ]}
     >
-      <LinearGradient
-        colors={[selected ? tone.strong : tone.soft, 'rgba(255,255,255,0.02)']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      {selected ? (
+        <LinearGradient
+          colors={[PRIMARY, PRIMARY_DEEP]}
+          start={{ x: 0.85, y: 0 }}
+          end={{ x: 0.15, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : !isDark ? (
+        <LinearGradient
+          colors={['#FFFFFF', '#FCF9FF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
       <Pressable
         onPress={onPress}
         onPressIn={() => setPressed(true)}
         onPressOut={() => setPressed(false)}
         disabled={locked}
         accessibilityRole="button"
-        accessibilityLabel={`${name} ${percent}%`}
+        accessibilityLabel={name}
         accessibilityState={{ selected, disabled: locked }}
         style={styles.tileInner}
       >
-        <View style={styles.tileTop}>
-          <LinearGradient
-            colors={tone.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.markChip}
-          >
-            <Text style={styles.markChipText}>{CHOICE_MARK[choice]}</Text>
-          </LinearGradient>
-          {selected ? (
-            <View style={[styles.checkBadge, { backgroundColor: tone.color }]}>
-              <Ionicons name="checkmark" size={11} color="#FFFFFF" />
-            </View>
-          ) : null}
-        </View>
-
         {media}
-
-        <Text style={styles.tileName} numberOfLines={2}>
+        <Text style={[styles.tileName, { color: nameColor }]} numberOfLines={2}>
           {name}
         </Text>
-
-        <View style={styles.divider} />
-
-        <Text style={[styles.percent, leading && { color: tone.color }]}>
-          {percent}
-          <Text style={[styles.percentSign, leading && { color: tone.color }]}>%</Text>
-        </Text>
-
-        {votes != null ? (
-          <Text style={styles.tileVotes} numberOfLines={1}>
-            {`${formatVotes(votes)} ${votesUnit}`}
-          </Text>
-        ) : null}
       </Pressable>
     </View>
+  );
+}
+
+function BarSegment({
+  choice,
+  flex,
+}: {
+  choice: CrowdVoteChoice;
+  flex: number;
+}) {
+  if (flex <= 0) return null;
+  if (choice === 'draw') {
+    return <View style={[styles.barSegment, { flex, backgroundColor: DRAW_BAR }]} />;
+  }
+  const colors = choice === 'home' ? HOME_BAR : AWAY_BAR;
+  return (
+    <LinearGradient
+      colors={colors}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={[styles.barSegment, { flex }]}
+    />
   );
 }
 
@@ -224,10 +229,12 @@ export function MatchCrowdVote({
   drawLabel,
   votesUnit,
   tapHint = 'Tap a card to vote',
-  votedHint = 'Your vote is in',
+  votedHint = 'Your vote was recorded successfully',
+  lockedHint = 'You cannot vote again',
   rtl,
   voteKey = null,
 }: Props) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const storageKey =
     voteKey != null && String(voteKey) !== '' && String(voteKey) !== '0'
       ? `${VOTE_STORAGE_PREFIX}${voteKey}`
@@ -280,19 +287,28 @@ export function MatchCrowdVote({
       ? counts
       : { home: homePercent, draw: drawPercent, away: awayPercent };
   const percents = roundToHundred(rawPercents);
-  const shownTotal = counts ? Math.round(countsSum) : null;
-
-  const maxPercent = Math.max(percents.home, percents.draw, percents.away);
-  const leaders = CHOICES.filter((key) => percents[key] === maxPercent);
-  const leader = maxPercent > 0 && leaders.length === 1 ? leaders[0] : null;
+  const shownTotal = counts ? Math.round(countsSum) : total;
 
   const locked = myVote != null;
+  const headerSubtitle = locked ? votedHint : subtitle;
+  const footerStatus = locked ? lockedHint : tapHint;
   const textAlign = rtl ? 'right' : 'left';
+  const rowDir = rtl ? ('row-reverse' as const) : ('row' as const);
+
+  const ink = isDark ? colors.textPrimary : INK;
+  const muted = isDark ? colors.textMuted : MUTED;
+  const cardBorder = isDark ? colors.cardBorder : BORDER;
+  const cardBg = isDark ? colors.elevatedBg : '#FFFFFF';
+  const iconWell = isDark ? colors.primaryMuted : '#F4EEFF';
 
   const tileMedia: Record<CrowdVoteChoice, React.ReactNode> = {
-    home: <Crest team={home} />,
-    draw: <DrawMark />,
-    away: <Crest team={away} />,
+    home: (
+      <Crest team={home} size={myVote === 'home' ? 60 : 49} selected={myVote === 'home'} isDark={isDark} />
+    ),
+    draw: null,
+    away: (
+      <Crest team={away} size={myVote === 'away' ? 60 : 49} selected={myVote === 'away'} isDark={isDark} />
+    ),
   };
   const tileName: Record<CrowdVoteChoice, string> = {
     home: home.name,
@@ -300,90 +316,91 @@ export function MatchCrowdVote({
     away: away.name,
   };
 
-  return (
-    <View style={styles.card}>
-      <LinearGradient
-        colors={['rgba(124,58,237,0.20)', 'rgba(59,130,246,0.06)', 'rgba(8,7,25,0)']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+  const footerParts = [
+    shownTotal != null ? `${formatVotes(shownTotal)} ${votesUnit}` : null,
+    footerStatus,
+  ].filter(Boolean);
 
-      <View style={[styles.header, rtl && styles.rowReverse]}>
+  return (
+    <View
+      style={[
+        styles.card,
+        {
+          borderColor: cardBorder,
+          backgroundColor: cardBg,
+        },
+        !isDark && styles.cardShadow,
+      ]}
+    >
+      {!isDark ? (
         <LinearGradient
-          colors={['#A855F7', '#6D28D9']}
+          colors={['#FFFFFF', '#FCFAFF']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.headerIcon}
-        >
-          <Ionicons name="stats-chart" size={16} color="#FFFFFF" />
-        </LinearGradient>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.title, { textAlign }]} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={[styles.subtitle, { textAlign }]} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-        <View style={styles.oddsPill}>
-          <Text style={styles.oddsPillText}>1X2</Text>
-        </View>
-      </View>
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
 
-      <View style={styles.tiles}>
-        {CHOICES.map((choice) => (
-          <VoteTile
-            key={choice}
-            choice={choice}
-            media={tileMedia[choice]}
-            name={tileName[choice]}
-            percent={percents[choice]}
-            votes={counts ? counts[choice] : null}
-            votesUnit={votesUnit}
-            leading={leader === choice}
-            selected={myVote === choice}
-            locked={locked}
-            dimmed={locked && myVote !== choice}
-            onPress={() => castVote(choice)}
-          />
-        ))}
-      </View>
-
-      <View style={styles.bar}>
-        {CHOICES.filter((choice) => percents[choice] > 0).map((choice) => (
-          <LinearGradient
-            key={choice}
-            colors={TONE[choice].gradient}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={[styles.barSegment, { flex: percents[choice] }]}
-          />
-        ))}
-      </View>
-
-      <View style={[styles.footer, rtl && styles.rowReverse]}>
-        {shownTotal != null ? (
-          <View style={[styles.footerItem, rtl && styles.rowReverse]}>
-            <Ionicons name="people" size={14} color="rgba(255,255,255,0.55)" />
-            <Text style={styles.footerText} numberOfLines={1}>
-              {`${formatVotes(shownTotal)} ${votesUnit}`}
+      <View style={styles.block}>
+        <View style={[styles.header, { flexDirection: rowDir }]}>
+          <View style={styles.headerCopy}>
+            <Text style={[styles.title, { color: ink, textAlign }]} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={[styles.subtitle, { color: muted, textAlign }]} numberOfLines={1}>
+              {headerSubtitle}
             </Text>
           </View>
-        ) : (
-          <View />
-        )}
-        <View style={[styles.footerItem, rtl && styles.rowReverse]}>
-          <Ionicons
-            name={locked ? 'checkmark-circle' : 'hand-left-outline'}
-            size={14}
-            color={locked ? '#4ADE80' : 'rgba(255,255,255,0.55)'}
-          />
-          <Text style={[styles.footerText, locked && styles.footerTextDone]} numberOfLines={1}>
-            {locked ? votedHint : tapHint}
-          </Text>
+          <View style={[styles.headerIcon, { backgroundColor: iconWell }]}>
+            <Image source={CHART_ICON} style={styles.chartIcon} contentFit="contain" />
+          </View>
         </View>
+
+        <View style={[styles.tiles, { flexDirection: rowDir }]}>
+          {CHOICES.map((choice) => (
+            <VoteTile
+              key={choice}
+              media={tileMedia[choice]}
+              name={tileName[choice]}
+              selected={myVote === choice}
+              locked={locked}
+              dimmed={locked && myVote !== choice}
+              isDark={isDark}
+              onPress={() => castVote(choice)}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.results}>
+        <View style={[styles.percentRow, { flexDirection: rowDir }]}>
+          {CHOICES.map((choice) =>
+            percents[choice] > 0 ? (
+              <Text
+                key={choice}
+                style={[styles.percentLabel, { color: ink, flex: percents[choice] }]}
+                numberOfLines={1}
+              >
+                {`${percents[choice]}%`}
+              </Text>
+            ) : (
+              <View key={choice} style={{ flex: 0 }} />
+            ),
+          )}
+        </View>
+
+        <View style={[styles.barTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : TRACK }]}>
+          <View style={[styles.barFill, { flexDirection: rowDir }]}>
+            {CHOICES.map((choice) => (
+              <BarSegment key={choice} choice={choice} flex={percents[choice]} />
+            ))}
+          </View>
+        </View>
+
+        <Text style={[styles.footer, { color: muted }]} numberOfLines={1}>
+          {footerParts.join('  •  ')}
+        </Text>
       </View>
     </View>
   );
@@ -391,206 +408,146 @@ export function MatchCrowdVote({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 22,
+    borderRadius: 23,
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.22)',
-    backgroundColor: '#0C0A1F',
-    padding: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 16,
     gap: 16,
     overflow: 'hidden',
   },
-  rowReverse: {
-    flexDirection: 'row-reverse',
+  cardShadow: {
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.1,
+    shadowRadius: 13,
+    elevation: 4,
+  },
+  block: {
+    gap: 12,
+    width: '100%',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'stretch',
   },
   headerCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 0,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    fontWeight: '700',
+    lineHeight: 24,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  oddsPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.45)',
-    backgroundColor: 'rgba(124,58,237,0.18)',
-  },
-  oddsPillText: {
-    color: '#DDD6FE',
     fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  headerIcon: {
+    width: 35,
+    height: 35,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  chartIcon: {
+    width: 19,
+    height: 19,
   },
   tiles: {
-    flexDirection: 'row',
-    gap: 8,
+    width: '100%',
+    gap: 10,
   },
   tile: {
     flex: 1,
     flexBasis: 0,
     flexGrow: 1,
     minWidth: 0,
+    height: 113,
     borderRadius: 16,
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
     overflow: 'hidden',
   },
+  tileShadow: {
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 9,
+    elevation: 2,
+  },
   tileInner: {
-    flexGrow: 1,
+    flex: 1,
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 14,
-    paddingHorizontal: 8,
-    gap: 6,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    gap: 0,
   },
   tileDimmed: {
-    opacity: 0.6,
+    opacity: 0.55,
   },
   tilePressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.97 }],
-  },
-  tileTop: {
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 20,
-  },
-  markChip: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markChipText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  checkBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  crest: {
-    width: 46,
-    height: 46,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
   crestFallback: {
-    borderRadius: 23,
-    backgroundColor: 'rgba(168,85,247,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   crestFallbackText: {
-    color: '#FFFFFF',
+    color: INK,
     fontSize: 15,
     fontWeight: '700',
   },
-  drawMark: {
-    borderRadius: 23,
-    borderWidth: 1.5,
-    borderColor: 'rgba(148,163,184,0.45)',
-    backgroundColor: 'rgba(148,163,184,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  drawMarkText: {
-    color: '#CBD5E1',
-    fontSize: 18,
-    fontWeight: '800',
+  crestFallbackTextSelected: {
+    color: '#FFFFFF',
   },
   tileName: {
     alignSelf: 'stretch',
-    color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    lineHeight: 16,
-    minHeight: 32,
+    lineHeight: 17,
+    minHeight: 28,
     textAlign: 'center',
     textAlignVertical: 'center',
   },
-  divider: {
-    alignSelf: 'stretch',
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+  results: {
+    width: '100%',
+    gap: 8,
+    alignItems: 'center',
   },
-  percent: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    lineHeight: 28,
+  percentRow: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  percentLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 23,
+    textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
-  percentSign: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tileVotes: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  bar: {
-    flexDirection: 'row',
-    height: 8,
-    borderRadius: 4,
-    gap: 3,
+  barTrack: {
+    width: '100%',
+    height: 13,
+    borderRadius: 6,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  barFill: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
   },
   barSegment: {
     height: '100%',
-    borderRadius: 4,
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  footerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 1,
-  },
-  footerText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
-  },
-  footerTextDone: {
-    color: '#4ADE80',
+    lineHeight: 14,
+    textAlign: 'center',
+    width: '100%',
   },
 });
