@@ -56,6 +56,7 @@ type MatchDetailsTopBarProps = {
 function GlassIsland({
   style,
   lit,
+  solid,
   children,
   fill,
   blurTint,
@@ -63,25 +64,27 @@ function GlassIsland({
 }: {
   style?: StyleProp<ViewStyle>;
   lit?: boolean;
+  /** Opaque fill, same weight as the selected tab pill. */
+  solid?: boolean;
   children?: React.ReactNode;
   fill: readonly [string, string];
   blurTint: 'light' | 'dark';
   rimTint: string;
 }) {
   return (
-    <View style={[styles.island, blurTint === 'dark' && styles.islandDark, style]}>
+    <View style={[styles.island, (blurTint === 'dark' || solid) && styles.islandDark, style]}>
       {lit ? (
         <GlassBubbleFill radius={ISLAND_RADIUS} height={ISLAND_HEIGHT} />
       ) : (
         <>
-          {Platform.OS === 'ios' ? (
+          {!solid && Platform.OS === 'ios' ? (
             <BlurView intensity={40} tint={blurTint} style={[StyleSheet.absoluteFill, styles.islandClip]} />
           ) : null}
           <View style={[StyleSheet.absoluteFill, styles.islandClip]}>
-            <LinearGradient colors={fill} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={fill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           </View>
-          <GlassSheen radius={ISLAND_RADIUS} />
-          <GlassRim radius={ISLAND_RADIUS} tint={rimTint} />
+          {!solid ? <GlassSheen radius={ISLAND_RADIUS} /> : null}
+          {!solid ? <GlassRim radius={ISLAND_RADIUS} tint={rimTint} /> : null}
         </>
       )}
       {children}
@@ -146,6 +149,9 @@ export function MatchDetailsTopBar({
   const { colors, isDark } = useMatchDetailsTheme();
   const islandFill =
     Platform.OS === 'ios' ? colors.islandFill : colors.islandFillAndroid;
+  /** Same gradient as the selected match tab, so the score capsule stays readable. */
+  const scoreFill = isDark ? islandFill : (['#6A2BD9', '#4B1FA3'] as const);
+  const scoreInk = isDark ? colors.textPrimary : '#FFFFFF';
   const rimTint = isDark ? 'rgba(190,160,255,0.38)' : 'rgba(106,43,217,0.28)';
   const fadeColors = isDark
     ? (['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)'] as const)
@@ -201,7 +207,8 @@ export function MatchDetailsTopBar({
 
         <GlassIsland
           style={styles.titleIsland}
-          fill={islandFill}
+          solid={!isDark}
+          fill={scoreFill}
           blurTint={colors.blurTint}
           rimTint={rimTint}
         >
@@ -213,7 +220,7 @@ export function MatchDetailsTopBar({
                 styles.title,
                 {
                   fontFamily: titleFont,
-                  color: colors.textPrimary,
+                  color: scoreInk,
                   textShadowColor: isDark ? 'rgba(164,123,255,0.35)' : 'transparent',
                 },
               ]}
