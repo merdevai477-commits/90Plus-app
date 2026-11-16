@@ -50,16 +50,18 @@ const CountryFlagThumb = memo(function CountryFlagThumb({
   const styles = useMemo(() => createAccordionStyles(colors), [colors]);
   const uri = useMemo(() => getCountryFlagUri(country, apiFlag), [country, apiFlag]);
   const emoji = useMemo(() => getCountryFlagEmoji(country, apiFlag), [country, apiFlag]);
-  const isInternational = useMemo(
-    () => isInternationalCountryGroup(country, apiFlag),
-    [country, apiFlag],
-  );
+  const useBrandFlag = useMemo(() => {
+    if (isInternationalCountryGroup(country, apiFlag)) return true;
+    if (!uri) return true;
+    return emoji === '🏳️' || emoji === '🌍';
+  }, [country, apiFlag, uri, emoji]);
 
-  // Light theme: Figma 1669:10628 purple flag instead of white 🏳️ / globe on #FCFCFC.
-  if (isInternational && !isDark) {
+  // Light theme: solid brand purple flag in a lavender squircle (Figma matches list).
+  // Covers World/International and continent rows that have no national PNG.
+  if (useBrandFlag && !isDark) {
     return (
-      <View style={styles.internationalFlagWrap}>
-        <InternationalFlagIcon size={21} color={colors.primary} />
+      <View style={styles.brandFlagWrap}>
+        <InternationalFlagIcon size={18} color="#6A2BD9" />
       </View>
     );
   }
@@ -279,9 +281,11 @@ function createAccordionStyles(c: MatchesThemeColors) {
       overflow: 'hidden',
       backgroundColor: c.logoStubBg,
     },
-    internationalFlagWrap: {
-      width: 24,
-      height: 24,
+    brandFlagWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      backgroundColor: '#F3EDFF',
       alignItems: 'center',
       justifyContent: 'center',
     },
