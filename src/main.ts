@@ -992,6 +992,11 @@ async function startServer() {
                         logger.info('📰 World Cup news cron disabled (WORLD_CUP_NEWS_ENABLED≠true)');
                     }
 
+                    const { startMatchHighlightsSync } = await import(
+                        './services/highlightly/match-highlights-sync.service'
+                    );
+                    startMatchHighlightsSync();
+
                     // ✅ Share & Win — archive finished 30-day cycles with their final
                     // ranks. Rollover is also lazy on every read/write, so this only
                     // makes it prompt when there is no traffic.

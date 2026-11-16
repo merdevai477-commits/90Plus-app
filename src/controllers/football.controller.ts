@@ -28,6 +28,7 @@ import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-ro
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
 import { isScores365OnlyMode } from '../config/scores365-only-mode.config';
 import { API_FOOTBALL_FALLBACK_CALL } from '../services/api-football-quota.service';
+import { getFixtureHighlights as readFixtureHighlights } from '../services/highlightly/match-highlights.service';
 import {
   calendarDateRangeBounds,
   calendarTodayKey,
@@ -992,6 +993,31 @@ export class FootballController {
         status: 'SUCCESS',
         results: statistics.length,
         response: statistics,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/fixtures/:id/highlights
+   * Stored post-match summary and goal clips. Does not call Highlightly.
+   */
+  static async getFixtureHighlights(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id), 10);
+      if (!Number.isFinite(fixtureId)) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'Invalid fixture ID',
+        });
+        return;
+      }
+
+      const highlights = await readFixtureHighlights(fixtureId);
+      res.json({
+        status: 'SUCCESS',
+        response: highlights,
       });
     } catch (error) {
       FootballController.handleError(res, error);

@@ -1375,6 +1375,50 @@ model CachedFixture {
   @@map("cached_fixtures")
 }
 
+/// One Highlightly clip. `fixtureId` stays null until team names and kickoff
+/// match a single cached fixture. Highlightly ids are not our fixture ids.
+model MatchHighlight {
+  id                 String   @id @default(uuid())
+  highlightlyId      Int      @unique
+  fixtureId          Int?
+  highlightlyMatchId Int
+  category           String
+  type               String
+  title              String
+  description        String?
+  url                String
+  embedUrl           String?
+  imgUrl             String?
+  source             String?
+  channel            String?
+  homeTeamName       String
+  awayTeamName       String
+  leagueName         String?
+  matchDate          DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([fixtureId])
+  @@index([matchDate])
+  @@index([highlightlyMatchId])
+  @@map("match_highlights")
+}
+
+/// Backoff for a finished fixture until a summary arrives or the window closes.
+model FixtureHighlightSync {
+  fixtureId     Int      @id
+  lastCheckedAt DateTime?
+  attempts      Int      @default(0)
+  nextCheckAt   DateTime
+  status        String
+  priority      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nextCheckAt, status])
+  @@map("fixture_highlight_sync")
+}
+
 model CachedPlayer {
   id              String   @id @default(uuid())
   playerId        Int      @unique

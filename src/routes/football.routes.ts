@@ -395,6 +395,12 @@ router.get('/fixtures/:id/statistics', SHARED_CACHE_8S, FootballController.getFi
 router.get('/fixtures/:id/events', SHARED_CACHE_5S, FootballController.getFixtureEvents);
 
 // ============================================
+// GET /api/football/fixtures/:id/highlights
+// Post-match summary and goal clips. Served from Postgres.
+// ============================================
+router.get('/fixtures/:id/highlights', SHARED_CACHE_5MIN, FootballController.getFixtureHighlights);
+
+// ============================================
 // GET /api/football/standings
 // Get standings for a league
 // Query params: league (required), season (optional)
