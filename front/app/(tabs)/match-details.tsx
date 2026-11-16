@@ -24,7 +24,15 @@ import { setDiagnosticsFixture, setDiagnosticsScreen } from '../../services/diag
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Lineup, Standing } from '../../services/apiFootball';
+import ApiFootballService, {
+  TeamStatistics,
+  TeamFixture,
+  FixtureEvent,
+  Fixture,
+  Lineup,
+  Standing,
+  Injury,
+} from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType } from '../../utils/i18nHelpers';
 import { displayMatchTeamName as getTeamDisplayName, isIsraelSeniorNationalTeam, presentTeamLogo } from '../../utils/maskedNationalTeam';
@@ -56,6 +64,7 @@ import { MatchDetailsThemeProvider, useMatchDetailsTheme } from '../../hooks/use
 import { FootballField } from '../../components/match-details/FootballField';
 import { LineupBestPlayers } from '../../components/match-details/LineupBestPlayers';
 import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDrawer';
+import { LineupBelowSections } from '../../components/match-details/LineupBelowSections';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventsTimeline } from '../../components/match-details/MatchEventsTimeline';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
@@ -271,6 +280,9 @@ const MatchDetailsScreen = () => {
   // Home/Away selector shared by Lineups and Previous Results.
   const [selectedTeamSide, setSelectedTeamSide] = useState<'home' | 'away'>('home');
   const [benchDrawerOpen, setBenchDrawerOpen] = useState(false);
+  /** Team injuries for the absences section under the pitch (Figma 1823:25316). */
+  const [lineupInjuries, setLineupInjuries] = useState<Injury[]>([]);
+  const [coachNationality, setCoachNationality] = useState<string | null>(null);
   // Selected standings group index (World Cup groups A-G etc.).
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
 
@@ -1728,6 +1740,53 @@ const MatchDetailsScreen = () => {
     [router, fixture?.league?.season, fixtureId, is365Fixture, resolveLineupPlayerPhoto],
   );
 
+  // Coach nationality + injuries for the under-pitch Figma sections (selected team).
+  useEffect(() => {
+    if (activeTab !== 'lineups') return;
+    const teamId = fixture?.teams?.[selectedTeamSide]?.id;
+    if (!teamId) {
+      setLineupInjuries([]);
+      setCoachNationality(null);
+      return;
+    }
+    let cancelled = false;
+    setLineupInjuries([]);
+    setCoachNationality(null);
+
+    (async () => {
+      const [injuriesRes, coachesRes] = await Promise.allSettled([
+        ApiFootballService.getTeamInjuries(teamId),
+        ApiFootballService.getTeamCoaches(teamId),
+      ]);
+      if (cancelled) return;
+
+      if (injuriesRes.status === 'fulfilled') {
+        const all = injuriesRes.value ?? [];
+        const forFixture =
+          fixtureId > 0 ? all.filter((row) => row.fixture?.id === fixtureId) : [];
+        setLineupInjuries(forFixture.length > 0 ? forFixture : all.slice(0, 12));
+      }
+
+      if (coachesRes.status === 'fulfilled') {
+        const coaches = coachesRes.value ?? [];
+        const lineupCoachName =
+          lineups
+            .find((l) => l.team?.id === teamId)
+            ?.coach?.name?.trim()
+            .toLowerCase() ?? '';
+        const match =
+          coaches.find((c) => c.id && lineups.some((l) => l.team?.id === teamId && l.coach?.id === c.id)) ||
+          coaches.find((c) => c.name?.trim().toLowerCase() === lineupCoachName) ||
+          coaches[0];
+        setCoachNationality(match?.nationality?.trim() || null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedTeamSide, fixture?.teams, fixtureId, lineups]);
+
   // Open a team's 365 profile from the match header. For 365 fixtures the team
   // id already is a 365 competitorId; for API-Football fixtures we pass only the
   // name so the profile resolves the competitor by name.
@@ -2206,6 +2265,68 @@ const MatchDetailsScreen = () => {
                       }}
                     />
                   )}
+                />
+
+                <LineupBelowSections
+                  coach={
+                    lineup.coach?.name
+                      ? {
+                          id: lineup.coach.id,
+                          name: lineup.coach.name,
+                          photo: lineup.coach.photo,
+                          nationality: coachNationality,
+                        }
+                      : null
+                  }
+                  teamName={getTeamDisplayName(
+                    lineup.team?.name || selectedTeamName,
+                    language,
+                  )}
+                  teamLogo={
+                    lineup.team?.logo ||
+                    (selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo)
+                  }
+                  substitutes={benchPlayers}
+                  absences={lineupInjuries}
+                  rtl={language === 'ar'}
+                  language={language}
+                  labels={{
+                    coach: t.matchDetails.coach,
+                    substitutes: t.matchDetails.substitutes,
+                    absences: t.matchDetails.absences,
+                    emptySubs: t.matchDetails.lineupNoSubstitutes,
+                    playersCount: (n) =>
+                      (t.matchDetails.lineupPlayersCount || '{n} players').replace(
+                        '{n}',
+                        String(n),
+                      ),
+                  }}
+                  resolvePhoto={resolveLineupPlayerPhoto}
+                  onCoachPress={(coachInfo) => {
+                    if (!coachInfo.id) return;
+                    router.push({
+                      pathname: '/coach-profile' as any,
+                      params: {
+                        id: String(coachInfo.id),
+                        name: coachInfo.name ?? '',
+                        photo: coachInfo.photo ?? '',
+                        teamName: lineup.team?.name ?? selectedTeamName,
+                        teamId: String(lineup.team?.id ?? ''),
+                      },
+                    } as any);
+                  }}
+                  onPlayerPress={openLineupPlayer}
+                  onAbsencePress={(injury) => {
+                    if (!injury.player?.id) return;
+                    openPlayerProfile(
+                      {
+                        id: injury.player.id,
+                        name: injury.player.name,
+                        photo: injury.player.photo,
+                      },
+                      lineup.team,
+                    );
+                  }}
                 />
 
                 <LineupBestPlayers

@@ -562,6 +562,8 @@ export const en = {
     startingXI: 'Starting XI',
     substitutes: 'Substitutes',
     coach: 'Coach',
+    absences: 'Absences',
+    lineupPlayersCount: '{n} players',
     formation: 'Formation',
     noLineups: 'Lineups not available',
     lineupsUnavailable: 'Lineup not available yet — check back a bit later.',

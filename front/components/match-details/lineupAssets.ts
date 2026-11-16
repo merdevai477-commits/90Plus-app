@@ -30,4 +30,10 @@ export const LINEUP_ICON = {
   users: require('../../assets/images/match-lineup/users.svg'),
   ratingStarSm: require('../../assets/images/match-lineup/rating-star-sm.svg'),
   ratingStarLg: require('../../assets/images/match-lineup/rating-star-lg.svg'),
+  /** Figma `1823:24046` coach header. */
+  coach: require('../../assets/images/match-lineup/icon-coach.svg'),
+  /** Figma `1830:27631` substitutes header. */
+  subsSwap: require('../../assets/images/match-lineup/icon-subs-swap.svg'),
+  /** Figma `1830:29955` absences header. */
+  absences: require('../../assets/images/match-lineup/icon-absences.svg'),
 } as const;

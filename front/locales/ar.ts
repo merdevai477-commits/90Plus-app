@@ -799,6 +799,8 @@ export const ar = {
     startingXI: 'التشكيلة الأساسية',
     substitutes: 'البدلاء',
     coach: 'المدرب',
+    absences: 'الغيابات',
+    lineupPlayersCount: '{n} لاعبين',
     formation: 'التشكيلة',
     noLineups: 'التشكيلات غير متاحة',
     lineupsUnavailable: 'التشكيلة لسه مش متاحة، جرّب تاني بعد شوية.',
