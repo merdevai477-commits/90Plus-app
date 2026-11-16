@@ -72,7 +72,7 @@ import { MatchKickoffHighlights } from '../../components/match-details/MatchKick
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
 import { fetchFixtureLmt, type Scores365LmtInfo } from '../../services/lmt.service';
-import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
+import { applySubstitutionsToPitch, collectLineupSubstitutions } from '../../utils/lineupMatchState';
 import { matchArchiveService, type MatchArchive } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
@@ -2188,6 +2188,12 @@ const MatchDetailsScreen = () => {
               events,
               teamId,
             );
+            const substitutions = collectLineupSubstitutions(
+              startingXI,
+              substitutes,
+              events,
+              teamId,
+            );
 
             const fieldPlayers = sortPlayersForPitch(
               pitchPlayers.map((player) => ({
@@ -2286,7 +2292,7 @@ const MatchDetailsScreen = () => {
                     lineup.team?.logo ||
                     (selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo)
                   }
-                  substitutes={benchPlayers}
+                  substitutions={substitutions}
                   absences={lineupInjuries}
                   rtl={language === 'ar'}
                   language={language}

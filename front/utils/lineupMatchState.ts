@@ -35,6 +35,57 @@ function toPitchPlayer(item: { player: Record<string, unknown> }): LineupPitchPl
   };
 }
 
+export type LineupSubstitution = {
+  minute: number;
+  /** Player who left the pitch. */
+  out: LineupPitchPlayer;
+  /** Player who came on in their place. */
+  in: LineupPitchPlayer;
+};
+
+function lookupLineupPlayer(
+  id: number | null | undefined,
+  name: string | null | undefined,
+  pools: Array<Array<{ player: Record<string, unknown> }>>,
+): LineupPitchPlayer {
+  for (const pool of pools) {
+    const hit = pool.find((item) => {
+      const pid = item.player.id ?? item.player.athleteId;
+      return id != null && pid === id;
+    });
+    if (hit) return toPitchPlayer(hit);
+  }
+  return {
+    id: id ?? undefined,
+    name: name?.trim() || '—',
+    number: 0,
+    pos: '',
+  };
+}
+
+/** Substitutions that actually happened for one team, earliest first. Unused bench players are excluded. */
+export function collectLineupSubstitutions(
+  startingXI: Array<{ player: Record<string, unknown> }>,
+  substitutes: Array<{ player: Record<string, unknown> }>,
+  events: FixtureEvent[],
+  teamId: number,
+): LineupSubstitution[] {
+  return events
+    .filter((event) => event.type === 'subst' && event.team.id === teamId)
+    .map((event) => {
+      const minute = event.time.elapsed + (event.time.extra ?? 0) * 0.01;
+      const outId = event.assist?.id ?? null;
+      const inId = event.player?.id ?? null;
+      return {
+        minute,
+        out: lookupLineupPlayer(outId, event.assist?.name, [startingXI, substitutes]),
+        in: lookupLineupPlayer(inId, event.player?.name, [substitutes, startingXI]),
+      };
+    })
+    .filter((row) => row.out.name !== '—' || row.in.name !== '—')
+    .sort((a, b) => a.minute - b.minute);
+}
+
 export function applySubstitutionsToPitch(
   startingXI: Array<{ player: Record<string, unknown> }>,
   substitutes: Array<{ player: Record<string, unknown> }>,

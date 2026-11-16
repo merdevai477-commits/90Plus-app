@@ -19,7 +19,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 import { useLocalizedName } from '../../hooks/useLocalizedName';
-import { shortPlayerName, type LineupPitchPlayer } from '../../utils/lineupMatchState';
+import {
+  shortPlayerName,
+  type LineupPitchPlayer,
+  type LineupSubstitution,
+} from '../../utils/lineupMatchState';
 import { getCountryDisplayName } from '../../utils/i18nHelpers';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
 import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
@@ -48,7 +52,7 @@ type LineupBelowSectionsProps = {
   coach: LineupCoachInfo | null;
   teamName: string;
   teamLogo?: string | null;
-  substitutes: LineupSquadPlayer[];
+  substitutions: LineupSubstitution[];
   absences: Injury[];
   rtl: boolean;
   language: Language;
@@ -145,6 +149,7 @@ function SquadPlayerCard({
   photoUri,
   nationality,
   secondary,
+  swappedWith,
   language,
   rtl,
   onPress,
@@ -157,6 +162,8 @@ function SquadPlayerCard({
   nationality?: string | null;
   /** Plain secondary line (injury reason / position) when not a country. */
   secondary?: string | null;
+  /** Player this one was substituted with. */
+  swappedWith?: string | null;
   language: Language;
   rtl: boolean;
   onPress?: () => void;
@@ -164,6 +171,7 @@ function SquadPlayerCard({
 }) {
   const { isDark } = useMatchDetailsTheme();
   const displayName = useLocalizedName(name);
+  const partnerName = useLocalizedName(swappedWith || '');
   return (
     <TouchableOpacity
       style={[styles.playerCard, isDark && styles.playerCardDark, style]}
@@ -190,7 +198,18 @@ function SquadPlayerCard({
         >
           {shortPlayerName(displayName, 14)}
         </Text>
-        {nationality ? (
+        {swappedWith ? (
+          <View style={[styles.swapRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+            <Image source={LINEUP_ICON.subsSwap} style={styles.swapIcon} contentFit="contain" />
+            <Text
+              style={[styles.swapName, isDark && { color: 'rgba(255,255,255,0.7)' }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
+              {shortPlayerName(partnerName, 16)}
+            </Text>
+          </View>
+        ) : nationality ? (
           <MetaFlag country={nationality} language={language} />
         ) : secondary ? (
           <Text
@@ -362,7 +381,7 @@ export function LineupBelowSections({
   coach,
   teamName,
   teamLogo,
-  substitutes,
+  substitutions,
   absences,
   rtl,
   language,
@@ -378,12 +397,12 @@ export function LineupBelowSections({
   const cardW = Math.floor((width - 32 * s - 28 * s - 10 * s) / 2);
 
   const rows = useMemo(() => {
-    const out: LineupSquadPlayer[][] = [];
-    for (let i = 0; i < substitutes.length; i += 2) {
-      out.push(substitutes.slice(i, i + 2));
+    const out: LineupSubstitution[][] = [];
+    for (let i = 0; i < substitutions.length; i += 2) {
+      out.push(substitutions.slice(i, i + 2));
     }
     return out;
-  }, [substitutes]);
+  }, [substitutions]);
 
   const absenceRows = useMemo(() => {
     const out: Injury[][] = [];
@@ -417,37 +436,36 @@ export function LineupBelowSections({
         />
       ) : null}
 
+      {substitutions.length > 0 ? (
       <PlayersGridSection
         title={labels.substitutes}
         icon={LINEUP_ICON.subsSwap}
-        countLabel={labels.playersCount(substitutes.length)}
+        countLabel={labels.playersCount(substitutions.length)}
         emptyLabel={labels.emptySubs}
         rtl={rtl}
       >
-        {substitutes.length === 0 ? undefined : (
           <View style={styles.grid}>
             {rows.map((row, ri) => (
               <View
                 key={`sub-row-${ri}`}
                 style={[styles.gridRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
               >
-                {row.map((player) => (
+                {row.map((swap) => (
                   <SquadPlayerCard
-                    key={`sub-${player.id ?? player.name}-${player.number}`}
-                    name={player.name}
-                    number={player.number}
-                    athleteId={player.id}
+                    key={`sub-${swap.out.id ?? swap.out.name}-${swap.minute}-${swap.in.id ?? swap.in.name}`}
+                    name={swap.out.name}
+                    number={swap.out.number}
+                    athleteId={swap.out.id}
                     photoUri={
-                      player.id
-                        ? resolvePhoto(player.id, player.photo, 160) || player.photo
-                        : player.photo
+                      swap.out.id
+                        ? resolvePhoto(swap.out.id, swap.out.photo, 160) || swap.out.photo
+                        : swap.out.photo
                     }
-                    nationality={player.nationality}
-                    secondary={player.nationality ? null : player.pos || null}
+                    swappedWith={swap.in.name}
                     language={language}
                     rtl={rtl}
                     onPress={
-                      onPlayerPress && player.id ? () => onPlayerPress(player) : undefined
+                      onPlayerPress && swap.out.id ? () => onPlayerPress(swap.out) : undefined
                     }
                     style={{ width: cardW, maxWidth: cardW }}
                   />
@@ -456,8 +474,8 @@ export function LineupBelowSections({
               </View>
             ))}
           </View>
-        )}
       </PlayersGridSection>
+      ) : null}
 
       {absences.length > 0 ? (
         <PlayersGridSection
@@ -672,6 +690,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  swapRow: {
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '100%',
+  },
+  swapIcon: {
+    width: 14,
+    height: 14,
+  },
+  swapName: {
+    flexShrink: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6A2BD9',
   },
   flag: {
     width: 16,
