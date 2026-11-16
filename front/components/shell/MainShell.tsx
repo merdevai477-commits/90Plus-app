@@ -7,6 +7,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import BottomNav from '@/components/navigation/BottomNav';
 import { TAB_BAR_HEIGHT } from '@/components/navigation/liquidGlassTabBar.constants';
 import { useTranslation } from '../../src/i18n';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import {
   BG_BASE,
   TEXT_PRIMARY,
@@ -38,21 +39,28 @@ export function MainShell({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
   const isRtl = language === 'ar';
+  const titleColor = isDark ? TEXT_PRIMARY : '#24104E';
+  const mutedColor = isDark ? TEXT_MUTED : '#6B7280';
   const bottomPad = Math.max(insets.bottom, 16) + TAB_BAR_HEIGHT + 56;
   const topPad = insets.top + 12;
   const label = backLabel ?? t.common?.back ?? 'Back';
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
-      <LinearGradient
-        colors={[...GRADIENT_BG_COLORS]}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        locations={[...GRADIENT_BG_LOCATIONS]}
-      />
+    <View style={[styles.root, !isDark && { backgroundColor: '#F4F1FA' }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      {isDark ? (
+        <LinearGradient
+          colors={[...GRADIENT_BG_COLORS]}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          locations={[...GRADIENT_BG_LOCATIONS]}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#F4F1FA' }]} />
+      )}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{
@@ -75,16 +83,16 @@ export function MainShell({
                 testID={backTestID}
               >
                 <ChevronLeft
-                  color={TEXT_MUTED}
+                  color={mutedColor}
                   size={22}
                   strokeWidth={2.2}
                   style={isRtl ? { transform: [{ scaleX: -1 }] } : undefined}
                 />
-                <Text style={styles.backTxt}>{label}</Text>
+                <Text style={[styles.backTxt, { color: mutedColor }]}>{label}</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={styles.title}>{title}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
+            {subtitle ? <Text style={[styles.subtitle, { color: mutedColor }]}>{subtitle}</Text> : null}
           </View>
           {headerRight && <View style={styles.headRight}>{headerRight}</View>}
         </View>

@@ -3417,6 +3417,10 @@ export const ar = {
 
     sectionNotifications: 'الإشعارات',
     sectionPreferences: 'التفضيلات',
+    appearance: 'المظهر',
+    appearanceLight: 'الوضع الفاتح',
+    appearanceDark: 'الوضع الداكن',
+    appearanceSub: 'بدّل بين الأبيض والأسود فورًا',
     sectionData: 'البيانات والتخزين',
     sectionSupport: 'الدعم والقانوني',
     sectionAbout: 'حول التطبيق',

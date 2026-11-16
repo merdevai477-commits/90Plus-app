@@ -10,6 +10,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Switch,
   TouchableOpacity,
   StatusBar,
   Platform,
@@ -31,6 +32,8 @@ import {
   Share2,
   Ban,
   Mail,
+  Moon,
+  Sun,
 } from 'lucide-react-native';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVideos } from '../../contexts/VideosContext';
@@ -45,6 +48,8 @@ import { AccountDeletionService } from '../../services/accountDeletionService';
 import { LEGAL_URLS, openLegalUrl } from '../../config/legal.config';
 import { toastManager } from '../../services/toastManager';
 import { useScreenFont } from '../../utils/fontSetup';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
+import { useAppSettings } from '@/src/store/useAppSettings';
 import { MainShell } from '../../components/shell/MainShell';
 import {
   TEXT_PRIMARY,
@@ -79,6 +84,8 @@ export default function SettingsScreen() {
   const { signOut, getToken, isLoaded, isSignedIn } = useAuth();
 
   const { t, language, setLanguage } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const setTheme = useAppSettings((s) => s.setTheme);
   const tSettings = t.settingsScreen;
   const tCommon = t.common;
   const appVersion = getAppVersionLabel();
@@ -274,7 +281,15 @@ export default function SettingsScreen() {
       backLabel={tSettings.backToProfile ?? tCommon.back ?? tCommon.close}
       backTestID="settings-back"
     >
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#000' : '#F4F1FA'} />
+
+      <ThemeQuickSwitch
+        isDark={isDark}
+        title={tSettings.appearance}
+        subtitle={isDark ? tSettings.appearanceDark : tSettings.appearanceLight}
+        hint={tSettings.appearanceSub}
+        onChange={(dark) => setTheme(dark ? 'dark' : 'light')}
+      />
 
       {osPushGranted === false ? (
         <TouchableOpacity
@@ -373,7 +388,9 @@ export default function SettingsScreen() {
         <SettingsRow
           icon={null}
           title={tSettings.version}
-          trailing={<Text style={styles.infoValue}>{appVersion}</Text>}
+          trailing={
+            <Text style={[styles.infoValue, !isDark && { color: '#24104E' }]}>{appVersion}</Text>
+          }
           testID="settings-app-version"
         />
         <SettingsRow
@@ -428,8 +445,10 @@ export default function SettingsScreen() {
       </SettingsGroup>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>{tSettings.madeWith}</Text>
-        <Text style={styles.footerCopyright}>{tSettings.copyright}</Text>
+        <Text style={[styles.footerText, !isDark && { color: '#6B7280' }]}>{tSettings.madeWith}</Text>
+        <Text style={[styles.footerCopyright, !isDark && { color: '#9CA3AF' }]}>
+          {tSettings.copyright}
+        </Text>
       </View>
 
       <LanguagePickerModal
@@ -447,11 +466,74 @@ export default function SettingsScreen() {
   );
 }
 
+function ThemeQuickSwitch({
+  isDark,
+  title,
+  subtitle,
+  hint,
+  onChange,
+}: {
+  isDark: boolean;
+  title: string;
+  subtitle: string;
+  hint: string;
+  onChange: (dark: boolean) => void;
+}) {
+  const ink = isDark ? TEXT_PRIMARY : '#24104E';
+  const muted = isDark ? TEXT_MUTED : '#6B7280';
+  return (
+    <View
+      style={[
+        styles.themeCard,
+        !isDark && {
+          backgroundColor: '#FFFFFF',
+          borderColor: 'rgba(106,43,217,0.16)',
+        },
+      ]}
+    >
+      <View style={[styles.linkIcon, { backgroundColor: isDark ? PURPLE_GLOW_SM : '#F3EDFF' }]}>
+        {isDark ? (
+          <Moon size={18} color={PURPLE_SOFT} strokeWidth={2.2} />
+        ) : (
+          <Sun size={18} color="#6A2BD9" strokeWidth={2.2} />
+        )}
+      </View>
+      <View style={styles.themeCopy}>
+        <Text style={[styles.linkTitle, { color: ink }]}>{title}</Text>
+        <Text style={[styles.linkSub, { color: muted }]}>{subtitle}</Text>
+        <Text style={[styles.themeHint, { color: muted }]}>{hint}</Text>
+      </View>
+      <Switch
+        value={isDark}
+        onValueChange={onChange}
+        trackColor={{ false: '#E5E7EB', true: '#6A2BD9' }}
+        thumbColor="#FFFFFF"
+        ios_backgroundColor="#E5E7EB"
+        accessibilityRole="switch"
+        accessibilityLabel={title}
+        accessibilityState={{ checked: isDark }}
+        testID="settings-theme-switch"
+      />
+    </View>
+  );
+}
+
 function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+  const { isDark } = useResolvedAppScheme();
   return (
     <View style={styles.group}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <View style={styles.card}>{children}</View>
+      <Text style={[styles.sectionLabel, !isDark && { color: '#6B7280' }]}>{label}</Text>
+      <View
+        style={[
+          styles.card,
+          !isDark && {
+            backgroundColor: '#FFFFFF',
+            borderColor: 'rgba(106,43,217,0.14)',
+          },
+        ]}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -479,8 +561,17 @@ function SettingsRow({
   titleColor?: string;
   testID?: string;
 }) {
+  const { isDark } = useResolvedAppScheme();
+  const ink = titleColor ?? (isDark ? TEXT_PRIMARY : '#24104E');
+  const muted = isDark ? TEXT_MUTED : '#6B7280';
   const content = (
-    <View style={[styles.row, !last && styles.rowDivider]}>
+    <View
+      style={[
+        styles.row,
+        !last && styles.rowDivider,
+        !last && !isDark && { borderBottomColor: 'rgba(106,43,217,0.1)' },
+      ]}
+    >
       <View style={styles.linkLeft}>
         {icon ? (
           <View style={[styles.linkIcon, { backgroundColor: iconBg ?? PURPLE_GLOW_SM }]}>
@@ -488,11 +579,11 @@ function SettingsRow({
           </View>
         ) : null}
         <View style={{ flex: 1 }}>
-          <Text style={[styles.linkTitle, titleColor ? { color: titleColor } : null]}>{title}</Text>
-          {sub ? <Text style={styles.linkSub}>{sub}</Text> : null}
+          <Text style={[styles.linkTitle, { color: ink }]}>{title}</Text>
+          {sub ? <Text style={[styles.linkSub, { color: muted }]}>{sub}</Text> : null}
         </View>
       </View>
-      {trailing ?? (onPress ? <ChevronRight color={TEXT_MUTED} size={18} strokeWidth={2} /> : null)}
+      {trailing ?? (onPress ? <ChevronRight color={muted} size={18} strokeWidth={2} /> : null)}
     </View>
   );
 
@@ -562,6 +653,20 @@ const styles = StyleSheet.create({
   linkTitle: { fontSize: 15, fontWeight: '700', color: TEXT_PRIMARY },
   linkSub: { marginTop: 2, fontSize: 12, color: TEXT_MUTED, lineHeight: 16 },
   infoValue: { fontSize: 14, fontWeight: '700', color: TEXT_PRIMARY },
+  themeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS_LG,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER_ARENA,
+    backgroundColor: 'rgba(255,255,255,0.045)',
+  },
+  themeCopy: { flex: 1, paddingEnd: 8 },
+  themeHint: { marginTop: 2, fontSize: 11, lineHeight: 15 },
   warnBanner: {
     marginBottom: 18,
     paddingVertical: 14,

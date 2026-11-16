@@ -3500,6 +3500,10 @@ export const en = {
     // Section labels
     sectionNotifications: 'Notifications',
     sectionPreferences: 'Preferences',
+    appearance: 'Appearance',
+    appearanceLight: 'Light mode',
+    appearanceDark: 'Dark mode',
+    appearanceSub: 'Switch between light and dark instantly',
     sectionData: 'Data & storage',
     sectionSupport: 'Support & legal',
     sectionAbout: 'About',
