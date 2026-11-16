@@ -37,7 +37,7 @@ import {
 import { logger } from '../services/logger';
 import { releaseLoginInterstitialAfterOnboarding } from '../services/loginInterstitialAd';
 
-/** Figma Team Selection light (1594:4455 / 1594:5015). */
+/** Figma Team Selection light tokens (1594:4455 / 1594:5015). */
 const BG = '#FCFCFC';
 const INK = '#24104E';
 const MUTED = '#6B7280';
@@ -113,22 +113,39 @@ function ClubRow({
   onToggle: (club: OnboardingClubPick) => void;
 }) {
   if (clubs.length === 0) return null;
+  const visible = clubs.slice(0, 4);
   return (
     <View style={styles.section}>
-      <View style={[styles.sectionHeader, isRTL && styles.sectionHeaderRtl]}>
-        <View style={[styles.sectionTitleGroup, isRTL && styles.sectionTitleGroupRtl]}>
-          {isRTL ? null : <View style={styles.sectionAccent} />}
-          <Text style={[styles.sectionTitle, isRTL && styles.textRtl]}>{title}</Text>
-          {isRTL ? <View style={styles.sectionAccent} /> : null}
-        </View>
-        {showViewAll && viewAllLabel ? (
-          <Text style={styles.viewAll}>{viewAllLabel}</Text>
+      {/* Figma: view-all on the left, title+accent on the right (AR). */}
+      <View style={styles.sectionHeader}>
+        {isRTL ? (
+          <>
+            {showViewAll && viewAllLabel ? (
+              <Text style={styles.viewAll}>{viewAllLabel}</Text>
+            ) : (
+              <View />
+            )}
+            <View style={styles.sectionTitleGroup}>
+              <Text style={[styles.sectionTitle, styles.textRtl]}>{title}</Text>
+              <View style={styles.sectionAccent} />
+            </View>
+          </>
         ) : (
-          <View />
+          <>
+            <View style={styles.sectionTitleGroup}>
+              <View style={styles.sectionAccent} />
+              <Text style={styles.sectionTitle}>{title}</Text>
+            </View>
+            {showViewAll && viewAllLabel ? (
+              <Text style={styles.viewAll}>{viewAllLabel}</Text>
+            ) : (
+              <View />
+            )}
+          </>
         )}
       </View>
-      <View style={[styles.row, isRTL && styles.rowRtl]}>
-        {clubs.slice(0, 4).map((club) => (
+      <View style={styles.row}>
+        {visible.map((club) => (
           <View key={club.competitorId} style={styles.cardSlot}>
             <OnboardingClubCard
               club={club}
@@ -288,7 +305,7 @@ export default function OnboardingScreen() {
       >
         <View style={styles.topBar}>
           <View style={styles.topBarSpacer} />
-          <Image source={APP_ICON} style={styles.appIcon} contentFit="contain" />
+          <Image source={APP_ICON} style={styles.appIcon} contentFit="cover" />
         </View>
 
         <View style={styles.header}>
@@ -304,7 +321,7 @@ export default function OnboardingScreen() {
           <Text style={[styles.progressLabel, isRTL && styles.textRtl]}>{progressText}</Text>
           <View style={styles.progressTrack}>
             {[0, 1, 2].map((index) => {
-              // Fill from the right (Figma RTL): rightmost = first selection.
+              // Figma fills from the right: rightmost = first pick.
               const filledFromRight = MAX_ONBOARDING_TEAMS - 1 - index;
               const filled = count > filledFromRight;
               return (
@@ -317,7 +334,14 @@ export default function OnboardingScreen() {
           </View>
         </View>
 
-        <View style={[styles.searchWrap, focused && styles.searchWrapFocused]}>
+        <View
+          style={[
+            styles.searchWrap,
+            focused && styles.searchWrapFocused,
+            isRTL ? styles.searchWrapRtl : null,
+          ]}
+        >
+          {!isRTL ? <Search size={20} color={focused ? PRIMARY : SUBTLE} /> : null}
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -330,7 +354,7 @@ export default function OnboardingScreen() {
             autoCapitalize="none"
             returnKeyType="search"
           />
-          <Search size={20} color={focused ? PRIMARY : SUBTLE} />
+          {isRTL ? <Search size={20} color={focused ? PRIMARY : SUBTLE} /> : null}
         </View>
 
         {searching ? (
@@ -419,19 +443,20 @@ export default function OnboardingScreen() {
           </ScrollView>
         )}
 
+        {/* Figma: hint sits on page bg above the white bottom nav. */}
+        <View style={[styles.hintBanner, isRTL && styles.hintBannerRtl]}>
+          <Text style={[styles.hintText, isRTL && styles.textRtl]}>{hintText}</Text>
+          <View style={styles.hintDot} />
+        </View>
+
         <View
           style={[
             styles.footer,
             {
-              paddingBottom: Math.max(insets.bottom, 12),
+              paddingBottom: Math.max(insets.bottom, 20),
             },
           ]}
         >
-          <View style={[styles.hintBanner, isRTL && styles.hintBannerRtl]}>
-            <Text style={[styles.hintText, isRTL && styles.textRtl]}>{hintText}</Text>
-            <View style={styles.hintDot} />
-          </View>
-
           <Pressable
             disabled={!nextEnabled}
             onPress={() => finish(false)}
@@ -474,6 +499,7 @@ const styles = StyleSheet.create({
     width: 39,
     height: 39,
     borderRadius: 11,
+    overflow: 'hidden',
   },
   header: {
     marginBottom: 16,
@@ -498,6 +524,7 @@ const styles = StyleSheet.create({
   progressBlock: {
     marginBottom: 16,
     gap: 2,
+    alignItems: 'stretch',
   },
   progressLabel: {
     color: DARK,
@@ -534,6 +561,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  searchWrapRtl: {
+    justifyContent: 'flex-end',
+  },
   searchWrapFocused: {
     borderColor: PRIMARY,
   },
@@ -545,24 +575,19 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   section: {
-    marginBottom: 18,
+    marginBottom: 16,
     gap: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  sectionHeaderRtl: {
-    flexDirection: 'row-reverse',
+    minHeight: 35,
   },
   sectionTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-  },
-  sectionTitleGroupRtl: {
-    flexDirection: 'row',
   },
   sectionAccent: {
     width: 4,
@@ -584,15 +609,15 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
     minHeight: 122,
   },
-  rowRtl: {
-    flexDirection: 'row-reverse',
-  },
   cardSlot: {
-    flex: 1,
-    minWidth: 0,
+    width: 88,
+    maxWidth: 88,
+    flexGrow: 0,
+    flexShrink: 1,
     height: 122,
   },
   grids: {
@@ -647,15 +672,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
     fontSize: 15,
   },
-  footer: {
-    gap: 11,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: FOOTER_BORDER,
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
   hintBanner: {
     height: 42,
     borderRadius: 12,
@@ -664,6 +680,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 12,
   },
   hintBannerRtl: {
     flexDirection: 'row-reverse',
@@ -681,6 +698,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: PRIMARY,
   },
+  footer: {
+    gap: 11,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: FOOTER_BORDER,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
   nextBtn: {
     height: 52,
     borderRadius: 16,
@@ -697,6 +723,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    lineHeight: 24,
   },
   nextTextOff: {
     color: BTN_DISABLED_TEXT,
@@ -707,6 +734,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 20,
-    paddingVertical: 4,
+    minHeight: 30,
+    textAlignVertical: 'center',
   },
 });

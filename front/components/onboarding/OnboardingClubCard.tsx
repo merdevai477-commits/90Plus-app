@@ -6,7 +6,7 @@ import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import type { Language } from '../../src/i18n/types';
 import type { OnboardingClubPick } from '../../utils/teamOnboarding';
 
-/** Figma Team Selection light cards (1594:4455 / 1594:5015). */
+/** Figma Team Selection light cards (1594:4455 / 1594:5015) — 88×122. */
 const INK = '#24104E';
 const PRIMARY = '#6A2BD9';
 const CARD_BORDER = '#E8E0F5';
@@ -29,7 +29,7 @@ export default function OnboardingClubCard({
       : getTeamDisplayName(club.name, language, club.competitorId);
 
   const body = (
-    <>
+    <View style={styles.content}>
       <View style={styles.logoWell}>
         <TeamBadge
           name={club.name}
@@ -45,7 +45,7 @@ export default function OnboardingClubCard({
       >
         {label}
       </Text>
-    </>
+    </View>
   );
 
   return (
@@ -59,8 +59,8 @@ export default function OnboardingClubCard({
       {selected ? (
         <LinearGradient
           colors={['#6A2BD9', '#4B1FA3']}
-          start={{ x: 0.05, y: 0.2 }}
-          end={{ x: 0.95, y: 0.9 }}
+          start={{ x: 0.09, y: 0.15 }}
+          end={{ x: 0.9, y: 0.9 }}
           style={[styles.card, styles.cardSelected]}
         >
           {body}
@@ -74,18 +74,16 @@ export default function OnboardingClubCard({
 
 const styles = StyleSheet.create({
   press: {
-    flex: 1,
-    minWidth: 0,
+    width: '100%',
     height: 122,
   },
   card: {
-    flex: 1,
+    width: '100%',
+    height: 122,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 12,
-    gap: 8,
   },
   cardIdle: {
     backgroundColor: '#FFFFFF',
@@ -95,6 +93,11 @@ const styles = StyleSheet.create({
   cardSelected: {
     borderWidth: 1.5,
     borderColor: PRIMARY,
+  },
+  content: {
+    width: 70.5,
+    alignItems: 'center',
+    gap: 8,
   },
   logoWell: {
     width: 50,
@@ -108,11 +111,11 @@ const styles = StyleSheet.create({
     color: INK,
     fontSize: 11,
     fontWeight: '600',
+    lineHeight: 17,
     textAlign: 'center',
     width: '100%',
   },
   nameSelected: {
     color: '#FCFCFC',
-    fontWeight: '600',
   },
 });

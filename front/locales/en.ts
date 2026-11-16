@@ -3677,7 +3677,7 @@ export const en = {
     hintNeedThree: 'Pick 3 teams to continue',
     hintNeedTwo: 'Pick 2 more teams to continue',
     hintNeedOne: 'Pick 1 more team to continue',
-    hintReady: 'All set — you can continue',
+    hintReady: 'Ready! You can continue now',
   },
 
   // ── My reports screen ────────────────────────────────────────────────
