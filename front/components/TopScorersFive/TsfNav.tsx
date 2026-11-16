@@ -11,25 +11,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from '../../src/i18n';
 import {
-  GLASS_ICON_ACTIVE,
-  GLASS_ICON_IDLE,
   GlassCapsuleNav,
+  useGlassNavColors,
   type GlassCapsuleItem,
 } from '../navigation/GlassCapsuleNav';
 
 export type TsfTabKey = 'matches' | 'pitch' | 'ranking';
-
-const iconColor = (active: boolean) => (active ? GLASS_ICON_ACTIVE : GLASS_ICON_IDLE);
-
-const TAB_ICON: Record<TsfTabKey, GlassCapsuleItem<TsfTabKey>['renderIcon']> = {
-  matches: (active, size) => (
-    <Ionicons name={active ? 'calendar' : 'calendar-outline'} size={size} color={iconColor(active)} />
-  ),
-  pitch: (active, size) => <MaterialCommunityIcons name="soccer-field" size={size} color={iconColor(active)} />,
-  ranking: (active, size) => (
-    <Ionicons name={active ? 'trophy' : 'trophy-outline'} size={size} color={iconColor(active)} />
-  ),
-};
 
 /** How far the bar sits off the foot of the screen. */
 export function tsfNavBottom(insetBottom: number): number {
@@ -49,19 +36,42 @@ type TsfNavProps = {
 export function TsfNav({ activeTab, onChange, scale }: TsfNavProps) {
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
+  const navColors = useGlassNavColors();
   const tabsCopy = t.topScorersFive.pick.tabs;
 
   /** Arabic design order (left → right); English reads the other way. */
   const items = useMemo<GlassCapsuleItem<TsfTabKey>[]>(() => {
     const order: TsfTabKey[] =
       language === 'ar' ? ['ranking', 'pitch', 'matches'] : ['matches', 'pitch', 'ranking'];
+    const iconColor = (isActive: boolean) => (isActive ? navColors.iconActive : navColors.iconIdle);
     return order.map((key) => ({
       key,
       label: tabsCopy[key],
-      renderIcon: TAB_ICON[key],
+      renderIcon: (isActive, size) => {
+        switch (key) {
+          case 'matches':
+            return (
+              <Ionicons
+                name={isActive ? 'calendar' : 'calendar-outline'}
+                size={size}
+                color={iconColor(isActive)}
+              />
+            );
+          case 'pitch':
+            return <MaterialCommunityIcons name="soccer-field" size={size} color={iconColor(isActive)} />;
+          case 'ranking':
+            return (
+              <Ionicons
+                name={isActive ? 'trophy' : 'trophy-outline'}
+                size={size}
+                color={iconColor(isActive)}
+              />
+            );
+        }
+      },
       testID: `tsf-nav-${key}`,
     }));
-  }, [language, tabsCopy]);
+  }, [language, navColors.iconActive, navColors.iconIdle, tabsCopy]);
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { bottom: tsfNavBottom(insets.bottom) }]}>

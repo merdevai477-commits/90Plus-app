@@ -12,6 +12,30 @@ export const GLASS_SURFACE_BG = '#100C1C';
 export const GLASS_BUBBLE_COLORS = ['#A47BFF', '#7B4DF0', '#5B30C6'] as const;
 export const GLASS_ACCENT = '#A47BFF';
 
+/** Light / dark tokens for the floating capsule tab bar. */
+export const GLASS_NAV_THEME = {
+  dark: {
+    barBg: GLASS_BAR_BG,
+    iconActive: '#FFFFFF',
+    iconIdle: 'rgba(235,228,255,0.6)',
+    label: '#FFFFFF',
+    rimTint: undefined as string | undefined,
+    shadowColor: '#7C4DFF',
+    shadowOpacity: 0.45,
+    sheen: true,
+  },
+  light: {
+    barBg: '#FFFFFF',
+    iconActive: '#FFFFFF',
+    iconIdle: '#6A2BD9',
+    label: '#FFFFFF',
+    rimTint: 'rgba(106,43,217,0.14)',
+    shadowColor: '#6A2BD9',
+    shadowOpacity: 0.18,
+    sheen: false,
+  },
+} as const;
+
 const SHEEN_COLORS = ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0.08)'] as const;
 const SHEEN_LOCATIONS = [0, 0.45, 0.7, 1] as const;
 

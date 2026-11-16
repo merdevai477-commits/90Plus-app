@@ -15,12 +15,19 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useAppFont } from '@/utils/fontSetup';
 
-import { GLASS_BAR_BG, GlassBubbleFill, GlassRim, GlassSheen } from './glass';
+import { GLASS_NAV_THEME, GlassBubbleFill, GlassRim, GlassSheen } from './glass';
 
-export const GLASS_ICON_ACTIVE = '#FFFFFF';
-export const GLASS_ICON_IDLE = 'rgba(235,228,255,0.6)';
+/** Dark-theme defaults (kept for chat composer + legacy callers). */
+export const GLASS_ICON_ACTIVE = GLASS_NAV_THEME.dark.iconActive;
+export const GLASS_ICON_IDLE = GLASS_NAV_THEME.dark.iconIdle;
+
+export function useGlassNavColors() {
+  const { isDark } = useResolvedAppScheme();
+  return isDark ? GLASS_NAV_THEME.dark : GLASS_NAV_THEME.light;
+}
 
 export type GlassCapsuleItem<K extends string> = {
   key: K;
@@ -85,6 +92,7 @@ export function GlassCapsuleNav<K extends string>({
   const m = { ...DEFAULT_METRICS, ...metricsProp };
   const s = (value: number) => value * scale;
   const fontSemi = useAppFont(600);
+  const navTheme = useGlassNavColors();
 
   const [labelWidths, setLabelWidths] = useState<Partial<Record<K, number>>>({});
 
@@ -165,11 +173,19 @@ export function GlassCapsuleNav<K extends string>({
       <View
         style={[
           styles.bar,
-          { height, borderRadius: height / 2, paddingHorizontal: pad, columnGap: gap },
+          {
+            height,
+            borderRadius: height / 2,
+            paddingHorizontal: pad,
+            columnGap: gap,
+            backgroundColor: navTheme.barBg,
+            shadowColor: navTheme.shadowColor,
+            shadowOpacity: navTheme.shadowOpacity,
+          },
         ]}
       >
-        <GlassSheen radius={height / 2} />
-        <GlassRim radius={height / 2} />
+        {navTheme.sheen ? <GlassSheen radius={height / 2} /> : null}
+        <GlassRim radius={height / 2} tint={navTheme.rimTint} />
 
         <Animated.View
           pointerEvents="none"
@@ -192,6 +208,7 @@ export function GlassCapsuleNav<K extends string>({
               labelGap={s(m.labelGap)}
               fontSize={s(m.font)}
               fontFamily={fontSemi}
+              labelColor={navTheme.label}
               testID={item.testID}
               onPressIn={onPressIn ? () => onPressIn(item.key) : undefined}
               onPress={() => {
@@ -215,6 +232,7 @@ type TabButtonProps = {
   labelGap: number;
   fontSize: number;
   fontFamily: string;
+  labelColor: string;
   testID?: string;
   onPressIn?: () => void;
   onPress: () => void;
@@ -230,6 +248,7 @@ function TabButton({
   labelGap,
   fontSize,
   fontFamily,
+  labelColor,
   testID,
   onPressIn,
   onPress,
@@ -278,7 +297,7 @@ function TabButton({
         {icon}
         <Animated.Text
           numberOfLines={1}
-          style={[styles.label, { fontFamily, fontSize, marginLeft: labelGap }, labelStyle]}
+          style={[styles.label, { fontFamily, fontSize, marginLeft: labelGap, color: labelColor }, labelStyle]}
           maxFontSizeMultiplier={1}
           importantForAccessibility="no"
         >
@@ -294,9 +313,6 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: GLASS_BAR_BG,
-    shadowColor: '#7C4DFF',
-    shadowOpacity: 0.45,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
@@ -310,5 +326,5 @@ const styles = StyleSheet.create({
     // No elevation: on Android it would lift the bubble over the tab icons.
   },
   slot: { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
-  label: { color: '#FFFFFF' },
+  label: {},
 });
