@@ -99,20 +99,21 @@ function BestPlayerCard({
           <View style={[StyleSheet.absoluteFill, { backgroundColor: plate }]} />
         )}
 
-        {/* Soft halo behind the cutout so the character pops. */}
-        <View
-          pointerEvents="none"
-          style={[
-            styles.halo,
-            {
-              width: c.w * s * 0.78,
-              height: c.w * s * 0.78,
-              borderRadius: (c.w * s * 0.78) / 2,
-              top: c.h * s * 0.08,
-              backgroundColor: isDark ? 'rgba(167,139,250,0.18)' : 'rgba(255,255,255,0.7)',
-            },
-          ]}
-        />
+        {!isDark ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.halo,
+              {
+                width: c.w * s * 0.78,
+                height: c.w * s * 0.78,
+                borderRadius: (c.w * s * 0.78) / 2,
+                top: c.h * s * 0.08,
+                backgroundColor: 'rgba(255,255,255,0.7)',
+              },
+            ]}
+          />
+        ) : null}
 
         <AthleteCutoutImage
           athleteId={player.id}

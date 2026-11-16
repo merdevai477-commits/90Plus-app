@@ -81,7 +81,8 @@ function MatchStandingsTableComponent({
         {
           backgroundColor: cardBg,
           borderColor: cardBorder,
-          shadowOpacity: isDark ? 0.25 : 0.14,
+          shadowOpacity: isDark ? 0 : 0.14,
+          elevation: isDark ? 0 : 3,
         },
       ]}
     >

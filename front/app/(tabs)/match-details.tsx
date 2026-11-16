@@ -2577,6 +2577,8 @@ const MatchDetailsScreen = () => {
                       backgroundColor: mdColors.cardBg,
                       borderColor: mdColors.cardBorder,
                       shadowColor: '#4B1FA3',
+                      shadowOpacity: mdIsDark ? 0 : 0.22,
+                      elevation: mdIsDark ? 0 : 2,
                     },
                   ]}
                 >

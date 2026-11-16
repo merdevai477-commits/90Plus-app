@@ -5,7 +5,7 @@ import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from './MatchText';
 import { LinearGradient } from 'expo-linear-gradient';
-import CachedAthletePhoto from '../common/CachedAthletePhoto';
+import { AthleteCutoutImage } from './AthleteCutoutImage';
 import { useCompetitorSquad, useCompetitorStats } from '../../hooks/useTeamProfile';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 import {
@@ -68,6 +68,7 @@ function PlayerMiniCard({
   accent,
   photoBg,
   cardBg,
+  isDark,
   onPress,
 }: {
   player: MatchTopPlayer | null;
@@ -76,6 +77,7 @@ function PlayerMiniCard({
   accent: string;
   photoBg: string;
   cardBg: string;
+  isDark: boolean;
   onPress?: () => void;
 }) {
   const body = (
@@ -87,9 +89,13 @@ function PlayerMiniCard({
           </Text>
         </View>
         <View style={[styles.photoWrap, { backgroundColor: photoBg }]}>
-          <CachedAthletePhoto
-            uri={player?.photo}
-            size={52}
+          <AthleteCutoutImage
+            athleteId={player?.athleteId}
+            photo={player?.photo}
+            width={52}
+            height={52}
+            plateColor={photoBg}
+            contentFit="contain"
             recyclingKey={player?.athleteId ?? 'empty'}
           />
         </View>
@@ -106,12 +112,16 @@ function PlayerMiniCard({
   );
 
   if (!player || !onPress) {
-    return <View style={[styles.playerCard, CARD_SHADOW, { backgroundColor: cardBg }]}>{body}</View>;
+    return (
+      <View style={[styles.playerCard, !isDark && CARD_SHADOW, { backgroundColor: cardBg }]}>
+        {body}
+      </View>
+    );
   }
 
   return (
     <TouchableOpacity
-      style={[styles.playerCard, CARD_SHADOW, { backgroundColor: cardBg }]}
+      style={[styles.playerCard, !isDark && CARD_SHADOW, { backgroundColor: cardBg }]}
       onPress={onPress}
       activeOpacity={0.85}
       accessibilityRole="button"
@@ -176,7 +186,7 @@ export function MatchTopPlayersCard({
   const tabIdleText = isDark ? colors.primarySoft : '#4B1FA3';
   const compareBg = isDark ? colors.elevatedBg : '#FFFFFF';
   const miniCardBg = isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF';
-  const photoBg = isDark ? 'rgba(168,85,247,0.18)' : '#F6EFFF';
+  const photoBg = isDark ? 'transparent' : '#F6EFFF';
   const fallbackPos = tabLabel(tab, labels);
 
   const slots: Array<{ player: MatchTopPlayer | null; team: TeamRef }> = [
@@ -197,7 +207,7 @@ export function MatchTopPlayersCard({
         </Text>
       </View>
 
-      <View style={[styles.tabsBar, CARD_SHADOW, { backgroundColor: tabBarBg }]}>
+      <View style={[styles.tabsBar, !isDark && CARD_SHADOW, { backgroundColor: tabBarBg }]}>
         {TABS.map((item) => {
           const selected = item === tab;
           return (
@@ -231,7 +241,7 @@ export function MatchTopPlayersCard({
         })}
       </View>
 
-      <View style={[styles.compareCard, CARD_SHADOW, { backgroundColor: compareBg }]}>
+      <View style={[styles.compareCard, !isDark && CARD_SHADOW, { backgroundColor: compareBg }]}>
         <View style={styles.teamHeaders}>
           <Text style={[styles.teamName, { color: accent }]} numberOfLines={1}>
             {homeTeam.name}
@@ -255,6 +265,7 @@ export function MatchTopPlayersCard({
               accent={accent}
               photoBg={photoBg}
               cardBg={miniCardBg}
+              isDark={isDark}
               onPress={
                 slot.player ? () => onOpenPlayer(slot.player!, slot.team) : undefined
               }
@@ -385,7 +396,7 @@ const styles = StyleSheet.create({
     borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 5,
+    overflow: 'hidden',
   },
   playerDetails: {
     width: '100%',

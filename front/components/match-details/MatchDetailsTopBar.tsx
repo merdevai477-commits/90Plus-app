@@ -69,7 +69,7 @@ function GlassIsland({
   rimTint: string;
 }) {
   return (
-    <View style={[styles.island, style]}>
+    <View style={[styles.island, blurTint === 'dark' && styles.islandDark, style]}>
       {lit ? (
         <GlassBubbleFill radius={ISLAND_RADIUS} height={ISLAND_HEIGHT} />
       ) : (
@@ -284,6 +284,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
+  },
+  islandDark: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
   islandClip: {
     borderRadius: ISLAND_RADIUS,
