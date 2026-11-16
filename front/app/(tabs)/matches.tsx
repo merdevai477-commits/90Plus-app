@@ -24,6 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { Bell, ChevronDown, Calendar, Search, X, ChevronLeft, ChevronRight, CalendarCheck2, Lock } from 'lucide-react-native';
+import { FilterStarIcon, FilterTimeIcon } from '../../components/Matches/FilterChipIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -2517,6 +2518,7 @@ export default function MatchesHubScreenV2() {
           {visibleFilters.map((f, chipIndex) => {
             const active = chipIndex === highlightIndex;
             const showLock = f === 'WorldCup' && wcTabLocked;
+            const iconColor = active ? colors.textInverse : colors.primary;
             return (
               <TouchableOpacity
                 key={f}
@@ -2528,18 +2530,24 @@ export default function MatchesHubScreenV2() {
                 activeOpacity={0.85}
                 style={[styles.tabChip, active && styles.tabChipActive]}
               >
-                {isLiquidGlassSupported ? (
-                  <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: colors.glassTint, effect: 'clear' } as any)} />
-                ) : (
-                  <BlurView intensity={25} tint={blurTint} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                )}
-                {active && (
-                  <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
-                )}
+                {isDark ? (
+                  <>
+                    {isLiquidGlassSupported ? (
+                      <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 45 }], tint: colors.glassTint, effect: 'clear' } as any)} />
+                    ) : (
+                      <BlurView intensity={25} tint={blurTint} style={[StyleSheet.absoluteFill, { borderRadius: 45 }]} />
+                    )}
+                    {active ? (
+                      <View style={[StyleSheet.absoluteFill, { borderRadius: 45, backgroundColor: colors.primary }]} />
+                    ) : null}
+                  </>
+                ) : null}
                 <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>
                   {t(FILTER_LABEL_KEYS[f as MatchFilter])}
                 </Text>
-                {showLock ? <Lock size={11} color={active ? colors.textInverse : colors.iconMuted} style={{ marginStart: 4 }} /> : null}
+                {f === 'Upcoming' ? <FilterTimeIcon size={16} color={iconColor} /> : null}
+                {f === 'Favorite' ? <FilterStarIcon size={16} color={iconColor} /> : null}
+                {showLock ? <Lock size={11} color={active ? colors.textInverse : colors.iconMuted} /> : null}
                 {f === 'Live' && !active && <View style={styles.liveDot} />}
               </TouchableOpacity>
             );
@@ -2560,7 +2568,7 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [highlightIndex, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar, styles, colors, blurTint]);
+  ), [highlightIndex, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar, styles, colors, blurTint, isDark]);
 
   const pinnedHeaderFor = useCallback(
     (pageFilter: MatchFilter) => {

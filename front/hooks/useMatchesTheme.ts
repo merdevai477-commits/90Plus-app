@@ -14,6 +14,8 @@ export type MatchesThemeColors = {
   textSecondary: string;
   textMuted: string;
   textInverse: string;
+  /** Idle filter-chip label color. */
+  chipText: string;
   primary: string;
   primarySoft: string;
   primaryMuted: string;
@@ -61,13 +63,15 @@ export const MATCHES_THEME: { light: MatchesThemeColors; dark: MatchesThemeColor
     cardBg: AUTH_LIGHT.cardBg,
     cardBorder: AUTH_LIGHT.divider,
     elevatedBg: '#FFFFFF',
-    chipBg: 'rgba(106,43,217,0.06)',
-    chipBorder: 'rgba(106,43,217,0.14)',
-    chipBorderActive: 'rgba(106,43,217,0.45)',
+    // Figma filter chips — pale lavender idle, solid primary when selected.
+    chipBg: '#F3EDFF',
+    chipBorder: 'transparent',
+    chipBorderActive: 'transparent',
     textPrimary: AUTH_LIGHT.textPrimary,
     textSecondary: AUTH_LIGHT.textSecondary,
     textMuted: AUTH_LIGHT.textMuted,
     textInverse: '#FFFFFF',
+    chipText: AUTH_LIGHT.textPrimary,
     primary: AUTH_LIGHT.primary,
     primarySoft: '#A78BFA',
     primaryMuted: 'rgba(106,43,217,0.12)',
@@ -120,6 +124,7 @@ export const MATCHES_THEME: { light: MatchesThemeColors; dark: MatchesThemeColor
     textSecondary: 'rgba(255,255,255,0.6)',
     textMuted: 'rgba(255,255,255,0.4)',
     textInverse: '#FFFFFF',
+    chipText: 'rgba(255,255,255,0.6)',
     primary: '#7C3AED',
     primarySoft: '#A78BFA',
     primaryMuted: 'rgba(168,85,247,0.15)',
