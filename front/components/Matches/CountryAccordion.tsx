@@ -25,9 +25,14 @@ import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
 import { useTranslation } from '../../src/i18n';
 import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
-import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
+import {
+  getCountryFlagEmoji,
+  getCountryFlagUri,
+  isInternationalCountryGroup,
+} from '../../utils/countryFlagUri';
 import { isMisTaggedWorldCupLeagueName } from '../../constants/worldCup';
 import { useMatchesTheme, type MatchesThemeColors } from '../../hooks/useMatchesTheme';
+import { InternationalFlagIcon } from './InternationalFlagIcon';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
@@ -41,10 +46,23 @@ const CountryFlagThumb = memo(function CountryFlagThumb({
   country: string;
   apiFlag: string | null;
 }) {
-  const { colors } = useMatchesTheme();
+  const { colors, isDark } = useMatchesTheme();
   const styles = useMemo(() => createAccordionStyles(colors), [colors]);
   const uri = useMemo(() => getCountryFlagUri(country, apiFlag), [country, apiFlag]);
   const emoji = useMemo(() => getCountryFlagEmoji(country, apiFlag), [country, apiFlag]);
+  const isInternational = useMemo(
+    () => isInternationalCountryGroup(country, apiFlag),
+    [country, apiFlag],
+  );
+
+  // Light theme: Figma 1669:10628 purple flag instead of white 🏳️ / globe on #FCFCFC.
+  if (isInternational && !isDark) {
+    return (
+      <View style={styles.internationalFlagWrap}>
+        <InternationalFlagIcon size={21} color={colors.primary} />
+      </View>
+    );
+  }
 
   if (!uri) {
     return <Text style={styles.flagEmoji}>{emoji}</Text>;
@@ -260,6 +278,12 @@ function createAccordionStyles(c: MatchesThemeColors) {
       borderRadius: 2,
       overflow: 'hidden',
       backgroundColor: c.logoStubBg,
+    },
+    internationalFlagWrap: {
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     flagEmoji: {
       fontSize: 16,

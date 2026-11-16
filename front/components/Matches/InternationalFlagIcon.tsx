@@ -1,0 +1,28 @@
+/**
+ * Figma 1669:10628 — boxicons flag-alt-filled for World / International rows.
+ * Brand purple (#6A2BD9) so the mark stays visible on the light matches theme.
+ */
+
+import { memo } from 'react';
+import Svg, { Path } from 'react-native-svg';
+
+const FIGMA_FILL = '#6A2BD9';
+
+type InternationalFlagIconProps = {
+  size?: number;
+  color?: string;
+};
+
+export const InternationalFlagIcon = memo(function InternationalFlagIcon({
+  size = 21,
+  color = FIGMA_FILL,
+}: InternationalFlagIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 21 21" fill="none">
+      <Path
+        d="M4.375 13.685C6.125 12.9238 8.12 13.02 9.7825 13.9738C10.9812 14.6563 12.3112 15.0063 13.65 15.0063C14.63 15.0063 15.61 14.8225 16.555 14.4463L17.8238 13.9388C17.9866 13.8739 18.1261 13.7617 18.2244 13.6166C18.3227 13.4715 18.3752 13.3002 18.375 13.125V3.5C18.375 3.21125 18.2262 2.94 17.99 2.77375C17.8718 2.69394 17.7358 2.64424 17.594 2.62899C17.4522 2.61374 17.3087 2.6334 17.1762 2.68625L15.9075 3.19375C14.1838 3.885 12.2675 3.745 10.6575 2.82625C9.54264 2.18846 8.28733 1.83633 7.00341 1.80121C5.71948 1.7661 4.44681 2.0491 3.29875 2.625L3.115 2.7125C2.9707 2.78521 2.84935 2.89646 2.76441 3.03392C2.67946 3.17137 2.63424 3.32967 2.63375 3.49125V19.2412H4.38375V13.6763L4.375 13.685Z"
+        fill={color}
+      />
+    </Svg>
+  );
+});

@@ -78,6 +78,25 @@ function resolveIsoCode(country: string, apiFlag?: string | null): string | null
   return isoFromApiFlagUrl(apiFlag);
 }
 
+/** World / International bucket — no national PNG; use the brand flag icon. */
+export function isInternationalCountryGroup(
+  country: string,
+  apiFlag?: string | null,
+): boolean {
+  const key = normKey(country);
+  if (
+    key === 'world' ||
+    key === 'global' ||
+    key === 'international' ||
+    key === 'عالمي' ||
+    key === 'دولي' ||
+    key === 'العالم'
+  ) {
+    return true;
+  }
+  return (apiFlag ?? '').trim() === '🌍';
+}
+
 /** Emoji fallback for instant paint while the PNG loads. */
 export function getCountryFlagEmoji(country: string, apiFlag?: string | null): string {
   const fromLocal = getFlagByCountryName(country);
@@ -89,7 +108,7 @@ export function getCountryFlagEmoji(country: string, apiFlag?: string | null): s
   );
   if (fromList?.flag) return fromList.flag;
 
-  if (key === 'world') return '🌍';
+  if (key === 'world' || isInternationalCountryGroup(country, apiFlag)) return '🌍';
   if (key === 'europe') return '🇪🇺';
 
   return '🏳️';
@@ -105,8 +124,7 @@ export function getCountryFlagUri(
   // App / global accounts use the globe emoji — do not map "World" labels to the UN PNG.
   if (flagEmoji === '🌍') return null;
 
-  const countryKey = normKey(country);
-  if (countryKey === 'world' || countryKey === 'global' || countryKey === 'عالمي') {
+  if (isInternationalCountryGroup(country, apiFlag)) {
     return null;
   }
 
