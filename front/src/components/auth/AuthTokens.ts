@@ -37,7 +37,7 @@ export type AuthPalette = {
 
 /** Figma Color Palette + Login light frame */
 export const AUTH_LIGHT: AuthPalette = {
-  pageBg: '#F8F7FF',
+  pageBg: '#FCFCFC',
   headerGradient: ['#4B1FA3', '#100729'],
   headerTagline: '#E9D5FF',
   goldAccent: '#F5B301',

@@ -70,8 +70,14 @@ function AuthLandingInner() {
     }
   };
 
+  // Landing chrome is always the Figma light palette (1620:5898).
+  const ink = colors.textPrimary;
+  const border = colors.inputBorder;
+  const muted = colors.textSecondary;
+  const primary = colors.primary;
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.pageBg }]}>
+    <View style={[styles.root, { backgroundColor: '#FCFCFC' }]}>
       <StatusBar style="light" />
       <ImageBackground
         source={LANDING_HERO}
@@ -80,7 +86,7 @@ function AuthLandingInner() {
       >
         <LinearGradient
           colors={['transparent', 'rgba(252,252,252,0)', '#FCFCFC']}
-          locations={[0.55, 0.72, 1]}
+          locations={[0.599, 0.72, 0.869]}
           style={StyleSheet.absoluteFill}
         />
       </ImageBackground>
@@ -100,8 +106,8 @@ function AuthLandingInner() {
         >
           <LinearGradient
             colors={[...colors.buttonGradient]}
-            start={{ x: 0.1, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
             style={styles.primaryBtn}
           >
             <Text style={styles.primaryTxt}>{copy.signUp}</Text>
@@ -113,14 +119,14 @@ function AuthLandingInner() {
           onPress={() => router.push('/auth/login')}
           style={({ pressed }) => [
             styles.secondaryBtn,
-            { borderColor: colors.inputBorder },
+            { borderColor: border, backgroundColor: '#FFFFFF' },
             pressed && { opacity: 0.9 },
           ]}
         >
-          <Text style={[styles.secondaryTxt, { color: colors.textPrimary }]}>
+          <Text style={[styles.secondaryTxt, { color: ink }]}>
             {copy.login}
           </Text>
-          <LogIn size={21} color={colors.primary} strokeWidth={2.25} />
+          <LogIn size={21} color={primary} strokeWidth={2.25} />
         </Pressable>
 
         <View style={styles.dividerWrap}>
@@ -136,22 +142,22 @@ function AuthLandingInner() {
         />
 
         <View style={[styles.legalRow, isRTL && styles.legalRowRtl]}>
-          <Text style={[styles.legalMuted, { color: colors.textSecondary }]}>
+          <Text style={[styles.legalMuted, { color: muted }]}>
             {copy.agree}{' '}
           </Text>
           <Text
-            style={[styles.legalLink, { color: colors.primary }]}
+            style={[styles.legalLink, { color: primary }]}
             onPress={() => {
               void openLegalUrl(LEGAL_URLS.terms);
             }}
           >
             {copy.terms}
           </Text>
-          <Text style={[styles.legalMuted, { color: colors.textSecondary }]}>
+          <Text style={[styles.legalMuted, { color: muted }]}>
             {copy.and}
           </Text>
           <Text
-            style={[styles.legalLink, { color: colors.primary }]}
+            style={[styles.legalLink, { color: primary }]}
             onPress={() => {
               void openLegalUrl(LEGAL_URLS.privacy);
             }}
@@ -171,8 +177,10 @@ function AuthLandingInner() {
 }
 
 export default function AuthLandingScreen() {
+  // Figma 1620:5898 is light-only — never inherit app/system dark tokens
+  // (that was painting white text on white secondary/social buttons).
   return (
-    <AuthThemeProvider>
+    <AuthThemeProvider forceScheme="light">
       <AuthLandingInner />
     </AuthThemeProvider>
   );
@@ -209,7 +217,7 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 18,
     borderWidth: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -218,6 +226,7 @@ const styles = StyleSheet.create({
   secondaryTxt: {
     fontSize: 16,
     fontWeight: '600',
+    lineHeight: 22,
   },
   dividerWrap: {
     marginTop: 4,

@@ -23,18 +23,25 @@ function resolveScheme(
   return system === 'light' ? 'light' : 'dark';
 }
 
-export function AuthThemeProvider({ children }: { children: React.ReactNode }) {
+export function AuthThemeProvider({
+  children,
+  forceScheme,
+}: {
+  children: React.ReactNode;
+  /** Pin palette regardless of app/system theme (e.g. Figma light-only landing). */
+  forceScheme?: AuthScheme;
+}) {
   const preference = useAppSettings((s) => s.theme?.mode);
   const system = useColorScheme();
 
   const value = useMemo<AuthThemeValue>(() => {
-    const scheme = resolveScheme(preference, system);
+    const scheme = forceScheme ?? resolveScheme(preference, system);
     return {
       scheme,
       colors: AUTH_PALETTES[scheme],
       isDark: scheme === 'dark',
     };
-  }, [preference, system]);
+  }, [forceScheme, preference, system]);
 
   return (
     <AuthThemeContext.Provider value={value}>{children}</AuthThemeContext.Provider>

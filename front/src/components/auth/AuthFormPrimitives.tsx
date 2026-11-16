@@ -394,16 +394,18 @@ function createAuthPrimitiveStyles(
     },
     dividerLine: {
       flex: 1,
-      height: StyleSheet.hairlineWidth,
+      height: 1,
       backgroundColor: colors.divider,
     },
     dividerTxt: {
       fontSize: f(12),
       fontWeight: '600',
       color: colors.textSecondary,
+      lineHeight: f(16),
     },
     socialRow: {
       flexDirection: 'row',
+      justifyContent: 'space-between',
       gap: s(SOCIAL_ROW_GAP),
       width: '100%',
       height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
@@ -412,7 +414,7 @@ function createAuthPrimitiveStyles(
       flex: 1,
       height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
       borderRadius: s(SOCIAL_BTN_RADIUS),
-      borderWidth: Platform.OS === 'ios' ? 1 : StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: colors.socialBorder,
       backgroundColor: colors.socialBg,
       overflow: 'hidden',

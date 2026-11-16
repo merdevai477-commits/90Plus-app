@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 
 const AUTH_STACK_OPTIONS = {
   headerShown: false,
-  contentStyle: { backgroundColor: '#F8F7FF' },
+  contentStyle: { backgroundColor: '#FCFCFC' },
   animation: 'slide_from_right' as const,
 };
 
