@@ -134,17 +134,34 @@ function verifiedRank(type: string): number {
   return type.trim().toUpperCase() === 'VERIFIED' ? 1 : 0;
 }
 
-export function pickSummary(clips: StoredHighlightClip[]): PublicHighlight | null {
-  const summaries = clips.filter((clip) => clip.category === SUMMARY_CATEGORY && clip.url);
-  if (!summaries.length) return null;
+function summaryPlayRank(clip: StoredHighlightClip): number {
+  const title = `${clip.title} ${clip.description ?? ''}`.toLowerCase();
+  const file = /\.mp4(?:$|\?)|streamin\./i.test(clip.url) ? 0 : 20;
+  const recap = /highlight|ملخص|resumen|all goals|match recap/.test(title) ? 0 : 8;
+  const verified = verifiedRank(clip.type) === 1 ? 0 : 2;
+  return file + recap + verified;
+}
+
+export function pickSummaries(clips: StoredHighlightClip[]): PublicHighlight[] {
+  const summaries = clips.filter((clip) => clip.category === SUMMARY_CATEGORY && (clip.url || clip.embedUrl));
   summaries.sort((a, b) => {
-    const verified = verifiedRank(b.type) - verifiedRank(a.type);
-    if (verified !== 0) return verified;
-    const embed = Number(Boolean(b.embedUrl)) - Number(Boolean(a.embedUrl));
-    if (embed !== 0) return embed;
+    const rank = summaryPlayRank(a) - summaryPlayRank(b);
+    if (rank !== 0) return rank;
     return a.highlightlyId - b.highlightlyId;
   });
-  return toPublic(summaries[0]);
+  const seen = new Set<string>();
+  const picked: PublicHighlight[] = [];
+  for (const clip of summaries) {
+    const key = (clip.embedUrl || clip.url).replace(/[?&#].*$/, '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push(toPublic(clip));
+  }
+  return picked;
+}
+
+export function pickSummary(clips: StoredHighlightClip[]): PublicHighlight | null {
+  return pickSummaries(clips)[0] ?? null;
 }
 
 export function pickGoals(clips: StoredHighlightClip[]): PublicHighlight[] {

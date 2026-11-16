@@ -299,7 +299,8 @@ const MatchDetailsScreen = () => {
   const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
   const [goalClips, setGoalClips] = useState<GoalClipMedia[]>([]);
   const [matchSummary, setMatchSummary] = useState<GoalClipMedia | null>(null);
-  const [highlightVideoUrl, setHighlightVideoUrl] = useState<string | null>(null);
+  const [summaryUrls, setSummaryUrls] = useState<string[]>([]);
+  const [highlightVideoUrls, setHighlightVideoUrls] = useState<string[]>([]);
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
@@ -517,19 +518,28 @@ const MatchDetailsScreen = () => {
     if (!fixtureId || !isFinishedMatch()) {
       setGoalClips([]);
       setMatchSummary(null);
+      setSummaryUrls([]);
       return;
     }
     let cancelled = false;
     ApiFootballService.getFixtureHighlights(fixtureId)
       .then((payload) => {
         if (cancelled) return;
+        const clips = (payload.summaries?.length
+          ? payload.summaries
+          : payload.summary
+            ? [payload.summary]
+            : []
+        ).map((clip) => clip.url || clip.embedUrl || '').filter(Boolean);
         setGoalClips(payload.goals ?? []);
         setMatchSummary(payload.summary);
+        setSummaryUrls(clips);
       })
       .catch(() => {
         if (cancelled) return;
         setGoalClips([]);
         setMatchSummary(null);
+        setSummaryUrls([]);
       });
     return () => {
       cancelled = true;
@@ -2085,7 +2095,7 @@ const MatchDetailsScreen = () => {
             thumbnail={matchSummary.thumbnail}
             url={matchSummary.url || matchSummary.embedUrl}
             playLabel={t.matchDetails.matchSummaryPlay || 'تشغيل ملخص المباراة'}
-            onPlay={setHighlightVideoUrl}
+            onPlay={() => setHighlightVideoUrls(summaryUrls.length ? summaryUrls : [])}
           />
         ) : (
           <MatchMomentumGraph
@@ -2132,14 +2142,14 @@ const MatchDetailsScreen = () => {
               goalClips={goalClips}
               goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
               goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
-              onPlayClip={setHighlightVideoUrl}
+              onPlayClip={(url) => setHighlightVideoUrls([url])}
             />
           )}
         </View>
         <HighlightVideoSheet
-          visible={highlightVideoUrl != null}
-          url={highlightVideoUrl ?? ''}
-          onClose={() => setHighlightVideoUrl(null)}
+          visible={highlightVideoUrls.length > 0}
+          urls={highlightVideoUrls}
+          onClose={() => setHighlightVideoUrls([])}
           closeLabel={language === 'ar' ? 'إغلاق' : 'Close'}
         />
       </ScrollView>

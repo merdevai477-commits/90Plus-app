@@ -18,7 +18,7 @@ describe('resolveHighlightPlaybackUrl', () => {
 
   it('builds a player-only YouTube embed from a watch link', () => {
     expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo')).toBe(
-      'https://www.youtube-nocookie.com/embed/qjEXEEBQgqo?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3',
+      'https://www.youtube-nocookie.com/embed/qjEXEEBQgqo?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1',
     );
     expect(youtubeEmbedUrl('https://youtu.be/6Nk3FShw4XM')).toContain('/embed/6Nk3FShw4XM?');
   });

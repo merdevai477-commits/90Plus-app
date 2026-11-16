@@ -4,7 +4,7 @@ import { isHighlightCoverageFixture } from './highlight-coverage';
 import {
   isFinishedHighlightStatus,
   pickGoals,
-  pickSummary,
+  pickSummaries,
   resolveReadStatus,
   shouldPrioritizeHighlight,
   type HighlightReadStatus,
@@ -15,6 +15,7 @@ import {
 export interface FixtureHighlightsResult {
   status: HighlightReadStatus;
   summary: PublicHighlight | null;
+  summaries: PublicHighlight[];
   goals: PublicHighlight[];
   checkedAt: string | null;
 }
@@ -22,6 +23,7 @@ export interface FixtureHighlightsResult {
 const EMPTY: FixtureHighlightsResult = {
   status: 'not_finished',
   summary: null,
+  summaries: [],
   goals: [],
   checkedAt: null,
 };
@@ -65,11 +67,12 @@ export async function getFixtureHighlights(
   ]);
 
   const stored = clips as StoredHighlightClip[];
-  const summary = pickSummary(stored);
+  const summaries = pickSummaries(stored);
+  const summary = summaries[0] ?? null;
   const goals = pickGoals(stored);
   const covered = isHighlightCoverageFixture(fixture);
   if (!covered && summary == null && goals.length === 0) {
-    return { status: 'unavailable', summary: null, goals: [], checkedAt: null };
+    return { status: 'unavailable', summary: null, summaries: [], goals: [], checkedAt: null };
   }
   const status = resolveReadStatus({
     finished: true,
@@ -84,6 +87,7 @@ export async function getFixtureHighlights(
   return {
     status,
     summary,
+    summaries,
     goals,
     checkedAt: sync?.lastCheckedAt?.toISOString() ?? null,
   };

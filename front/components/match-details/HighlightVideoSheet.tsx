@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -7,11 +7,12 @@ import {
   isDirectHighlightFile,
   resolveHighlightPlaybackUrl,
   youtubeEmbedUrl,
+  youtubeVideoId,
 } from '../../utils/highlightPlaybackUrl';
 
 type Props = {
   visible: boolean;
-  url: string;
+  urls: string[];
   onClose: () => void;
   closeLabel?: string;
 };
@@ -19,19 +20,63 @@ type Props = {
 const PLAYER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36';
 
-/** Plays the clip itself: an MP4 in the native player, or a YouTube player with no watch page. */
-export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close' }: Props) {
-  const fileUrl = resolveHighlightPlaybackUrl(url);
-  const embedUrl = youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl);
-  const direct = !embedUrl && isDirectHighlightFile(fileUrl);
+const GEO_BLOCK_PROBE = `
+(function () {
+  var blocked = /video unavailable|not made this video available in your country|playback on other websites has been disabled|هذا الفيديو غير متاح|غير متاح في بلدك/i;
+  function report() {
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage('unavailable:' + location.href);
+  }
+  function pageText(doc) {
+    try { return (doc && doc.body && doc.body.innerText) || ''; } catch (e) { return ''; }
+  }
+  function check() {
+    var text = pageText(document);
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) text += ' ' + pageText(frames[i].contentDocument);
+    if (blocked.test(text)) report();
+  }
+  window.addEventListener('message', function (event) {
+    var raw = typeof event.data === 'string' ? event.data : JSON.stringify(event.data || '');
+    if (/onError|"info":\\s*(100|101|150)/.test(raw)) report();
+  });
+  setTimeout(check, 800);
+  setTimeout(check, 2000);
+  setTimeout(check, 4000);
+})();
+true;
+`;
+
+/** Plays the clip itself. A country-blocked YouTube upload is skipped for the next one. */
+export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
+  const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
-  useEffect(() => {
+  const skippedId = useRef('');
+  const listKey = urls.join('|');
+  const openKey = visible ? listKey : '';
+  const [seenKey, setSeenKey] = useState(openKey);
+  if (seenKey !== openKey) {
+    skippedId.current = '';
+    setSeenKey(openKey);
+    setIndex(0);
     setFailed(false);
-  }, [url]);
+  }
+
+  const url = urls[index] ?? '';
+  const fileUrl = resolveHighlightPlaybackUrl(url);
+  const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
+  const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
+  const videoId = url ? youtubeVideoId(url) : null;
+
+  const skipBlocked = () => {
+    if (videoId && skippedId.current === videoId) return;
+    if (videoId) skippedId.current = videoId;
+    if (index + 1 < urls.length) setIndex((current) => current + 1);
+    else setFailed(true);
+  };
 
   return (
     <Modal
-      visible={visible && Boolean(url)}
+      visible={visible && urls.length > 0}
       transparent
       animationType="fade"
       onRequestClose={onClose}
@@ -42,6 +87,7 @@ export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close
         {visible && embedUrl && !failed ? (
           <View style={styles.player}>
             <WebView
+              key={`${listKey}:${embedUrl}`}
               source={{
                 uri: embedUrl,
                 headers: { Referer: 'https://90plus.pro' },
@@ -57,8 +103,16 @@ export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close
               allowsFullscreenVideo
               javaScriptEnabled
               domStorageEnabled
-              onError={() => setFailed(true)}
-              onHttpError={() => setFailed(true)}
+              injectedJavaScript={GEO_BLOCK_PROBE}
+              onMessage={(event) => {
+                const data = event.nativeEvent.data || '';
+                if (!data.startsWith('unavailable:')) return;
+                if (videoId && !data.includes(videoId)) return;
+                skipBlocked();
+              }}
+              onHttpError={(event) => {
+                if (event.nativeEvent.statusCode >= 400) skipBlocked();
+              }}
             />
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
@@ -66,9 +120,9 @@ export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close
         {visible && direct && !failed ? (
           <DirectClipPlayer url={fileUrl} onClose={onClose} closeLabel={closeLabel} />
         ) : null}
-        {visible && (failed || (!embedUrl && !direct)) ? (
+        {visible && (failed || (Boolean(url) && !embedUrl && !direct)) ? (
           <View style={styles.player}>
-            <Text style={styles.error}>تعذر تشغيل الفيديو</Text>
+            <Text style={styles.error}>الفيديو مش متاح في البلد دي</Text>
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}

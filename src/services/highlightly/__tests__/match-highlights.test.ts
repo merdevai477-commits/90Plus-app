@@ -11,6 +11,7 @@ import {
   highlightDateKey,
   linkHighlightToFixture,
   pickGoals,
+  pickSummaries,
   pickSummary,
   planNextCheck,
   selectSyncDates,
@@ -166,6 +167,17 @@ describe('highlight selection', () => {
     });
     expect(pickGoals(clips)).toEqual([
       expect.objectContaining({ title: 'Goal', url: 'https://example.com/goal' }),
+    ]);
+  });
+
+  it('tries a direct summary file before a YouTube recap', () => {
+    const ordered = pickSummaries([
+      clip({ highlightlyId: 1, title: 'Studio show', url: 'https://www.youtube.com/watch?v=abc12345678', embedUrl: 'https://www.youtube.com/embed/abc12345678' }),
+      clip({ highlightlyId: 2, title: 'Match highlights', url: 'https://c-cdn.streamin.top/uploads/abc.mp4', embedUrl: null }),
+    ]);
+    expect(ordered.map((item) => item.url)).toEqual([
+      'https://c-cdn.streamin.top/uploads/abc.mp4',
+      'https://www.youtube.com/watch?v=abc12345678',
     ]);
   });
 });

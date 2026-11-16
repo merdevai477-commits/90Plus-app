@@ -57,6 +57,7 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
     modestbranding: '1',
     controls: '1',
     iv_load_policy: '3',
+    enablejsapi: '1',
   });
   return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
 }

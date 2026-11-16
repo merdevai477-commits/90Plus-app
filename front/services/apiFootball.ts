@@ -572,6 +572,7 @@ export interface FixtureGoalClip {
 export interface FixtureHighlightsPayload {
   status: 'not_finished' | 'pending' | 'ready' | 'unavailable';
   summary: FixtureGoalClip | null;
+  summaries?: FixtureGoalClip[];
   goals: FixtureGoalClip[];
   checkedAt: string | null;
 }
@@ -1981,7 +1982,12 @@ export const ApiFootballService = {
       const summary = payload.summary && (payload.summary.url || payload.summary.embedUrl)
         ? payload.summary
         : null;
-      return { ...payload, summary, goals };
+      const summaries = Array.isArray(payload.summaries)
+        ? payload.summaries.filter((clip) => clip?.url || clip?.embedUrl)
+        : summary
+          ? [summary]
+          : [];
+      return { ...payload, summary: summaries[0] ?? summary, summaries, goals };
     } catch {
       return empty;
     }
