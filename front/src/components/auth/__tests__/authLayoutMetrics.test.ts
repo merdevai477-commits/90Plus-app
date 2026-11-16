@@ -114,8 +114,8 @@ describe('the scale is one number, not two systems', () => {
     const ipad = getAuthLayoutMetrics(820, 1180);
     expect(ipad.scale).toBe(AUTH_SCALE_MAX);
     expect(ipad.contentWidth).toBe(AUTH_MAX_CONTENT_WIDTH);
-    // The old, unclamped formula: 820/448 = 1.83 → a 716pt-tall hero.
-    expect(ipad.heroHeight).toBeLessThan((391 / 448) * 820);
+    // The old, unclamped formula at design width 430: 820/430 ≈ 1.91 → tall hero.
+    expect(ipad.heroHeight).toBeLessThan((232 / 430) * 820);
   });
 
   it('is monotonic across widths — no size gets a smaller layout than a smaller phone', () => {

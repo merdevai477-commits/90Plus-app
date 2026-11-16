@@ -87,9 +87,9 @@ describe('the sign-up screen specifically', () => {
     render(<RegisterScreen />);
 
     // The panel the responsiveness work rebuilt — every part of it is present.
-    expect(screen.getByPlaceholderText(/full name/i)).toBeTruthy();
-    expect(screen.getByPlaceholderText(/^email$/i)).toBeTruthy();
-    expect(screen.getByPlaceholderText(/password/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/your full name/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/you@example\.com/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/at least 8 characters/i)).toBeTruthy();
     expect(screen.getByText(/sign up/i)).toBeTruthy();
   });
 

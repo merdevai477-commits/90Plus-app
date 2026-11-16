@@ -35,26 +35,26 @@
 import { createContext, useContext } from 'react';
 import { useWindowDimensions } from 'react-native';
 
-/** Figma sign-up screen metrics (node 1015:3722, frame 448×1154). */
+/** Figma Login / Sign Up metrics (nodes 1613:5666 / 1604:5520, frame 430×900). */
 export const FIGMA_AUTH_FRAME = {
-  width: 448,
-  height: 1154,
-  heroHeight: 391,
-  heroOffsetY: -381.5,
-  panelWidth: 408,
-  panelHeight: 747,
-  panelOffsetY: 160.5,
-  panelContentWidth: 368,
-  panelHeaderWidth: 314,
-  horizontalInset: 20,
+  width: 430,
+  height: 900,
+  heroHeight: 232,
+  heroOffsetY: 0,
+  panelWidth: 430,
+  panelHeight: 688,
+  panelOffsetY: 212,
+  panelContentWidth: 390,
+  panelHeaderWidth: 390,
+  horizontalInset: 0,
   panelPaddingX: 20,
 } as const;
 
-/** Hero bottom (391) minus panel top (364) on the Figma frame. */
-export const FIGMA_PANEL_OVERLAP = 27;
+/** Hero bottom (232) minus panel top (212) on the Figma frame. */
+export const FIGMA_PANEL_OVERLAP = 20;
 
 /** Nudge panel down in "steps" (1 step = 16px on Figma frame). */
-export const PANEL_DROP_STEPS = 3;
+export const PANEL_DROP_STEPS = 0;
 export const PANEL_STEP_PX = 16;
 
 /**
@@ -84,8 +84,8 @@ const FONT_SCALE_DAMPING = 0.5;
  * At the cap the image is centre-cropped by `cover`, which takes from the
  * composite's own top and bottom margins rather than its artwork.
  */
-const HERO_MAX_HEIGHT_RATIO = 0.44;
-const HERO_MIN_HEIGHT_RATIO = 0.22;
+const HERO_MAX_HEIGHT_RATIO = 0.3;
+const HERO_MIN_HEIGHT_RATIO = 0.2;
 
 /**
  * Widest the panel column is allowed to get. A phone layout stretched across a

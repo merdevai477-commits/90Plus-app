@@ -20,6 +20,20 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props) => Reactl.createElement(V, props, props.children) };
 });
 
+jest.mock('expo-status-bar', () => ({
+  StatusBar: () => null,
+}));
+
+// Auth theme reads preference from the settings store; keep the heavy zustand
+// module (nanoid / device) out of render suites.
+jest.mock('@/src/store/useAppSettings', () => ({
+  useAppSettings: (selector) =>
+    selector({
+      theme: { mode: 'light', fontScale: 1, colors: {} },
+    }),
+  useTheme: () => ({ mode: 'light', fontScale: 1, colors: {} }),
+}));
+
 jest.mock('react-native-safe-area-context', () => {
   const Reactl = require('react');
   const { View: V } = require('react-native');

@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   View,
-  ImageBackground,
   ScrollView,
   Platform,
   Pressable,
@@ -12,83 +11,44 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
-import {
-  AUTH_PANEL_BG,
-  AUTH_PANEL_BORDER,
-  AUTH_PANEL_DARK,
-} from './AuthTokens';
-import { AUTH_V2_ASSETS } from './authV2Assets';
+import { AuthBrandHeader } from './AuthBrandHeader';
 import { AuthScaleProvider, getAuthLayoutMetrics } from './authLayoutMetrics';
+import { AuthThemeProvider, useAuthTheme } from './useAuthTheme';
 import { useTranslation } from '@/src/i18n';
 
 type Props = {
   children: React.ReactNode;
   /**
-   * Hides the close button on a screen that must not be dismissable. Nothing
-   * passes this today — it exists so turning the affordance off is a deliberate
-   * decision at a call site rather than an omission in this file.
+   * Hides the close button on a screen that must not be dismissable.
    */
   hideClose?: boolean;
+  /** Optional brand header copy override (e.g. signup journey lines). */
+  brandTitleLines?: [string, string];
+  brandTagline?: string;
 };
 
-/**
- * =============================================================================
- * THE SHELL EVERY PRE-LOGIN SCREEN SITS IN
- * =============================================================================
- * Sign up, Log in and Forgot password all render inside this. The Figma frame
- * (448 × 1154) is a hero composite with a rounded panel riding up over it.
- *
- * ── THE CLOSE BUTTON IS NOT DECORATION ───────────────────────────────────────
- * `/auth` is PUSHED from inside the signed-in app in half a dozen places — the
- * chat tab's sign-in prompt, a prediction, someone's profile, the quiz hub — so
- * a visitor who taps "Sign in" to see what it is lands here. This shell had no
- * back or close affordance at all and the auth stack sets `headerShown: false`,
- * so on iOS there was no way out except force-quitting; on Android the hardware
- * key was the only escape. The button is drawn only when there is genuinely
- * somewhere to go back TO, so it never appears on a cold start where `/auth` is
- * the first screen.
- *
- * ── RESPONSIVENESS ───────────────────────────────────────────────────────────
- * Every measurement comes from ./authLayoutMetrics, on ONE clamped scale, so
- * the hero and the panel can no longer disagree about how big the screen is.
- * See that file for the sizes and why they are bounded the way they are.
- *
- * The keyboard is handled by the ScrollView rather than a KeyboardAvoidingView:
- *   • iOS  — `automaticallyAdjustKeyboardInsets` insets the scroll content by
- *            the real keyboard frame, which is correct at every screen size.
- *            The KeyboardAvoidingView this replaced used `behavior="padding"`
- *            around a ScrollView, which pads the OUTER box: it shrinks the
- *            viewport instead of scrolling to the focused field, and on short
- *            phones that pushed the password field under the keyboard.
- *   • Android — app.json sets `softwareKeyboardLayoutMode: "resize"`, so the
- *            window is already resized and the ScrollView simply gets shorter.
- * =============================================================================
- */
-export function AuthScreenShell({ children, hideClose }: Props) {
+function AuthScreenShellInner({
+  children,
+  hideClose,
+  brandTitleLines,
+  brandTagline,
+}: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language } = useTranslation();
   const isRTL = language === 'ar';
   const { width, height } = useWindowDimensions();
   const metrics = getAuthLayoutMetrics(width, height);
-  const {
-    s,
-    heroHeight,
-    panelOverlap,
-    panelDropOffset,
-    horizontalInset,
-    panelPaddingX,
-    contentWidth,
-  } = metrics;
+  const { s, panelOverlap, panelDropOffset, panelPaddingX, contentWidth } =
+    metrics;
+  const { colors } = useAuthTheme();
 
-  // Only offer a way out when there is one. `canGoBack` is false when `/auth`
-  // is the first screen of the session (a cold start on a signed-out device).
   const canClose = !hideClose && router.canGoBack();
 
   return (
     <AuthScaleProvider value={metrics}>
-      <View style={styles.root}>
-        <StatusBar style="light" />
+      <View style={[styles.root, { backgroundColor: colors.pageBg }]}>
+        <StatusBar style={colors.statusBar} />
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
@@ -99,50 +59,36 @@ export function AuthScreenShell({ children, hideClose }: Props) {
           contentContainerStyle={[
             styles.scroll,
             {
-              // The panel's own bottom edge clears the home indicator, and the
-              // extra breathing room keeps the footer link off the very edge on
-              // a phone with no inset at all.
               paddingBottom: Math.max(insets.bottom, 16) + s(24),
             },
           ]}
         >
-          {/* Centred column so a tablet or a landscape phone gets a readable
-              width instead of a stretched phone layout. */}
           <View style={[styles.column, { width: contentWidth }]}>
-            <View style={[styles.heroWrap, { height: heroHeight }]}>
-              <ImageBackground
-                source={AUTH_V2_ASSETS.hero}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              />
-            </View>
+            <AuthBrandHeader
+              titleLines={brandTitleLines}
+              tagline={brandTagline}
+            />
 
             <View
               style={[
                 styles.panelOuter,
                 {
                   marginTop: -panelOverlap + panelDropOffset,
-                  marginHorizontal: horizontalInset,
                   paddingHorizontal: panelPaddingX,
-                  borderRadius: s(50),
-                  paddingTop: s(40),
+                  borderRadius: s(29),
+                  paddingTop: s(30),
                   paddingBottom: s(28),
+                  backgroundColor: colors.cardBg,
+                  borderColor: colors.cardBorder,
+                  borderWidth: colors.cardBorder === 'transparent' ? 0 : 0.5,
                 },
               ]}
             >
-              <View style={styles.panelDark} />
-              <View style={styles.panelTint} />
               <View style={styles.panelBody}>{children}</View>
             </View>
           </View>
         </ScrollView>
 
-        {/*
-          Pinned to the window, NOT to the scroll content: it has to stay
-          reachable after the player scrolls down to the Sign Up button, and it
-          must sit below the notch / Dynamic Island on every device. Rendered
-          last so it draws over the hero.
-        */}
         {canClose ? (
           <Pressable
             onPress={() => router.back()}
@@ -157,6 +103,8 @@ export function AuthScreenShell({ children, hideClose }: Props) {
                 width: s(44),
                 height: s(44),
                 borderRadius: s(22),
+                backgroundColor: colors.closeBg,
+                borderColor: colors.closeBorder,
               },
               isRTL
                 ? { right: Math.max(insets.right, s(20)) }
@@ -164,7 +112,7 @@ export function AuthScreenShell({ children, hideClose }: Props) {
               pressed && styles.closePressed,
             ]}
           >
-            <X size={s(22)} color="#fff" strokeWidth={2.25} />
+            <X size={s(22)} color={colors.closeIcon} strokeWidth={2.25} />
           </Pressable>
         ) : null}
       </View>
@@ -172,36 +120,33 @@ export function AuthScreenShell({ children, hideClose }: Props) {
   );
 }
 
+/**
+ * Pre-login shell matching Figma Authentication frames:
+ * purple brand header + elevated form card with theme (light / dark / system).
+ */
+export function AuthScreenShell(props: Props) {
+  return (
+    <AuthThemeProvider>
+      <AuthScreenShellInner {...props} />
+    </AuthThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
   },
   scroll: {
     flexGrow: 1,
     alignItems: 'center',
   },
   column: {
-    // The hero is full-bleed inside the column, so the column itself carries no
-    // padding — the panel supplies its own inset.
     alignSelf: 'center',
   },
-  heroWrap: {
+  panelOuter: {
     width: '100%',
     overflow: 'hidden',
-  },
-  panelOuter: {
-    borderWidth: 0.5,
-    borderColor: AUTH_PANEL_BORDER,
-    overflow: 'hidden',
-  },
-  panelDark: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: AUTH_PANEL_DARK,
-  },
-  panelTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: AUTH_PANEL_BG,
+    minHeight: 520,
   },
   panelBody: {
     width: '100%',
@@ -210,9 +155,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(10, 6, 24, 0.62)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
     zIndex: 30,
   },
   closePressed: {

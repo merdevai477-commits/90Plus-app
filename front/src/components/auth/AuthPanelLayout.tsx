@@ -12,15 +12,16 @@ import { useAuthScale } from './authLayoutMetrics';
  * the screen spent on two gaps, which is what drove the Sign Up button below
  * the fold. They go through `s()` now, like every other measurement here.
  */
+/** Spacing from Figma Login 1613:5666 (tighter than the old stadium panel). */
 export const AUTH_PANEL_GAP = {
-  header: 48,
+  header: 24,
   headerInner: 6,
-  main: 55,
-  form: 18,
-  fields: 16,
+  main: 28,
+  form: 16,
+  fields: 12,
   terms: 8,
-  action: 42,
-  cta: 41,
+  action: 24,
+  cta: 16,
   social: 14,
 } as const;
 

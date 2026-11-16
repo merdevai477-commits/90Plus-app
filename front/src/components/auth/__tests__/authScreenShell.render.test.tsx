@@ -31,6 +31,14 @@ jest.mock('expo-router', () => ({
   router: mockRouter,
 }));
 
+jest.mock('@/src/i18n', () => ({
+  useTranslation: () => ({
+    language: 'en',
+    t: {},
+    setLanguage: jest.fn(),
+  }),
+}));
+
 /** Per-test insets — the global render setup pins them all to 0. */
 const mockInsets = { top: 0, bottom: 0, left: 0, right: 0 };
 

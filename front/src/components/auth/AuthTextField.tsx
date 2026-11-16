@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   View,
+  Text,
   TextInput,
   Pressable,
   StyleSheet,
@@ -11,34 +12,21 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import type { LucideIcon } from 'lucide-react-native';
-import {
-  AUTH_INPUT_BG,
-  AUTH_INPUT_BG_FILLED,
-  AUTH_INPUT_BORDER,
-  AUTH_INPUT_BORDER_ALT,
-  AUTH_INPUT_PLACEHOLDER,
-} from './AuthTokens';
-import { TEXT_PRIMARY } from '../../../constants/tokens';
 import { AUTH_V2_ASSETS } from './authV2Assets';
 import { useAuthScale } from './authLayoutMetrics';
+import { useAuthTheme } from './useAuthTheme';
 
-/**
- * Figma DESIGN units — converted at render time by the shell's scale, like
- * every other measurement on these screens. A field fixed at 62pt on a 320pt
- * iPhone SE takes the same room it does on a 440pt Pro Max, which is what left
- * three of them plus the terms row filling the panel and pushing Sign Up off
- * the fold on small phones.
- */
-const FIELD_HEIGHT = 62;
-const FIELD_RADIUS = 16;
-const FIELD_PADDING_H = 24;
+/** Figma field height on Login (1613:5714) — 52pt. */
+const FIELD_HEIGHT = 52;
+const FIELD_RADIUS = 14;
+const FIELD_PADDING_H = 16;
 const FIELD_PADDING_V = 10;
-const ICON_GAP = 10;
-const ICON_SIZE = 24;
-/** Never let a field fall below the accessibility touch minimum. */
+const ICON_GAP = 12;
+const ICON_SIZE = 21;
 const MIN_FIELD_HEIGHT = 48;
 
 type Props = TextInputProps & {
+  label?: string;
   icon?: LucideIcon;
   iconSource?: ImageSourcePropType;
   secureToggle?: boolean;
@@ -48,65 +36,88 @@ type Props = TextInputProps & {
 };
 
 export function AuthTextField({
+  label,
   icon: Icon,
   iconSource,
   secureToggle,
   containerStyle,
   secureTextEntry,
   isRTL,
-  filled,
+  filled: _filled,
   style,
   ...rest
 }: Props) {
   const styles = useFieldStyles();
   const { s } = useAuthScale();
+  const { colors } = useAuthTheme();
   const [hide, setHide] = useState(true);
   const isSecure = !!(secureToggle && (secureTextEntry ?? true));
   const trailingIcon = iconSource;
-  const borderColor = filled ? AUTH_INPUT_BORDER : AUTH_INPUT_BORDER_ALT;
 
   return (
-    <View
-      style={[
-        styles.shell,
-        { borderColor },
-        filled ? styles.shellFilled : styles.shellDefault,
-        containerStyle,
-      ]}
-    >
-      <View style={[styles.row, isRTL && styles.rowRtl]}>
-        {secureToggle ? (
-          <Pressable
-            hitSlop={10}
-            onPress={() => setHide((h) => !h)}
-            style={styles.iconSlot}
-          >
-            <Image
-              source={AUTH_V2_ASSETS.iconEye}
-              style={styles.iconImage}
-              contentFit="contain"
-            />
-          </Pressable>
-        ) : null}
-
-        <TextInput
-          {...rest}
-          placeholderTextColor={AUTH_INPUT_PLACEHOLDER}
-          cursorColor={TEXT_PRIMARY}
+    <View style={[styles.wrap, containerStyle]}>
+      {label ? (
+        <Text
           style={[
-            styles.input,
-            isRTL ? styles.inputRtl : styles.inputLtr,
-            style,
+            styles.label,
+            { color: colors.textPrimary },
+            isRTL ? styles.labelRtl : styles.labelLtr,
           ]}
-          secureTextEntry={isSecure ? hide : secureTextEntry}
-        />
+        >
+          {label}
+        </Text>
+      ) : null}
 
-        <View style={styles.iconSlot}>
-          {trailingIcon ? (
-            <Image source={trailingIcon} style={styles.iconImage} contentFit="contain" />
-          ) : Icon ? (
-            <Icon color={AUTH_INPUT_PLACEHOLDER} size={s(22)} strokeWidth={1.75} />
+      <View
+        style={[
+          styles.shell,
+          {
+            borderColor: colors.inputBorder,
+            backgroundColor: colors.inputBg,
+          },
+        ]}
+      >
+        <View style={[styles.row, isRTL && styles.rowRtl]}>
+          {secureToggle ? (
+            <Pressable
+              hitSlop={10}
+              onPress={() => setHide((h) => !h)}
+              style={styles.iconSlot}
+              accessibilityRole="button"
+              accessibilityLabel={hide ? 'Show password' : 'Hide password'}
+            >
+              <Image
+                source={AUTH_V2_ASSETS.iconEye}
+                style={styles.iconImage}
+                contentFit="contain"
+              />
+            </Pressable>
           ) : null}
+
+          <TextInput
+            {...rest}
+            placeholderTextColor={colors.inputPlaceholder}
+            cursorColor={colors.primary}
+            style={[
+              styles.input,
+              { color: colors.textPrimary },
+              isRTL ? styles.inputRtl : styles.inputLtr,
+              style,
+            ]}
+            secureTextEntry={isSecure ? hide : secureTextEntry}
+          />
+
+          <View style={styles.iconSlot}>
+            {trailingIcon ? (
+              <Image
+                source={trailingIcon}
+                style={styles.iconImage}
+                contentFit="contain"
+              />
+            ) : Icon ? (
+              <Icon color={colors.inputIcon} size={s(22)} strokeWidth={1.75} />
+            ) : null}
+          </View>
         </View>
       </View>
     </View>
@@ -118,7 +129,6 @@ function useFieldStyles() {
 
   return useMemo(
     () => createFieldStyles(s, f),
-    // `s`/`f` are new closures each render; the multipliers are what change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scale, fontScale],
   );
@@ -129,61 +139,73 @@ function createFieldStyles(s: (v: number) => number, f: (v: number) => number) {
   const iconSize = s(ICON_SIZE);
 
   return StyleSheet.create({
-  shell: {
-    height: fieldHeight,
-    borderRadius: s(FIELD_RADIUS),
-    borderWidth: Platform.OS === 'ios' ? 0.5 : StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  shellFilled: {
-    backgroundColor: AUTH_INPUT_BG_FILLED,
-  },
-  shellDefault: {
-    backgroundColor: AUTH_INPUT_BG,
-  },
-  row: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: s(FIELD_PADDING_H),
-    paddingVertical: s(FIELD_PADDING_V),
-    gap: s(ICON_GAP),
-    minHeight: fieldHeight - 1,
-  },
-  rowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  iconSlot: {
-    width: iconSize,
-    height: iconSize,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  iconImage: {
-    width: iconSize,
-    height: iconSize,
-  },
-  input: {
-    flex: 1,
-    minWidth: 0,
-    color: TEXT_PRIMARY,
-    fontSize: f(17),
-    fontWeight: '500',
-    paddingVertical: 0,
-    margin: 0,
-    ...Platform.select({
-      android: { includeFontPadding: false, textAlignVertical: 'center' },
-      default: {},
-    }),
-  },
-  inputRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  inputLtr: {
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
+    wrap: {
+      width: '100%',
+      gap: s(4),
+    },
+    label: {
+      fontSize: f(13),
+      fontWeight: '600',
+      lineHeight: f(18),
+      width: '100%',
+    },
+    labelRtl: {
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    labelLtr: {
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+    shell: {
+      height: fieldHeight,
+      borderRadius: s(FIELD_RADIUS),
+      borderWidth: 1,
+      overflow: 'hidden',
+      width: '100%',
+    },
+    row: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: s(FIELD_PADDING_H),
+      paddingVertical: s(FIELD_PADDING_V),
+      gap: s(ICON_GAP),
+      minHeight: fieldHeight - 2,
+    },
+    rowRtl: {
+      flexDirection: 'row-reverse',
+    },
+    iconSlot: {
+      width: iconSize,
+      height: iconSize,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    iconImage: {
+      width: iconSize,
+      height: iconSize,
+    },
+    input: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: f(13),
+      fontWeight: '400',
+      paddingVertical: 0,
+      margin: 0,
+      ...Platform.select({
+        android: { includeFontPadding: false, textAlignVertical: 'center' },
+        default: {},
+      }),
+    },
+    inputRtl: {
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    inputLtr: {
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
   });
 }

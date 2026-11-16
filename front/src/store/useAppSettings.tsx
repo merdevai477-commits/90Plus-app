@@ -12,7 +12,7 @@ const { width, height } = Dimensions.get('window');
 
 // Initial States
 const initialTheme = {
-  mode: 'light' as const,
+  mode: 'auto' as const,
   fontScale: 1,
   colors: {
     primary: '#007AFF',

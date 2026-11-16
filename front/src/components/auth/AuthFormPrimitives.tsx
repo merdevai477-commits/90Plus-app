@@ -10,78 +10,36 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Check } from 'lucide-react-native';
+import { Check, ArrowLeft, ArrowRight } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
-import {
-  AUTH_ACCENT,
-  AUTH_BUTTON_SOLID,
-  AUTH_CHECKBOX_BG,
-  AUTH_CHECKBOX_BORDER,
-  AUTH_DIVIDER_LINE,
-  AUTH_DIVIDER_TEXT,
-  AUTH_SOCIAL_BG,
-  AUTH_SOCIAL_BORDER,
-  AUTH_TEXT_MUTED,
-  AUTH_TEXT_SUBTITLE,
-} from './AuthTokens';
-import { TEXT_PRIMARY } from '../../../constants/tokens';
 import { useAuthScale } from './authLayoutMetrics';
+import { useAuthTheme } from './useAuthTheme';
+import { AUTH_V2_ASSETS } from './authV2Assets';
 
-const googleIcon = require('../../../assets/images/auth/icon-google.svg');
-const appleIcon = require('../../../assets/images/auth/icon-apple.svg');
-
-const SOCIAL_BTN_HEIGHT = 54;
-const SOCIAL_BTN_RADIUS = 12;
-const SOCIAL_BTN_PADDING_H = 24;
-const SOCIAL_BTN_PADDING_V = 10;
+const SOCIAL_BTN_HEIGHT = 50;
+const SOCIAL_BTN_RADIUS = 14;
 const SOCIAL_ICON_SIZE = 24;
-const SOCIAL_ROW_GAP = 16;
-
-function AuthSocialButton({
-  onPress,
-  disabled,
-  loading,
-  icon,
-}: {
-  onPress: () => void;
-  disabled?: boolean;
-  loading?: boolean;
-  icon: number;
-}) {
-  const styles = useAuthPrimitiveStyles();
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={onPress}
-      disabled={disabled || loading}
-      style={[styles.socialBtnOuter, (disabled || loading) && { opacity: 0.6 }]}
-    >
-      <View style={styles.socialBtnInner}>
-        {loading ? (
-          <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-        ) : (
-          <Image source={icon} style={styles.socialIcon} contentFit="contain" />
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
+const SOCIAL_ROW_GAP = 12;
+const MIN_TOUCH_TARGET = 44;
 
 export function AuthPanelHeader({
   title,
   subtitle,
+  align = 'end',
 }: {
   title: string;
   subtitle: string;
+  align?: 'center' | 'end';
 }) {
   const styles = useAuthPrimitiveStyles();
+  const end = align === 'end';
 
   return (
-    <>
-      <Text style={styles.panelTitle}>{title}</Text>
-      <Text style={styles.panelSubtitle}>{subtitle}</Text>
-    </>
+    <View style={[styles.headerBlock, end && styles.headerBlockEnd]}>
+      <Text style={[styles.panelTitle, end && styles.textEnd]}>{title}</Text>
+      <Text style={[styles.panelSubtitle, end && styles.textEnd]}>{subtitle}</Text>
+    </View>
   );
 }
 
@@ -92,6 +50,8 @@ export function AuthPrimaryButton({
   onPress,
   disabled,
   style,
+  showArrow = true,
+  isRTL,
 }: {
   label: string;
   loading?: boolean;
@@ -99,23 +59,39 @@ export function AuthPrimaryButton({
   onPress: () => void;
   disabled?: boolean;
   style?: ViewStyle;
+  showArrow?: boolean;
+  isRTL?: boolean;
 }) {
   const styles = useAuthPrimitiveStyles();
+  const { colors } = useAuthTheme();
+  const { s } = useAuthScale();
+  const Arrow = isRTL ? ArrowLeft : ArrowRight;
 
   return (
     <TouchableOpacity
       activeOpacity={0.92}
       onPress={onPress}
       disabled={disabled || loading}
-      style={[
-        styles.primaryBtn,
-        (disabled || loading) && { opacity: 0.6 },
-        style,
-      ]}
+      style={[{ width: '100%' }, (disabled || loading) && { opacity: 0.6 }, style]}
     >
-      <Text style={styles.primaryTxt}>
-        {loading ? (loadingLabel ?? label) : label}
-      </Text>
+      <LinearGradient
+        colors={[...colors.buttonGradient]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.primaryBtn}
+      >
+        {showArrow ? (
+          <View style={styles.primaryArrowSlot}>
+            <Arrow size={s(18)} color="#fff" strokeWidth={2.5} />
+          </View>
+        ) : (
+          <View style={styles.primaryArrowSlot} />
+        )}
+        <Text style={styles.primaryTxt}>
+          {loading ? (loadingLabel ?? label) : label}
+        </Text>
+        <View style={styles.primaryArrowSlot} />
+      </LinearGradient>
     </TouchableOpacity>
   );
 }
@@ -129,6 +105,43 @@ export function AuthDivider({ label }: { label: string }) {
       <Text style={styles.dividerTxt}>{label}</Text>
       <View style={styles.dividerLine} />
     </View>
+  );
+}
+
+function AuthSocialButton({
+  onPress,
+  disabled,
+  loading,
+  icon,
+  label,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  icon: number;
+  label: string;
+}) {
+  const styles = useAuthPrimitiveStyles();
+  const { colors } = useAuthTheme();
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={[styles.socialBtnOuter, (disabled || loading) && { opacity: 0.6 }]}
+    >
+      <View style={styles.socialBtnInner}>
+        {loading ? (
+          <ActivityIndicator color={colors.textPrimary} size="small" />
+        ) : (
+          <>
+            <Image source={icon} style={styles.socialIcon} contentFit="contain" />
+            <Text style={styles.socialLabel}>{label}</Text>
+          </>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -153,13 +166,15 @@ export function AuthSocialButtons({
         onPress={onGoogle}
         disabled={loading}
         loading={googleLoading}
-        icon={googleIcon}
+        icon={AUTH_V2_ASSETS.iconGoogle}
+        label="Google"
       />
       <AuthSocialButton
         onPress={onApple}
         disabled={loading}
         loading={appleLoading}
-        icon={appleIcon}
+        icon={AUTH_V2_ASSETS.iconApple}
+        label="Apple"
       />
     </View>
   );
@@ -199,6 +214,48 @@ export function AuthFooterLink({
   );
 }
 
+export function AuthRememberRow({
+  remembered,
+  onToggleRemember,
+  onForgot,
+  rememberLabel,
+  forgotLabel,
+  isRTL,
+}: {
+  remembered: boolean;
+  onToggleRemember: () => void;
+  onForgot: () => void;
+  rememberLabel: string;
+  forgotLabel: string;
+  isRTL?: boolean;
+}) {
+  const styles = useAuthPrimitiveStyles();
+  const { colors } = useAuthTheme();
+  const { s } = useAuthScale();
+
+  // Figma keeps forgot on the left and remember+checkbox on the right in both
+  // languages (Login 1613:5829), so we do not flip this row for RTL.
+  return (
+    <View style={styles.rememberRow}>
+      <Pressable onPress={onForgot} hitSlop={8}>
+        <Text style={styles.forgotLink}>{forgotLabel}</Text>
+      </Pressable>
+      <Pressable
+        onPress={onToggleRemember}
+        hitSlop={8}
+        style={[styles.rememberRight, isRTL && styles.rememberRightRtl]}
+      >
+        <Text style={styles.rememberLabel}>{rememberLabel}</Text>
+        <View style={[styles.checkbox, remembered && styles.checkboxOn]}>
+          {remembered ? (
+            <Check size={s(14)} color="#fff" strokeWidth={2.5} />
+          ) : null}
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
 type TermsCopy = {
   registerAgreementPrefix: string;
   registerTermsLink: string;
@@ -206,11 +263,11 @@ type TermsCopy = {
   registerAgreementAfterLinks: string;
 };
 
-const TERMS_FONT_SIZE = 16;
-const TERMS_LINE_HEIGHT = 20;
+const TERMS_FONT_SIZE = 12;
+const TERMS_LINE_HEIGHT = 16;
 const TERMS_LINE_GAP = 1;
-const TERMS_CHECKBOX_SIZE = 24;
-const TERMS_ROW_MIN_HEIGHT = 42;
+const TERMS_CHECKBOX_SIZE = 22;
+const TERMS_ROW_MIN_HEIGHT = 40;
 
 export const AuthTermsConsent = memo(function AuthTermsConsent({
   checked,
@@ -266,166 +323,210 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
 });
 AuthTermsConsent.displayName = 'AuthTermsConsent';
 
-/**
- * Every number below is a Figma DESIGN unit, converted at render time by the
- * shell's scale (./authLayoutMetrics). Before this the panel was hard-coded in
- * design units while the hero scaled with the screen, so the two disagreed
- * about how big the phone was — the source of the pre-login layout problems on
- * iPhone. Sizes go through `s()`, type through `f()`.
- *
- * Note the touch-target floor on the primary button and the social row: at the
- * minimum scale (0.8) 56 → 45 and 54 → 43, so the social buttons are pinned to
- * 44 rather than allowed to fall under the accessibility minimum.
- */
-const MIN_TOUCH_TARGET = 44;
-
 function useAuthPrimitiveStyles() {
   const { s, f, scale, fontScale } = useAuthScale();
+  const { colors, scheme } = useAuthTheme();
 
   return useMemo(
-    () => createAuthPrimitiveStyles(s, f),
-    // `s`/`f` are new closures each render; the multipliers are what change.
+    () => createAuthPrimitiveStyles(s, f, colors),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scale, fontScale],
+    [scale, fontScale, scheme],
   );
 }
 
-function createAuthPrimitiveStyles(s: (v: number) => number, f: (v: number) => number) {
+function createAuthPrimitiveStyles(
+  s: (v: number) => number,
+  f: (v: number) => number,
+  colors: ReturnType<typeof useAuthTheme>['colors'],
+) {
   return StyleSheet.create({
-  panelTitle: {
-    fontSize: f(26),
-    fontWeight: '700',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  panelSubtitle: {
-    fontSize: f(19),
-    color: AUTH_TEXT_SUBTITLE,
-    textAlign: 'center',
-  },
-  primaryBtn: {
-    height: Math.max(s(56), MIN_TOUCH_TARGET),
-    borderRadius: s(16),
-    backgroundColor: AUTH_BUTTON_SOLID,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  primaryTxt: {
-    fontSize: f(16),
-    fontWeight: '700',
-    color: '#fff',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(22),
-    width: '100%',
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: AUTH_DIVIDER_LINE,
-  },
-  dividerTxt: {
-    fontSize: f(14),
-    fontWeight: '500',
-    color: AUTH_DIVIDER_TEXT,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: s(SOCIAL_ROW_GAP),
-    width: '100%',
-    height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
-  },
-  socialBtnOuter: {
-    flex: 1,
-    height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
-    borderRadius: s(SOCIAL_BTN_RADIUS),
-    borderWidth: Platform.OS === 'ios' ? 0.5 : StyleSheet.hairlineWidth,
-    borderColor: AUTH_SOCIAL_BORDER,
-    backgroundColor: AUTH_SOCIAL_BG,
-    overflow: 'hidden',
-  },
-  socialBtnInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: s(SOCIAL_BTN_PADDING_H),
-    paddingVertical: s(SOCIAL_BTN_PADDING_V),
-    gap: s(10),
-  },
-  socialIcon: {
-    width: s(SOCIAL_ICON_SIZE),
-    height: s(SOCIAL_ICON_SIZE),
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(4),
-    paddingBottom: s(4),
-  },
-  footerRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  footerMuted: {
-    fontSize: f(14),
-    fontWeight: '500',
-    color: AUTH_TEXT_MUTED,
-  },
-  footerLink: {
-    fontSize: f(14),
-    fontWeight: '600',
-    color: AUTH_ACCENT,
-  },
-  termsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: s(8),
-    width: '100%',
-    minHeight: Math.max(s(TERMS_ROW_MIN_HEIGHT), MIN_TOUCH_TARGET),
-  },
-  termsRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  termsTextWrap: {
-    flex: 1,
-    minWidth: 0,
-    gap: s(TERMS_LINE_GAP),
-  },
-  termsTextWrapRtl: {
-    alignItems: 'flex-end',
-  },
-  termsLine: {
-    fontSize: f(TERMS_FONT_SIZE),
-    lineHeight: f(TERMS_LINE_HEIGHT),
-    color: AUTH_TEXT_MUTED,
-  },
-  termsLineRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  termsLink: {
-    color: AUTH_ACCENT,
-    fontSize: f(TERMS_FONT_SIZE),
-    lineHeight: f(TERMS_LINE_HEIGHT),
-  },
-  checkbox: {
-    width: s(TERMS_CHECKBOX_SIZE),
-    height: s(TERMS_CHECKBOX_SIZE),
-    borderRadius: s(6),
-    borderWidth: 1,
-    borderColor: AUTH_CHECKBOX_BORDER,
-    backgroundColor: AUTH_CHECKBOX_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  checkboxOn: {
-    borderColor: AUTH_ACCENT,
-    backgroundColor: AUTH_ACCENT,
-  },
+    headerBlock: {
+      width: '100%',
+      gap: s(6),
+    },
+    headerBlockEnd: {
+      alignItems: 'flex-end',
+    },
+    textEnd: {
+      textAlign: 'right',
+      width: '100%',
+    },
+    panelTitle: {
+      fontSize: f(28),
+      fontWeight: '700',
+      color: colors.textPrimary,
+      lineHeight: f(38),
+    },
+    panelSubtitle: {
+      fontSize: f(13),
+      fontWeight: '400',
+      color: colors.textSecondary,
+      lineHeight: f(18),
+    },
+    primaryBtn: {
+      height: Math.max(s(54), MIN_TOUCH_TARGET),
+      borderRadius: s(16),
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+      paddingHorizontal: s(22),
+    },
+    primaryTxt: {
+      fontSize: f(16),
+      fontWeight: '700',
+      color: '#fff',
+      textAlign: 'center',
+      flex: 1,
+    },
+    primaryArrowSlot: {
+      width: s(25),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    divider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(12),
+      width: '100%',
+    },
+    dividerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.divider,
+    },
+    dividerTxt: {
+      fontSize: f(12),
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    socialRow: {
+      flexDirection: 'row',
+      gap: s(SOCIAL_ROW_GAP),
+      width: '100%',
+      height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
+    },
+    socialBtnOuter: {
+      flex: 1,
+      height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
+      borderRadius: s(SOCIAL_BTN_RADIUS),
+      borderWidth: Platform.OS === 'ios' ? 1 : StyleSheet.hairlineWidth,
+      borderColor: colors.socialBorder,
+      backgroundColor: colors.socialBg,
+      overflow: 'hidden',
+    },
+    socialBtnInner: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: s(12),
+      gap: s(7),
+    },
+    socialIcon: {
+      width: s(SOCIAL_ICON_SIZE),
+      height: s(SOCIAL_ICON_SIZE),
+    },
+    socialLabel: {
+      fontSize: f(13),
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    footerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(6),
+      paddingBottom: s(4),
+    },
+    footerRowRtl: {
+      flexDirection: 'row-reverse',
+    },
+    footerMuted: {
+      fontSize: f(13),
+      fontWeight: '400',
+      color: colors.textSecondary,
+    },
+    footerLink: {
+      fontSize: f(13),
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    rememberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+      minHeight: s(36),
+    },
+    rememberRowRtl: {
+      flexDirection: 'row-reverse',
+    },
+    rememberRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(8),
+    },
+    rememberRightRtl: {
+      flexDirection: 'row-reverse',
+    },
+    rememberLabel: {
+      fontSize: f(12),
+      fontWeight: '400',
+      color: colors.textSecondary,
+    },
+    forgotLink: {
+      fontSize: f(12),
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    termsRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: s(8),
+      width: '100%',
+      minHeight: Math.max(s(TERMS_ROW_MIN_HEIGHT), MIN_TOUCH_TARGET),
+    },
+    termsRowRtl: {
+      flexDirection: 'row-reverse',
+    },
+    termsTextWrap: {
+      flex: 1,
+      minWidth: 0,
+      gap: s(TERMS_LINE_GAP),
+    },
+    termsTextWrapRtl: {
+      alignItems: 'flex-end',
+    },
+    termsLine: {
+      fontSize: f(TERMS_FONT_SIZE),
+      lineHeight: f(TERMS_LINE_HEIGHT),
+      color: colors.textSecondary,
+    },
+    termsLineRtl: {
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    termsLink: {
+      color: colors.primary,
+      fontSize: f(TERMS_FONT_SIZE),
+      lineHeight: f(TERMS_LINE_HEIGHT),
+      fontWeight: '600',
+    },
+    checkbox: {
+      width: s(TERMS_CHECKBOX_SIZE),
+      height: s(TERMS_CHECKBOX_SIZE),
+      borderRadius: s(6),
+      borderWidth: 1,
+      borderColor: colors.checkboxBorder,
+      backgroundColor: colors.checkboxBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    checkboxOn: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primary,
+    },
   });
 }

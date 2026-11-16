@@ -64,15 +64,21 @@ export default function RegisterScreen() {
 
   const copy = {
     title: isRTL ? 'إنشاء حساب' : 'Create account',
-    subtitle: isRTL ? 'مرحبا بك' : 'Welcome',
+    subtitle: isRTL ? 'انضم إلى 90plus وابدأ التوقع' : 'Join 90Plus and start predicting',
     fullName: isRTL ? 'الاسم كامل' : 'Full name',
-    email: isRTL ? 'البريد الإلكتروني' : 'Email',
+    fullNamePlaceholder: isRTL ? 'اسمك بالكامل' : 'Your full name',
+    email: isRTL ? 'البريد الإلكتروني' : 'Email address',
+    emailPlaceholder: 'you@example.com',
     password: isRTL ? 'كلمة المرور' : 'Password',
+    passwordPlaceholder: isRTL ? '8 أحرف على الأقل' : 'At least 8 characters',
     submit: isRTL ? 'إنشاء حساب' : 'Sign up',
     submitting: isRTL ? 'جاري الإنشاء...' : 'Creating...',
-    divider: isRTL ? 'أو المتابعة باستخدام' : 'Or continue with',
-    footerMuted: isRTL ? 'لديك حساب بالفعل؟' : "Already have an account?",
+    divider: isRTL ? 'أو تابع باستخدام' : 'Or continue with',
+    footerMuted: isRTL ? 'هل لديك حساب بالفعل؟' : 'Already have an account?',
     footerLink: isRTL ? 'تسجيل الدخول' : 'Log in',
+    brandLines: (isRTL
+      ? ['رحلتك في كرة القدم', 'تبدأ من هنا.']
+      : ['Your football journey', 'starts here.']) as [string, string],
   };
 
   const recordSignupAgeAttestation = async (): Promise<void> => {
@@ -202,7 +208,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreenShell>
+    <AuthScreenShell brandTitleLines={copy.brandLines}>
       <AuthPanelLayout
         variant="signup"
         header={<AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />}
@@ -210,18 +216,19 @@ export default function RegisterScreen() {
           <>
             <AuthFormFields>
               <AuthTextField
+                label={copy.fullName}
                 iconSource={AUTH_V2_ASSETS.iconUser}
-                placeholder={copy.fullName}
+                placeholder={copy.fullNamePlaceholder}
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
                 autoCorrect={false}
                 isRTL={isRTL}
-                filled
               />
               <AuthTextField
+                label={copy.email}
                 iconSource={AUTH_V2_ASSETS.iconEmail}
-                placeholder={copy.email}
+                placeholder={copy.emailPlaceholder}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -230,8 +237,9 @@ export default function RegisterScreen() {
                 isRTL={isRTL}
               />
               <AuthTextField
+                label={copy.password}
                 iconSource={AUTH_V2_ASSETS.iconLock}
-                placeholder={copy.password}
+                placeholder={copy.passwordPlaceholder}
                 secureTextEntry
                 secureToggle
                 value={password}
@@ -257,6 +265,7 @@ export default function RegisterScreen() {
               loadingLabel={copy.submitting}
               loading={isSubmitting}
               onPress={submit}
+              isRTL={isRTL}
             />
             <AuthDivider label={copy.divider} />
           </>

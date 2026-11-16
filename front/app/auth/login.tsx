@@ -25,6 +25,7 @@ import {
   AuthDivider,
   AuthSocialButtons,
   AuthFooterLink,
+  AuthRememberRow,
   OtpInput,
   MIN_PASSWORD_LENGTH,
   normalizeAuthEmail,
@@ -59,6 +60,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
 
@@ -72,13 +74,17 @@ export default function LoginScreen() {
 
   const copy = {
     title: isRTL ? 'تسجيل الدخول' : 'Log in',
-    subtitle: isRTL ? 'مرحبا بعودتك' : 'Welcome back',
-    email: isRTL ? 'البريد الإلكتروني' : 'Email',
+    subtitle: isRTL ? 'عالم مليء بكرة القدم ينتظرك' : 'A world of football awaits you',
+    email: isRTL ? 'البريد الإلكتروني' : 'Email address',
+    emailPlaceholder: 'you@example.com',
     password: isRTL ? 'كلمة المرور' : 'Password',
+    passwordPlaceholder: isRTL ? 'أدخل كلمة المرور' : 'Enter password',
+    remember: isRTL ? 'تذكرنى' : 'Remember me',
+    forgot: isRTL ? 'نسيت كلمة المرور؟' : 'Forgot password?',
     submit: isRTL ? 'تسجيل الدخول' : 'Log in',
-    divider: isRTL ? 'أو المتابعة باستخدام' : 'Or continue with',
-    footerMuted: isRTL ? 'ليس لديك حساب؟' : "Don't have an account?",
-    footerLink: isRTL ? 'إنشاء حساب' : 'Sign up',
+    divider: isRTL ? 'أو تابع باستخدام' : 'Or continue with',
+    footerMuted: isRTL ? 'هل أنت جديد في 90Plus؟' : 'New to 90Plus?',
+    footerLink: isRTL ? 'أنشئ حساباً' : 'Create an account',
   };
 
   useEffect(() => {
@@ -285,8 +291,9 @@ export default function LoginScreen() {
         form={
           <AuthFormFields>
             <AuthTextField
+              label={copy.email}
               iconSource={AUTH_V2_ASSETS.iconEmail}
-              placeholder={copy.email}
+              placeholder={copy.emailPlaceholder}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -295,12 +302,21 @@ export default function LoginScreen() {
               isRTL={isRTL}
             />
             <AuthTextField
+              label={copy.password}
               iconSource={AUTH_V2_ASSETS.iconLock}
-              placeholder={copy.password}
+              placeholder={copy.passwordPlaceholder}
               secureTextEntry
               secureToggle
               value={password}
               onChangeText={setPassword}
+              isRTL={isRTL}
+            />
+            <AuthRememberRow
+              remembered={rememberMe}
+              onToggleRemember={() => setRememberMe((v) => !v)}
+              onForgot={() => router.push('/auth/forgot-password')}
+              rememberLabel={copy.remember}
+              forgotLabel={copy.forgot}
               isRTL={isRTL}
             />
           </AuthFormFields>
@@ -312,6 +328,7 @@ export default function LoginScreen() {
               loadingLabel={tCommon.loggingIn}
               loading={isSubmitting}
               onPress={submit}
+              isRTL={isRTL}
             />
             <AuthDivider label={copy.divider} />
           </>
