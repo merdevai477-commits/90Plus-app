@@ -1853,17 +1853,22 @@ const MatchDetailsScreen = () => {
           info={extractMatchKickoffInfo({ fixture, venue })}
           kickoffTime={kickoffTime}
           rtl={language === 'ar'}
-          matchTimeLabel={t.matchDetails.matchTimeLabel || 'Kick-off'}
+          sectionTitle={t.matchDetails.matchInfo || t.matchDetails.highlightsTitle || 'Match Information'}
+          sectionHint={t.matchDetails.stadiumAndCoverage || 'Stadium & coverage'}
+          matchTimeLabel={t.matchDetails.kickoffTimeLabel || t.matchDetails.matchTimeLabel || 'Kick-off'}
           autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Details move to Information'}
           autoUpdateHint={
             t.matchDetails.highlightsAutoUpdateHint ||
             'When the first event appears, these details open in a new Information tab.'
           }
-          refereeLabel={t.matchDetails.referee || 'Referee'}
+          refereeLabel={t.matchDetails.matchRefereeLabel || t.matchDetails.referee || 'Referee'}
           staffLabel={t.matchDetails.matchStaff || 'Officials'}
           stadiumLabel={t.matchDetails.stadiumTag || t.matchDetails.stadium || 'Stadium'}
           capacityLabel={t.matchDetails.capacity || 'Capacity'}
-          broadcastLabel={t.matchDetails.liveBroadcast || t.matchDetails.broadcastChannel || 'Broadcast'}
+          broadcastLabel={t.matchDetails.broadcastChannel || t.matchDetails.liveBroadcast || 'Broadcast'}
+          weatherLabel={t.matchDetails.stadiumWeather || t.matchDetails.weather || 'Weather'}
+          kickoffTimezoneHint={t.matchDetails.cairoTimezoneHint || 'Cairo time'}
+          broadcastRegionHint={t.matchDetails.broadcastRegionHint || 'Egypt & Middle East'}
           emptyHint={
             isLive()
               ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')

@@ -5,6 +5,8 @@ export type MatchKickoffInfo = {
   attendance: number | null;
   stadiumImage: string | null;
   referee: string | null;
+  /** Nationality / country when the feed embeds it (e.g. "C. Turpin, France"). */
+  refereeCountry: string | null;
   staff: string | null;
   broadcast: string | null;
 };
@@ -72,7 +74,8 @@ export function extractMatchKickoffInfo(opts: {
   const fixtureVenue = opts.fixture?.fixture?.venue;
   const venue = opts.venue ?? null;
   const officials = (opts.fixture?._officials ?? []).map((name) => clean(name)).filter((name): name is string => !!name);
-  const referee = officials[0] ?? clean(opts.fixture?.fixture?.referee);
+  const rawReferee = officials[0] ?? clean(opts.fixture?.fixture?.referee);
+  const { name: referee, country: refereeCountry } = splitReferee(rawReferee);
   const staff = officials.slice(1).join(' · ') || null;
   const broadcast = tvNames(opts.fixture?._tvNetworks).join(' · ') || null;
 
@@ -83,9 +86,21 @@ export function extractMatchKickoffInfo(opts: {
     attendance: positiveInt(venue?.attendance) ?? positiveInt(fixtureVenue?.attendance),
     stadiumImage: clean(venue?.image) ?? clean(fixtureVenue?.image),
     referee,
+    refereeCountry,
     staff,
     broadcast,
   };
+}
+
+/** API-Football often ships "Name, Country" in the referee field. */
+function splitReferee(raw: string | null): { name: string | null; country: string | null } {
+  if (!raw) return { name: null, country: null };
+  const comma = raw.lastIndexOf(',');
+  if (comma <= 0 || comma >= raw.length - 1) return { name: raw, country: null };
+  const name = raw.slice(0, comma).trim();
+  const country = raw.slice(comma + 1).trim();
+  if (!name || !country || country.length > 40) return { name: raw, country: null };
+  return { name, country };
 }
 
 export function hasMatchKickoffFacts(info: MatchKickoffInfo): boolean {

@@ -1,14 +1,13 @@
 /**
- * Pre-kickoff / Information tab: fan 1-X-2 vote, stadium photo card and the
- * kickoff / capacity / broadcast / referee grid (Figma 1347:18834).
+ * Pre-kickoff / Information tab: fan vote + stadium + fact grid (Figma 1700:10690).
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, type ImageSourcePropType } from 'react-native';
 import { Text } from './MatchText';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
-import { GOLD_PRIMARY, PURPLE_SOFT, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from '../../constants/tokens';
+import { PURPLE_SOFT } from '../../constants/tokens';
 import { MatchCrowdVote, type MatchCrowdVoteData } from './MatchCrowdVote';
 import ImageViewerModal from '../common/ImageViewerModal';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
@@ -16,29 +15,33 @@ import {
   fetchStadiumImageByName,
   isUnverifiedStadiumCdnUrl,
 } from '../../utils/fetchStadiumImage';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
-/**
- * Kept in module scope so Fast Refresh does not crash with
- * `Property 'STADIUM_PLACEHOLDER' doesn't exist` after the Highlights hero
- * stopped using a real stadium photo as the miss fallback.
- * Branded logo only — never a venue photograph.
- */
 const STADIUM_PLACEHOLDER = require('../../assets/images/splash/splash-logo-v3.png');
 
 const ICON = {
-  time: require('../../assets/images/match-vote/time.svg'),
+  pin: require('../../assets/images/match-info/icon-pin.svg'),
+  clock: require('../../assets/images/match-info/icon-clock.svg'),
+  tv: require('../../assets/images/match-info/icon-tv.svg'),
+  whistle: require('../../assets/images/match-info/icon-whistle.svg'),
+  weather: require('../../assets/images/match-info/icon-weather.svg'),
   capacity: require('../../assets/images/match-vote/capacity.svg'),
-  whistle: require('../../assets/images/match-vote/whistle.svg'),
-  location: require('../../assets/images/match-vote/location.svg'),
 };
 
-const ACCENT = '#BC7BFA';
+const CARD_SHADOW = {
+  shadowColor: '#4B1FA3',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.2,
+  shadowRadius: 2,
+  elevation: 2,
+} as const;
 
-type InfoItem = {
+type FactCard = {
   key: string;
   label: string;
   value: string;
-  icon: React.ReactNode;
+  subtitle?: string | null;
+  icon: ImageSourcePropType;
 };
 
 type Props = {
@@ -47,15 +50,21 @@ type Props = {
   rtl: boolean;
   autoUpdateTitle: string;
   autoUpdateHint: string;
+  sectionTitle: string;
+  sectionHint: string;
   refereeLabel: string;
   staffLabel: string;
   stadiumLabel: string;
   capacityLabel: string;
   broadcastLabel: string;
   matchTimeLabel: string;
+  weatherLabel: string;
+  kickoffTimezoneHint: string;
+  broadcastRegionHint: string;
   emptyHint: string;
+  weatherValue?: string | null;
+  weatherHint?: string | null;
   crowd?: MatchCrowdVoteData | null;
-  /** The "switches to Events" note only belongs on the pre-event Highlights tab. */
   showAutoUpdate?: boolean;
 };
 
@@ -69,15 +78,20 @@ function isUsableRemotePhoto(url?: string | null): boolean {
 }
 
 function StadiumPlaceholder() {
+  const { colors, isDark } = useMatchDetailsTheme();
   return (
     <View style={[StyleSheet.absoluteFill, styles.heroPlaceholder]} accessibilityLabel="Stadium photo loading">
       <LinearGradient
-        colors={['rgba(18,8,28,0.96)', 'rgba(28,15,46,0.92)', 'rgba(12,6,20,0.96)']}
+        colors={
+          isDark
+            ? ['rgba(18,8,28,0.96)', 'rgba(28,15,46,0.92)', 'rgba(12,6,20,0.96)']
+            : ['#EDE6FA', '#F4F1FA', '#E8E0F5']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <MaterialCommunityIcons name="stadium-outline" size={40} color={PURPLE_SOFT} />
+      <MaterialCommunityIcons name="stadium-outline" size={40} color={isDark ? PURPLE_SOFT : colors.primary} />
     </View>
   );
 }
@@ -126,26 +140,49 @@ function StadiumPhoto({ remote, onError }: { remote: string | null; onError: () 
   );
 }
 
-function IconCircle({ children }: { children: React.ReactNode }) {
-  return <View style={styles.iconCircle}>{children}</View>;
+function IconBox({ source, isDark }: { source: ImageSourcePropType; isDark: boolean }) {
+  return (
+    <LinearGradient
+      colors={isDark ? ['rgba(168,85,247,0.22)', 'rgba(106,43,217,0.28)'] : ['#F2E6FF', '#E7D3FF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.iconBox}
+    >
+      <ExpoImage source={source} style={styles.icon18} contentFit="contain" />
+    </LinearGradient>
+  );
 }
 
-function InfoCell({ item, rtl, divided }: { item: InfoItem; rtl: boolean; divided: boolean }) {
+function FactTile({
+  item,
+  ink,
+  muted,
+  cardBg,
+  isDark,
+}: {
+  item: FactCard;
+  ink: string;
+  muted: string;
+  cardBg: string;
+  isDark: boolean;
+}) {
   return (
-    <View style={[styles.cell, rtl && styles.rowReverse, divided && styles.cellDivided]}>
-      {item.icon}
-      <View style={styles.cellText}>
-        <Text style={[styles.cellLabel, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
+    <View style={[styles.factCard, CARD_SHADOW, { backgroundColor: cardBg }]}>
+      <View style={styles.factHeader}>
+        <Text style={[styles.factLabel, { color: muted }]} numberOfLines={1}>
           {item.label}
         </Text>
-        <Text
-          style={[styles.cellValue, { textAlign: rtl ? 'right' : 'left' }]}
-          numberOfLines={2}
-          adjustsFontSizeToFit
-          minimumFontScale={0.65}
-        >
+        <IconBox source={item.icon} isDark={isDark} />
+      </View>
+      <View style={styles.factBody}>
+        <Text style={[styles.factValue, { color: ink }]} numberOfLines={2}>
           {item.value}
         </Text>
+        {item.subtitle ? (
+          <Text style={[styles.factSubtitle, { color: muted }]} numberOfLines={1}>
+            {item.subtitle}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -157,97 +194,109 @@ export function MatchKickoffHighlights({
   rtl,
   autoUpdateTitle,
   autoUpdateHint,
+  sectionTitle,
+  sectionHint,
   refereeLabel,
-  staffLabel,
+  staffLabel: _staffLabel,
   stadiumLabel,
   capacityLabel,
   broadcastLabel,
   matchTimeLabel,
+  weatherLabel,
+  kickoffTimezoneHint,
+  broadcastRegionHint,
   emptyHint,
+  weatherValue = null,
+  weatherHint = null,
   crowd = null,
   showAutoUpdate = true,
 }: Props) {
-  const items: InfoItem[] = [];
-  const time = (kickoffTime ?? '').trim();
-  if (time) {
-    items.push({
-      key: 'time',
-      label: matchTimeLabel,
-      value: time,
-      icon: (
-        <IconCircle>
-          <ExpoImage source={ICON.time} style={styles.icon25} contentFit="contain" />
-        </IconCircle>
-      ),
-    });
-  }
-  if (info.capacity) {
-    items.push({
-      key: 'capacity',
-      label: capacityLabel,
-      value: info.capacity.toLocaleString('en-US'),
-      icon: <ExpoImage source={ICON.capacity} style={styles.iconCircleSize} contentFit="contain" />,
-    });
-  }
+  void _staffLabel;
+
+  const { colors, isDark } = useMatchDetailsTheme();
+  const ink = isDark ? colors.textPrimary : '#24104E';
+  const muted = isDark ? colors.textMuted : '#6B7280';
+  const cardBg = isDark ? colors.elevatedBg : '#FFFFFF';
+  const accent = isDark ? colors.primarySoft : '#6A2BD9';
+
+  // LTR grid order matches Figma: [broadcast, kickoff] / [weather|capacity, referee]
+  const facts: FactCard[] = [];
   if (info.broadcast) {
-    items.push({
+    facts.push({
       key: 'broadcast',
       label: broadcastLabel,
       value: info.broadcast,
-      icon: (
-        <IconCircle>
-          <Text style={styles.tvMark}>TV</Text>
-        </IconCircle>
-      ),
+      subtitle: broadcastRegionHint,
+      icon: ICON.tv,
+    });
+  }
+  const time = (kickoffTime ?? '').trim();
+  if (time) {
+    facts.push({
+      key: 'time',
+      label: matchTimeLabel,
+      value: time,
+      subtitle: kickoffTimezoneHint,
+      icon: ICON.clock,
+    });
+  }
+  const weather = (weatherValue ?? '').trim();
+  if (weather) {
+    facts.push({
+      key: 'weather',
+      label: weatherLabel,
+      value: weather,
+      subtitle: weatherHint,
+      icon: ICON.weather,
+    });
+  } else if (info.capacity) {
+    facts.push({
+      key: 'capacity',
+      label: capacityLabel,
+      value: info.capacity.toLocaleString('en-US'),
+      subtitle: info.attendance ? info.attendance.toLocaleString('en-US') : null,
+      icon: ICON.capacity,
     });
   }
   if (info.referee) {
-    items.push({
+    facts.push({
       key: 'referee',
       label: refereeLabel,
       value: info.referee,
-      icon: (
-        <IconCircle>
-          <ExpoImage source={ICON.whistle} style={styles.icon22} contentFit="contain" />
-        </IconCircle>
-      ),
+      subtitle: info.refereeCountry,
+      icon: ICON.whistle,
     });
   }
-  if (info.staff) {
-    items.push({
-      key: 'staff',
-      label: staffLabel,
-      value: info.staff,
-      icon: (
-        <IconCircle>
-          <Ionicons name="people" size={20} color={ACCENT} />
-        </IconCircle>
-      ),
-    });
-  }
-
-  const gridRows: InfoItem[][] = [];
-  for (let i = 0; i < items.length; i += 2) gridRows.push(items.slice(i, i + 2));
 
   const hasStadium = Boolean(info.stadiumName || info.stadiumImage);
-  const hasCard = hasStadium || items.length > 0;
+  const hasCard = hasStadium || facts.length > 0;
   const stadiumPhoto = useStadiumPhotoUri(info.stadiumImage, info.stadiumName);
   const [stadiumViewerOpen, setStadiumViewerOpen] = useState(false);
 
   return (
     <View style={styles.wrap}>
       {showAutoUpdate ? (
-        <View style={styles.strip}>
-          <LinearGradient
-            colors={['rgba(124,58,237,0.42)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.18)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.stripDot} />
+        <View
+          style={[
+            styles.strip,
+            {
+              borderColor: isDark ? 'rgba(167,139,250,0.35)' : colors.primaryBorder,
+              backgroundColor: isDark ? 'transparent' : colors.primaryMuted,
+            },
+          ]}
+        >
+          {isDark ? (
+            <LinearGradient
+              colors={['rgba(124,58,237,0.42)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.18)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
+          <View style={[styles.stripDot, { backgroundColor: accent }]} />
           <View style={styles.stripCopy}>
-            <Text style={styles.stripTitle}>{autoUpdateTitle}</Text>
-            <Text style={styles.stripHint}>{autoUpdateHint}</Text>
+            <Text style={[styles.stripTitle, { color: ink }]}>{autoUpdateTitle}</Text>
+            <Text style={[styles.stripHint, { color: muted }]}>{autoUpdateHint}</Text>
           </View>
         </View>
       ) : null}
@@ -255,64 +304,70 @@ export function MatchKickoffHighlights({
       {crowd ? <MatchCrowdVote {...crowd} rtl={rtl} /> : null}
 
       {hasCard ? (
-        <View style={styles.card}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionHint, { color: accent }]} numberOfLines={1}>
+              {sectionHint}
+            </Text>
+            <Text style={[styles.sectionTitle, { color: ink }]} numberOfLines={1}>
+              {sectionTitle}
+            </Text>
+          </View>
+
           {hasStadium ? (
-            <Pressable
-              style={styles.hero}
-              disabled={!stadiumPhoto.remote}
-              onPress={() => setStadiumViewerOpen(true)}
-              accessibilityRole="imagebutton"
-              accessibilityLabel={info.stadiumName ?? stadiumLabel}
-            >
-              <StadiumPhoto remote={stadiumPhoto.remote} onError={stadiumPhoto.onError} />
-              <LinearGradient
-                colors={['rgba(8,7,25,0.05)', 'rgba(8,7,25,0.35)', 'rgba(8,7,25,0.97)']}
-                locations={[0, 0.45, 1]}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {info.stadiumName ? (
-                <View style={styles.heroCopy}>
-                  <View style={[styles.heroTagPill, rtl && styles.rowReverse]}>
-                    <MaterialCommunityIcons name="stadium-variant" size={12} color={GOLD_PRIMARY} />
-                    <Text style={styles.heroTag} numberOfLines={1}>
-                      {stadiumLabel}
-                    </Text>
-                  </View>
-                  <Text style={styles.heroName} numberOfLines={2}>
+            <View style={[styles.venueCard, CARD_SHADOW, { backgroundColor: cardBg }]}>
+              <Pressable
+                style={styles.hero}
+                disabled={!stadiumPhoto.remote}
+                onPress={() => setStadiumViewerOpen(true)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={info.stadiumName ?? stadiumLabel}
+              >
+                <StadiumPhoto remote={stadiumPhoto.remote} onError={stadiumPhoto.onError} />
+                <LinearGradient
+                  colors={['#B26BFFBA', '#6A2BD9BA']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.venuePill}
+                >
+                  <Text style={styles.venuePillText}>{stadiumLabel}</Text>
+                </LinearGradient>
+              </Pressable>
+              <View style={styles.venueBody}>
+                {info.stadiumName ? (
+                  <Text style={[styles.venueName, { color: ink }]} numberOfLines={2}>
                     {info.stadiumName}
                   </Text>
-                  {info.city ? (
-                    <View style={[styles.heroLocation, rtl && styles.rowReverse]}>
-                      <ExpoImage source={ICON.location} style={styles.icon16} contentFit="contain" />
-                      <Text style={styles.heroCity} numberOfLines={1}>
-                        {info.city}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-            </Pressable>
+                ) : null}
+                {info.city ? (
+                  <View style={styles.venueLocation}>
+                    <Text style={[styles.venueCity, { color: muted }]} numberOfLines={1}>
+                      {info.city}
+                    </Text>
+                    <ExpoImage source={ICON.pin} style={styles.icon18} contentFit="contain" />
+                  </View>
+                ) : null}
+              </View>
+            </View>
           ) : null}
 
-          {gridRows.length > 0 ? (
-            <View style={styles.grid}>
-              {gridRows.map((row) => (
-                <View key={row.map((item) => item.key).join('-')} style={styles.gridRow}>
-                  <View style={styles.gridCol}>
-                    <InfoCell item={row[0]} rtl={rtl} divided={false} />
-                  </View>
-                  <View style={styles.gridCol}>
-                    {row[1] ? <InfoCell item={row[1]} rtl={rtl} divided /> : null}
-                  </View>
-                </View>
+          {facts.length > 0 ? (
+            <View style={styles.factGrid}>
+              {facts.map((item) => (
+                <FactTile
+                  key={item.key}
+                  item={item}
+                  ink={ink}
+                  muted={muted}
+                  cardBg={cardBg}
+                  isDark={isDark}
+                />
               ))}
             </View>
           ) : null}
         </View>
       ) : (
-        <Text style={styles.empty}>{emptyHint}</Text>
+        <Text style={[styles.empty, { color: muted }]}>{emptyHint}</Text>
       )}
 
       {stadiumPhoto.remote ? (
@@ -331,17 +386,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingTop: 12,
     paddingBottom: 24,
-    gap: 24,
-  },
-  rowReverse: {
-    flexDirection: 'row-reverse',
+    gap: 22,
   },
   strip: {
     minHeight: 58,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.35)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
@@ -352,156 +403,175 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: GOLD_PRIMARY,
   },
   stripCopy: {
     flex: 1,
     gap: 2,
   },
   stripTitle: {
-    color: TEXT_PRIMARY,
     fontSize: 13,
     fontWeight: '700',
   },
   stripHint: {
-    color: TEXT_SECONDARY,
     fontSize: 12,
     lineHeight: 16,
   },
-  card: {
-    borderRadius: 24,
+  section: {
+    width: '100%',
+    gap: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    direction: 'ltr',
+  },
+  sectionHint: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'left',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  venueCard: {
+    width: '100%',
+    borderRadius: 21,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(72,72,72,0.29)',
-    backgroundColor: '#080719',
   },
   hero: {
-    height: 193,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 174,
+    width: '100%',
     backgroundColor: '#000000',
   },
   heroPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroCopy: {
+  venuePill: {
     position: 'absolute',
-    bottom: 14,
-    left: 20,
-    right: 20,
+    top: 13,
+    right: 13,
+    minWidth: 61,
+    height: 25,
+    borderRadius: 13,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  heroTagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: 'rgba(124,58,237,0.38)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.55)',
-  },
-  heroTag: {
-    color: '#EDE9FE',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textAlign: 'center',
-  },
-  heroName: {
+  venuePillText: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    textShadowColor: 'rgba(0,0,0,0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
-  },
-  heroLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-    maxWidth: '100%',
-  },
-  heroCity: {
-    flexShrink: 1,
-    color: 'rgba(221,214,254,0.8)',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
+    textAlign: 'center',
   },
-  grid: {
-    paddingHorizontal: 19,
-    paddingVertical: 30,
-    gap: 20,
-  },
-  gridRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  gridCol: {
-    flex: 1,
-  },
-  cell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 58,
-  },
-  cellDivided: {
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(168,85,247,0.38)',
-    paddingLeft: 12,
-  },
-  cellText: {
-    flex: 1,
+  venueBody: {
+    minHeight: 77,
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
     gap: 2,
   },
-  cellLabel: {
-    color: ACCENT,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cellValue: {
-    color: '#FFFFFF',
-    fontSize: 19,
+  venueName: {
+    fontSize: 15,
     fontWeight: '700',
+    lineHeight: 22,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    width: '100%',
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(168,85,247,0.19)',
+  venueLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    width: '100%',
+    direction: 'ltr',
+  },
+  venueCity: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  factGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    rowGap: 12,
+    columnGap: 13,
+    direction: 'ltr',
+  },
+  factCard: {
+    width: '47.5%',
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 88,
+    borderRadius: 16,
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingVertical: 9,
+    gap: 8,
+    justifyContent: 'center',
+  },
+  factHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    width: '100%',
+    direction: 'ltr',
+  },
+  factLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  iconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconCircleSize: {
-    width: 44,
-    height: 44,
+  icon18: {
+    width: 18,
+    height: 18,
   },
-  icon25: {
-    width: 25,
-    height: 25,
+  factBody: {
+    width: '100%',
+    gap: 3,
+    alignItems: 'flex-end',
   },
-  icon22: {
-    width: 22,
-    height: 22,
-  },
-  icon16: {
-    width: 16,
-    height: 16,
-  },
-  tvMark: {
-    color: ACCENT,
-    fontSize: 16,
+  factValue: {
+    fontSize: 14,
     fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'right',
+    width: '100%',
+  },
+  factSubtitle: {
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right',
+    width: '100%',
+    writingDirection: 'rtl',
   },
   empty: {
-    color: TEXT_MUTED,
     fontSize: 13,
     lineHeight: 18,
   },

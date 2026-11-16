@@ -18,11 +18,20 @@ describe('extractMatchKickoffInfo', () => {
       stadiumName: 'Anfield',
       capacity: 61276,
       referee: 'Thomas Bramall',
+      refereeCountry: null,
       staff: 'Fourth Official',
       broadcast: 'beIN Sport Max 1 HD · beIN Sport Max 3 HD',
       stadiumImage: 'https://img/anfield.jpg',
     });
     expect(hasMatchKickoffFacts(info)).toBe(true);
+  });
+
+  it('splits referee name and country when the feed embeds both', () => {
+    const info = extractMatchKickoffInfo({
+      fixture: { fixture: { referee: 'Clement Turpin, France' } },
+    });
+    expect(info.referee).toBe('Clement Turpin');
+    expect(info.refereeCountry).toBe('France');
   });
 
   it('is empty when the fixture has no preview facts', () => {
