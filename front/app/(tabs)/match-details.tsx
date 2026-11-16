@@ -67,6 +67,7 @@ import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDra
 import { LineupBelowSections } from '../../components/match-details/LineupBelowSections';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventsTimeline } from '../../components/match-details/MatchEventsTimeline';
+import type { GoalClipMedia } from '../../utils/assignGoalClips';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
@@ -294,6 +295,7 @@ const MatchDetailsScreen = () => {
     : params.fixtureId;
   const parsedFixtureId = parseInt(String(rawFixtureId ?? '').trim(), 10);
   const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
+  const [goalClips, setGoalClips] = useState<GoalClipMedia[]>([]);
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
@@ -506,6 +508,24 @@ const MatchDetailsScreen = () => {
       ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
       : snapshot?.phase === 'finished';
   }, [fixture, snapshot?.phase]);
+
+  useEffect(() => {
+    if (!fixtureId || !isFinishedMatch()) {
+      setGoalClips([]);
+      return;
+    }
+    let cancelled = false;
+    ApiFootballService.getFixtureHighlights(fixtureId)
+      .then((clips) => {
+        if (!cancelled) setGoalClips(clips);
+      })
+      .catch(() => {
+        if (!cancelled) setGoalClips([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureId, isFinishedMatch]);
 
   const isPreKickoff = useCallback(() => {
     const short = fixture?.fixture?.status?.short;
@@ -2091,6 +2111,9 @@ const MatchDetailsScreen = () => {
               language={language}
               goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
               detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
+              goalClips={goalClips}
+              goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
+              goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
             />
           )}
         </View>

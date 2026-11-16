@@ -561,6 +561,21 @@ export interface FixtureEvent {
   _minuteKnown?: boolean;
 }
 
+export interface FixtureGoalClip {
+  title: string;
+  description: string | null;
+  url: string;
+  embedUrl: string | null;
+  thumbnail: string | null;
+}
+
+export interface FixtureHighlightsPayload {
+  status: 'not_finished' | 'pending' | 'ready' | 'unavailable';
+  summary: FixtureGoalClip | null;
+  goals: FixtureGoalClip[];
+  checkedAt: string | null;
+}
+
 export type FixtureMomentumPayload = {
   available: boolean;
   duration: number;
@@ -1940,6 +1955,23 @@ export const ApiFootballService = {
       } catch {
         return [];
       }
+    }
+  },
+
+  /**
+   * Stored post-match goal videos. Empty when none have been published.
+   */
+  async getFixtureHighlights(fixtureId: number): Promise<FixtureGoalClip[]> {
+    try {
+      const payload = await fetchFromProxy<FixtureHighlightsPayload | FixtureGoalClip[]>(
+        `/fixtures/${fixtureId}/highlights`,
+        {},
+        { timeout: 8_000 },
+      );
+      if (!payload || Array.isArray(payload)) return [];
+      return Array.isArray(payload.goals) ? payload.goals.filter((clip) => clip?.url || clip?.embedUrl) : [];
+    } catch {
+      return [];
     }
   },
 

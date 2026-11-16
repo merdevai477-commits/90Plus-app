@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { Text } from './MatchText';
@@ -8,10 +8,13 @@ import TeamBadge from '../common/TeamBadge';
 import type { FixtureEvent } from '../../services/apiFootball';
 import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
+import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const SWAP_ICON = require('../../assets/images/match-events/swap.svg');
+const GOAL_BALL = require('../../assets/images/match-events/goal-ball.svg');
+const GOAL_PLAY = require('../../assets/images/match-events/goal-play.svg');
 
 const DOT = 12;
 const MINUTE_W = 40;
@@ -29,6 +32,9 @@ type Props = {
   language: Language;
   goalForLabel: string;
   detailsUnavailableLabel: string;
+  goalClips?: GoalClipMedia[];
+  goalClipScorerLabel?: string;
+  goalClipPlayLabel?: string;
 };
 
 function formatMinute(event: FixtureEvent): string {
@@ -70,6 +76,9 @@ export function MatchEventsTimeline({
   language,
   goalForLabel,
   detailsUnavailableLabel,
+  goalClips = [],
+  goalClipScorerLabel = 'سجل الهدف: {player}',
+  goalClipPlayLabel = 'Play {player} goal',
 }: Props) {
   const { colors, isDark } = useMatchDetailsTheme();
   const rtl = language === 'ar';
@@ -77,6 +86,7 @@ export function MatchEventsTimeline({
   const textAlign = rtl ? 'right' : 'left';
   const baseMark = rtl ? RLM : LRM;
   const lastIndex = events.length - 1;
+  const clipsByEvent = assignGoalClips(events, goalClips);
 
   return (
     <View
@@ -113,6 +123,12 @@ export function MatchEventsTimeline({
           }
           title = `${baseMark}${title}`;
           subtitle = subtitle ? `${baseMark}${subtitle}` : '';
+          const clip = clipsByEvent[index];
+          const playUrl = clip?.url || clip?.embedUrl || '';
+          const scorerName = event.player?.name?.trim() ?? '';
+          const scorerLine = clip && scorerName
+            ? `${baseMark}${goalClipScorerLabel.replace('{player}', isolate(scorerName))}`
+            : '';
 
           return (
             <View
@@ -121,36 +137,76 @@ export function MatchEventsTimeline({
             >
               <View
                 style={[
-                  styles.cluster,
-                  { flexDirection: rowDirection },
-                  !active && styles.dimmed,
+                  clip ? styles.clipCard : styles.cluster,
+                  { flexDirection: clip ? 'column' : rowDirection },
+                  !clip && !active && styles.dimmed,
+                  clip && {
+                    backgroundColor: isDark ? '#241447' : '#F4EBFF',
+                  },
                 ]}
               >
-                <View style={[styles.textCol, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
-                  <Text
-                    style={[
-                      styles.title,
-                      active && styles.titleActive,
-                      { textAlign, color: colors.textPrimary },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {title}
-                  </Text>
-                  {!!subtitle && (
+                <View style={[clip ? styles.clipHeader : styles.cluster, { flexDirection: rowDirection }]}>
+                  <View style={[styles.textCol, clip && styles.clipTextCol, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
                     <Text
                       style={[
-                        styles.subtitle,
-                        active && styles.subtitleActive,
-                        { textAlign, color: colors.textMuted },
+                        styles.title,
+                        (active || !!clip) && styles.titleActive,
+                        clip && styles.clipTitle,
+                        { textAlign, color: colors.textPrimary },
                       ]}
                       numberOfLines={2}
                     >
-                      {subtitle}
+                      {title}
                     </Text>
+                    {!!subtitle && !clip && (
+                      <Text
+                        style={[
+                          styles.subtitle,
+                          active && styles.subtitleActive,
+                          { textAlign, color: colors.textMuted },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {subtitle}
+                      </Text>
+                    )}
+                  </View>
+                  {clip && event.type === 'Goal' ? (
+                    <ExpoImage source={GOAL_BALL} style={styles.goalBall} contentFit="contain" />
+                  ) : (
+                    <EventGlyph event={event} language={language} />
                   )}
                 </View>
-                <EventGlyph event={event} language={language} />
+                {clip ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={goalClipPlayLabel.replace('{player}', scorerName || event.team.name)}
+                    onPress={() => {
+                      if (playUrl) Linking.openURL(playUrl).catch(() => undefined);
+                    }}
+                    style={styles.clipMedia}
+                  >
+                    {clip.thumbnail ? (
+                      <ExpoImage
+                        source={{ uri: clip.thumbnail }}
+                        style={styles.clipImage}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.clipImage, styles.clipFallback]} />
+                    )}
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']}
+                      style={styles.clipShade}
+                    />
+                    <ExpoImage source={GOAL_PLAY} style={styles.clipPlay} contentFit="contain" />
+                  </Pressable>
+                ) : null}
+                {!!scorerLine && (
+                  <Text style={[styles.clipScorer, { textAlign, color: colors.textMuted }]} numberOfLines={1}>
+                    {scorerLine}
+                  </Text>
+                )}
               </View>
 
               <View
@@ -288,6 +344,57 @@ const styles = StyleSheet.create({
   minute: {
     width: MINUTE_W,
     fontSize: 12,
+    fontWeight: '500',
+  },
+  clipCard: {
+    flex: 1,
+    gap: 4,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+  },
+  clipHeader: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clipTextCol: {
+    flex: 1,
+  },
+  clipTitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  goalBall: {
+    width: 20,
+    height: 20,
+  },
+  clipMedia: {
+    height: 122,
+    width: '100%',
+    borderRadius: 13,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 13,
+  },
+  clipFallback: {
+    backgroundColor: '#111111',
+  },
+  clipShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  clipPlay: {
+    width: 26,
+    height: 26,
+  },
+  clipScorer: {
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: '500',
   },
 });

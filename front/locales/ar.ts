@@ -839,6 +839,8 @@ export const ar = {
     eventsFeedUnavailableHint: 'نعرض الأهداف من النتيجة فقط، بدون أسماء اللاعبين',
     eventDetailsUnavailable: 'التفاصيل غير متاحة',
     goalFor: 'هدف لـ {team}',
+    goalClipScorer: 'سجل الهدف: {player}',
+    goalClipPlay: 'تشغيل هدف {player}',
     eventsNoneRecorded: 'لم تُسجَّل أحداث لهذه المباراة',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',

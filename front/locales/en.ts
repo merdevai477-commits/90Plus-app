@@ -603,6 +603,8 @@ export const en = {
     eventsFeedUnavailableHint: 'Goals are shown from the score only, without player names',
     eventDetailsUnavailable: 'Details unavailable',
     goalFor: 'Goal for {team}',
+    goalClipScorer: 'Scored by: {player}',
+    goalClipPlay: 'Play {player} goal',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
