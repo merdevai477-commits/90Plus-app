@@ -9,13 +9,12 @@ import {
   Platform,
   type ViewStyle,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Check, ArrowLeft, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import { useAuthScale } from './authLayoutMetrics';
 import { useAuthTheme } from './useAuthTheme';
-import { AUTH_V2_ASSETS } from './authV2Assets';
+import { AppleLogo, GoogleLogo } from './AuthSocialIcons';
 
 const SOCIAL_BTN_HEIGHT = 50;
 const SOCIAL_BTN_RADIUS = 14;
@@ -112,14 +111,14 @@ function AuthSocialButton({
   onPress,
   disabled,
   loading,
-  icon,
   label,
+  icon,
 }: {
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  icon: number;
   label: string;
+  icon: React.ReactNode;
 }) {
   const styles = useAuthPrimitiveStyles();
   const { colors } = useAuthTheme();
@@ -136,7 +135,7 @@ function AuthSocialButton({
           <ActivityIndicator color={colors.textPrimary} size="small" />
         ) : (
           <>
-            <Image source={icon} style={styles.socialIcon} contentFit="contain" />
+            {icon}
             <Text style={styles.socialLabel}>{label}</Text>
           </>
         )}
@@ -159,6 +158,9 @@ export function AuthSocialButtons({
   appleLoading?: boolean;
 }) {
   const styles = useAuthPrimitiveStyles();
+  const { colors } = useAuthTheme();
+  const { s } = useAuthScale();
+  const iconSize = s(SOCIAL_ICON_SIZE);
 
   return (
     <View style={styles.socialRow}>
@@ -166,15 +168,15 @@ export function AuthSocialButtons({
         onPress={onGoogle}
         disabled={loading}
         loading={googleLoading}
-        icon={AUTH_V2_ASSETS.iconGoogle}
         label="Google"
+        icon={<GoogleLogo size={iconSize} />}
       />
       <AuthSocialButton
         onPress={onApple}
         disabled={loading}
         loading={appleLoading}
-        icon={AUTH_V2_ASSETS.iconApple}
         label="Apple"
+        icon={<AppleLogo size={iconSize} color={colors.textPrimary} />}
       />
     </View>
   );
@@ -422,10 +424,6 @@ function createAuthPrimitiveStyles(
       justifyContent: 'center',
       paddingHorizontal: s(12),
       gap: s(7),
-    },
-    socialIcon: {
-      width: s(SOCIAL_ICON_SIZE),
-      height: s(SOCIAL_ICON_SIZE),
     },
     socialLabel: {
       fontSize: f(13),

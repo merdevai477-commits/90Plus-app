@@ -1,10 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
 import { useAuthScale } from './authLayoutMetrics';
 import { useAuthTheme } from './useAuthTheme';
-import { AUTH_V2_ASSETS } from './authV2Assets';
 import { useTranslation } from '@/src/i18n';
 
 type Props = {
@@ -14,8 +12,9 @@ type Props = {
 };
 
 /**
- * Purple branded header from Figma Login (1613:5666) / Sign Up (1604:5520).
- * Gradient + soft orbit decorations + 90PLUS + gold accent bar.
+ * Purple branded header from Figma Login / Sign Up.
+ * Soft purple spotlight + orbit are View ellipses (Figma 1604:5448 / 1604:5449)
+ * so they render on Android without depending on SVG image assets.
  */
 export function AuthBrandHeader({ titleLines, tagline }: Props) {
   const { language } = useTranslation();
@@ -37,31 +36,49 @@ export function AuthBrandHeader({ titleLines, tagline }: Props) {
       end={{ x: 1, y: 1 }}
       style={[styles.root, { height: s(232) }]}
     >
-      <Image
-        source={AUTH_V2_ASSETS.brandOrbit}
+      {/* Brand orbit — large soft circle (Figma Brand orbit) */}
+      <View
+        pointerEvents="none"
         style={[
-          styles.orbit,
+          styles.decor,
           {
             width: s(420),
             height: s(330),
+            borderRadius: s(210),
             left: s(-228),
             top: s(-175),
+            backgroundColor: 'rgba(168, 85, 247, 0.28)',
           },
         ]}
-        contentFit="contain"
       />
-      <Image
-        source={AUTH_V2_ASSETS.brandSpotlight}
+      {/* Soft purple spotlight (Figma 1604:5448) */}
+      <View
+        pointerEvents="none"
         style={[
-          styles.spotlight,
+          styles.decor,
           {
             width: s(223),
             height: s(214),
-            left: s(-98),
-            top: s(43),
+            borderRadius: s(112),
+            left: s(-40),
+            top: s(36),
+            backgroundColor: 'rgba(168, 85, 247, 0.45)',
           },
         ]}
-        contentFit="contain"
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.decor,
+          {
+            width: s(140),
+            height: s(140),
+            borderRadius: s(70),
+            left: s(24),
+            top: s(88),
+            backgroundColor: 'rgba(233, 213, 255, 0.18)',
+          },
+        ]}
       />
 
       <View
@@ -70,9 +87,9 @@ export function AuthBrandHeader({ titleLines, tagline }: Props) {
           isRTL ? styles.messagingRtl : styles.messagingLtr,
           {
             top: s(58),
-            width: s(207),
+            width: s(220),
             gap: s(16),
-            ...(isRTL ? { right: s(34) } : { left: s(34) }),
+            ...(isRTL ? { right: s(28) } : { left: s(28) }),
           },
         ]}
       >
@@ -93,7 +110,7 @@ export function AuthBrandHeader({ titleLines, tagline }: Props) {
           style={[
             styles.taglineRow,
             { gap: s(12) },
-            isRTL ? styles.taglineRowRtl : null,
+            isRTL ? null : styles.taglineRowLtr,
           ]}
         >
           {isRTL ? (
@@ -106,8 +123,8 @@ export function AuthBrandHeader({ titleLines, tagline }: Props) {
                       style={[
                         styles.titleLine,
                         {
-                          fontSize: f(23),
-                          lineHeight: f(31),
+                          fontSize: f(22),
+                          lineHeight: f(30),
                           textAlign: 'right',
                         },
                       ]}
@@ -163,8 +180,8 @@ export function AuthBrandHeader({ titleLines, tagline }: Props) {
                       style={[
                         styles.titleLine,
                         {
-                          fontSize: f(23),
-                          lineHeight: f(31),
+                          fontSize: f(22),
+                          lineHeight: f(30),
                           textAlign: 'left',
                         },
                       ]}
@@ -200,16 +217,12 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
   },
-  orbit: {
+  decor: {
     position: 'absolute',
-    opacity: 0.85,
-  },
-  spotlight: {
-    position: 'absolute',
-    opacity: 0.9,
   },
   messaging: {
     position: 'absolute',
+    zIndex: 2,
   },
   messagingRtl: {
     alignItems: 'flex-end',
@@ -226,7 +239,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  taglineRowRtl: {
+  taglineRowLtr: {
     flexDirection: 'row',
   },
   taglineCopy: {

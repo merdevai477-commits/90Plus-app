@@ -13,8 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { ShieldCheck, X } from 'lucide-react-native';
-import { AUTH_V2_ASSETS } from '@/src/components/auth/authV2Assets';
+import { ShieldCheck, X, Mail, Lock } from 'lucide-react-native';
 import {
   AuthScreenShell,
   AuthTextField,
@@ -292,7 +291,7 @@ export default function LoginScreen() {
           <AuthFormFields>
             <AuthTextField
               label={copy.email}
-              iconSource={AUTH_V2_ASSETS.iconEmail}
+              icon={Mail}
               placeholder={copy.emailPlaceholder}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -303,7 +302,7 @@ export default function LoginScreen() {
             />
             <AuthTextField
               label={copy.password}
-              iconSource={AUTH_V2_ASSETS.iconLock}
+              icon={Lock}
               placeholder={copy.passwordPlaceholder}
               secureTextEntry
               secureToggle
@@ -345,7 +344,7 @@ export default function LoginScreen() {
             <AuthFooterLink
               muted={copy.footerMuted}
               link={copy.footerLink}
-              onPress={() => router.replace('/auth')}
+              onPress={() => router.replace('/auth/register')}
               isRTL={isRTL}
             />
           </>

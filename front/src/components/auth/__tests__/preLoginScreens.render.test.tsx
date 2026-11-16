@@ -61,11 +61,13 @@ jest.mock('expo-linking', () => ({
   parse: (url: string) => ({ path: url, queryParams: {} }),
 }));
 
-import RegisterScreen from '../../../../app/auth/index';
+import AuthLandingScreen from '../../../../app/auth/index';
+import RegisterScreen from '../../../../app/auth/register';
 import LoginScreen from '../../../../app/auth/login';
 import ForgotPasswordScreen from '../../../../app/auth/forgot-password';
 
 const SCREENS: Array<[string, React.ComponentType]> = [
+  ['Landing', AuthLandingScreen],
   ['Sign up', RegisterScreen],
   ['Log in', LoginScreen],
   ['Forgot password', ForgotPasswordScreen],
@@ -75,10 +77,26 @@ describe.each(SCREENS)('%s', (_name, Screen) => {
   it('mounts without throwing', () => {
     expect(() => render(<Screen />)).not.toThrow();
   });
+});
 
+describe.each([
+  ['Sign up', RegisterScreen],
+  ['Log in', LoginScreen],
+  ['Forgot password', ForgotPasswordScreen],
+] as Array<[string, React.ComponentType]>)('%s', (_name, Screen) => {
   it('offers a way back out of the auth flow', () => {
     render(<Screen />);
     expect(screen.getByTestId('auth-close')).toBeTruthy();
+  });
+});
+
+describe('the landing screen', () => {
+  it('shows sign up, log in, and social brands', () => {
+    render(<AuthLandingScreen />);
+    expect(screen.getByText(/create new account/i)).toBeTruthy();
+    expect(screen.getByText(/^log in$/i)).toBeTruthy();
+    expect(screen.getByText('Google')).toBeTruthy();
+    expect(screen.getByText('Apple')).toBeTruthy();
   });
 });
 

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import type { LucideIcon } from 'lucide-react-native';
-import { AUTH_V2_ASSETS } from './authV2Assets';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useAuthScale } from './authLayoutMetrics';
 import { useAuthTheme } from './useAuthTheme';
 
@@ -86,11 +86,11 @@ export function AuthTextField({
               accessibilityRole="button"
               accessibilityLabel={hide ? 'Show password' : 'Hide password'}
             >
-              <Image
-                source={AUTH_V2_ASSETS.iconEye}
-                style={styles.iconImage}
-                contentFit="contain"
-              />
+              {hide ? (
+                <Eye color={colors.inputIcon} size={s(19)} strokeWidth={1.75} />
+              ) : (
+                <EyeOff color={colors.inputIcon} size={s(19)} strokeWidth={1.75} />
+              )}
             </Pressable>
           ) : null}
 
