@@ -26,8 +26,6 @@ interface TeamToggleProps {
   scale?: number;
 }
 
-const PILL_ACTIVE = ['#8B5CF6', '#513690'] as const;
-
 export const TeamToggle: React.FC<TeamToggleProps> = ({
   home,
   away,
@@ -37,8 +35,12 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
   scale = 1,
 }) => {
   const { colors, isDark } = useMatchDetailsTheme();
-  const idleLabel = isDark ? colors.textInverse : colors.textPrimary;
-  const activeLabel = colors.textInverse;
+  // Same Figma pill shape in both modes: idle uses brand ink, active uses white on purple.
+  const idleLabel = isDark ? '#E9D5FF' : colors.textPrimary;
+  const activeLabel = '#FFFFFF';
+  const pillIdleBg = isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF';
+  const pillIdleBorder = isDark ? 'rgba(168,85,247,0.35)' : 'rgba(106,43,217,0.18)';
+  const pillActive = (isDark ? (['#8B5CF6', '#4B1FA3'] as const) : (['#6A2BD9', '#4B1FA3'] as const));
 
   if (variant === 'pill') {
     const renderSegment = (side: 'home' | 'away', team: TeamToggleTeam) => {
@@ -70,7 +72,7 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
           accessibilityState={{ selected: isActive }}
         >
           {isActive ? (
-            <LinearGradient colors={PILL_ACTIVE} style={pill.active}>
+            <LinearGradient colors={pillActive} style={pill.active}>
               {content}
             </LinearGradient>
           ) : (
@@ -85,8 +87,10 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
         style={[
           pill.container,
           {
-            backgroundColor: isDark ? '#0D0D25' : colors.cardBg,
-            borderColor: isDark ? 'rgba(139,92,246,0.24)' : colors.cardBorder,
+            backgroundColor: pillIdleBg,
+            borderColor: pillIdleBorder,
+            shadowOpacity: isDark ? 0.2 : 0.12,
+            elevation: 2,
           },
         ]}
       >
@@ -176,6 +180,9 @@ const pill = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 48,
     overflow: 'hidden',
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
   },
   segment: {
     flex: 1,

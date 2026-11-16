@@ -414,8 +414,8 @@ export const FootballField: React.FC<FootballFieldProps> = ({
               },
             ]}
           >
-            <Text style={[styles.pillText, { fontSize: 16 * s }]} maxFontSizeMultiplier={1.1}>
-              {formationLabel.split('-').join(' - ')}
+            <Text style={[styles.pillText, { fontSize: Math.max(9, 12 * s) }]} maxFontSizeMultiplier={1.1}>
+              {formationLabel}
             </Text>
           </View>
         ) : null}
@@ -533,15 +533,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0D0D25',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.24)',
-    borderRadius: 48,
+    backgroundColor: '#6A2BD9',
+    borderWidth: 0,
+    borderRadius: 999,
     zIndex: 3,
+    shadowColor: '#4B1FA3',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   pillText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
     includeFontPadding: false,
   },
   benchButton: {

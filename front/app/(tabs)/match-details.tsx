@@ -2680,7 +2680,7 @@ const MatchDetailsScreen = () => {
           name: fixture?.teams?.away?.name,
         }}
         labels={{
-          rank: '#',
+          rank: t.matchDetails.standingsRank || '#',
           team: t.matchDetails.team,
           played: t.matchDetails.standingsPlayed,
           goalsFor: t.matchDetails.standingsGoalsFor,
@@ -2691,6 +2691,11 @@ const MatchDetailsScreen = () => {
           goalDiffShort: t.matchDetails.standingsGoalDiffShort,
           points: t.matchDetails.standingsPoints,
           pointsShort: t.matchDetails.standingsPointsShort,
+          pointsExplain: t.matchDetails.standingsPointsExplain,
+          gdExplain: t.matchDetails.standingsGdExplain,
+          formWin: t.matchDetails.standingsFormWin,
+          formDraw: t.matchDetails.standingsFormDraw,
+          formLoss: t.matchDetails.standingsFormLoss,
         }}
         onPressTeam={openStandingTeamProfile}
       />
@@ -2755,8 +2760,29 @@ const MatchDetailsScreen = () => {
         )}
 
         {activeGroup && (
-          <View style={styles.standingsContainer}>
-            {renderStandingsTable(activeGroup.standings, `${activeGroup.group}-${groupIndex}`)}
+          <View style={styles.standingsSection}>
+            <View style={styles.standingsTitleRow}>
+              <Text style={[styles.standingsTableTitle, { color: mdColors.textPrimary }]}>
+                {t.matchDetails.standingsTableTitle || t.matchDetails.standings || 'Standings'}
+              </Text>
+              <ExpoImage
+                source={require('../../assets/images/match-form/trophy.svg')}
+                style={styles.standingsTrophy}
+                contentFit="contain"
+              />
+            </View>
+            <View
+              style={[
+                styles.standingsContainer,
+                {
+                  backgroundColor: 'transparent',
+                  padding: 0,
+                  borderWidth: 0,
+                },
+              ]}
+            >
+              {renderStandingsTable(activeGroup.standings, `${activeGroup.group}-${groupIndex}`)}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -3981,6 +4007,25 @@ const styles = StyleSheet.create({
   eventTeamLogo: {
     width: 30,
     height: 30,
+  },
+  standingsSection: {
+    marginBottom: 12,
+    gap: 12,
+  },
+  standingsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  standingsTableTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  standingsTrophy: {
+    width: 24,
+    height: 24,
   },
   standingsContainer: {
     backgroundColor: '#1a1a1a',

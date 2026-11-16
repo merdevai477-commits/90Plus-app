@@ -824,7 +824,7 @@ export function MatchChatTab({
         style={styles.emptyIllustration}
         contentFit="contain"
       />
-      <Text style={[styles.emptyTitle, { color: isDark ? '#6B5B7A' : colors.primary }]}>
+      <Text style={[styles.emptyTitle, { color: isDark ? '#C4B5FD' : colors.primary }]}>
         {signedIn ? md.chatEmptyFirst : md.chatLoginTitle}
       </Text>
       {!signedIn ? (
@@ -887,13 +887,13 @@ export function MatchChatTab({
       <LinearGradient
         colors={
           isDark
-            ? (['#07040D', '#0C051A'] as const)
+            ? (['#1A0F33', '#120925'] as const)
             : (['#FAF5FF', '#F3EDFF'] as const)
         }
         style={[
           styles.composerBar,
           {
-            borderTopColor: isDark ? '#24193B' : '#F3EDFF',
+            borderTopColor: isDark ? 'rgba(168,85,247,0.28)' : '#F3EDFF',
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
@@ -940,9 +940,9 @@ export function MatchChatTab({
         <View
           style={[
             styles.inputContainer,
-            !isDark && {
-              backgroundColor: '#F2E5FF',
-              borderColor: '#E4D6FF',
+            {
+              backgroundColor: isDark ? 'rgba(168,85,247,0.14)' : '#F2E5FF',
+              borderColor: isDark ? 'rgba(168,85,247,0.35)' : '#E4D6FF',
             },
             (frozen || chatClosed || !signedIn) && styles.inputContainerDisabled,
           ]}
@@ -950,7 +950,7 @@ export function MatchChatTab({
           <FaceSmileIcon size={24} />
           <TextInput
             ref={inputRef}
-            style={[styles.input, !isDark && { color: colors.textPrimary }]}
+            style={[styles.input, { color: isDark ? '#F5F3FF' : colors.textPrimary }]}
             placeholder={
               chatClosed
                 ? md.chatClosedPlaceholder
@@ -960,7 +960,7 @@ export function MatchChatTab({
                     ? md.chatLoginHint
                     : md.chatPlaceholder
             }
-            placeholderTextColor={isDark ? '#484050' : '#4B1FA3'}
+            placeholderTextColor={isDark ? '#C4B5FD' : '#4B1FA3'}
             textAlign="right"
             textAlignVertical="center"
             editable={signedIn && !frozen && !chatClosed}
@@ -1041,13 +1041,16 @@ export function MatchChatTab({
   return (
     <View
       collapsable={false}
-      style={[styles.wrap, !isDark && { backgroundColor: colors.pageBg }]}
+      style={[
+        styles.wrap,
+        { backgroundColor: isDark ? colors.pageBg : colors.pageBg },
+      ]}
     >
       {banners}
 
       <View
         collapsable={false}
-        style={[styles.compactBody, !isDark && { backgroundColor: colors.pageBg }]}
+        style={[styles.compactBody, { backgroundColor: colors.pageBg }]}
       >
         {feedBody('compact', compactMessages)}
 
