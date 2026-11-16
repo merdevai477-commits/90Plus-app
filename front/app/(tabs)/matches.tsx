@@ -1496,13 +1496,13 @@ export default function MatchesHubScreenV2() {
     }
   }, [params.filter, worldCupEnabled, worldCupLocked]);
 
-  // Live/Finished snap the calendar to today. During a swipe we only flip the
-  // tab label immediately and defer this work so the pager doesn't hitch.
-  const applyLiveFinishedSideEffects = useCallback(() => {
+  // Any tab change snaps the calendar back to today. During a swipe we only
+  // flip the tab label immediately and defer this work so the pager doesn't hitch.
+  const snapCalendarToToday = useCallback(() => {
     const today = startOfLocalDay();
     if (selectedDate.getTime() !== today.getTime()) setSelectedDate(today);
-    else refreshSoft();
-  }, [selectedDate, refreshSoft]);
+    else if (filter === 'Live' || filter === 'Finished') refreshSoft();
+  }, [selectedDate, filter, refreshSoft]);
 
   // Returns false when the tab was blocked (e.g. locked World Cup) so the pager
   // can stay on / bounce back to the previous page.
@@ -1515,27 +1515,22 @@ export default function MatchesHubScreenV2() {
       return false;
     }
     setFilter(f);
-    if (f === 'Live' || f === 'Finished') {
-      if (opts?.deferSideEffects) {
-        InteractionManager.runAfterInteractions(applyLiveFinishedSideEffects);
-      } else {
-        applyLiveFinishedSideEffects();
-      }
+    if (opts?.deferSideEffects) {
+      InteractionManager.runAfterInteractions(snapCalendarToToday);
+    } else {
+      snapCalendarToToday();
     }
     return true;
-  }, [worldCupEnabled, worldCupLocked, applyLiveFinishedSideEffects]);
+  }, [worldCupEnabled, worldCupLocked, snapCalendarToToday]);
 
   const handleCalendarDayPress = useCallback((date: Date) => {
     const next = new Date(date);
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
-    // Keep World Cup / Favorite / Live when browsing dates — optional tabs
-    // fall back via the empty-availability effect if the new day has no matches.
-    if (filter !== 'WorldCup' && filter !== 'Favorite' && filter !== 'Live') {
-      setFilter(filterForCalendarDay(next));
-    }
-  }, [filter]);
+    // Past days open Finished, future days Upcoming, today All.
+    setFilter(filterForCalendarDay(next));
+  }, []);
 
   const openCalendar = useCallback(() => {
     setCalendarViewDate(new Date(selectedDate));
@@ -2985,6 +2980,7 @@ export default function MatchesHubScreenV2() {
                 ))}
                 {calendarGrid.map(({ date, inMonth }) => {
                   const isSelected = isCalendarDaySelected(date);
+                  const isToday = isSameLocalDay(date, new Date());
                   return (
                     <TouchableOpacity
                       key={date.toDateString()}
@@ -2992,9 +2988,20 @@ export default function MatchesHubScreenV2() {
                       onPress={() => handleCalendarDayPress(date)}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.calDayInner, isSelected && styles.calDayActive]}>
+                      <View
+                        style={[
+                          styles.calDayInner,
+                          inMonth && styles.calDayDefined,
+                          isToday && !isSelected && styles.calDayToday,
+                          isSelected && styles.calDayActive,
+                        ]}
+                      >
                         <Text
-                          style={[styles.calDayTxt, !inMonth && !isSelected && styles.calDayTxtOutside]}
+                          style={[
+                            styles.calDayTxt,
+                            !inMonth && !isSelected && styles.calDayTxtOutside,
+                            isSelected && styles.calDayTxtActive,
+                          ]}
                           allowFontScaling={false}
                         >
                           {date.getDate()}

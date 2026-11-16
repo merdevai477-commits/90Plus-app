@@ -550,14 +550,28 @@ export function createMatchesStyles(c: MatchesThemeColors) {
     },
     calDay: { width: '14.28%', height: 33, alignItems: 'center', justifyContent: 'center' },
     calDayInner: {
-      minWidth: 28,
-      height: 28,
+      minWidth: 32,
+      height: 32,
       paddingHorizontal: 2,
-      borderRadius: 6,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    calDayActive: { backgroundColor: c.primary },
+    calDayDefined: {
+      borderWidth: 1,
+      borderColor: c.primaryBorder,
+      backgroundColor: c.primaryMuted,
+    },
+    calDayToday: {
+      borderWidth: 1.5,
+      borderColor: c.primary,
+    },
+    calDayActive: {
+      backgroundColor: c.primary,
+      borderWidth: 1.5,
+      borderColor: c.primary,
+    },
+    calDayTxtActive: { color: c.textInverse },
     calDayTxt: {
       color: c.textPrimary,
       fontSize: 21,
