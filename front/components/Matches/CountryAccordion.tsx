@@ -221,46 +221,56 @@ export const CountryAccordion = memo(function CountryAccordion({
   for (const l of countryGroup.leagues) totalMatches += l.matches.length;
 
   return (
-    <View style={styles.countryContainer}>
-      {/* Country Header */}
-      <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
-        <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
-        <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
-        <Text style={styles.totalBadge}>{totalMatches}</Text>
-        {expanded ? (
-          <ChevronUp size={16} color={colors.iconMuted} />
-        ) : (
-          <ChevronDown size={16} color={colors.iconMuted} />
-        )}
-      </TouchableOpacity>
+    <View style={styles.countryShell}>
+      <View style={styles.countryContainer}>
+        {/* Country Header */}
+        <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
+          <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
+          <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
+          <Text style={styles.totalBadge}>{totalMatches}</Text>
+          {expanded ? (
+            <ChevronUp size={16} color={colors.iconMuted} />
+          ) : (
+            <ChevronDown size={16} color={colors.iconMuted} />
+          )}
+        </TouchableOpacity>
 
-      {/* Leagues are only mounted when the country is expanded. This is the
-          single biggest win — non-expanded countries pay zero cost beyond
-          their header. */}
-      {expanded && (
-        <View style={styles.leaguesWrapper}>
-          {countryGroup.leagues.map(league => (
-            <LeagueSection
-              key={league.leagueId}
-              league={league}
-              renderMatchCard={renderMatchCard}
-              onViewAllLeague={onViewAllLeague}
-            />
-          ))}
-        </View>
-      )}
+        {/* Leagues are only mounted when the country is expanded. This is the
+            single biggest win — non-expanded countries pay zero cost beyond
+            their header. */}
+        {expanded && (
+          <View style={styles.leaguesWrapper}>
+            {countryGroup.leagues.map(league => (
+              <LeagueSection
+                key={league.leagueId}
+                league={league}
+                renderMatchCard={renderMatchCard}
+                onViewAllLeague={onViewAllLeague}
+              />
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 });
 
 function createAccordionStyles(c: MatchesThemeColors) {
   return StyleSheet.create({
+    countryShell: {
+      marginBottom: 10,
+      borderRadius: 14,
+      shadowColor: '#24104E',
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+    },
     countryContainer: {
-      marginBottom: 8,
       borderRadius: 14,
       overflow: 'hidden',
       backgroundColor: c.cardBg,
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderColor: c.cardBorder,
     },
     countryHeader: {
@@ -286,6 +296,8 @@ function createAccordionStyles(c: MatchesThemeColors) {
       height: 28,
       borderRadius: 8,
       backgroundColor: '#F3EDFF',
+      borderWidth: 1,
+      borderColor: 'rgba(106,43,217,0.22)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -310,8 +322,10 @@ function createAccordionStyles(c: MatchesThemeColors) {
     totalBadge: {
       fontSize: 12,
       fontWeight: '600',
-      color: c.textSecondary,
+      color: c.textPrimary,
       backgroundColor: c.chipBg,
+      borderWidth: 1,
+      borderColor: c.chipBorder,
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: 10,
@@ -325,6 +339,8 @@ function createAccordionStyles(c: MatchesThemeColors) {
       marginTop: 4,
       borderRadius: 10,
       backgroundColor: c.chipBg,
+      borderWidth: 1,
+      borderColor: c.chipBorder,
       overflow: 'hidden',
     },
     leagueHeader: {

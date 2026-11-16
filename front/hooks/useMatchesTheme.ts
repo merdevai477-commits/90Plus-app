@@ -59,14 +59,15 @@ export type MatchesThemeColors = {
 
 export const MATCHES_THEME: { light: MatchesThemeColors; dark: MatchesThemeColors } = {
   light: {
-    pageBg: AUTH_LIGHT.pageBg,
-    cardBg: AUTH_LIGHT.cardBg,
-    cardBorder: AUTH_LIGHT.divider,
+    // Slightly tinted page so white cards lift off the surface.
+    pageBg: '#F4F1FA',
+    cardBg: '#FFFFFF',
+    cardBorder: 'rgba(106,43,217,0.2)',
     elevatedBg: '#FFFFFF',
     // Figma filter chips — pale lavender idle, solid primary when selected.
     chipBg: '#F3EDFF',
-    chipBorder: 'transparent',
-    chipBorderActive: 'transparent',
+    chipBorder: 'rgba(106,43,217,0.28)',
+    chipBorderActive: 'rgba(106,43,217,0.55)',
     textPrimary: AUTH_LIGHT.textPrimary,
     textSecondary: AUTH_LIGHT.textSecondary,
     textMuted: AUTH_LIGHT.textMuted,

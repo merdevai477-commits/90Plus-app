@@ -29,9 +29,9 @@ export const GLASS_NAV_THEME = {
     iconActive: '#FFFFFF',
     iconIdle: '#6A2BD9',
     label: '#FFFFFF',
-    rimTint: 'rgba(106,43,217,0.14)',
-    shadowColor: '#6A2BD9',
-    shadowOpacity: 0.18,
+    rimTint: 'rgba(106,43,217,0.32)',
+    shadowColor: '#24104E',
+    shadowOpacity: 0.22,
     sheen: false,
   },
 } as const;
