@@ -33,6 +33,31 @@ describe('assignGoalClips', () => {
     ]);
   });
 
+  it('attaches clips by minute when the event has no player name', () => {
+    const unnamed = (elapsed: number) => ({
+      type: 'Goal',
+      player: { name: null },
+      time: { elapsed },
+    });
+    const clips = [
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'D Scherhant 41', url: 'https://example.com/41' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'N Schlotterbeck 65', url: 'https://example.com/65' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'F Wirtz 71', url: 'https://example.com/71' },
+      { title: 'UEFA Nations League: Germany vs Netherlands', description: 'B Gruda 77', url: 'https://example.com/77' },
+    ];
+    const assigned = assignGoalClips(
+      [unnamed(41), unnamed(60), unnamed(65), unnamed(71), unnamed(78)],
+      clips,
+    );
+    expect(assigned.map((clip) => clip?.url ?? null)).toEqual([
+      'https://example.com/41',
+      null,
+      'https://example.com/65',
+      'https://example.com/71',
+      'https://example.com/77',
+    ]);
+  });
+
   it('attaches a clip to the scorer named in the title and leaves other events alone', () => {
     const clips = [
       { title: 'Bellingham goal', description: null, url: 'https://example.com/b', thumbnail: 'https://example.com/b.jpg' },

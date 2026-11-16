@@ -75,16 +75,48 @@ export function assignGoalClips(events: GoalEvent[], clips: GoalClipMedia[]): Ar
     assigned[index] = pick.clip;
   }
 
-  const openGoals = goalIndexes.filter((index) => assigned[index] == null);
-  const openClips = usable.filter((_, index) => !used.has(index));
-  const minutesConflict = openGoals.some((eventIndex, offset) => {
-    const clip = openClips[offset];
+  const openClips = usable
+    .map((clip, index) => ({ clip, index, minute: clipMinute(clip) }))
+    .filter((entry) => !used.has(entry.index) && entry.minute != null);
+
+  const assignUniqueMinutes = (tolerance: number) => {
+    const goalsLeft = goalIndexes.filter((index) => assigned[index] == null);
+    const clipsLeft = openClips.filter((entry) => !used.has(entry.index));
+    const pairs: Array<{ goalIndex: number; clipIndex: number }> = [];
+    for (const goalIndex of goalsLeft) {
+      const elapsed = events[goalIndex]?.time?.elapsed;
+      if (elapsed == null) continue;
+      for (const entry of clipsLeft) {
+        if (Math.abs((entry.minute as number) - elapsed) <= tolerance) {
+          pairs.push({ goalIndex, clipIndex: entry.index });
+        }
+      }
+    }
+    for (const goalIndex of goalsLeft) {
+      const forGoal = pairs.filter((pair) => pair.goalIndex === goalIndex);
+      if (forGoal.length !== 1) continue;
+      const clipIndex = forGoal[0].clipIndex;
+      if (used.has(clipIndex)) continue;
+      const claimed = pairs.filter((pair) => pair.clipIndex === clipIndex);
+      if (claimed.length !== 1) continue;
+      used.add(clipIndex);
+      assigned[goalIndex] = usable[clipIndex];
+    }
+  };
+
+  assignUniqueMinutes(0);
+  assignUniqueMinutes(1);
+
+  const stillOpen = goalIndexes.filter((index) => assigned[index] == null);
+  const stillClips = usable.filter((_, index) => !used.has(index));
+  const minutesConflict = stillOpen.some((eventIndex, offset) => {
+    const clip = stillClips[offset];
     if (!clip) return false;
     return !minuteAgrees(clip, events[eventIndex]?.time?.elapsed);
   });
-  if (openGoals.length > 0 && openGoals.length === openClips.length && !minutesConflict) {
-    openGoals.forEach((eventIndex, offset) => {
-      assigned[eventIndex] = openClips[offset];
+  if (stillOpen.length > 0 && stillOpen.length === stillClips.length && !minutesConflict) {
+    stillOpen.forEach((eventIndex, offset) => {
+      assigned[eventIndex] = stillClips[offset];
     });
   }
 
