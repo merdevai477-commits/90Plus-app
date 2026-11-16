@@ -2304,7 +2304,7 @@ const MatchDetailsScreen = () => {
             awayScore={awaySummary}
             enrichment={recentFormAverages}
             labels={{
-              goalsScored: t.matchDetails.goalsScoredAvg || 'Goals scored',
+              goalsScored: t.matchDetails.goalsScoredAvg || 'Goals',
               goalsConceded: t.matchDetails.goalsConcededAvg || 'Goals conceded',
               expectedGoals:
                 t.matchDetails.statTypes?.expectedGoals || 'Expected Goals (xG)',
@@ -2323,6 +2323,9 @@ const MatchDetailsScreen = () => {
               winOrDraw: t.matchDetails.winOrDraw || 'Win or draw',
               cleanSheets: t.teamProfile?.cleanSheets || 'Clean sheets',
               trendsTitle: t.matchDetails.recentTrendsTitle || 'Trends',
+              teamIndicators: t.matchDetails.teamIndicatorsTitle || 'Team indicators',
+              scoring: t.matchDetails.indicatorScoring || 'Scoring',
+              indicatorGoals: t.matchDetails.indicatorGoals || 'Goals',
             }}
           />
         </ScrollView>
