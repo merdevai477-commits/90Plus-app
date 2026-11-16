@@ -96,6 +96,7 @@ function GlassIslandButton({
   onPress,
   disabled,
   lit,
+  solid,
   accessibilityLabel,
   accessibilityState,
   children,
@@ -106,6 +107,7 @@ function GlassIslandButton({
   onPress: () => void;
   disabled?: boolean;
   lit?: boolean;
+  solid?: boolean;
   accessibilityLabel: string;
   accessibilityState?: { selected?: boolean; disabled?: boolean };
   children: React.ReactNode;
@@ -123,7 +125,7 @@ function GlassIslandButton({
       accessibilityState={accessibilityState}
       style={({ pressed }) => pressed && styles.pressed}
     >
-      <GlassIsland lit={lit} style={styles.roundIsland} fill={fill} blurTint={blurTint} rimTint={rimTint}>
+      <GlassIsland lit={lit} solid={solid} style={styles.roundIsland} fill={fill} blurTint={blurTint} rimTint={rimTint}>
         {children}
       </GlassIsland>
     </Pressable>
@@ -198,11 +200,12 @@ export function MatchDetailsTopBar({
         <GlassIslandButton
           onPress={onBack}
           accessibilityLabel={backLabel}
-          fill={islandFill}
+          solid={!isDark}
+          fill={scoreFill}
           blurTint={colors.blurTint}
           rimTint={rimTint}
         >
-          <Ionicons name="chevron-back" size={26} color={iconColor} />
+          <Ionicons name="chevron-back" size={26} color={scoreInk} />
         </GlassIslandButton>
 
         <GlassIsland
