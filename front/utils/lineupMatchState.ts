@@ -68,10 +68,11 @@ export function collectLineupSubstitutions(
   startingXI: Array<{ player: Record<string, unknown> }>,
   substitutes: Array<{ player: Record<string, unknown> }>,
   events: FixtureEvent[],
-  teamId: number,
+  teamId?: number | null,
 ): LineupSubstitution[] {
+  if (!Array.isArray(events) || teamId == null) return [];
   return events
-    .filter((event) => event.type === 'subst' && event.team.id === teamId)
+    .filter((event) => event?.type === 'subst' && event.team?.id === teamId)
     .map((event) => {
       const minute = event.time.elapsed + (event.time.extra ?? 0) * 0.01;
       const outId = event.assist?.id ?? null;

@@ -381,7 +381,7 @@ export function LineupBelowSections({
   coach,
   teamName,
   teamLogo,
-  substitutions,
+  substitutions = [],
   absences,
   rtl,
   language,
