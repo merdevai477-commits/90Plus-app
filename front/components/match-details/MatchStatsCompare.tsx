@@ -13,6 +13,7 @@ import TeamBadge from '../common/TeamBadge';
 import type { TeamStatistics } from '../../services/apiFootball';
 import { getLocalizedStatType } from '../../utils/i18nHelpers';
 import { useTranslation } from '../../src/i18n';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const ICON = {
   possession: require('../../assets/images/match-stats/icon-possession.svg'),
@@ -29,7 +30,7 @@ const ICON = {
 
 const DESIGN_WIDTH = 405;
 
-const C = {
+const C_DARK = {
   card: '#0B0518',
   cardBorder: '#281359',
   primary: '#8B5CF6',
@@ -42,7 +43,49 @@ const C = {
   red: '#B60505',
   muted: '#B0B0B0',
   insight: '#78679F',
+  text: '#FFFFFF',
+  textSoft: '#DFD1FD',
+} as const;
+
+const C_LIGHT = {
+  card: '#FFFFFF',
+  cardBorder: 'rgba(106,43,217,0.2)',
+  primary: '#6A2BD9',
+  secondary: '#8B5CF6',
+  homeRing: '#6A2BD9',
+  homeRingTrack: '#EDE6FA',
+  awayRingTrack: '#F3EDFF',
+  barTrack: '#EDE6FA',
+  yellow: '#D97706',
+  red: '#B60505',
+  muted: '#6B7280',
+  insight: '#6B5B95',
+  text: '#1A102B',
+  textSoft: '#6A2BD9',
+} as const;
+
+type StatsC = {
+  card: string;
+  cardBorder: string;
+  primary: string;
+  secondary: string;
+  homeRing: string;
+  homeRingTrack: string;
+  awayRingTrack: string;
+  barTrack: string;
+  yellow: string;
+  red: string;
+  muted: string;
+  insight: string;
+  text: string;
+  textSoft: string;
 };
+
+function useStatsC(): StatsC {
+  const { isDark } = useMatchDetailsTheme();
+  return isDark ? C_DARK : C_LIGHT;
+}
+
 
 const DIVIDER_V = ['rgba(139,92,246,0)', 'rgba(139,92,246,0.55)', 'rgba(81,54,144,0)'] as const;
 
@@ -140,6 +183,7 @@ function Section({
   s: number;
   children: React.ReactNode;
 }) {
+  const C = useStatsC();
   return (
     <View style={{ gap: 14 * s }}>
       <View
@@ -151,9 +195,9 @@ function Section({
           },
         ]}
       >
-        <Text style={[styles.sectionTitle, { fontSize: 16 * s }]}>
+        <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: C.text }]}>
           {title}
-          {suffix ? <Text style={styles.sectionTitleSuffix}>{` ${suffix}`}</Text> : null}
+          {suffix ? <Text style={[styles.sectionTitleSuffix, { color: C.textSoft }]}>{` ${suffix}`}</Text> : null}
         </Text>
         {iconNode ?? (icon != null ? <Image source={icon} style={styles.sectionIcon} contentFit="contain" /> : null)}
       </View>
@@ -163,13 +207,15 @@ function Section({
 }
 
 function Card({ style, children }: { style?: object; children: React.ReactNode }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  const C = useStatsC();
+  return <View style={[styles.card, { backgroundColor: C.card, borderColor: C.cardBorder }, style]}>{children}</View>;
 }
 
 function TeamName({ name, s, size = 14 }: { name: string; s: number; size?: number }) {
+  const C = useStatsC();
   return (
     <Text
-      style={[styles.teamName, { fontSize: size * s }]}
+      style={[styles.teamName, { fontSize: size * s, color: C.text }]}
       numberOfLines={1}
       adjustsFontSizeToFit
       minimumFontScale={0.8}
@@ -190,6 +236,7 @@ function PercentRing({
   color: string;
   track: string;
 }) {
+  const C = useStatsC();
   const stroke = size * 0.1;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
@@ -217,7 +264,7 @@ function PercentRing({
           />
         ) : null}
       </Svg>
-      <Text style={[styles.ringValue, { fontSize: size / 6 }]}>{`${Math.round(clamped)}%`}</Text>
+      <Text style={[styles.ringValue, { fontSize: size / 6, color: C.text }]}>{`${Math.round(clamped)}%`}</Text>
     </View>
   );
 }
@@ -235,6 +282,7 @@ function RingPair({
   s: number;
   divider?: boolean;
 }) {
+  const C = useStatsC();
   const size = 112 * s;
   return (
     <View style={[styles.pairRow, { gap: (divider ? 28 : 40) * s }]}>
@@ -268,6 +316,7 @@ function BigNumberPair({
   gap?: number;
   decimals?: number;
 }) {
+  const C = useStatsC();
   const col = (value: number | null, name: string, color: string) => (
     <View style={[styles.bigCol, { gap: gap * s }]}>
       <Text
@@ -292,12 +341,13 @@ function BigNumberPair({
 
 /** Shared track: home fills from the left, away from the right. */
 function DualTrack({ pair, s }: { pair: Pair; s: number }) {
+  const C = useStatsC();
   const total = n(pair.home) + n(pair.away);
   const homePct = total > 0 ? (n(pair.home) / total) * 88 : 0;
   const awayPct = total > 0 ? (n(pair.away) / total) * 88 : 0;
   const h = 8 * s;
   return (
-    <View style={[styles.track, { height: h, borderRadius: h / 2 }]}>
+    <View style={[styles.track, { height: h, borderRadius: h / 2, backgroundColor: C.barTrack }]}>
       <View style={{ width: `${homePct}%`, height: h, borderRadius: h / 2, backgroundColor: C.secondary }} />
       <View style={{ width: `${awayPct}%`, height: h, borderRadius: h / 2, backgroundColor: C.primary }} />
     </View>
@@ -317,19 +367,20 @@ function ShotsCard({
   awayName: string;
   s: number;
 }) {
+  const C = useStatsC();
   return (
     <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 22 * s }}>
       <View style={{ gap: 12 * s }}>
         <View style={styles.spaceBetween}>
           <View style={[styles.flex1, styles.alignStart]}>
-            <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(total.home)}</Text>
-            <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
+            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.home)}</Text>
+            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
               {homeName}
             </Text>
           </View>
           <View style={[styles.flex1, styles.alignEnd]}>
-            <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(total.away)}</Text>
-            <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
+            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.away)}</Text>
+            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
               {awayName}
             </Text>
           </View>
@@ -340,11 +391,11 @@ function ShotsCard({
       {rows.map((row) => (
         <View key={row.key} style={{ gap: 10 * s }}>
           <View style={styles.spaceBetween}>
-            <Text style={[styles.rowValue, { fontSize: 17 * s }]}>{fmt(row.pair.home)}</Text>
-            <Text style={[styles.rowLabel, { fontSize: 13 * s }]} numberOfLines={1}>
+            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.home)}</Text>
+            <Text style={[styles.rowLabel, { fontSize: 13 * s, color: C.text }]} numberOfLines={1}>
               {row.label}
             </Text>
-            <Text style={[styles.rowValue, { fontSize: 17 * s }]}>{fmt(row.pair.away)}</Text>
+            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.away)}</Text>
           </View>
           <DualTrack pair={row.pair} s={s} />
         </View>
@@ -365,6 +416,7 @@ function SideBarsCard({
   awayName: string;
   s: number;
 }) {
+  const C = useStatsC();
   const max = Math.max(n(pair.home), n(pair.away));
   const pct = (v: number | null) => (max > 0 ? (n(v) / max) * 100 : 0);
   const h = 8 * s;
@@ -372,15 +424,20 @@ function SideBarsCard({
   const side = (value: number | null, name: string, color: string, align: 'start' | 'end') => (
     <View style={[styles.flex1, { gap: 12 * s }]}>
       <View style={align === 'start' ? styles.alignStart : styles.alignEnd}>
-        <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(value)}</Text>
-        <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
+        <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(value)}</Text>
+        <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
           {name}
         </Text>
       </View>
       <View
         style={[
           styles.track,
-          { height: h, borderRadius: h / 2, justifyContent: align === 'start' ? 'flex-start' : 'flex-end' },
+          {
+            height: h,
+            borderRadius: h / 2,
+            justifyContent: align === 'start' ? 'flex-start' : 'flex-end',
+            backgroundColor: C.barTrack,
+          },
         ]}
       >
         <View style={{ width: `${pct(value)}%`, height: h, borderRadius: h / 2, backgroundColor: color }} />
@@ -412,10 +469,11 @@ function CardsCard({
   awayName: string;
   s: number;
 }) {
+  const C = useStatsC();
   const group = (value: number | null, name: string, color: string) => (
     <View style={[styles.cardGroup, { gap: 6 * s }]}>
       <View style={[styles.cardCountCol, { gap: 4 * s }]}>
-        <Text style={[styles.cardCount, { fontSize: 28 * s }]}>{fmt(value)}</Text>
+        <Text style={[styles.cardCount, { fontSize: 28 * s, color: C.text }]}>{fmt(value)}</Text>
         <TeamName name={name} s={s} size={13} />
       </View>
       <View style={{ width: 14 * s, height: 19 * s, borderRadius: 2, backgroundColor: color, marginTop: 6 * s }} />
@@ -452,6 +510,7 @@ function SummarySide({
   align: 'start' | 'end';
   s: number;
 }) {
+  const C = useStatsC();
   const crest = (
     <TeamBadge name={name} logo={logo} size={30 * s} color="transparent" />
   );
@@ -462,7 +521,13 @@ function SummarySide({
         <Text
           style={[
             styles.summaryName,
-            { fontSize: 14 * s, lineHeight: 18 * s, minHeight: 36 * s, textAlign: align === 'start' ? 'left' : 'right' },
+            {
+              fontSize: 14 * s,
+              lineHeight: 18 * s,
+              minHeight: 36 * s,
+              textAlign: align === 'start' ? 'left' : 'right',
+              color: C.text,
+            },
           ]}
           numberOfLines={2}
         >
@@ -471,11 +536,15 @@ function SummarySide({
         <View style={[styles.summaryMetrics, { gap: 8 * s }]}>
           {metrics.map((m) => (
             <View key={m.key} style={[styles.flex1, styles.summaryMetric]}>
-              <Text style={[styles.summaryValue, { fontSize: 17 * s }]} numberOfLines={1} adjustsFontSizeToFit>
+              <Text
+                style={[styles.summaryValue, { fontSize: 17 * s, color: C.text }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
                 {m.value}
               </Text>
               <Text
-                style={[styles.summaryLabel, { fontSize: (m.small ? 9 : 10) * s }]}
+                style={[styles.summaryLabel, { fontSize: (m.small ? 9 : 10) * s, color: C.muted }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
@@ -506,6 +575,7 @@ export function MatchStatsCompare({
   homeLogo,
   awayLogo,
 }: MatchStatsCompareProps) {
+  const C = useStatsC();
   const { t, language } = useTranslation();
   const md = t.matchDetails;
   const rtl = language === 'ar';
@@ -752,9 +822,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: C.card,
     borderWidth: 1,
-    borderColor: C.cardBorder,
     borderRadius: 16,
   },
   sectionTitleRow: {
@@ -762,11 +830,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: '#fff',
     fontWeight: '600',
   },
   sectionTitleSuffix: {
-    color: '#DFD1FD',
     fontWeight: '500',
   },
   sectionIcon: {
@@ -797,11 +863,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ringValue: {
-    color: '#fff',
     fontWeight: '600',
   },
   teamName: {
-    color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
     alignSelf: 'stretch',
@@ -815,7 +879,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subTitle: {
-    color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -834,22 +897,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   smallValue: {
-    color: C.primary,
     fontWeight: '700',
   },
   smallName: {
-    color: '#fff',
     fontWeight: '600',
   },
   rowValue: {
-    color: '#fff',
     fontWeight: '700',
     minWidth: 24,
     textAlign: 'center',
   },
   rowLabel: {
     flex: 1,
-    color: '#fff',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -857,7 +916,6 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: C.barTrack,
     overflow: 'hidden',
   },
   cardGroup: {
@@ -871,7 +929,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardCount: {
-    color: '#fff',
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -880,7 +937,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   summaryName: {
-    color: '#fff',
     fontWeight: '700',
     alignSelf: 'stretch',
   },
@@ -894,12 +950,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   summaryValue: {
-    color: '#fff',
     fontWeight: '700',
     textAlign: 'center',
   },
   summaryLabel: {
-    color: C.muted,
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -912,7 +966,6 @@ const styles = StyleSheet.create({
   },
   insightText: {
     flex: 1,
-    color: C.insight,
     fontWeight: '500',
   },
   insightIconBox: {

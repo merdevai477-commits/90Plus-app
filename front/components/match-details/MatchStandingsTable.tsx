@@ -5,6 +5,7 @@ import type { Standing } from '../../services/apiFootball';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { standingRowMatchesTeam } from '../../utils/standingsHelpers';
 import type { Language } from '../../src/i18n';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 type TeamRef = { id?: number | null; name?: string | null };
 
@@ -39,6 +40,7 @@ function MatchStandingsTableComponent({
   labels,
   onPressTeam,
 }: MatchStandingsTableProps) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const { width } = useWindowDimensions();
   const compact = width < 400;
   const colW = compact ? 28 : 34;
@@ -51,24 +53,29 @@ function MatchStandingsTableComponent({
     points: compact ? labels.pointsShort : labels.points,
   };
 
+  const headerColor = colors.textMuted;
+  const rowColor = colors.textPrimary;
+  const borderColor = isDark ? '#333' : colors.divider;
+  const rowBorder = isDark ? '#252525' : colors.divider;
+
   return (
     <>
-      <View style={styles.header}>
-        <Text style={[styles.headerText, { width: rankW }]}>{labels.rank}</Text>
-        <Text style={[styles.headerText, styles.teamHeader]}>{labels.team}</Text>
-        <Text style={[styles.headerText, { width: colW }]} numberOfLines={1}>
+      <View style={[styles.header, { borderBottomColor: borderColor }]}>
+        <Text style={[styles.headerText, { width: rankW, color: headerColor }]}>{labels.rank}</Text>
+        <Text style={[styles.headerText, styles.teamHeader, { color: headerColor }]}>{labels.team}</Text>
+        <Text style={[styles.headerText, { width: colW, color: headerColor }]} numberOfLines={1}>
           {header.played}
         </Text>
-        <Text style={[styles.headerText, { width: colW }]} numberOfLines={1}>
+        <Text style={[styles.headerText, { width: colW, color: headerColor }]} numberOfLines={1}>
           {header.goalsFor}
         </Text>
-        <Text style={[styles.headerText, { width: colW }]} numberOfLines={1}>
+        <Text style={[styles.headerText, { width: colW, color: headerColor }]} numberOfLines={1}>
           {header.goalsAgainst}
         </Text>
-        <Text style={[styles.headerText, { width: colW }]} numberOfLines={1}>
+        <Text style={[styles.headerText, { width: colW, color: headerColor }]} numberOfLines={1}>
           {header.goalDiff}
         </Text>
-        <Text style={[styles.headerText, { width: colW }]} numberOfLines={1}>
+        <Text style={[styles.headerText, { width: colW, color: headerColor }]} numberOfLines={1}>
           {header.points}
         </Text>
       </View>
@@ -79,25 +86,25 @@ function MatchStandingsTableComponent({
         return (
           <TouchableOpacity
             key={`${keyPrefix}-${team.team.id ?? index}`}
-            style={[styles.row, isHighlighted && styles.rowHighlighted]}
+            style={[styles.row, { borderBottomColor: rowBorder }, isHighlighted && styles.rowHighlighted]}
             onPress={() => onPressTeam(team)}
             activeOpacity={0.75}
           >
-            <Text style={[styles.text, styles.num, { width: rankW }]}>{team.rank}</Text>
+            <Text style={[styles.text, styles.num, { width: rankW, color: rowColor }]}>{team.rank}</Text>
             <View style={styles.teamCell}>
               <Image
                 source={{ uri: presentTeamLogo(team.team.name, team.team.logo, team.team.id) }}
                 style={styles.logo}
               />
-              <Text style={[styles.text, styles.teamName]} numberOfLines={1}>
+              <Text style={[styles.text, styles.teamName, { color: rowColor }]} numberOfLines={1}>
                 {displayMatchTeamName(team.team.name, language as Language, team.team.id, team.team.logo)}
               </Text>
             </View>
-            <Text style={[styles.text, styles.num, { width: colW }]}>{team.all.played}</Text>
-            <Text style={[styles.text, styles.num, { width: colW }]}>{team.all.goals.for}</Text>
-            <Text style={[styles.text, styles.num, { width: colW }]}>{team.all.goals.against}</Text>
-            <Text style={[styles.text, styles.num, { width: colW }]}>{team.goalsDiff}</Text>
-            <Text style={[styles.text, styles.num, styles.points, { width: colW }]}>{team.points}</Text>
+            <Text style={[styles.text, styles.num, { width: colW, color: rowColor }]}>{team.all.played}</Text>
+            <Text style={[styles.text, styles.num, { width: colW, color: rowColor }]}>{team.all.goals.for}</Text>
+            <Text style={[styles.text, styles.num, { width: colW, color: rowColor }]}>{team.all.goals.against}</Text>
+            <Text style={[styles.text, styles.num, { width: colW, color: rowColor }]}>{team.goalsDiff}</Text>
+            <Text style={[styles.text, styles.num, styles.points, { width: colW, color: rowColor }]}>{team.points}</Text>
           </TouchableOpacity>
         );
       })}
@@ -117,7 +124,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   headerText: {
-    color: '#888',
     fontSize: 11,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -141,7 +147,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   text: {
-    color: '#fff',
     fontSize: 12,
     textAlign: 'center',
   },

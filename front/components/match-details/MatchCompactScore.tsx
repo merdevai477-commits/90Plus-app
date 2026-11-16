@@ -5,6 +5,7 @@ import { Text } from './MatchText';
 import { PulsingDot } from './MatchHeader';
 import { useMatchStatusLine, type MatchStatusLineInput } from './useMatchStatusLine';
 import { LIVE_RED } from '../../constants/tokens';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 type MatchCompactScoreProps = MatchStatusLineInput & {
   homeTeam: string;
@@ -35,28 +36,38 @@ export function MatchCompactScore({
   ...statusInput
 }: MatchCompactScoreProps) {
   const { isLive, isHalftime, isFinished, isNotPlayed, statusLine } = useMatchStatusLine(statusInput);
+  const { colors, isDark } = useMatchDetailsTheme();
   const hasScore = homeScore != null && awayScore != null && !isNotPlayed;
   const tone: Tone = isLive ? 'live' : isHalftime ? 'halftime' : isFinished ? 'finished' : 'upcoming';
+  const pillTone = isDark ? PILL_TONE_DARK : PILL_TONE_LIGHT;
+  const pillTextTone = isDark ? PILL_TEXT_TONE_DARK : PILL_TEXT_TONE_LIGHT;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Text style={[styles.name, styles.nameHome]} numberOfLines={1}>
+        <Text style={[styles.name, styles.nameHome, { color: colors.textSecondary }]} numberOfLines={1}>
           {homeTeam}
         </Text>
         <CompactLogo uri={homeLogo} />
-        <Text style={[styles.score, !hasScore && styles.scoreVs]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.score,
+            { color: colors.textPrimary },
+            !hasScore && { fontSize: 13, color: colors.textSecondary },
+          ]}
+          numberOfLines={1}
+        >
           {hasScore ? `${homeScore} - ${awayScore}` : (statusInput.vsLabel || 'VS')}
         </Text>
         <CompactLogo uri={awayLogo} />
-        <Text style={[styles.name, styles.nameAway]} numberOfLines={1}>
+        <Text style={[styles.name, styles.nameAway, { color: colors.textSecondary }]} numberOfLines={1}>
           {awayTeam}
         </Text>
       </View>
       {statusLine ? (
-        <View style={[styles.pill, PILL_TONE[tone]]}>
+        <View style={[styles.pill, pillTone[tone]]}>
           {isLive ? <PulsingDot color={LIVE_RED} /> : null}
-          <Text style={[styles.pillText, PILL_TEXT_TONE[tone]]} numberOfLines={1}>
+          <Text style={[styles.pillText, pillTextTone[tone]]} numberOfLines={1}>
             {statusLine}
           </Text>
         </View>
@@ -77,12 +88,13 @@ export function MatchCompactProgress({
   statusShort?: string;
   elapsed?: number | null;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const short = statusShort || '';
   let fraction: number | null = null;
   let color = LIVE_RED;
   if (FINISHED_STATUSES.includes(short)) {
     fraction = 1;
-    color = 'rgba(167,139,250,0.55)';
+    color = isDark ? 'rgba(167,139,250,0.55)' : colors.primarySoft;
   } else if (short === 'HT') {
     fraction = 0.5;
     color = '#f59e0b';
@@ -93,24 +105,38 @@ export function MatchCompactProgress({
   if (fraction == null) return null;
 
   return (
-    <View style={styles.progressTrack}>
+    <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.divider }]}>
       <View style={[styles.progressFill, { width: `${fraction * 100}%`, backgroundColor: color }]} />
     </View>
   );
 }
 
-const PILL_TONE = StyleSheet.create({
+const PILL_TONE_DARK = StyleSheet.create({
   live: { backgroundColor: 'rgba(239,68,68,0.16)', borderColor: 'rgba(239,68,68,0.55)' },
   halftime: { backgroundColor: 'rgba(245,158,11,0.16)', borderColor: 'rgba(245,158,11,0.5)' },
   finished: { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: 'rgba(255,255,255,0.14)' },
   upcoming: { backgroundColor: 'rgba(129,10,242,0.2)', borderColor: 'rgba(129,10,242,0.5)' },
 });
 
-const PILL_TEXT_TONE = StyleSheet.create({
+const PILL_TONE_LIGHT = StyleSheet.create({
+  live: { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.4)' },
+  halftime: { backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.4)' },
+  finished: { backgroundColor: 'rgba(106,43,217,0.08)', borderColor: 'rgba(106,43,217,0.22)' },
+  upcoming: { backgroundColor: 'rgba(106,43,217,0.12)', borderColor: 'rgba(106,43,217,0.35)' },
+});
+
+const PILL_TEXT_TONE_DARK = StyleSheet.create({
   live: { color: '#ff6b6b' },
   halftime: { color: '#fbbf24' },
   finished: { color: '#d1d5db' },
   upcoming: { color: '#c79bff' },
+});
+
+const PILL_TEXT_TONE_LIGHT = StyleSheet.create({
+  live: { color: '#DC2626' },
+  halftime: { color: '#D97706' },
+  finished: { color: '#4B5563' },
+  upcoming: { color: '#6A2BD9' },
 });
 
 const styles = StyleSheet.create({
@@ -128,7 +154,6 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    color: 'rgba(255,255,255,0.78)',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -147,17 +172,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(124,58,237,0.25)',
   },
   score: {
-    color: '#fff',
     fontSize: 17,
     lineHeight: 20,
     fontWeight: '800',
     minWidth: 44,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-  },
-  scoreVs: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
   },
   pill: {
     flexDirection: 'row',
@@ -177,7 +197,6 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 2,
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   progressFill: {
     height: 2,

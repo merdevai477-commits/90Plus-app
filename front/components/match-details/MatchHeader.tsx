@@ -13,10 +13,8 @@ import Animated, {
 import { useMatchStatusLine } from './useMatchStatusLine';
 import { isClockBaselineEnabled, noteDetailsHeaderRender } from '../../utils/clockBaseline';
 import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
-import {
-  LIVE_RED,
-  TEXT_PRIMARY,
-} from '../../constants/tokens';
+import { LIVE_RED } from '../../constants/tokens';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 interface MatchHeaderProps {
   homeTeam: string;
@@ -150,6 +148,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   onPressLeague,
 }) => {
   if (isClockBaselineEnabled()) noteDetailsHeaderRender();
+  const { colors, isDark } = useMatchDetailsTheme();
   const {
     short,
     isLive,
@@ -196,13 +195,19 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const awayScorers = scorerList.away;
   const showScorers = homeScorers.length > 0 || awayScorers.length > 0;
 
+  const leaguePillColors = isDark
+    ? (['rgba(95,13,173,0.55)', 'rgba(42,6,75,0.55)'] as const)
+    : ([colors.primaryMuted, 'rgba(106,43,217,0.08)'] as const);
+  const scorerColor = colors.textSecondary;
+
   return (
     <LinearGradient
-      colors={['#0c051a', '#07040d']}
+      colors={colors.heroGradient}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
       style={[
         styles.wrap,
+        { borderBottomColor: isDark ? '#53198a' : colors.divider },
         isStoppage && styles.wrapStoppage,
         compact && { paddingHorizontal: 12 },
       ]}
@@ -216,7 +221,10 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <TeamLogo name={homeTeam} uri={homeLogo} size={logoSize} />
-          <Text style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118 }]} numberOfLines={2}>
+          <Text
+            style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118, color: colors.textPrimary }]}
+            numberOfLines={2}
+          >
             {homeTeam}
           </Text>
         </TouchableOpacity>
@@ -232,12 +240,18 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
               accessibilityLabel={league}
             >
               <LinearGradient
-                colors={['rgba(95,13,173,0.55)', 'rgba(42,6,75,0.55)']}
+                colors={leaguePillColors}
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
-                style={[styles.leaguePill, { maxWidth: leagueMaxWidth }]}
+                style={[
+                  styles.leaguePill,
+                  {
+                    maxWidth: leagueMaxWidth,
+                    borderColor: isDark ? '#370565' : colors.primaryBorder,
+                  },
+                ]}
               >
-                <Text style={styles.leaguePillText} numberOfLines={2}>
+                <Text style={[styles.leaguePillText, { color: colors.primarySoft }]} numberOfLines={2}>
                   {league}
                 </Text>
               </LinearGradient>
@@ -247,7 +261,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           )}
 
           {isNotPlayed ? (
-            <Text style={styles.notPlayedLabel} numberOfLines={2}>
+            <Text style={[styles.notPlayedLabel, { color: colors.textMuted }]} numberOfLines={2}>
               {specialBadgeText}
             </Text>
           ) : (
@@ -256,17 +270,31 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
               <Text
                 style={[
                   styles.scoreNum,
-                  { fontSize: scoreFont, lineHeight: scoreFont + 6, minWidth: Math.round(scoreFont * 0.7) },
+                  {
+                    fontSize: scoreFont,
+                    lineHeight: scoreFont + 6,
+                    minWidth: Math.round(scoreFont * 0.7),
+                    color: colors.textPrimary,
+                  },
                 ]}
                 numberOfLines={1}
               >
                 {homeScore || '0'}
               </Text>
-              <Text style={[styles.scoreDash, { fontSize: Math.round(scoreFont * 0.72) }]}>—</Text>
+              <Text
+                style={[styles.scoreDash, { fontSize: Math.round(scoreFont * 0.72), color: colors.textPrimary }]}
+              >
+                —
+              </Text>
               <Text
                 style={[
                   styles.scoreNum,
-                  { fontSize: scoreFont, lineHeight: scoreFont + 6, minWidth: Math.round(scoreFont * 0.7) },
+                  {
+                    fontSize: scoreFont,
+                    lineHeight: scoreFont + 6,
+                    minWidth: Math.round(scoreFont * 0.7),
+                    color: colors.textPrimary,
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -280,7 +308,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             <Text
               style={[
                 styles.statusLine,
-                isLive && styles.statusLive,
+                { color: colors.textSecondary },
+                isLive && { color: colors.primarySoft },
                 isStoppage && styles.statusStoppage,
               ]}
               numberOfLines={1}
@@ -290,13 +319,13 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           </View>
           {hasPenaltyScore ? (
             <View style={styles.penaltyRow}>
-              <Text style={styles.penaltyLine} numberOfLines={1}>
+              <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
                 {`(${String(penaltyHome)}`}
               </Text>
-              <Text style={styles.penaltyLine} numberOfLines={1}>
+              <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
                 {' - '}
               </Text>
-              <Text style={styles.penaltyLine} numberOfLines={1}>
+              <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
                 {`${String(penaltyAway)} ${
                   statusLabel && short !== 'FT' ? statusLabel : penaltiesShortLabel
                 })`}
@@ -313,7 +342,10 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <TeamLogo name={awayTeam} uri={awayLogo} size={logoSize} />
-          <Text style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118 }]} numberOfLines={2}>
+          <Text
+            style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118, color: colors.textPrimary }]}
+            numberOfLines={2}
+          >
             {awayTeam}
           </Text>
         </TouchableOpacity>
@@ -324,23 +356,23 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           <View style={styles.scorersCol}>
             {homeScorers.map((s, i) => (
               <View key={`h-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
-                <Text style={styles.scorerName} numberOfLines={1}>
+                <Text style={[styles.scorerName, { color: scorerColor }]} numberOfLines={1}>
                   {s.name}
                 </Text>
-                <Ionicons name="football" size={14} color="#c3c3c3" />
-                <Text style={styles.scorerMinute}>{s.minute}</Text>
+                <Ionicons name="football" size={14} color={scorerColor} />
+                <Text style={[styles.scorerMinute, { color: scorerColor }]}>{s.minute}</Text>
               </View>
             ))}
           </View>
-          <View style={styles.scorersDivider} />
+          <View style={[styles.scorersDivider, { backgroundColor: colors.divider }]} />
           <View style={styles.scorersCol}>
             {awayScorers.map((s, i) => (
               <View key={`a-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
-                <Text style={styles.scorerName} numberOfLines={1}>
+                <Text style={[styles.scorerName, { color: scorerColor }]} numberOfLines={1}>
                   {s.name}
                 </Text>
-                <Ionicons name="football" size={14} color="#c3c3c3" />
-                <Text style={styles.scorerMinute}>{s.minute}</Text>
+                <Ionicons name="football" size={14} color={scorerColor} />
+                <Text style={[styles.scorerMinute, { color: scorerColor }]}>{s.minute}</Text>
               </View>
             ))}
           </View>
@@ -365,7 +397,6 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#53198a',
   },
   wrapStoppage: {
     borderBottomColor: 'rgba(239,68,68,0.45)',
@@ -386,7 +417,6 @@ const styles = StyleSheet.create({
   },
   teamAvatarText: { color: '#b363ff', fontSize: 18, fontWeight: '800' },
   teamName: {
-    color: '#fff',
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
@@ -407,13 +437,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 41,
     borderWidth: 1,
-    borderColor: '#370565',
     alignItems: 'center',
     justifyContent: 'center',
   },
   leaguePillSpacer: { height: 28 },
   leaguePillText: {
-    color: '#b363ff',
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
@@ -426,7 +454,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   scoreNum: {
-    color: TEXT_PRIMARY,
     fontSize: 44,
     fontWeight: '600',
     letterSpacing: -0.5,
@@ -436,7 +463,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   scoreDash: {
-    color: TEXT_PRIMARY,
     fontWeight: '600',
     lineHeight: 36,
     textAlign: 'center',
@@ -448,17 +474,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   statusLine: {
-    color: '#b7b7b7',
     fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     writingDirection: 'ltr',
   },
-  statusLive: { color: '#c4b5fd' },
   statusStoppage: { color: LIVE_RED },
   notPlayedLabel: {
-    color: '#94a3b8',
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -472,7 +495,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   penaltyLine: {
-    color: '#b363ff',
     fontSize: 12,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -492,7 +514,6 @@ const styles = StyleSheet.create({
   scorersDivider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   scorerLine: {
     flexDirection: 'row',
@@ -501,12 +522,10 @@ const styles = StyleSheet.create({
   },
   scorerName: {
     flexShrink: 1,
-    color: '#c3c3c3',
     fontSize: 12,
     fontWeight: '600',
   },
   scorerMinute: {
-    color: '#c3c3c3',
     fontSize: 12,
     fontWeight: '600',
   },

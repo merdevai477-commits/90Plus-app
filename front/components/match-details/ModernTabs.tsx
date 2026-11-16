@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Text } from './MatchText';
 import { useAppFont } from '../../utils/fontSetup';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 interface Tab {
   key: string;
@@ -46,6 +47,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   const [containerWidth, setContainerWidth] = useState(0);
   const fontRegular = useAppFont(400);
   const fontBold = useAppFont(700);
+  const { colors, isDark } = useMatchDetailsTheme();
 
   const onTabLayout = useCallback((key: string, e: LayoutChangeEvent) => {
     const { x, width } = e.nativeEvent.layout;
@@ -90,7 +92,22 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   }
 
   return (
-    <View style={floating ? styles.floatingContainer : styles.container}>
+    <View
+      style={[
+        floating ? styles.floatingContainer : styles.container,
+        floating
+          ? {
+              backgroundColor: isDark ? 'rgba(20,9,38,0.96)' : colors.tabBarBg,
+              borderColor: isDark ? 'rgba(129,10,242,0.38)' : colors.primaryBorder,
+              shadowOpacity: isDark ? 0.45 : 0.12,
+              elevation: isDark ? 10 : 4,
+            }
+          : {
+              backgroundColor: colors.tabBarBg,
+              borderBottomColor: isDark ? '#53198a' : colors.divider,
+            },
+      ]}
+    >
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -116,15 +133,18 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
                 style={[
                   styles.tabText,
                   floating && styles.floatingTabText,
-                  { fontFamily: isActive ? fontBold : fontRegular },
-                  isActive && styles.activeTabText,
+                  { fontFamily: isActive ? fontBold : fontRegular, color: colors.tabIdle },
+                  isActive && {
+                    color: colors.tabActive,
+                    textShadowColor: isDark ? 'rgba(95,39,149,0.45)' : 'transparent',
+                  },
                 ]}
                 numberOfLines={1}
               >
                 {tab.label}
               </Text>
               {isActive && !useSlidingIndicator ? (
-                <View style={styles.underline} />
+                <View style={[styles.underline, { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator }]} />
               ) : (
                 <View style={styles.underlineSpacer} />
               )}
@@ -132,7 +152,14 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
           );
         })}
         {indicatorStyle ? (
-          <Animated.View pointerEvents="none" style={[styles.slidingUnderline, indicatorStyle]} />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.slidingUnderline,
+              { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator },
+              indicatorStyle,
+            ]}
+          />
         ) : null}
       </ScrollView>
     </View>
@@ -141,22 +168,16 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0c051a',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#53198a',
     paddingTop: 4,
   },
   floatingContainer: {
-    backgroundColor: 'rgba(20,9,38,0.96)',
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(129,10,242,0.38)',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
     shadowRadius: 12,
-    elevation: 10,
   },
   floatingTab: {
     paddingTop: 10,
@@ -179,23 +200,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   tabText: {
-    color: '#fff',
     fontSize: 17,
     paddingBottom: 10,
-  },
-  activeTabText: {
-    color: '#b57cff',
-    // Weight via Cairo_700Bold / Inter_700Bold — avoid synthetic bold on Arabic.
-    textShadowColor: 'rgba(95,39,149,0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
   underline: {
     width: '88%',
     height: 2,
     borderRadius: 2,
-    backgroundColor: '#810af2',
-    shadowColor: '#810af2',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 8,
@@ -207,8 +218,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: INDICATOR_BASE_WIDTH,
     height: 2,
-    backgroundColor: '#810af2',
-    shadowColor: '#810af2',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 8,

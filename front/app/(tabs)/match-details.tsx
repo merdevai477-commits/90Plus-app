@@ -52,6 +52,7 @@ import { BG_BASE,
   TEXT_PRIMARY,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
+import { MatchDetailsThemeProvider, useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 import { FootballField } from '../../components/match-details/FootballField';
 import { LineupBestPlayers } from '../../components/match-details/LineupBestPlayers';
 import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDrawer';
@@ -218,7 +219,12 @@ function resolveFormResult(
   return 'draw';
 }
 
-function detailsPullControl(refreshing: boolean, onRefresh: () => void, progressViewOffset = 0) {
+function detailsPullControl(
+  refreshing: boolean,
+  onRefresh: () => void,
+  progressViewOffset = 0,
+  progressBackgroundColor = BG_BASE,
+) {
   return (
     <RefreshControl
       refreshing={refreshing}
@@ -226,7 +232,7 @@ function detailsPullControl(refreshing: boolean, onRefresh: () => void, progress
       progressViewOffset={progressViewOffset}
       tintColor={PURPLE_SOFT}
       colors={[PURPLE_PRIMARY]}
-      progressBackgroundColor={BG_BASE}
+      progressBackgroundColor={progressBackgroundColor}
     />
   );
 }
@@ -236,6 +242,7 @@ function PullableTabBody({ children }: { children: React.ReactNode }) {
 }
 
 const MatchDetailsScreen = () => {
+  const { colors: mdColors } = useMatchDetailsTheme();
   useScreenFont();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -2667,21 +2674,21 @@ const MatchDetailsScreen = () => {
 
   if (loading && !snapshot) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" />
+      <View style={[styles.loadingContainer, { backgroundColor: mdColors.pageBg }]}>
+        <StatusBar barStyle={mdColors.statusBar} />
         <View style={{ paddingHorizontal: 20, paddingTop: 100 }}>
           {/* Header skeleton */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1b4b' }} />
-            <View style={{ flex: 1, marginHorizontal: 16, height: 16, borderRadius: 8, backgroundColor: '#1e1b4b' }} />
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1b4b' }} />
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: mdColors.skeleton }} />
+            <View style={{ flex: 1, marginHorizontal: 16, height: 16, borderRadius: 8, backgroundColor: mdColors.skeleton }} />
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: mdColors.skeleton }} />
           </View>
           {/* Score card skeleton */}
-          <View style={{ height: 160, borderRadius: 24, backgroundColor: '#1e1b4b', marginBottom: 16 }} />
+          <View style={{ height: 160, borderRadius: 24, backgroundColor: mdColors.skeleton, marginBottom: 16 }} />
           {/* Tabs skeleton */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
             {[80, 80, 90, 80, 70, 80].map((w, i) => (
-              <View key={i} style={{ width: w, height: 36, borderRadius: 12, backgroundColor: '#1e1b4b' }} />
+              <View key={i} style={{ width: w, height: 36, borderRadius: 12, backgroundColor: mdColors.skeleton }} />
             ))}
           </View>
           {/* Events skeleton */}
@@ -2693,8 +2700,8 @@ const MatchDetailsScreen = () => {
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <StatusBar barStyle="light-content" />
+      <View style={[styles.errorContainer, { backgroundColor: mdColors.pageBg }]}>
+        <StatusBar barStyle={mdColors.statusBar} />
         <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={loadMatchDetails}>
@@ -2706,7 +2713,7 @@ const MatchDetailsScreen = () => {
 
   if (!translationsReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: mdColors.pageBg }}>
         <ActivityIndicator size="large" color="#A855F7" />
       </View>
     );
@@ -2716,8 +2723,8 @@ const MatchDetailsScreen = () => {
   // state instead of an empty header/tabs shell on a dark background.
   if (!fixture && !loading) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
+      <View style={[styles.container, { backgroundColor: mdColors.pageBg }]}>
+        <StatusBar barStyle={mdColors.statusBar} backgroundColor={mdColors.pageBg} />
         <MatchDetailsTopBar
           title={t.matchDetails.navTitle || t.matchDetails.title}
           backLabel={t.matchDetails.backToMatches}
@@ -2728,7 +2735,7 @@ const MatchDetailsScreen = () => {
           notificationsDisabled={isFinishedMatch()}
           notificationsLoading={matchSubLoading}
         />
-        <View style={styles.errorContainer}>
+        <View style={[styles.errorContainer, { backgroundColor: mdColors.pageBg }]}>
           <Ionicons name="football-outline" size={64} color="#333" />
           <Text style={styles.errorText}>{t.matchDetails.matchUnavailable}</Text>
           <Text style={styles.emptyStateSubtext}>{t.matchDetails.matchUnavailableSubtext}</Text>
@@ -2893,7 +2900,7 @@ const MatchDetailsScreen = () => {
           pageMountAppliedRef.current.add(key);
           pageRefs.current[key]?.scrollTo({ y: mountOffset, animated: false });
         }}
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh, headerHeight)}
+        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh, headerHeight, mdColors.pageBg)}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         alwaysBounceVertical
@@ -2970,8 +2977,8 @@ const MatchDetailsScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0c051a" />
+    <View style={[styles.container, { backgroundColor: mdColors.pageBg }]}>
+      <StatusBar barStyle={mdColors.statusBar} backgroundColor={mdColors.pageBg} />
 
       <View style={styles.body}>
         <Animated.ScrollView
@@ -3007,7 +3014,7 @@ const MatchDetailsScreen = () => {
             { paddingTop: topBarHeight, transform: [{ translateY: headerTranslateY }] },
           ]}
         >
-          <View collapsable={false} onLayout={onHeroLayout} style={styles.heroBlock}>
+          <View collapsable={false} onLayout={onHeroLayout} style={[styles.heroBlock, { backgroundColor: mdColors.heroBg }]}>
             {lmtWidget}
             {/* Score header stays mounted across Pitch ↔ Score so the live clock
                 anchor does not reset. LMT WebView mounts only while Pitch is shown. */}
@@ -3965,5 +3972,13 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MatchDetailsScreen;
+function MatchDetailsScreenWithTheme() {
+  return (
+    <MatchDetailsThemeProvider>
+      <MatchDetailsScreen />
+    </MatchDetailsThemeProvider>
+  );
+}
+
+export default MatchDetailsScreenWithTheme;
 

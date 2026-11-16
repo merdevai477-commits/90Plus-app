@@ -9,6 +9,7 @@ import type { FixtureEvent } from '../../services/apiFootball';
 import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import type { Language } from '../../src/i18n/types';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const SWAP_ICON = require('../../assets/images/match-events/swap.svg');
 
@@ -70,6 +71,7 @@ export function MatchEventsTimeline({
   goalForLabel,
   detailsUnavailableLabel,
 }: Props) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const rtl = language === 'ar';
   const rowDirection = rtl ? 'row' : 'row-reverse';
   const textAlign = rtl ? 'right' : 'left';
@@ -77,7 +79,15 @@ export function MatchEventsTimeline({
   const lastIndex = events.length - 1;
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: isDark ? '#0B0518' : colors.cardBg,
+          borderColor: isDark ? '#281359' : colors.cardBorder,
+        },
+      ]}
+    >
       <View style={styles.list}>
         <LinearGradient
           pointerEvents="none"
@@ -118,14 +128,22 @@ export function MatchEventsTimeline({
               >
                 <View style={[styles.textCol, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
                   <Text
-                    style={[styles.title, active && styles.titleActive, { textAlign }]}
+                    style={[
+                      styles.title,
+                      active && styles.titleActive,
+                      { textAlign, color: colors.textPrimary },
+                    ]}
                     numberOfLines={2}
                   >
                     {title}
                   </Text>
                   {!!subtitle && (
                     <Text
-                      style={[styles.subtitle, active && styles.subtitleActive, { textAlign }]}
+                      style={[
+                        styles.subtitle,
+                        active && styles.subtitleActive,
+                        { textAlign, color: colors.textMuted },
+                      ]}
                       numberOfLines={2}
                     >
                       {subtitle}
@@ -145,13 +163,19 @@ export function MatchEventsTimeline({
                 {active ? (
                   <LinearGradient colors={['#8B5CF6', '#513690']} style={styles.dot} />
                 ) : (
-                  <View style={[styles.dot, styles.dotIdle]} />
+                  <View
+                    style={[
+                      styles.dot,
+                      styles.dotIdle,
+                      !isDark && { backgroundColor: colors.primaryMuted },
+                    ]}
+                  />
                 )}
                 <Text
                   style={[
                     styles.minute,
-                    active && styles.minuteActive,
-                    { textAlign: rtl ? 'left' : 'right' },
+                    { textAlign: rtl ? 'left' : 'right', color: colors.textMuted },
+                    active && { color: colors.textPrimary },
                   ]}
                   numberOfLines={1}
                 >
@@ -203,7 +227,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '500',
@@ -213,7 +236,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   subtitle: {
-    color: '#999999',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '500',
@@ -265,11 +287,7 @@ const styles = StyleSheet.create({
   },
   minute: {
     width: MINUTE_W,
-    color: '#818181',
     fontSize: 12,
     fontWeight: '500',
-  },
-  minuteActive: {
-    color: '#FFFFFF',
   },
 });

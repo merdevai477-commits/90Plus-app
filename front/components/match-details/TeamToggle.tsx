@@ -6,12 +6,9 @@ import TeamBadge from '../common/TeamBadge';
 import {
   PURPLE_PRIMARY,
   PURPLE_GLOW,
-  GLASS_CARD,
-  GLASS_BORDER_SIDE,
   RADIUS_MD,
-  TEXT_PRIMARY,
-  TEXT_MUTED,
 } from '../../constants/tokens';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 interface TeamToggleTeam {
   name: string;
@@ -39,13 +36,21 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
   variant = 'cards',
   scale = 1,
 }) => {
+  const { colors, isDark } = useMatchDetailsTheme();
+  const idleLabel = isDark ? colors.textInverse : colors.textPrimary;
+  const activeLabel = colors.textInverse;
+
   if (variant === 'pill') {
     const renderSegment = (side: 'home' | 'away', team: TeamToggleTeam) => {
       const isActive = value === side;
       const content = (
         <View style={[pill.content, { gap: 6 * scale, paddingHorizontal: 8 * scale }]}>
           <Text
-            style={[pill.label, { fontSize: 15 * scale }, isActive && pill.labelActive]}
+            style={[
+              pill.label,
+              { fontSize: 15 * scale, color: isActive ? activeLabel : idleLabel },
+              isActive && pill.labelActive,
+            ]}
             numberOfLines={1}
             maxFontSizeMultiplier={1.1}
           >
@@ -76,7 +81,15 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
     };
 
     return (
-      <View style={pill.container}>
+      <View
+        style={[
+          pill.container,
+          {
+            backgroundColor: isDark ? '#0D0D25' : colors.cardBg,
+            borderColor: isDark ? 'rgba(139,92,246,0.24)' : colors.cardBorder,
+          },
+        ]}
+      >
         {renderSegment('home', home)}
         {renderSegment('away', away)}
       </View>
@@ -87,7 +100,14 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
     const isActive = value === side;
     return (
       <TouchableOpacity
-        style={[styles.button, isActive && styles.buttonActive]}
+        style={[
+          styles.button,
+          {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.cardBg,
+            borderColor: isDark ? 'rgba(255,255,255,0.12)' : colors.cardBorder,
+          },
+          isActive && styles.buttonActive,
+        ]}
         onPress={() => onChange(side)}
         activeOpacity={0.85}
         accessibilityRole="tab"
@@ -96,7 +116,11 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
       >
         <TeamBadge name={team.name} logo={team.logo} size={44} color="transparent" />
         <Text
-          style={[styles.label, isActive && styles.labelActive]}
+          style={[
+            styles.label,
+            { color: colors.textMuted },
+            isActive && { color: colors.textPrimary, fontWeight: '700' },
+          ]}
           numberOfLines={1}
         >
           {team.name}
@@ -127,9 +151,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     borderRadius: RADIUS_MD,
-    backgroundColor: GLASS_CARD,
     borderWidth: 1,
-    borderColor: GLASS_BORDER_SIDE,
   },
   buttonActive: {
     borderColor: PURPLE_PRIMARY,
@@ -141,14 +163,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   label: {
-    color: TEXT_MUTED,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  labelActive: {
-    color: TEXT_PRIMARY,
-    fontWeight: '700',
   },
 });
 
@@ -156,9 +173,7 @@ const pill = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#0D0D25',
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.24)',
     borderRadius: 48,
     overflow: 'hidden',
   },
@@ -181,7 +196,6 @@ const pill = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    color: TEXT_PRIMARY,
     fontWeight: '500',
     textAlign: 'center',
     includeFontPadding: false,

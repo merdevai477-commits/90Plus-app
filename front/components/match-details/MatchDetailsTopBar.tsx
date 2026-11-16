@@ -16,17 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassBubbleFill, GlassRim, GlassSheen } from '../navigation/glass';
 import { useAppFont } from '../../utils/fontSetup';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const ISLAND_HEIGHT = 56;
 const ISLAND_RADIUS = ISLAND_HEIGHT / 2;
 const ISLAND_GAP = 10;
 const BAR_PAD_TOP = 6;
 const BAR_PAD_BOTTOM = 8;
-/** iOS blurs what scrolls behind the islands; Android has no blur, so the tint carries it. */
-const ISLAND_FILL =
-  Platform.OS === 'ios'
-    ? (['rgba(70,36,128,0.62)', 'rgba(26,14,48,0.62)'] as const)
-    : (['rgba(64,32,118,0.96)', 'rgba(24,13,46,0.96)'] as const);
 
 /** Height of the bar below the status bar inset — screens floating content under it pad by this. */
 export const MATCH_TOP_BAR_HEIGHT = BAR_PAD_TOP + ISLAND_HEIGHT + BAR_PAD_BOTTOM;
@@ -61,10 +57,16 @@ function GlassIsland({
   style,
   lit,
   children,
+  fill,
+  blurTint,
+  rimTint,
 }: {
   style?: StyleProp<ViewStyle>;
   lit?: boolean;
   children?: React.ReactNode;
+  fill: readonly [string, string];
+  blurTint: 'light' | 'dark';
+  rimTint: string;
 }) {
   return (
     <View style={[styles.island, style]}>
@@ -73,13 +75,13 @@ function GlassIsland({
       ) : (
         <>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.islandClip]} />
+            <BlurView intensity={40} tint={blurTint} style={[StyleSheet.absoluteFill, styles.islandClip]} />
           ) : null}
           <View style={[StyleSheet.absoluteFill, styles.islandClip]}>
-            <LinearGradient colors={ISLAND_FILL} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={fill} style={StyleSheet.absoluteFill} />
           </View>
           <GlassSheen radius={ISLAND_RADIUS} />
-          <GlassRim radius={ISLAND_RADIUS} tint="rgba(190,160,255,0.38)" />
+          <GlassRim radius={ISLAND_RADIUS} tint={rimTint} />
         </>
       )}
       {children}
@@ -94,6 +96,9 @@ function GlassIslandButton({
   accessibilityLabel,
   accessibilityState,
   children,
+  fill,
+  blurTint,
+  rimTint,
 }: {
   onPress: () => void;
   disabled?: boolean;
@@ -101,6 +106,9 @@ function GlassIslandButton({
   accessibilityLabel: string;
   accessibilityState?: { selected?: boolean; disabled?: boolean };
   children: React.ReactNode;
+  fill: readonly [string, string];
+  blurTint: 'light' | 'dark';
+  rimTint: string;
 }) {
   return (
     <Pressable
@@ -112,7 +120,7 @@ function GlassIslandButton({
       accessibilityState={accessibilityState}
       style={({ pressed }) => pressed && styles.pressed}
     >
-      <GlassIsland lit={lit} style={styles.roundIsland}>
+      <GlassIsland lit={lit} style={styles.roundIsland} fill={fill} blurTint={blurTint} rimTint={rimTint}>
         {children}
       </GlassIsland>
     </Pressable>
@@ -135,6 +143,13 @@ export function MatchDetailsTopBar({
 }: MatchDetailsTopBarProps): React.ReactElement {
   const insets = useSafeAreaInsets();
   const titleFont = useAppFont(800);
+  const { colors, isDark } = useMatchDetailsTheme();
+  const islandFill =
+    Platform.OS === 'ios' ? colors.islandFill : colors.islandFillAndroid;
+  const rimTint = isDark ? 'rgba(190,160,255,0.38)' : 'rgba(106,43,217,0.28)';
+  const fadeColors = isDark
+    ? (['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)'] as const)
+    : ([colors.pageBg, colors.pageBg, 'rgba(244,241,250,0.92)', 'rgba(244,241,250,0)'] as const);
   const titleFade = useRef(new Animated.Value(1)).current;
   const titleShift = useRef(new Animated.Value(0)).current;
   const firstTitle = useRef(true);
@@ -155,7 +170,12 @@ export function MatchDetailsTopBar({
     ? Animated.multiply(titleFade, Animated.subtract(1, collapseProgress))
     : titleFade;
   const bellLit = isSubscribed && !notificationsDisabled;
-  const bellColor = bellLit ? '#fff' : notificationsDisabled ? 'rgba(199,155,255,0.4)' : '#d8c2ff';
+  const bellColor = bellLit
+    ? colors.primary
+    : notificationsDisabled
+      ? colors.textMuted
+      : colors.iconMuted;
+  const iconColor = colors.icon;
 
   return (
     <View
@@ -164,20 +184,41 @@ export function MatchDetailsTopBar({
     >
       <LinearGradient
         pointerEvents="none"
-        colors={['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)']}
+        colors={fadeColors}
         locations={[0, 0.88, 0.96, 1]}
         style={StyleSheet.absoluteFill}
       />
       <View pointerEvents="box-none" style={styles.row}>
-        <GlassIslandButton onPress={onBack} accessibilityLabel={backLabel}>
-          <Ionicons name="chevron-back" size={26} color="#fff" />
+        <GlassIslandButton
+          onPress={onBack}
+          accessibilityLabel={backLabel}
+          fill={islandFill}
+          blurTint={colors.blurTint}
+          rimTint={rimTint}
+        >
+          <Ionicons name="chevron-back" size={26} color={iconColor} />
         </GlassIslandButton>
 
-        <GlassIsland style={styles.titleIsland}>
+        <GlassIsland
+          style={styles.titleIsland}
+          fill={islandFill}
+          blurTint={colors.blurTint}
+          rimTint={rimTint}
+        >
           <Animated.View
             style={[styles.centerLayer, { opacity: titleOpacity, transform: [{ translateY: titleShift }] }]}
           >
-            <Text style={[styles.title, { fontFamily: titleFont }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.title,
+                {
+                  fontFamily: titleFont,
+                  color: colors.textPrimary,
+                  textShadowColor: isDark ? 'rgba(164,123,255,0.35)' : 'transparent',
+                },
+              ]}
+              numberOfLines={1}
+            >
               {title}
             </Text>
           </Animated.View>
@@ -202,9 +243,12 @@ export function MatchDetailsTopBar({
           lit={bellLit}
           accessibilityLabel={notificationsLabel}
           accessibilityState={{ selected: isSubscribed, disabled: notificationsDisabled }}
+          fill={islandFill}
+          blurTint={colors.blurTint}
+          rimTint={rimTint}
         >
           {notificationsLoading ? (
-            <ActivityIndicator size="small" color="#c79bff" />
+            <ActivityIndicator size="small" color={colors.primarySoft} />
           ) : (
             <Ionicons name={isSubscribed ? 'notifications' : 'notifications-outline'} size={24} color={bellColor} />
           )}
@@ -273,12 +317,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   title: {
-    color: '#fff',
     fontSize: 20,
-    // Weight comes from Cairo_800ExtraBold / Inter_800ExtraBold via fontFamily —
-    // synthetic fontWeight blurs Arabic glyphs on Android.
     textAlign: 'center',
-    textShadowColor: 'rgba(164,123,255,0.35)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 4,
   },

@@ -8,6 +8,7 @@ import { View, Animated, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { FOOTBALL_PITCH_ASPECT_VERTICAL } from '../common/FootballPitchSvg';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const { width } = Dimensions.get('window');
 const CARD_W = width - 40;
@@ -26,10 +27,12 @@ const ShimmerBar = ({
   borderRadius?: number;
   style?: any;
   shimmerX: Animated.AnimatedInterpolation<string | number>;
-}) => (
+}) => {
+  const { colors } = useMatchDetailsTheme();
+  return (
   <View
     style={[
-      { width: w as any, height, borderRadius, backgroundColor: '#1e1b4b', overflow: 'hidden' },
+      { width: w as any, height, borderRadius, backgroundColor: colors.skeleton, overflow: 'hidden' },
       style,
     ]}
   >
@@ -58,7 +61,8 @@ const ShimmerBar = ({
       </View>
     </Animated.View>
   </View>
-);
+  );
+};
 
 // ── Skeleton for Events tab ───────────────────────────────────────────────────
 export const EventsSkeleton = ({ shimmerX }: { shimmerX: Animated.AnimatedInterpolation<string | number> }) => (

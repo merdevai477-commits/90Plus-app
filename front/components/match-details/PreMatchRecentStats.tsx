@@ -16,13 +16,13 @@ import {
   type RecentTeamAverages,
   type RecentTrend,
 } from '../../utils/recentTeamFormStats';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const INFO_ICON = require('../../assets/match-details/info-icon.svg');
 
 const PURPLE = '#8B5CF6';
 const PURPLE_SECONDARY = '#A855F7';
 const PILL_IDLE = '#1C1C1C';
-const PILL_BORDER = '#2B2B2B';
 const CARD_BG = '#110C2A';
 const LABEL = '#BFBFBF';
 const TITLE = '#D7D7D7';
@@ -40,6 +40,7 @@ function ValuePill({
   side: 'home' | 'away';
   wide?: boolean;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   return (
     <View
       style={[
@@ -49,10 +50,22 @@ function ValuePill({
           ? side === 'home'
             ? styles.pillHomeOn
             : styles.pillAwayOn
-          : styles.pillIdle,
+          : [
+              styles.pillIdle,
+              !isDark && {
+                backgroundColor: colors.primaryMuted,
+                borderColor: colors.primaryBorder,
+              },
+            ],
       ]}
     >
-      <Text style={styles.pillText} numberOfLines={1}>
+      <Text
+        style={[
+          styles.pillText,
+          !highlight && !isDark && { color: colors.textPrimary },
+        ]}
+        numberOfLines={1}
+      >
         {value}
       </Text>
     </View>
@@ -74,12 +87,16 @@ function CompareRow({
   awayNum: number | null;
   mode: 'higher' | 'lower' | 'none';
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const highlight = mode === 'none' ? null : pickHighlightSide(homeNum, awayNum, mode);
   // Figma LTR: home left, away right (matches scoreboard crest order).
   return (
     <View style={styles.row}>
       <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" />
-      <Text style={styles.rowLabel} numberOfLines={2}>
+      <Text
+        style={[styles.rowLabel, { color: isDark ? LABEL : colors.textSecondary }]}
+        numberOfLines={2}
+      >
         {label}
       </Text>
       <ValuePill value={awayValue} highlight={highlight === 'away'} side="away" />
@@ -156,6 +173,7 @@ function TrendCrestRow({
   homeLogo?: string | null;
   awayLogo?: string | null;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const highlight = pickHighlightSide(homePct, awayPct, 'higher');
   return (
     <View style={styles.trendRow}>
@@ -164,7 +182,10 @@ function TrendCrestRow({
         <ValuePill value={homeValue} highlight={highlight === 'home'} side="home" wide />
         <TrendRing pct={homePct} logo={homeLogo} side="home" />
       </View>
-      <Text style={styles.trendLabel} numberOfLines={2}>
+      <Text
+        style={[styles.trendLabel, { color: isDark ? LABEL : colors.textSecondary }]}
+        numberOfLines={2}
+      >
         {label}
       </Text>
       {/* Away (right): crest ring then pill */}
@@ -229,6 +250,10 @@ export function PreMatchRecentStats({
   void _columnLabel;
   void _homeName;
   void _awayName;
+  const { colors, isDark } = useMatchDetailsTheme();
+  const cardBg = isDark ? CARD_BG : colors.cardBg;
+  const titleColor = isDark ? TITLE : colors.textPrimary;
+  const bannerHintColor = isDark ? 'rgba(204,204,204,1)' : 'rgba(255,255,255,0.85)';
 
   const homeAvg: RecentFormAveragesNumbers = {
     goalsFor: enrichment?.home.averages.goalsFor ?? homeScore.avgGoalsFor,
@@ -304,14 +329,23 @@ export function PreMatchRecentStats({
       <View style={styles.banner}>
         <View style={styles.bannerTextCol}>
           <Text style={styles.bannerTitle}>{bannerTitle}</Text>
-          <Text style={styles.bannerHint}>{bannerHint}</Text>
+          <Text style={[styles.bannerHint, { color: bannerHintColor }]}>{bannerHint}</Text>
         </View>
         <Image source={INFO_ICON} style={styles.infoIcon} contentFit="contain" />
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: titleColor }]}>{title}</Text>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: cardBg,
+              borderWidth: isDark ? 0 : 1,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
           {avgRow('goalsFor', labels.goalsScored, 'higher')}
           {avgRow('goalsAgainst', labels.goalsConceded, 'lower')}
           {showXg ? avgRow('xg', labels.expectedGoals, 'higher') : null}
@@ -366,8 +400,17 @@ export function PreMatchRecentStats({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{labels.trendsTitle}</Text>
-        <View style={styles.trendsCard}>
+        <Text style={[styles.sectionTitle, { color: titleColor }]}>{labels.trendsTitle}</Text>
+        <View
+          style={[
+            styles.trendsCard,
+            {
+              backgroundColor: cardBg,
+              borderWidth: isDark ? 0 : 1,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
           <TrendCrestRow
             label={labels.won}
             homeValue={formatTrendValue(homeWins)}
