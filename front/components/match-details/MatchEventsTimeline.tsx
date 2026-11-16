@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -9,7 +8,6 @@ import type { FixtureEvent } from '../../services/apiFootball';
 import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
-import { HighlightVideoSheet } from './HighlightVideoSheet';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
@@ -36,6 +34,7 @@ type Props = {
   goalClips?: GoalClipMedia[];
   goalClipScorerLabel?: string;
   goalClipPlayLabel?: string;
+  onPlayClip?: (url: string) => void;
 };
 
 function formatMinute(event: FixtureEvent): string {
@@ -80,9 +79,9 @@ export function MatchEventsTimeline({
   goalClips = [],
   goalClipScorerLabel = 'سجل الهدف: {player}',
   goalClipPlayLabel = 'Play {player} goal',
+  onPlayClip,
 }: Props) {
   const { colors, isDark } = useMatchDetailsTheme();
-  const [videoUrl, setVideoUrl] = React.useState<string | null>(null);
   const rtl = language === 'ar';
   const rowDirection = rtl ? 'row' : 'row-reverse';
   const textAlign = rtl ? 'right' : 'left';
@@ -184,7 +183,7 @@ export function MatchEventsTimeline({
                     accessibilityRole="button"
                     accessibilityLabel={goalClipPlayLabel.replace('{player}', scorerName || event.team.name)}
                     onPress={() => {
-                      if (playUrl) setVideoUrl(playUrl);
+                      if (playUrl) onPlayClip?.(playUrl);
                     }}
                     style={styles.clipMedia}
                   >
@@ -244,14 +243,6 @@ export function MatchEventsTimeline({
           );
         })}
       </View>
-      {videoUrl ? (
-        <HighlightVideoSheet
-          visible
-          url={videoUrl}
-          onClose={() => setVideoUrl(null)}
-          closeLabel={goalClipPlayLabel}
-        />
-      ) : null}
     </View>
   );
 }

@@ -70,6 +70,7 @@ import { MatchEventsTimeline } from '../../components/match-details/MatchEventsT
 import type { GoalClipMedia } from '../../utils/assignGoalClips';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchSummaryVideo } from '../../components/match-details/MatchSummaryVideo';
+import { HighlightVideoSheet } from '../../components/match-details/HighlightVideoSheet';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
@@ -298,6 +299,7 @@ const MatchDetailsScreen = () => {
   const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
   const [goalClips, setGoalClips] = useState<GoalClipMedia[]>([]);
   const [matchSummary, setMatchSummary] = useState<GoalClipMedia | null>(null);
+  const [highlightVideoUrl, setHighlightVideoUrl] = useState<string | null>(null);
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
@@ -2083,6 +2085,7 @@ const MatchDetailsScreen = () => {
             thumbnail={matchSummary.thumbnail}
             url={matchSummary.url || matchSummary.embedUrl}
             playLabel={t.matchDetails.matchSummaryPlay || 'تشغيل ملخص المباراة'}
+            onPlay={setHighlightVideoUrl}
           />
         ) : (
           <MatchMomentumGraph
@@ -2129,9 +2132,16 @@ const MatchDetailsScreen = () => {
               goalClips={goalClips}
               goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
               goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
+              onPlayClip={setHighlightVideoUrl}
             />
           )}
         </View>
+        <HighlightVideoSheet
+          visible={highlightVideoUrl != null}
+          url={highlightVideoUrl ?? ''}
+          onClose={() => setHighlightVideoUrl(null)}
+          closeLabel={language === 'ar' ? 'إغلاق' : 'Close'}
+        />
       </ScrollView>
     );
   };
