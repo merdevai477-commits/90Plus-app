@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -38,7 +37,21 @@ import {
 import { logger } from '../services/logger';
 import { releaseLoginInterstitialAfterOnboarding } from '../services/loginInterstitialAd';
 
-const LOGO = require('../assets/images/splash/splash-logo-v3.png');
+/** Figma Team Selection light (1594:4455 / 1594:5015). */
+const BG = '#FCFCFC';
+const INK = '#24104E';
+const MUTED = '#6B7280';
+const SUBTLE = '#9CA3AF';
+const PRIMARY = '#6A2BD9';
+const DARK = '#4B1FA3';
+const PROGRESS_IDLE = '#E9D5FF';
+const HINT_BG = '#EFE7FD';
+const SEARCH_BORDER = '#E5E7EB';
+const FOOTER_BORDER = '#F3EDFF';
+const BTN_DISABLED_BG = '#DFD5F0';
+const BTN_DISABLED_TEXT = '#74648D';
+
+const APP_ICON = require('../assets/images/splash/onboarding-app-icon.png');
 const SEARCH_DEBOUNCE_MS = 150;
 
 function useDebouncedValue(value: string, delay: number): string {
@@ -50,28 +63,72 @@ function useDebouncedValue(value: string, delay: number): string {
   return debounced;
 }
 
+function progressLabel(
+  count: number,
+  copy: {
+    progressZero: string;
+    progressOne: string;
+    progressTwo: string;
+    progressThree: string;
+  },
+): string {
+  if (count <= 0) return copy.progressZero;
+  if (count === 1) return copy.progressOne;
+  if (count === 2) return copy.progressTwo;
+  return copy.progressThree;
+}
+
+function hintLabel(
+  count: number,
+  copy: {
+    hintNeedThree: string;
+    hintNeedTwo: string;
+    hintNeedOne: string;
+    hintReady: string;
+  },
+): string {
+  if (count <= 0) return copy.hintNeedThree;
+  if (count === 1) return copy.hintNeedTwo;
+  if (count === 2) return copy.hintNeedOne;
+  return copy.hintReady;
+}
+
 function ClubRow({
   title,
+  showViewAll,
+  viewAllLabel,
   clubs,
   selectedIds,
   language,
+  isRTL,
   onToggle,
 }: {
   title: string;
+  showViewAll?: boolean;
+  viewAllLabel?: string;
   clubs: OnboardingClubPick[];
   selectedIds: Set<number>;
   language: 'ar' | 'en';
+  isRTL: boolean;
   onToggle: (club: OnboardingClubPick) => void;
 }) {
   if (clubs.length === 0) return null;
   return (
     <View style={styles.section}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <View style={styles.sectionAccent} />
+      <View style={[styles.sectionHeader, isRTL && styles.sectionHeaderRtl]}>
+        <View style={[styles.sectionTitleGroup, isRTL && styles.sectionTitleGroupRtl]}>
+          {isRTL ? null : <View style={styles.sectionAccent} />}
+          <Text style={[styles.sectionTitle, isRTL && styles.textRtl]}>{title}</Text>
+          {isRTL ? <View style={styles.sectionAccent} /> : null}
+        </View>
+        {showViewAll && viewAllLabel ? (
+          <Text style={styles.viewAll}>{viewAllLabel}</Text>
+        ) : (
+          <View />
+        )}
       </View>
-      <View style={styles.row}>
-        {clubs.map((club) => (
+      <View style={[styles.row, isRTL && styles.rowRtl]}>
+        {clubs.slice(0, 4).map((club) => (
           <View key={club.competitorId} style={styles.cardSlot}>
             <OnboardingClubCard
               club={club}
@@ -106,6 +163,10 @@ export default function OnboardingScreen() {
     () => new Set(selected.map((row) => row.competitorId)),
     [selected],
   );
+
+  const count = selected.length;
+  const progressText = progressLabel(count, copy);
+  const hintText = hintLabel(count, copy);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
@@ -219,41 +280,57 @@ export default function OnboardingScreen() {
   const nextEnabled = canSubmitOnboardingPicks(selected.length) && !submitting;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
-      <StatusBar style="light" />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <View style={styles.topBar}>
+          <View style={styles.topBarSpacer} />
+          <Image source={APP_ICON} style={styles.appIcon} contentFit="contain" />
+        </View>
+
         <View style={styles.header}>
-          <Image source={LOGO} style={styles.logo} contentFit="contain" />
-          <Text style={styles.title}>{copy.worldTitle}</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, isRTL && styles.textRtl]}>{copy.worldTitle}</Text>
+          <Text style={[styles.subtitle, isRTL && styles.textRtl]}>
             {copy.worldSubtitleBefore}
-            <Text style={styles.subtitleAccent}>{copy.worldSubtitleHighlight}</Text>
+            {copy.worldSubtitleHighlight}
             {copy.worldSubtitleAfter}
           </Text>
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>
-              {selected.length} / {MAX_ONBOARDING_TEAMS}
-            </Text>
+        </View>
+
+        <View style={styles.progressBlock}>
+          <Text style={[styles.progressLabel, isRTL && styles.textRtl]}>{progressText}</Text>
+          <View style={styles.progressTrack}>
+            {[0, 1, 2].map((index) => {
+              // Fill from the right (Figma RTL): rightmost = first selection.
+              const filledFromRight = MAX_ONBOARDING_TEAMS - 1 - index;
+              const filled = count > filledFromRight;
+              return (
+                <View
+                  key={index}
+                  style={[styles.progressSeg, filled ? styles.progressSegOn : styles.progressSegOff]}
+                />
+              );
+            })}
           </View>
         </View>
 
         <View style={[styles.searchWrap, focused && styles.searchWrapFocused]}>
-          <Search size={18} color={focused ? '#fff' : '#616161'} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={copy.searchPlaceholder}
-            placeholderTextColor="#616161"
+            placeholderTextColor={SUBTLE}
             style={[styles.searchInput, { textAlign: isRTL ? 'right' : 'left' }]}
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
           />
+          <Search size={20} color={focused ? PRIMARY : SUBTLE} />
         </View>
 
         {searching ? (
@@ -263,7 +340,7 @@ export default function OnboardingScreen() {
             contentContainerStyle={styles.searchList}
           >
             {searchQuery.isFetching && searchHits.length === 0 ? (
-              <ActivityIndicator color="#8B5CF6" style={{ marginTop: 24 }} />
+              <ActivityIndicator color={PRIMARY} style={{ marginTop: 24 }} />
             ) : searchHits.length === 0 ? (
               <Text style={styles.emptySearch}>{copy.searchEmpty}</Text>
             ) : (
@@ -316,14 +393,17 @@ export default function OnboardingScreen() {
             contentContainerStyle={styles.grids}
           >
             {clubsQuery.isLoading ? (
-              <ActivityIndicator color="#8B5CF6" style={{ marginTop: 32 }} />
+              <ActivityIndicator color={PRIMARY} style={{ marginTop: 32 }} />
             ) : (
               <>
                 <ClubRow
                   title={copy.famousTeams}
+                  showViewAll
+                  viewAllLabel={copy.viewAll}
                   clubs={clubsQuery.data?.global ?? []}
                   selectedIds={selectedIds}
                   language={language}
+                  isRTL={isRTL}
                   onToggle={toggle}
                 />
                 <ClubRow
@@ -331,6 +411,7 @@ export default function OnboardingScreen() {
                   clubs={clubsQuery.data?.local ?? []}
                   selectedIds={selectedIds}
                   language={language}
+                  isRTL={isRTL}
                   onToggle={toggle}
                 />
               </>
@@ -338,27 +419,33 @@ export default function OnboardingScreen() {
           </ScrollView>
         )}
 
-        <View style={styles.footer}>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
+          <View style={[styles.hintBanner, isRTL && styles.hintBannerRtl]}>
+            <Text style={[styles.hintText, isRTL && styles.textRtl]}>{hintText}</Text>
+            <View style={styles.hintDot} />
+          </View>
+
           <Pressable
             disabled={!nextEnabled}
             onPress={() => finish(false)}
-            style={styles.nextPress}
+            style={[styles.nextBtn, nextEnabled ? styles.nextBtnOn : styles.nextBtnOff]}
           >
-            <LinearGradient
-              colors={nextEnabled ? ['#8B5CF6', '#462f7a'] : ['#2A2433', '#1a1622']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.nextBtn}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={[styles.nextText, !nextEnabled && styles.nextTextOff]}>
-                  {copy.next}
-                </Text>
-              )}
-            </LinearGradient>
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={[styles.nextText, !nextEnabled && styles.nextTextOff]}>
+                {copy.next}
+              </Text>
+            )}
           </Pressable>
+
           <Pressable disabled={submitting} onPress={() => finish(true)} hitSlop={8}>
             <Text style={styles.skip}>{copy.skip}</Text>
           </Pressable>
@@ -371,107 +458,142 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#030303',
-    paddingHorizontal: 22,
+    backgroundColor: BG,
+    paddingHorizontal: 20,
   },
   flex: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  logo: {
-    width: 46,
-    height: 45,
-    alignSelf: 'flex-end',
-    marginBottom: 8,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  subtitle: {
-    marginTop: 8,
-    color: '#AEAEAE',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  subtitleAccent: {
-    color: '#8B5CF6',
-    fontWeight: '600',
-  },
-  pill: {
-    marginTop: 16,
-    minWidth: 69,
-    height: 23,
-    paddingHorizontal: 10,
-    borderRadius: 48,
-    backgroundColor: '#160c2c',
-    borderWidth: 0.5,
-    borderColor: '#38216a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  searchWrap: {
-    height: 57,
-    borderRadius: 16,
-    backgroundColor: '#0a080e',
-    borderWidth: 0.5,
-    borderColor: '#211c27',
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
-  },
-  searchWrapFocused: {
-    borderColor: '#8B5CF6',
-  },
-  searchInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
-    paddingVertical: 0,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitleRow: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  topBarSpacer: { flex: 1 },
+  appIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 11,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  title: {
+    color: INK,
+    fontSize: 26,
+    fontWeight: '700',
+    lineHeight: 39,
+  },
+  subtitle: {
+    marginTop: 2,
+    color: MUTED,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '400',
+  },
+  textRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  progressBlock: {
+    marginBottom: 16,
+    gap: 2,
+  },
+  progressLabel: {
+    color: DARK,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  progressTrack: {
+    flexDirection: 'row',
+    gap: 4,
+    width: '100%',
+  },
+  progressSeg: {
+    flex: 1,
+    height: 5,
+    borderRadius: 3,
+  },
+  progressSegOn: {
+    backgroundColor: PRIMARY,
+  },
+  progressSegOff: {
+    backgroundColor: PROGRESS_IDLE,
+  },
+  searchWrap: {
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: SEARCH_BORDER,
+    paddingHorizontal: 24,
+    paddingVertical: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  searchWrapFocused: {
+    borderColor: PRIMARY,
+  },
+  searchInput: {
+    flex: 1,
+    color: INK,
+    fontSize: 13,
+    fontWeight: '400',
+    paddingVertical: 0,
+  },
+  section: {
+    marginBottom: 18,
+    gap: 10,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionHeaderRtl: {
+    flexDirection: 'row-reverse',
+  },
+  sectionTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  sectionTitleGroupRtl: {
+    flexDirection: 'row',
   },
   sectionAccent: {
-    width: 2,
-    height: 16,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 1,
+    width: 4,
+    height: 17,
+    backgroundColor: PRIMARY,
+    borderRadius: 2,
   },
   sectionTitle: {
-    color: '#fff',
-    fontSize: 18,
+    color: INK,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  viewAll: {
+    color: PRIMARY,
+    fontSize: 12,
     fontWeight: '600',
-    textAlign: 'right',
+    lineHeight: 18,
   },
   row: {
     flexDirection: 'row',
-    gap: 6,
-    height: 95,
+    gap: 8,
+    minHeight: 122,
+  },
+  rowRtl: {
+    flexDirection: 'row-reverse',
   },
   cardSlot: {
     flex: 1,
     minWidth: 0,
-    height: 95,
+    height: 122,
   },
   grids: {
     paddingBottom: 12,
@@ -486,29 +608,33 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 10,
     paddingHorizontal: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E0F5',
   },
   searchMeta: {
     flex: 1,
     minWidth: 0,
   },
   searchName: {
-    color: '#fff',
+    color: INK,
     fontSize: 15,
     fontWeight: '600',
   },
   searchSub: {
-    color: 'rgba(255,255,255,0.45)',
+    color: MUTED,
     fontSize: 12,
     marginTop: 2,
   },
   followBtn: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: PRIMARY,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   followBtnOn: {
-    backgroundColor: '#3b2a66',
+    backgroundColor: DARK,
   },
   followBtnText: {
     color: '#fff',
@@ -516,36 +642,71 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   emptySearch: {
-    color: 'rgba(255,255,255,0.45)',
+    color: MUTED,
     textAlign: 'center',
     marginTop: 32,
     fontSize: 15,
   },
   footer: {
-    gap: 12,
-    paddingTop: 8,
+    gap: 11,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: FOOTER_BORDER,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
   },
-  nextPress: {
-    width: '100%',
+  hintBanner: {
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: HINT_BG,
+    paddingHorizontal: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hintBannerRtl: {
+    flexDirection: 'row-reverse',
+  },
+  hintText: {
+    flex: 1,
+    color: DARK,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  hintDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: PRIMARY,
   },
   nextBtn: {
-    height: 56,
+    height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  nextBtnOn: {
+    backgroundColor: PRIMARY,
+  },
+  nextBtnOff: {
+    backgroundColor: BTN_DISABLED_BG,
+  },
   nextText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
   nextTextOff: {
-    color: 'rgba(255,255,255,0.35)',
+    color: BTN_DISABLED_TEXT,
   },
   skip: {
-    color: '#851818',
-    fontSize: 16,
-    fontWeight: '500',
+    color: MUTED,
+    fontSize: 13,
+    fontWeight: '600',
     textAlign: 'center',
+    lineHeight: 20,
+    paddingVertical: 4,
   },
 });
