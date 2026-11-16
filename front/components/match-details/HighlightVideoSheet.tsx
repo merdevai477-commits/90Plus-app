@@ -1,14 +1,8 @@
-import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import React from 'react';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { isDirectHighlightFile, resolveHighlightPlaybackUrl } from '../../utils/highlightPlaybackUrl';
 
 type Props = {
   visible: boolean;
@@ -17,107 +11,95 @@ type Props = {
   closeLabel?: string;
 };
 
-/** In-app web sheet. The video page stays inside the app instead of the system browser. */
+/** Plays the clip file itself. The host page's share buttons and recommendations stay out. */
 export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close' }: Props) {
-  const { height } = useWindowDimensions();
-  const [loading, setLoading] = useState(true);
+  const playbackUrl = resolveHighlightPlaybackUrl(url);
+  const canPlayFile = isDirectHighlightFile(playbackUrl);
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && Boolean(url)}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
     >
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
-        <View style={[styles.sheet, { height: Math.round(height * 0.78) }]}>
-          <View style={styles.handleRow}>
-            <View style={styles.handle} />
-            <Pressable
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel={closeLabel}
-              hitSlop={12}
-              style={styles.close}
-            >
-              <Ionicons name="close" size={22} color="#24104E" />
-            </Pressable>
-          </View>
-          <View style={styles.web}>
-            {visible && url ? (
-              <WebView
-                source={{ uri: url }}
-                style={styles.webView}
-                setSupportMultipleWindows={false}
-                allowsInlineMediaPlayback
-                mediaPlaybackRequiresUserAction={false}
-                allowsFullscreenVideo
-                onLoadStart={() => setLoading(true)}
-                onLoadEnd={() => setLoading(false)}
-              />
-            ) : null}
-            {loading ? (
-              <View style={styles.loader} pointerEvents="none">
-                <ActivityIndicator color="#6A2BD9" size="large" />
-              </View>
-            ) : null}
-          </View>
-        </View>
+        {visible && canPlayFile ? (
+          <DirectClipPlayer url={playbackUrl} onClose={onClose} closeLabel={closeLabel} />
+        ) : null}
       </View>
     </Modal>
+  );
+}
+
+function DirectClipPlayer({
+  url,
+  onClose,
+  closeLabel,
+}: {
+  url: string;
+  onClose: () => void;
+  closeLabel: string;
+}) {
+  const player = useVideoPlayer(url, (instance) => {
+    instance.loop = false;
+    instance.play();
+  });
+
+  return (
+    <View style={styles.player}>
+      <VideoView
+        player={player}
+        style={styles.video}
+        nativeControls
+        contentFit="contain"
+        allowsFullscreen
+      />
+      <Pressable
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={closeLabel}
+        hitSlop={12}
+        style={styles.close}
+      >
+        <Ionicons name="close" size={22} color="#FFFFFF" />
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(12, 6, 28, 0.55)',
   },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  player: {
+    marginHorizontal: 12,
+    aspectRatio: 16 / 9,
+    borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: '#000000',
   },
-  handleRow: {
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D8CDEE',
+  video: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000000',
   },
   close: {
     position: 'absolute',
-    right: 16,
     top: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F4EBFF',
-  },
-  web: {
-    flex: 1,
-    backgroundColor: '#0C061C',
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: '#0C061C',
-  },
-  loader: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
 });
