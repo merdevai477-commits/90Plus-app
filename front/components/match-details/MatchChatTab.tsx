@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import {
   isLiveStoppage,
   resolveLiveMinuteLabel,
@@ -41,6 +41,8 @@ import {
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const CHAT_EMPTY_ILLUSTRATION = require('../../assets/images/match-chat/empty-bubbles.svg');
+/** Figma `1874:4322` — solid #6A2BD9 circle + white paper plane. */
+const CHAT_SEND_ICON = require('../../assets/images/match-chat/send-filled.svg');
 
 export type MatchChatScorer = { name: string; minute: string };
 
@@ -164,33 +166,27 @@ function FireIcon({ size = 12 }: { size?: number }) {
 }
 
 function FaceSmileIcon({ size = 24 }: { size?: number }) {
+  const { isDark } = useMatchDetailsTheme();
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         fillRule="evenodd"
         clipRule="evenodd"
         d="M4.5 12C4.5 10.0109 5.29018 8.10322 6.6967 6.6967C8.10322 5.29018 10.0109 4.5 12 4.5C13.9891 4.5 15.8968 5.29018 17.3033 6.6967C18.7098 8.10322 19.5 10.0109 19.5 12C19.5 13.9891 18.7098 15.8968 17.3033 17.3033C15.8968 18.7098 13.9891 19.5 12 19.5C10.0109 19.5 8.10322 18.7098 6.6967 17.3033C5.29018 15.8968 4.5 13.9891 4.5 12ZM12 3C10.8181 3 9.64778 3.23279 8.55585 3.68508C7.46392 4.13738 6.47177 4.80031 5.63604 5.63604C4.80031 6.47177 4.13738 7.46392 3.68508 8.55585C3.23279 9.64778 3 10.8181 3 12C3 13.1819 3.23279 14.3522 3.68508 15.4442C4.13738 16.5361 4.80031 17.5282 5.63604 18.364C6.47177 19.1997 7.46392 19.8626 8.55585 20.3149C9.64778 20.7672 10.8181 21 12 21C14.3869 21 16.6761 20.0518 18.364 18.364C20.0518 16.6761 21 14.3869 21 12C21 9.61305 20.0518 7.32387 18.364 5.63604C16.6761 3.94821 14.3869 3 12 3ZM9.25 10.5C9.58152 10.5 9.89946 10.3683 10.1339 10.1339C10.3683 9.89946 10.5 9.58152 10.5 9.25C10.5 8.91848 10.3683 8.60054 10.1339 8.36612C9.89946 8.1317 9.58152 8 9.25 8C8.91848 8 8.60054 8.1317 8.36612 8.36612C8.1317 8.60054 8 8.91848 8 9.25C8 9.58152 8.1317 9.89946 8.36612 10.1339C8.60054 10.3683 8.91848 10.5 9.25 10.5ZM16 9.25C16 9.58152 15.8683 9.89946 15.6339 10.1339C15.3995 10.3683 15.0815 10.5 14.75 10.5C14.4185 10.5 14.1005 10.3683 13.8661 10.1339C13.6317 9.89946 13.5 9.58152 13.5 9.25C13.5 8.91848 13.6317 8.60054 13.8661 8.36612C14.1005 8.1317 14.4185 8 14.75 8C15.0815 8 15.3995 8.1317 15.6339 8.36612C15.8683 8.60054 16 8.91848 16 9.25ZM8.7 13.726L8.696 13.718C8.61829 13.5386 8.47357 13.3966 8.29269 13.3223C8.11181 13.248 7.90907 13.2473 7.72768 13.3203C7.54629 13.3934 7.40059 13.5343 7.32164 13.7132C7.24268 13.8921 7.23671 14.0948 7.305 14.278L8 14C7.304 14.278 7.304 14.279 7.304 14.28L7.305 14.282L7.307 14.286L7.311 14.297C7.33025 14.3438 7.35126 14.3898 7.374 14.435C7.62476 14.9315 7.9521 15.3853 8.344 15.78C9.084 16.519 10.266 17.25 12 17.25C13.734 17.25 14.917 16.519 15.655 15.78C15.9568 15.4791 16.2204 15.1422 16.44 14.777C16.5316 14.6216 16.6147 14.4614 16.689 14.297L16.693 14.286L16.695 14.282V14.28C16.695 14.279 16.696 14.278 16 14L16.696 14.278C16.7603 14.0958 16.7518 13.8958 16.6722 13.7197C16.5927 13.5436 16.4483 13.405 16.269 13.3327C16.0898 13.2605 15.8896 13.2603 15.7102 13.3321C15.5308 13.4038 15.386 13.5421 15.306 13.718L15.302 13.726L15.277 13.78C15.0992 14.1264 14.8692 14.4435 14.595 14.72C14.083 15.231 13.265 15.75 12 15.75C10.735 15.75 9.917 15.231 9.405 14.72C9.1312 14.4434 8.90152 14.1264 8.724 13.78L8.7 13.726Z"
-        fill="#484050"
+        fill={isDark ? '#C4B5FD' : '#484050'}
       />
     </Svg>
   );
 }
 
+/** Figma `1874:4322` boxicons:send-filled — #6A2BD9 circle, white plane. */
 function SendButtonIcon({ size = 53, disabled }: { size?: number; disabled?: boolean }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 53 53" fill="none">
-      <Defs>
-        <SvgLinearGradient id="chatSendGrad" x1="26.5" y1="0" x2="26.5" y2="53" gradientUnits="userSpaceOnUse">
-          <Stop offset="0" stopColor={disabled ? '#2A1A5C' : '#4A0FD2'} />
-          <Stop offset="1" stopColor={disabled ? '#1A0F3A' : '#26076C'} />
-        </SvgLinearGradient>
-      </Defs>
-      <Rect width="53" height="53" rx="26.5" fill="url(#chatSendGrad)" opacity={disabled ? 0.55 : 1} />
-      <Path
-        d="M13.8542 23.5363L24.7099 28.2849L29.4557 39.147C29.6831 39.673 30.1946 40 30.7629 40H30.834C31.1213 39.9853 31.3975 39.8836 31.6258 39.7084C31.8542 39.5333 32.024 39.2928 32.1128 39.019L39.9278 14.8494C40.0104 14.6019 40.0224 14.3362 39.9625 14.0822C39.9026 13.8282 39.7732 13.596 39.5888 13.4114C39.4044 13.2269 39.1722 13.0974 38.9184 13.0375C38.6645 12.9776 38.399 12.9896 38.1516 13.0723L13.9821 20.8776C13.4137 21.0624 13.0301 21.5743 13.0016 22.1572C12.9732 22.7401 13.3142 23.2946 13.8542 23.5363Z"
-        fill="white"
-      />
-    </Svg>
+    <ExpoImage
+      source={CHAT_SEND_ICON}
+      style={{ width: size, height: size, opacity: disabled ? 0.42 : 1 }}
+      contentFit="contain"
+    />
   );
 }
 
@@ -212,7 +208,11 @@ const Avatar = memo(function Avatar({
   name: string;
   onDoublePress?: () => void;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const lastTapRef = useRef(0);
+  const fallbackStyle = !isDark
+    ? { backgroundColor: colors.primaryMuted }
+    : styles.avatarFallback;
 
   const handlePress = useCallback(() => {
     if (!onDoublePress) return;
@@ -228,14 +228,16 @@ const Avatar = memo(function Avatar({
   const content = uri ? (
     <Image source={{ uri }} style={styles.avatar} />
   ) : (
-    <Text style={styles.avatarInitials}>{initials(name)}</Text>
+    <Text style={[styles.avatarInitials, !isDark && { color: colors.primary }]}>
+      {initials(name)}
+    </Text>
   );
 
   if (onDoublePress) {
     return (
       <Pressable
         onPress={handlePress}
-        style={[styles.avatarWrapper, !uri && styles.avatarFallback]}
+        style={[styles.avatarWrapper, !uri && fallbackStyle]}
         hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={name}
@@ -253,8 +255,10 @@ const Avatar = memo(function Avatar({
     );
   }
   return (
-    <View style={[styles.avatarWrapper, styles.avatarFallback]}>
-      <Text style={styles.avatarInitials}>{initials(name)}</Text>
+    <View style={[styles.avatarWrapper, fallbackStyle]}>
+      <Text style={[styles.avatarInitials, !isDark && { color: colors.primary }]}>
+        {initials(name)}
+      </Text>
     </View>
   );
 });
@@ -270,17 +274,26 @@ const LikeButton = memo(function LikeButton({
   label: string;
   onPress?: () => void;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   return (
     <Pressable
       onPress={onPress}
       hitSlop={8}
       disabled={!onPress}
-      style={({ pressed }) => [styles.likeCounter, pressed && onPress ? styles.likeCounterPressed : null]}
+      style={({ pressed }) => [
+        styles.likeCounter,
+        {
+          backgroundColor: isDark ? '#1A052D' : colors.primaryMuted,
+        },
+        pressed && onPress ? styles.likeCounterPressed : null,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
       {likedByMe ? <HeartFilledIcon size={18} /> : <HeartOutlineIcon size={18} />}
-      <Text style={styles.likeText}>{formatLikes(likes)}</Text>
+      <Text style={[styles.likeText, !isDark && { color: colors.primary }]}>
+        {formatLikes(likes)}
+      </Text>
     </Pressable>
   );
 });
@@ -310,6 +323,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
   onReport: (message: MatchChatUiMessage) => void;
   onAvatarDoublePress?: (username: string) => void;
 }) {
+  const { colors, isDark } = useMatchDetailsTheme();
   const name = item.user.displayName || item.user.username || '';
   const handleLike = useCallback(() => onLike(item.id), [onLike, item.id]);
   const handleReply = useCallback(() => onReply(item), [onReply, item]);
@@ -331,11 +345,15 @@ const ChatMessageItem = memo(function ChatMessageItem({
           <Pressable
             onPress={handleReply}
             hitSlop={8}
-            style={({ pressed }) => [styles.replyButton, pressed && styles.replyButtonPressed]}
+            style={({ pressed }) => [
+              styles.replyButton,
+              { backgroundColor: isDark ? '#1A052D' : colors.primaryMuted },
+              pressed && styles.replyButtonPressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={replyLabel}
           >
-            <Ionicons name="arrow-undo-outline" size={16} color="#A852FA" />
+            <Ionicons name="arrow-undo-outline" size={16} color={isDark ? '#A852FA' : colors.primary} />
           </Pressable>
         ) : null}
       </View>
@@ -346,26 +364,45 @@ const ChatMessageItem = memo(function ChatMessageItem({
             {verified ? (
               <View style={styles.nameWithBadge}>
                 <PlayerBadge label={proBadgeLabel} />
-                <Text style={styles.username} numberOfLines={1}>
+                <Text
+                  style={[styles.username, !isDark && { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
                   {name}
                 </Text>
               </View>
             ) : (
-              <Text style={styles.username} numberOfLines={1}>
+              <Text
+                style={[styles.username, !isDark && { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
                 {name}
               </Text>
             )}
             {item.replyTo ? (
-              <View style={styles.replyPreview}>
-                <Text style={styles.replyPreviewAuthor} numberOfLines={1}>
+              <View
+                style={[
+                  styles.replyPreview,
+                  !isDark && { borderRightColor: colors.primary },
+                ]}
+              >
+                <Text
+                  style={[styles.replyPreviewAuthor, !isDark && { color: colors.primary }]}
+                  numberOfLines={1}
+                >
                   {replyAuthor}
                 </Text>
-                <Text style={styles.replyPreviewText} numberOfLines={2}>
+                <Text
+                  style={[styles.replyPreviewText, !isDark && { color: colors.textMuted }]}
+                  numberOfLines={2}
+                >
                   {item.replyTo.text}
                 </Text>
               </View>
             ) : null}
-            <Text style={styles.messageText}>{item.text}</Text>
+            <Text style={[styles.messageText, !isDark && { color: colors.textPrimary }]}>
+              {item.text}
+            </Text>
           </View>
           <Avatar
             uri={item.user.avatar}
@@ -843,33 +880,58 @@ export function MatchChatTab({
   const banners = (
     <>
       {warning ? (
-        <Pressable style={styles.warnBanner} onPress={clearWarning}>
-          <Text style={styles.warnText}>{md.chatWarning}</Text>
+        <Pressable
+          style={[styles.warnBanner, !isDark && { backgroundColor: 'rgba(245, 166, 35, 0.16)' }]}
+          onPress={clearWarning}
+        >
+          <Text style={[styles.warnText, !isDark && { color: '#9A6700' }]}>{md.chatWarning}</Text>
         </Pressable>
       ) : null}
       {rejectBannerText && connection === 'connected' ? (
-        <Pressable style={styles.warnBanner} onPress={clearLastError}>
-          <Text style={styles.warnText}>{rejectBannerText}</Text>
+        <Pressable
+          style={[styles.warnBanner, !isDark && { backgroundColor: 'rgba(245, 166, 35, 0.16)' }]}
+          onPress={clearLastError}
+        >
+          <Text style={[styles.warnText, !isDark && { color: '#9A6700' }]}>{rejectBannerText}</Text>
         </Pressable>
       ) : null}
       {signedIn && connection === 'connecting' && messages.length > 0 ? (
-        <View style={styles.statusBanner}>
-          <Text style={styles.statusText}>{md.chatConnecting}</Text>
+        <View
+          style={[styles.statusBanner, !isDark && { backgroundColor: colors.primaryMuted }]}
+        >
+          <Text style={[styles.statusText, !isDark && { color: colors.primary }]}>
+            {md.chatConnecting}
+          </Text>
         </View>
       ) : null}
       {signedIn && connection === 'disconnected' ? (
-        <View style={styles.statusBannerOffline}>
-          <Text style={styles.statusTextOffline}>{md.chatDisconnected}</Text>
-          {lastError ? <Text style={styles.statusError}>{lastError}</Text> : null}
+        <View
+          style={[
+            styles.statusBannerOffline,
+            !isDark && { backgroundColor: 'rgba(239, 68, 68, 0.1)' },
+          ]}
+        >
+          <Text style={[styles.statusTextOffline, !isDark && { color: '#B91C1C' }]}>
+            {md.chatDisconnected}
+          </Text>
+          {lastError ? (
+            <Text style={[styles.statusError, !isDark && { color: '#DC2626' }]}>{lastError}</Text>
+          ) : null}
         </View>
       ) : null}
       {chatClosed ? (
-        <View style={styles.freezeBanner}>
-          <Text style={styles.freezeText}>{md.chatClosedPlaceholder}</Text>
+        <View
+          style={[styles.freezeBanner, !isDark && { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}
+        >
+          <Text style={[styles.freezeText, !isDark && { color: '#B91C1C' }]}>
+            {md.chatClosedPlaceholder}
+          </Text>
         </View>
       ) : frozen ? (
-        <View style={styles.freezeBanner}>
-          <Text style={styles.freezeText}>
+        <View
+          style={[styles.freezeBanner, !isDark && { backgroundColor: 'rgba(220, 38, 38, 0.1)' }]}
+        >
+          <Text style={[styles.freezeText, !isDark && { color: '#B91C1C' }]}>
             {md.chatFrozen.replace('{seconds}', String(Math.ceil(frozenMs / 1000)))}
           </Text>
         </View>
@@ -906,11 +968,21 @@ export function MatchChatTab({
         {replyTarget ? (
           <View style={styles.replyComposerBanner}>
             <View style={styles.replyComposerTextWrap}>
-              <Text style={styles.replyComposerLabel}>{md.chatReplyingTo}</Text>
-              <Text style={styles.replyComposerName} numberOfLines={1}>
+              <Text
+                style={[styles.replyComposerLabel, !isDark && { color: colors.primary }]}
+              >
+                {md.chatReplyingTo}
+              </Text>
+              <Text
+                style={[styles.replyComposerName, !isDark && { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
                 {replyAuthor}
               </Text>
-              <Text style={styles.replyComposerSnippet} numberOfLines={1}>
+              <Text
+                style={[styles.replyComposerSnippet, !isDark && { color: colors.textMuted }]}
+                numberOfLines={1}
+              >
                 {replyTarget.text}
               </Text>
             </View>
@@ -920,7 +992,7 @@ export function MatchChatTab({
               accessibilityRole="button"
               accessibilityLabel={md.chatReplyCancel}
             >
-              <Ionicons name="close" size={20} color="#9CA3AF" />
+              <Ionicons name="close" size={20} color={isDark ? '#9CA3AF' : colors.textMuted} />
             </Pressable>
           </View>
         ) : null}
@@ -971,6 +1043,7 @@ export function MatchChatTab({
             onSubmitEditing={onSend}
             blurOnSubmit={false}
             onFocus={keyboard.onInputFocus}
+            keyboardAppearance={isDark ? 'dark' : 'light'}
           />
           {draft.length > maxLength - 40 ? (
             <Text style={[styles.counter, !isDark && { color: colors.textMuted }]}>
@@ -1000,10 +1073,10 @@ export function MatchChatTab({
     list: 'compact' | 'full',
     data: MatchChatUiMessage[],
   ) => (
-    <View style={styles.feed}>
+    <View style={[styles.feed, { backgroundColor: colors.pageBg }]}>
       {isLoading ? (
         <View style={styles.loadingState}>
-          <ActivityIndicator color="#8C5CF6" />
+          <ActivityIndicator color={isDark ? '#8C5CF6' : colors.primary} />
         </View>
       ) : messages.length === 0 ? (
         empty
@@ -1024,7 +1097,7 @@ export function MatchChatTab({
       )}
       {unseenCount > 0 ? (
         <Pressable
-          style={styles.newChip}
+          style={[styles.newChip, !isDark && { backgroundColor: colors.primary }]}
           onPress={() => {
             clearUnseen();
             safeFlashListScrollToEnd(list === 'full' ? fullListRef.current : listRef.current, true, {
@@ -1041,10 +1114,7 @@ export function MatchChatTab({
   return (
     <View
       collapsable={false}
-      style={[
-        styles.wrap,
-        { backgroundColor: isDark ? colors.pageBg : colors.pageBg },
-      ]}
+      style={[styles.wrap, { backgroundColor: colors.pageBg }]}
     >
       {banners}
 
@@ -1070,7 +1140,9 @@ export function MatchChatTab({
               onPress={onShowAllChats}
               accessibilityRole="button"
             >
-              <Text style={styles.allChatsText}>{md.chatShowAll}</Text>
+              <Text style={[styles.allChatsText, !isDark && { color: colors.primary }]}>
+                {md.chatShowAll}
+              </Text>
             </Pressable>
           </LinearGradient>
         ) : null}
@@ -1087,17 +1159,16 @@ export function MatchChatTab({
       >
         <View
           collapsable={false}
-          style={[styles.fullWrap, !isDark && { backgroundColor: colors.pageBg }]}
+          style={[styles.fullWrap, { backgroundColor: colors.pageBg }]}
         >
           <StatusBar
             barStyle={colors.statusBar}
-            backgroundColor={isDark ? '#07040D' : colors.pageBg}
+            backgroundColor={colors.pageBg}
           />
           <View
             style={[
               styles.fullInner,
-              { paddingTop: Math.max(insets.top, 12) },
-              !isDark && { backgroundColor: colors.pageBg },
+              { paddingTop: Math.max(insets.top, 12), backgroundColor: colors.pageBg },
             ]}
           >
             {matchSummary ? (
@@ -1109,9 +1180,17 @@ export function MatchChatTab({
             ) : (
               <View style={styles.fullTopBar}>
                 <Pressable onPress={onCloseFull} hitSlop={12} accessibilityRole="button">
-                  <Ionicons name="chevron-down" size={24} color="#C1C1C1" />
+                  <Ionicons
+                    name="chevron-down"
+                    size={24}
+                    color={isDark ? '#C1C1C1' : colors.textSecondary}
+                  />
                 </Pressable>
-                <Text style={styles.fullTopTitle}>{md.chats}</Text>
+                <Text
+                  style={[styles.fullTopTitle, !isDark && { color: colors.textPrimary }]}
+                >
+                  {md.chats}
+                </Text>
                 <View style={{ width: 24 }} />
               </View>
             )}
@@ -1128,24 +1207,19 @@ export function MatchChatTab({
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    backgroundColor: '#08050D',
   },
   fullWrap: {
     flex: 1,
-    backgroundColor: '#07040D',
   },
   fullInner: {
     flex: 1,
-    backgroundColor: '#07040D',
   },
   compactBody: {
     flex: 1,
     position: 'relative',
-    backgroundColor: '#08050D',
   },
   feed: {
     flex: 1,
-    backgroundColor: '#08050D',
   },
   listContentCompact: {
     paddingHorizontal: 16,
@@ -1176,7 +1250,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 16,
-    color: '#6B5B7A',
+    color: '#6A2BD9',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -1188,7 +1262,7 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     marginTop: 8,
-    backgroundColor: '#4A0FD1',
+    backgroundColor: '#6A2BD9',
     borderRadius: 18,
     paddingHorizontal: 18,
     paddingVertical: 10,
