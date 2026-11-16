@@ -717,7 +717,7 @@ export const ar = {
     events: 'أحداث المباراة',
     eventsShort: 'الأحداث',
     highlightsShort: 'هايلايتس',
-    infoShort: 'معلومات',
+    infoShort: 'المعلومات',
     highlightsTitle: 'معلومات المباراة',
     highlightsAutoUpdate: 'التفاصيل هتنتقل لتاب معلومات',
     highlightsAutoUpdateHint: 'مع أول حدث، التفاصيل دي هتظهر في تاب معلومات قبل تاب المباراة.',

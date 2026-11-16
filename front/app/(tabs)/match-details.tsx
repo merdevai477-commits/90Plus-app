@@ -3267,9 +3267,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0c051a',
   },
   floatingTabsWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   pageScroll: {
     flex: 1,

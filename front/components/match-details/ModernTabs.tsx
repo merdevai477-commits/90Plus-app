@@ -8,6 +8,7 @@ import {
   Animated,
   type LayoutChangeEvent,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
 import { useAppFont } from '../../utils/fontSetup';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
@@ -22,17 +23,20 @@ interface ModernTabsProps {
   tabs: Tab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
-  /** Horizontal offset of the content pager; drives the sliding underline while swiping. */
+  /** Horizontal offset of the content pager; drives the sliding active pill while swiping. */
   scrollX?: Animated.Value;
   pageWidth?: number;
-  /** Rounded glass capsule that floats over scrolling content. */
+  /** Rounded segmented pill that floats over scrolling content (Figma Match Tabs). */
   floating?: boolean;
 }
 
 type TabLayout = { x: number; width: number };
 
 const INDICATOR_BASE_WIDTH = 100;
-const INDICATOR_WIDTH_RATIO = 0.88;
+const ACTIVE_PILL_COLORS = ['#6A2BD9', '#4B1FA3'] as const;
+const ACTIVE_PILL_COLORS_DARK = ['#8B5CF6', '#4B1FA3'] as const;
+const FLOATING_TRACK_COLORS = ['#FFFFFF', '#FCF9FF'] as const;
+const FLOATING_TRACK_COLORS_DARK = ['rgba(28,14,52,0.98)', 'rgba(20,9,38,0.98)'] as const;
 
 export const ModernTabs: React.FC<ModernTabsProps> = ({
   tabs,
@@ -46,6 +50,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
   const [containerWidth, setContainerWidth] = useState(0);
   const fontRegular = useAppFont(400);
+  const fontSemiBold = useAppFont(600);
   const fontBold = useAppFont(700);
   const { colors, isDark } = useMatchDetailsTheme();
 
@@ -83,85 +88,158 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
     });
     const scaleX = scrollX.interpolate({
       inputRange,
-      outputRange: tabs.map(
-        (tab) => (layouts[tab.key].width * INDICATOR_WIDTH_RATIO) / INDICATOR_BASE_WIDTH,
-      ),
+      outputRange: tabs.map((tab) => layouts[tab.key].width / INDICATOR_BASE_WIDTH),
       extrapolate: 'clamp',
     });
     indicatorStyle = { transform: [{ translateX }, { scaleX }] };
   }
 
+  const activePillColors = isDark ? ACTIVE_PILL_COLORS_DARK : ACTIVE_PILL_COLORS;
+  const idleTextColor = floating
+    ? isDark
+      ? '#C4B5FD'
+      : '#6B7280'
+    : colors.tabIdle;
+  const activeTextColor = floating ? '#FFFFFF' : colors.tabActive;
+
+  const renderTabLabel = (tab: Tab, isActive: boolean) => (
+    <Text
+      style={[
+        floating ? styles.floatingTabText : styles.tabText,
+        {
+          fontFamily: floating
+            ? fontSemiBold
+            : isActive
+              ? fontBold
+              : fontRegular,
+          color: isActive ? activeTextColor : idleTextColor,
+          ...(!floating &&
+            isActive &&
+            isDark && {
+              textShadowColor: 'rgba(95,39,149,0.45)',
+              textShadowOffset: { width: 0, height: 0 },
+              textShadowRadius: 6,
+            }),
+        },
+      ]}
+      numberOfLines={1}
+    >
+      {tab.label}
+    </Text>
+  );
+
+  const tabsRow = (
+    <ScrollView
+      ref={scrollViewRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={floating ? styles.floatingScrollContent : styles.scrollContent}
+      decelerationRate="fast"
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      {floating && indicatorStyle ? (
+        <Animated.View pointerEvents="none" style={[styles.slidingPill, indicatorStyle]}>
+          <LinearGradient
+            colors={[...activePillColors]}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={styles.slidingPillFill}
+          />
+        </Animated.View>
+      ) : null}
+
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.key;
+        const showStaticPill = floating && isActive && !useSlidingIndicator;
+
+        return (
+          <TouchableOpacity
+            key={tab.key}
+            style={[
+              floating ? styles.floatingTab : styles.tab,
+              !floating && undefined,
+            ]}
+            onPress={() => onTabChange(tab.key)}
+            onLayout={(e) => onTabLayout(tab.key, e)}
+            activeOpacity={0.85}
+            accessibilityRole="tab"
+            accessibilityLabel={tab.label}
+            accessibilityState={{ selected: isActive }}
+          >
+            {showStaticPill ? (
+              <LinearGradient
+                colors={[...activePillColors]}
+                start={{ x: 0.15, y: 0 }}
+                end={{ x: 0.9, y: 1 }}
+                style={styles.floatingActivePill}
+              >
+                {renderTabLabel(tab, true)}
+              </LinearGradient>
+            ) : (
+              <View style={floating ? styles.floatingTabInner : undefined}>
+                {renderTabLabel(tab, isActive)}
+                {!floating &&
+                  (isActive && !useSlidingIndicator ? (
+                    <View
+                      style={[
+                        styles.underline,
+                        { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator },
+                      ]}
+                    />
+                  ) : (
+                    <View style={styles.underlineSpacer} />
+                  ))}
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+
+      {!floating && indicatorStyle ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.slidingUnderline,
+            { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator },
+            indicatorStyle,
+          ]}
+        />
+      ) : null}
+    </ScrollView>
+  );
+
+  if (floating) {
+    return (
+      <LinearGradient
+        colors={[...(isDark ? FLOATING_TRACK_COLORS_DARK : FLOATING_TRACK_COLORS)]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.95, y: 1 }}
+        style={[
+          styles.floatingContainer,
+          {
+            shadowOpacity: isDark ? 0.4 : 0.09,
+            elevation: isDark ? 10 : 4,
+            borderColor: isDark ? 'rgba(129,10,242,0.28)' : 'transparent',
+            borderWidth: isDark ? 1 : 0,
+          },
+        ]}
+      >
+        {tabsRow}
+      </LinearGradient>
+    );
+  }
+
   return (
     <View
       style={[
-        floating ? styles.floatingContainer : styles.container,
-        floating
-          ? {
-              backgroundColor: isDark ? 'rgba(20,9,38,0.96)' : colors.tabBarBg,
-              borderColor: isDark ? 'rgba(129,10,242,0.38)' : colors.primaryBorder,
-              shadowOpacity: isDark ? 0.45 : 0.12,
-              elevation: isDark ? 10 : 4,
-            }
-          : {
-              backgroundColor: colors.tabBarBg,
-              borderBottomColor: isDark ? '#53198a' : colors.divider,
-            },
+        styles.container,
+        {
+          backgroundColor: colors.tabBarBg,
+          borderBottomColor: isDark ? '#53198a' : colors.divider,
+        },
       ]}
     >
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        decelerationRate="fast"
-        onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-      >
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, floating && styles.floatingTab]}
-              onPress={() => onTabChange(tab.key)}
-              onLayout={(e) => onTabLayout(tab.key, e)}
-              activeOpacity={0.8}
-              accessibilityRole="tab"
-              accessibilityLabel={tab.label}
-              accessibilityState={{ selected: isActive }}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  floating && styles.floatingTabText,
-                  { fontFamily: isActive ? fontBold : fontRegular, color: colors.tabIdle },
-                  isActive && {
-                    color: colors.tabActive,
-                    textShadowColor: isDark ? 'rgba(95,39,149,0.45)' : 'transparent',
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {tab.label}
-              </Text>
-              {isActive && !useSlidingIndicator ? (
-                <View style={[styles.underline, { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator }]} />
-              ) : (
-                <View style={styles.underlineSpacer} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-        {indicatorStyle ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.slidingUnderline,
-              { backgroundColor: colors.tabIndicator, shadowColor: colors.tabIndicator },
-              indicatorStyle,
-            ]}
-          />
-        ) : null}
-      </ScrollView>
+      {tabsRow}
     </View>
   );
 };
@@ -172,20 +250,51 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   floatingContainer: {
-    borderRadius: 24,
-    borderWidth: 1,
+    borderRadius: 69,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 21,
+  },
+  floatingScrollContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 2,
+    alignItems: 'center',
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
   },
   floatingTab: {
-    paddingTop: 10,
-    minWidth: 60,
+    minWidth: 56,
+  },
+  floatingTabInner: {
+    height: 39,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  floatingActivePill: {
+    height: 39,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 51,
   },
   floatingTabText: {
-    fontSize: 15,
-    paddingBottom: 9,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  slidingPill: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    width: INDICATOR_BASE_WIDTH,
+    height: 39,
+  },
+  slidingPillFill: {
+    flex: 1,
+    borderRadius: 51,
   },
   scrollContent: {
     paddingHorizontal: 12,
