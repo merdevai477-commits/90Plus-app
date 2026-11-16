@@ -39,6 +39,7 @@ import {
   buildSyntheticGoalEvents,
   clearSyntheticGoals,
   feedHasGoalEvents,
+  preferStoredProviderEvents,
   mergeSyntheticGoalsIntoEvents,
   readSyntheticGoals,
   reconcileSyntheticGoals,
@@ -163,6 +164,16 @@ describe('synthetic goals', () => {
     const merged = await mergeSyntheticGoalsIntoEvents(4752417, [card], teams, { home: 1, away: 0 });
     expect(merged.events.map((event: any) => event.type)).toEqual(['Card', 'Goal']);
     expect(feedHasGoalEvents([card])).toBe(false);
+  });
+
+  it('replaces score-only goals with the stored provider feed', () => {
+    const synthetic = [{ type: 'Goal', _synthetic: true, time: { elapsed: 41 } }];
+    const stored = [
+      { type: 'Goal', player: { name: 'Scherhant' }, time: { elapsed: 41 } },
+      { type: 'Card', player: { name: 'Van Dijk' }, time: { elapsed: 50 } },
+    ];
+    expect(preferStoredProviderEvents(synthetic, stored)).toEqual(stored);
+    expect(preferStoredProviderEvents(stored, synthetic)).toEqual(stored);
   });
 
   it('reports feed availability honestly', () => {

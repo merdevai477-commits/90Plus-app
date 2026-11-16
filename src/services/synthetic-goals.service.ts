@@ -271,6 +271,21 @@ export function feedHasGoalEvents(events: unknown[]): boolean {
 }
 
 /**
+ * A cached details bundle can be stuck on score-only goals after the provider
+ * feed arrives. Use that feed so cards, substitutions and player names stay
+ * on the timeline with the goal clips.
+ */
+export function preferStoredProviderEvents(current: unknown[], stored: unknown[]): unknown[] {
+    const provider = (events: unknown[]) =>
+        events.filter((event) => (event as { _synthetic?: boolean })?._synthetic !== true);
+    const currentProvider = provider(current);
+    if (feedHasGoalEvents(currentProvider)) return currentProvider;
+    const storedProvider = provider(stored);
+    if (feedHasGoalEvents(storedProvider)) return storedProvider;
+    return current;
+}
+
+/**
  * Merge score-delta goals into a provider events list that has no goals of its
  * own. Returns the events untouched when the feed already reports goals or the
  * score is 0-0.

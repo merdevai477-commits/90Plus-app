@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,7 +16,7 @@ type Props = {
 export function MatchSummaryVideo({ thumbnail, url, playLabel }: Props) {
   const { width: screenW } = useWindowDimensions();
   const cardW = Math.min(screenW - 32, 420);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = React.useState(false);
 
   return (
     <>

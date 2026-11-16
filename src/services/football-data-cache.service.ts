@@ -3171,10 +3171,20 @@ class FootballDataCacheService {
     private async overlaySyntheticGoals(fixtureId: number, events: any[]): Promise<any[]> {
         const provider = events.filter((event: any) => event?._synthetic !== true);
         try {
-            const { feedHasGoalEvents, mergeSyntheticGoalsIntoEvents } = await import(
+            const { feedHasGoalEvents, mergeSyntheticGoalsIntoEvents, preferStoredProviderEvents } = await import(
                 './synthetic-goals.service'
             );
             if (feedHasGoalEvents(provider)) return provider;
+            const row = await prisma.cachedFixture.findUnique({
+                where: { fixtureId },
+                select: { fullData: true },
+            });
+            const stored = (row?.fullData as { events?: unknown[] } | null)?.events;
+            const preferred = preferStoredProviderEvents(
+                events,
+                Array.isArray(stored) ? stored : [],
+            );
+            if (preferred !== events) return preferred;
             const live = await readLiveFixtureById(fixtureId);
             const home = live?.teams?.home;
             const away = live?.teams?.away;

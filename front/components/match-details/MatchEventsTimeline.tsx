@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -82,13 +82,13 @@ export function MatchEventsTimeline({
   goalClipPlayLabel = 'Play {player} goal',
 }: Props) {
   const { colors, isDark } = useMatchDetailsTheme();
+  const [videoUrl, setVideoUrl] = React.useState<string | null>(null);
   const rtl = language === 'ar';
   const rowDirection = rtl ? 'row' : 'row-reverse';
   const textAlign = rtl ? 'right' : 'left';
   const baseMark = rtl ? RLM : LRM;
   const lastIndex = events.length - 1;
   const clipsByEvent = assignGoalClips(events, goalClips);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   return (
     <View
