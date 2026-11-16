@@ -22,3 +22,41 @@ export function resolveHighlightPlaybackUrl(pageUrl: string): string {
 export function isDirectHighlightFile(url: string): boolean {
   return /\.(mp4|m3u8)(?:$|\?)/i.test(url);
 }
+
+/** YouTube watch, share, shorts, and embed links. */
+export function youtubeVideoId(pageUrl: string): string | null {
+  try {
+    const parsed = new URL(pageUrl.trim());
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.split('/').filter(Boolean)[0] ?? '';
+      return /^[\w-]{6,}$/.test(id) ? id : null;
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      const fromQuery = parsed.searchParams.get('v');
+      if (fromQuery && /^[\w-]{6,}$/.test(fromQuery)) return fromQuery;
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const marker = parts.findIndex((part) => part === 'embed' || part === 'shorts' || part === 'live');
+      const id = marker >= 0 ? parts[marker + 1] ?? '' : '';
+      return /^[\w-]{6,}$/.test(id) ? id : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Player-only embed. No watch-page title, share row, or recommendations. */
+export function youtubeEmbedUrl(pageUrl: string): string | null {
+  const id = youtubeVideoId(pageUrl);
+  if (!id) return null;
+  const params = new URLSearchParams({
+    autoplay: '1',
+    playsinline: '1',
+    rel: '0',
+    modestbranding: '1',
+    controls: '1',
+    iv_load_policy: '3',
+  });
+  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
+}

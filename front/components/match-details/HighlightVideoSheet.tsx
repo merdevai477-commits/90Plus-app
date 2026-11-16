@@ -2,7 +2,12 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { isDirectHighlightFile, resolveHighlightPlaybackUrl } from '../../utils/highlightPlaybackUrl';
+import { WebView } from 'react-native-webview';
+import {
+  isDirectHighlightFile,
+  resolveHighlightPlaybackUrl,
+  youtubeEmbedUrl,
+} from '../../utils/highlightPlaybackUrl';
 
 type Props = {
   visible: boolean;
@@ -11,10 +16,11 @@ type Props = {
   closeLabel?: string;
 };
 
-/** Plays the clip file itself. The host page's share buttons and recommendations stay out. */
+/** Plays the clip itself: an MP4 in the native player, or a YouTube embed with no watch page. */
 export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close' }: Props) {
-  const playbackUrl = resolveHighlightPlaybackUrl(url);
-  const canPlayFile = isDirectHighlightFile(playbackUrl);
+  const fileUrl = resolveHighlightPlaybackUrl(url);
+  const embedUrl = youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl);
+  const direct = !embedUrl && isDirectHighlightFile(fileUrl);
 
   return (
     <Modal
@@ -26,12 +32,32 @@ export function HighlightVideoSheet({ visible, url, onClose, closeLabel = 'Close
     >
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
-        {visible && canPlayFile ? (
-          <DirectClipPlayer url={playbackUrl} onClose={onClose} closeLabel={closeLabel} />
+        {visible && embedUrl ? (
+          <View style={styles.player}>
+            <WebView
+              source={{ html: youtubePlayerHtml(embedUrl), baseUrl: 'https://90plus.pro' }}
+              style={styles.video}
+              originWhitelist={['*']}
+              setSupportMultipleWindows={false}
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              allowsFullscreenVideo
+              javaScriptEnabled
+              domStorageEnabled
+            />
+            <CloseButton onClose={onClose} label={closeLabel} />
+          </View>
+        ) : null}
+        {visible && direct ? (
+          <DirectClipPlayer url={fileUrl} onClose={onClose} closeLabel={closeLabel} />
         ) : null}
       </View>
     </Modal>
   );
+}
+
+function youtubePlayerHtml(embedUrl: string): string {
+  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;background:#000;height:100%;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${embedUrl}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></body></html>`;
 }
 
 function DirectClipPlayer({
@@ -57,16 +83,22 @@ function DirectClipPlayer({
         contentFit="contain"
         allowsFullscreen
       />
-      <Pressable
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel={closeLabel}
-        hitSlop={12}
-        style={styles.close}
-      >
-        <Ionicons name="close" size={22} color="#FFFFFF" />
-      </Pressable>
+      <CloseButton onClose={onClose} label={closeLabel} />
     </View>
+  );
+}
+
+function CloseButton({ onClose, label }: { onClose: () => void; label: string }) {
+  return (
+    <Pressable
+      onPress={onClose}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={12}
+      style={styles.close}
+    >
+      <Ionicons name="close" size={22} color="#FFFFFF" />
+    </Pressable>
   );
 }
 
