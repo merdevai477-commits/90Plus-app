@@ -10,7 +10,6 @@ import {
   Modal,
   Platform,
   ActivityIndicator,
-  Dimensions,
   Animated,
   FlatList,
   InteractionManager,
@@ -31,8 +30,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useTeamOnboardingGate } from '../../hooks/useTeamOnboardingGate';
 import { FlashList } from '@shopify/flash-list';
-import { TEXT_PRIMARY, PURPLE_PRIMARY, PURPLE_SOFT, LIVE_RED } from '../../constants/tokens';
-import { APP_BG } from '../../constants/ui';
+import { useMatchesStyles } from './matches.styles';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { useViewerIsIsrael } from '../../hooks/useViewerIsIsrael';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -124,7 +122,6 @@ function normalizePredictedMap(
 
 // Top 5 European leagues' countries — these accordions start expanded by default.
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Stable separator components — declared at module scope so they keep the
 // same identity across renders. Inline arrow components on FlashList
@@ -347,6 +344,7 @@ const PredictionButton = memo(function PredictionButton({
   disabled?: boolean;
   percent?: number | null;
 }) {
+  const { styles, colors, blurTint } = useMatchesStyles();
   const palette = PRED_COLORS[kind];
   return (
     <TouchableOpacity
@@ -372,12 +370,12 @@ const PredictionButton = memo(function PredictionButton({
           <LiquidGlassView
             {...({
               style: StyleSheet.absoluteFill,
-              tint: 'rgba(20,15,30,0.65)',
+              tint: colors.glassTint,
               effect: 'clear',
             } as any)}
           />
         ) : (
-          <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={25} tint={blurTint} style={StyleSheet.absoluteFill} />
         )}
         {isActive && (
           <LinearGradient
@@ -445,6 +443,7 @@ const MatchRow = memo(function MatchRow({
   onFixtureVisibility?: (fixtureId: number, visible: boolean) => void;
   nameRevision?: number;
 }) {
+  const { styles, colors } = useMatchesStyles();
   const diagSample = diagFlags.render && isFixtureSampled(fixture.id, 'render');
   const diagT0 = diagSample ? monoNow() : 0;
   if (diagFlags.render) noteMatchRowRendered(fixture);
@@ -635,7 +634,7 @@ const MatchRow = memo(function MatchRow({
           ) : (
             <Bell
               size={17}
-              color={isSubscribed ? '#fbbf24' : canSubscribe ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.2)'}
+              color={isSubscribed ? '#fbbf24' : canSubscribe ? colors.iconMuted : colors.textMuted}
               fill={isSubscribed ? '#fbbf24' : 'transparent'}
             />
           )}
@@ -649,7 +648,7 @@ const MatchRow = memo(function MatchRow({
               {existingPrediction ? t('matches.prediction.yourPrediction') : t('matches.prediction.title')}
             </Text>
             {isSubmitting && (
-              <ActivityIndicator size="small" color={PURPLE_PRIMARY} style={styles.predTitleSpinner} />
+              <ActivityIndicator size="small" color={colors.primary} style={styles.predTitleSpinner} />
             )}
           </View>
 
@@ -796,6 +795,7 @@ function LeagueAllMatchesModal({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
 }) {
+  const { styles, colors, blurTint, isDark } = useMatchesStyles();
   const { language, translate: t } = useTranslation();
   const nameRevision = useFootballTranslationStore((state) => state.revision);
   const [extraFixtures, setExtraFixtures] = useState<Fixture[]>([]);
@@ -893,7 +893,7 @@ function LeagueAllMatchesModal({
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1}>
         <BlurView
           intensity={Platform.OS === 'ios' ? 60 : 100}
-          tint={Platform.OS === 'ios' ? 'systemUltraThinMaterialDark' : 'dark'}
+          tint={Platform.OS === 'ios' ? (isDark ? 'systemUltraThinMaterialDark' : 'systemUltraThinMaterialLight') : blurTint}
           style={StyleSheet.absoluteFill}
         />
       </TouchableOpacity>
@@ -903,9 +903,9 @@ function LeagueAllMatchesModal({
         <View style={styles.allMatchesSheet}>
           {/* Sheet glass surface */}
           {isLiquidGlassSupported ? (
-            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(8,4,18,0.92)', effect: 'regular' } as any)} />
+            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: colors.glassTint, effect: 'regular' } as any)} />
           ) : (
-            <BlurView intensity={Platform.OS === 'ios' ? 80 : 100} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={Platform.OS === 'ios' ? 80 : 100} tint={blurTint} style={StyleSheet.absoluteFill} />
           )}
           {/* Subtle purple top glow */}
           <LinearGradient
@@ -924,14 +924,14 @@ function LeagueAllMatchesModal({
               <Text style={styles.allMatchesTitle}>{localizedLeagueName}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.allMatchesClose} activeOpacity={0.7}>
-              <X size={20} color="rgba(255,255,255,0.6)" />
+              <X size={20} color={colors.iconMuted} />
             </TouchableOpacity>
           </View>
           {/* All fixtures */}
           <View style={styles.allMatchesListWrap}>
             {leagueLoading ? (
               <View style={styles.leagueModalEmpty}>
-                <ActivityIndicator size="small" color={PURPLE_PRIMARY} />
+                <ActivityIndicator size="small" color={colors.primary} />
               </View>
             ) : fixtures.length === 0 ? (
               <View style={styles.leagueModalEmpty}>
@@ -984,6 +984,7 @@ const LeagueCard = memo(function LeagueCard({
   onOpenDetails: (fixture: Fixture) => void;
   nameRevision?: number;
 }) {
+  const { styles, colors } = useMatchesStyles();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   // World Cup keeps its campaign presentation open. International and normal
@@ -1036,7 +1037,7 @@ const LeagueCard = memo(function LeagueCard({
             </View>
             <ChevronDown
               size={16}
-              color="rgba(255,255,255,0.45)"
+              color={colors.iconMuted}
               style={{ transform: [{ rotate: showExpanded ? '0deg' : '-90deg' }] }}
             />
           </View>
@@ -1095,6 +1096,7 @@ const LeagueCard = memo(function LeagueCard({
 });
 
 export default function MatchesHubScreenV2() {
+  const { styles, colors, blurTint, isDark } = useMatchesStyles();
   useScreenFont();
   useMatchEventsMonitor();
   const params = useLocalSearchParams();
@@ -2239,7 +2241,7 @@ export default function MatchesHubScreenV2() {
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={styles.searchBtn}
       >
-        <Search size={20} color="#e9d5ff" />
+        <Search size={20} color={colors.icon} />
       </TouchableOpacity>
     ),
     [router, t],
@@ -2527,9 +2529,9 @@ export default function MatchesHubScreenV2() {
                 style={[styles.tabChip, active && styles.tabChipActive]}
               >
                 {isLiquidGlassSupported ? (
-                  <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+                  <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: colors.glassTint, effect: 'clear' } as any)} />
                 ) : (
-                  <BlurView intensity={25} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
+                  <BlurView intensity={25} tint={blurTint} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
                 )}
                 {active && (
                   <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
@@ -2537,7 +2539,7 @@ export default function MatchesHubScreenV2() {
                 <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>
                   {t(FILTER_LABEL_KEYS[f as MatchFilter])}
                 </Text>
-                {showLock ? <Lock size={11} color={active ? '#fff' : 'rgba(255,255,255,0.45)'} style={{ marginStart: 4 }} /> : null}
+                {showLock ? <Lock size={11} color={active ? colors.textInverse : colors.iconMuted} style={{ marginStart: 4 }} /> : null}
                 {f === 'Live' && !active && <View style={styles.liveDot} />}
               </TouchableOpacity>
             );
@@ -2545,11 +2547,11 @@ export default function MatchesHubScreenV2() {
         </ScrollView>
         <TouchableOpacity style={styles.calendarBtn} onPress={openCalendar} activeOpacity={0.7}>
           {isLiquidGlassSupported ? (
-            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
+            <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: colors.glassTint, effect: 'clear' } as any)} />
           ) : (
-            <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={25} tint={blurTint} style={StyleSheet.absoluteFill} />
           )}
-          <Calendar size={18} color="rgba(255,255,255,0.8)" />
+          <Calendar size={18} color={colors.iconMuted} />
         </TouchableOpacity>
       </View>
       {isDataStale && matches.length > 0 ? (
@@ -2558,7 +2560,7 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [highlightIndex, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar]);
+  ), [highlightIndex, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar, styles, colors, blurTint]);
 
   const pinnedHeaderFor = useCallback(
     (pageFilter: MatchFilter) => {
@@ -2623,7 +2625,7 @@ export default function MatchesHubScreenV2() {
       if (pageLoading) {
         return (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
           </View>
         );
@@ -2700,8 +2702,8 @@ export default function MatchesHubScreenV2() {
       <RefreshControl
         refreshing={pageFilter === filter && listPullRefreshing}
         onRefresh={onListPullRefresh}
-        tintColor={PURPLE_SOFT}
-        colors={[PURPLE_PRIMARY]}
+        tintColor={colors.primarySoft}
+        colors={[colors.primary]}
       />
     ),
     [filter, listPullRefreshing, onListPullRefresh],
@@ -2825,9 +2827,9 @@ export default function MatchesHubScreenV2() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: APP_BG }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
       <FloatingHeader
-        {...(isLiquidGlassSupported ? { effect: 'clear', tint: 'rgba(5,1,13,0.1)' } as any : { intensity: 15, tint: 'dark' })}
+        {...(isLiquidGlassSupported ? { effect: 'clear', tint: colors.headerGlassTint } as any : { intensity: 15, tint: blurTint })}
         style={[styles.floatingHeader, { paddingTop: Math.max(insets.top, 10) + 10 }]}
       >
         <View style={styles.headerLeft}>
@@ -2859,7 +2861,7 @@ export default function MatchesHubScreenV2() {
       <FeatureInfoModal
         visible={showMatchesInfo}
         onClose={() => setShowMatchesInfo(false)}
-        icon={<CalendarCheck2 size={30} color="#d8b4fe" />}
+        icon={<CalendarCheck2 size={30} color={colors.primarySoft} />}
         title={t('matchesInfo.title')}
         bullets={[t('matchesInfo.rule1'), t('matchesInfo.rule2'), t('matchesInfo.rule3')]}
         hype={t('matchesInfo.hype')}
@@ -2919,15 +2921,15 @@ export default function MatchesHubScreenV2() {
 
       {/* Calendar Modal */}
       <Modal visible={showCalendar} transparent animationType="fade">
-        <View style={[styles.modalOverlay, Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
-          <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={[styles.modalOverlay, Platform.OS === 'android' && { backgroundColor: colors.modalOverlay }]}>
+          <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint={blurTint} style={StyleSheet.absoluteFill} />
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowCalendar(false)} activeOpacity={1} />
           <View style={styles.calendarModalOuter}>
             <View style={styles.calendarModalInner}>
               {isLiquidGlassSupported ? (
-                <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular' } as any)} />
+                <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: isDark ? 'rgba(15,5,25,0.99)' : 'rgba(252,252,252,0.96)', effect: 'regular' } as any)} />
               ) : (
-                <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
+                <BlurView intensity={100} tint={blurTint} style={StyleSheet.absoluteFill} />
               )}
               <View style={[styles.calHeader, calMirrored && styles.calRowReverse]}>
                 <View style={styles.calHeaderSide} />
@@ -2947,7 +2949,7 @@ export default function MatchesHubScreenV2() {
                   accessibilityLabel={t(calMirrored ? 'matches.screen.nextMonth' : 'matches.screen.prevMonth')}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <ChevronLeft size={16} color="#fff" strokeWidth={2.5} />
+                  <ChevronLeft size={16} color={colors.icon} strokeWidth={2.5} />
                 </TouchableOpacity>
                 <Text style={styles.calMonthLabel} numberOfLines={1}>{calendarMonthLabel}</Text>
                 <TouchableOpacity
@@ -2956,7 +2958,7 @@ export default function MatchesHubScreenV2() {
                   accessibilityLabel={t(calMirrored ? 'matches.screen.prevMonth' : 'matches.screen.nextMonth')}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <ChevronRight size={16} color="#fff" strokeWidth={2.5} />
+                  <ChevronRight size={16} color={colors.icon} strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
               <View style={[styles.calBody, calMirrored && styles.calRowReverse]}>
@@ -3002,397 +3004,3 @@ export default function MatchesHubScreenV2() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  floatingHeader: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoPillSmall: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', gap: 5,
-  },
-  logo90Small: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
-  plusChipSmall: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
-  logoPlusSmall: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
-  headerTitleTxt: { flexShrink: 0, color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
-  searchBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: 'rgba(168,85,247,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listHeader: { marginBottom: 4, paddingHorizontal: 16 },
-  pagerShell: { flex: 1 },
-  pager: { flex: 1 },
-  pagerPage: { flex: 1 },
-  // Concrete flex box for FlashList inside each horizontal page (same idea as
-  // allMatchesListWrap — without this iOS can paint an empty content area).
-  pagerListWrap: { flex: 1 },
-  pagerList: { flex: 1 },
-  pagerListContent: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
-  pinnedWcWrap: { marginBottom: 10 },
-  staleBanner: {
-    marginBottom: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: 'rgba(245,158,11,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.35)',
-  },
-  staleBannerTxt: { color: '#fcd34d', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 8 },
-  tabsScroll: { gap: 8, paddingRight: 6 },
-  ticketsOuter: { shadowColor: '#000000ff', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
-  ticketsInner: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(84, 13, 151, 0)', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, overflow: 'hidden' },
-  ticketsTxt: { color: '#e9d5ff', fontSize: 16, fontWeight: '800', textShadowColor: '#a855f7', textShadowRadius: 8, zIndex: 1 },
-  ticketsTxtEmpty: { color: '#1a1a1a', textShadowColor: 'transparent' },
-  calendarBtn: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  tabChip: {
-    minWidth: 62, height: 38, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 14, overflow: 'hidden', flexDirection: 'row', gap: 6,
-  },
-  tabChipActive: { borderColor: 'rgba(167,139,250,0.55)' },
-  tabTxt: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700', zIndex: 1 },
-  tabTxtActive: { color: '#fff' },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#ef4444' },
-  filterBtn: {
-    width: 42, height: 38, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.02)', alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  leagueCard: {
-    borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',
-  },
-  // All-matches bottom sheet
-  allMatchesModalRoot: {
-    flex: 1,
-  },
-  allMatchesSheetWrap: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  allMatchesSheet: {
-    // Explicit height (not maxHeight) so the inner FlashList has a known
-    // layout box. Android/FlashList collapses to 0 otherwise.
-    height: SCREEN_HEIGHT * 0.82,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
-    overflow: 'hidden',
-    width: '100%',
-    // Opaque fallback for Android where the expo-blur intensity isn't a full
-    // frosted glass — keeps the sheet readable.
-    backgroundColor: Platform.OS === 'android' ? 'rgba(15,8,28,0.96)' : 'transparent',
-    // iOS shadow for depth
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    elevation: 30,
-  },
-  // Wrapper that gives the FlashList a concrete flex:1 container. Without
-  // this the list renders 0px tall and the sheet looks empty.
-  allMatchesListWrap: { flex: 1, zIndex: 1 },
-  leagueModalEmpty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 48,
-  },
-  leagueModalEmptyText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  sheetHandle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignSelf: 'center',
-    marginTop: 12, marginBottom: 4,
-  },
-  allMatchesHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-    zIndex: 1,
-  },
-  allMatchesLeagueLogo: { width: 28, height: 28, marginRight: 10 },
-  allMatchesTitle: { color: '#fff', fontSize: 18, fontWeight: '800', flex: 1 },
-  allMatchesClose: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  // Match count badge
-  matchCountBadge: {
-    backgroundColor: 'rgba(168,85,247,0.2)',
-    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.35)',
-  },
-  matchCountTxt: { color: '#d8b4fe', fontSize: 12, fontWeight: '800' },
-  cardShine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-  },
-  leagueHead: {
-    height: 52, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  leagueLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  leagueLogoWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  leagueLogo: { width: 22, height: 22 },
-  leagueTitle: { color: TEXT_PRIMARY, fontSize: 17, fontWeight: '700' },
-  leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  leagueLive: { color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700' },
-  rowWrap: {
-    minHeight: 116, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  rowIcon: { width: 28, alignItems: 'center', justifyContent: 'center' },
-  rowBody: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8,
-  },
-  teamCol: { width: '34%', alignItems: 'center', gap: 8 },
-  logoStub: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.09)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
-  },
-  logoInitials: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(124,58,237,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  logoInitialsTxt: { color: '#A78BFA', fontSize: 11, fontWeight: '800' },
-  teamLogo: { width: 34, height: 34 },
-  teamTxt: { color: 'rgba(255,255,255,0.92)', fontSize: 14, fontWeight: '600', maxWidth: '100%' },
-  scoreCol: { width: '32%', minWidth: 88, alignItems: 'center', flexShrink: 0 },
-  liveBadge: { color: '#ef4444', fontSize: 11, fontWeight: '900', backgroundColor: 'rgba(239,68,68,0.14)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
-  ftBadge: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '800' },
-  scoreTxt: {
-    marginTop: 6, color: '#fff', fontSize: 38, lineHeight: 40, fontWeight: '900',
-    letterSpacing: -1, fontVariant: ['tabular-nums'],
-  },
-  scoreDash: { color: 'rgba(255,255,255,0.45)' },
-  minuteTxt: { marginTop: 3, color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  liveMetaCol: { marginTop: 3, alignItems: 'center', gap: 2 },
-  minuteTxtLive: { color: '#f87171', fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  minuteTxtStoppage: { color: LIVE_RED },
-  cornersTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
-  viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
-  // rowWrap already owns the separator. A second full-width border here
-  // overlapped the rounded league-card edge and produced crossed/thick lines.
-  rowWrapCol: {},
-  rowWrapInCard: {
-    borderBottomWidth: 0,
-    minHeight: 112,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-  },
-  wcMatchCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.26)',
-    backgroundColor: '#0A0812',
-    overflow: 'hidden',
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  wcCardTopAccent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-  },
-  wcCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
-    paddingTop: 14,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-  },
-  wcLogoRing: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    padding: 1.5,
-  },
-  wcLogoInner: {
-    flex: 1,
-    borderRadius: 12.5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  wcHeaderLogo: {
-    width: 42,
-    height: 42,
-  },
-  wcHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  wcCardLeague: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.35,
-  },
-  wcCardSub: {
-    color: 'rgba(216,180,254,0.82)',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  wcCardDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 16,
-    backgroundColor: 'rgba(168,85,247,0.2)',
-  },
-  wcCardBody: { paddingBottom: 4 },
-  upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
-  specialBadgeWrap: { backgroundColor: 'rgba(148,163,184,0.16)', borderWidth: 0.5, borderColor: 'rgba(148,163,184,0.35)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, maxWidth: 96 },
-  specialBadge: { color: '#cbd5e1', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  timeTxt: {
-    marginTop: 6,
-    color: '#fff',
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: '900',
-    letterSpacing: 0,
-    fontVariant: ['tabular-nums'],
-    textAlign: 'center',
-    minWidth: 56,
-    writingDirection: 'ltr',
-  },
-  predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
-  predWrapInCard: { paddingHorizontal: 14, paddingBottom: 14 },
-  predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
-  predTitleSpinner: { marginLeft: 4 },
-  predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
-  predResultWin: { color: '#22c55e', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
-  predResultLoss: { color: '#ef4444', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
-  predResultPending: { color: '#f59e0b', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
-  predButtons: { flexDirection: 'row', gap: 10, paddingHorizontal: 4 },
-  predBtn: { flex: 1, minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8, gap: 2 },
-  predBtnPct: { color: 'rgba(233,213,255,0.95)', fontSize: 15, fontWeight: '900', zIndex: 1, fontVariant: ['tabular-nums'] },
-  predBtnTxt: { color: 'rgba(255,255,255,0.72)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },
-  predBtnTxtWithPct: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.55)' },
-
-  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
-  calendarModalInner: {
-    borderRadius: 28,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    overflow: 'hidden',
-    paddingVertical: 23,
-    paddingHorizontal: 12,
-  },
-  calRowReverse: { flexDirection: 'row-reverse' },
-  calHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11, zIndex: 1 },
-  calHeaderSide: { width: 48, justifyContent: 'center' },
-  calTitle: { flex: 1, color: '#fff', fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  calClose: { color: '#8C5CF5', fontSize: 18, fontWeight: '800' },
-  calMonthNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 35,
-    marginTop: 12,
-    marginBottom: 25,
-    gap: 36,
-    zIndex: 1,
-  },
-  calNavBtn: {
-    width: 29,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(219,219,219,0.17)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calMonthLabel: { color: '#fff', fontSize: 19, fontWeight: '700', minWidth: 120, textAlign: 'center' },
-  calBody: { flexDirection: 'row', flexWrap: 'wrap', zIndex: 1 },
-  calDayNameCell: {
-    width: '14.28%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 1,
-  },
-  calDayName: {
-    width: '100%',
-    textAlign: 'center',
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-    includeFontPadding: false,
-  },
-  calDay: { width: '14.28%', height: 33, alignItems: 'center', justifyContent: 'center' },
-  calDayInner: {
-    minWidth: 28,
-    height: 28,
-    paddingHorizontal: 2,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calDayActive: { backgroundColor: '#8C5CF5' },
-  calDayTxt: { color: '#fff', fontSize: 21, fontWeight: '800', letterSpacing: 0.63, includeFontPadding: false },
-  calDayTxtOutside: { opacity: 0.2 },
-  ticketsInfoModalOuter: { width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
-  ticketsInfoModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(168,85,247,0.4)', overflow: 'hidden', padding: 24, alignItems: 'center' },
-  infoIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(168,85,247,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)' },
-  infoTitle: { color: '#fff', fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.3 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', width: '100%', marginBottom: 12, gap: 10, paddingRight: 10 },
-  infoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#a855f7', marginTop: 7 },
-  infoText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, lineHeight: 22, flex: 1 },
-  infoBtn: { width: '100%', height: 48, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  infoBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  // Loading / Error / Empty
-  loadingWrap: { alignItems: 'center', paddingVertical: 60, gap: 12 },
-  loadingTxt: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
-  errorWrap: { alignItems: 'center', paddingVertical: 40, gap: 16 },
-  errorTxt: { color: 'rgba(255,100,100,0.8)', fontSize: 14, textAlign: 'center' },
-  retryBtn: { backgroundColor: 'rgba(168,85,247,0.2)', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(168,85,247,0.4)' },
-  retryTxt: { color: '#d8b4fe', fontSize: 14, fontWeight: '700' },
-  emptyWrap: { alignItems: 'center', paddingVertical: 60 },
-  emptyTxt: { color: 'rgba(255,255,255,0.3)', fontSize: 15 },
-});

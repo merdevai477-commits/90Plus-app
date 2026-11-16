@@ -25,6 +25,7 @@ import {
 } from '../../constants/worldCup';
 import { useTranslation } from '../../src/i18n';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
+import { useMatchesTheme } from '../../hooks/useMatchesTheme';
 
 const ACCENT = '#A855F7';
 const GOLD = '#F5D547';
@@ -38,6 +39,7 @@ export function WorldCupLockedModal({ visible, onClose }: WorldCupLockedModalPro
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const [time, setTime] = useState<WorldCupTimeLeft>(() => getWorldCupTimeLeft(Date.now(), unlockAtMs));
   const { t } = useTranslation();
+  const { blurTint } = useMatchesTheme();
 
   useEffect(() => {
     if (!visible) return;
@@ -64,7 +66,7 @@ export function WorldCupLockedModal({ visible, onClose }: WorldCupLockedModalPro
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
-        <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint={blurTint} style={StyleSheet.absoluteFill} />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" />
 
         <View style={s.cardOuter} pointerEvents="box-none">

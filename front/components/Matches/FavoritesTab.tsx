@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ChevronDown, ChevronUp, ChevronRight, Heart, Search } from 'lucide-react-native';
+import { useMatchesTheme, type MatchesThemeColors } from '../../hooks/useMatchesTheme';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -77,6 +78,8 @@ export interface FavoritesTabProps {
 }
 
 function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label: string }) {
+    const { colors } = useMatchesTheme();
+    const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     return (
         <TouchableOpacity
             activeOpacity={0.88}
@@ -92,7 +95,7 @@ function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label:
                 style={styles.ctaGradient}
             >
                 <View style={styles.ctaIconWrap}>
-                    <Heart size={18} color="#fff" fill="#fff" />
+                    <Heart size={18} color={colors.textInverse} fill={colors.textInverse} />
                 </View>
                 <Text style={styles.ctaLabel} numberOfLines={2}>
                     {label}
@@ -119,6 +122,8 @@ const LeagueMatchBlock = memo(function LeagueMatchBlock({
     showChevron?: boolean;
     expanded?: boolean;
 }) {
+    const { colors } = useMatchesTheme();
+    const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     const { language } = useTranslation();
     const title = getLeagueDisplayName(leagueName, language) || leagueName;
 
@@ -142,9 +147,9 @@ const LeagueMatchBlock = memo(function LeagueMatchBlock({
                 <Text style={styles.matchCount}>{fixtures.length}</Text>
                 {showChevron ? (
                     expanded ? (
-                        <ChevronUp size={14} color="rgba(255,255,255,0.4)" />
+                        <ChevronUp size={14} color={colors.iconMuted} />
                     ) : (
-                        <ChevronDown size={14} color="rgba(255,255,255,0.4)" />
+                        <ChevronDown size={14} color={colors.iconMuted} />
                     )
                 ) : null}
             </View>
@@ -170,6 +175,8 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
     onOpenTeam?: (team: StoredFollowedTeam) => void;
     liveById: Record<string, FavoriteLiveFields>;
 }) {
+    const { colors } = useMatchesTheme();
+    const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     const [expanded, setExpanded] = useState(false);
     const [diskFixtures, setDiskFixtures] = useState<FavoritesListFixture[]>([]);
     const prefetch = usePrefetchFavoriteCompetitorMatches();
@@ -266,16 +273,16 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
                 </View>
                 {matchCount > 0 ? <Text style={styles.totalBadge}>{matchCount}</Text> : null}
                 {expanded ? (
-                    <ChevronUp size={16} color="rgba(255,255,255,0.5)" />
+                    <ChevronUp size={16} color={colors.iconMuted} />
                 ) : (
-                    <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
+                    <ChevronDown size={16} color={colors.iconMuted} />
                 )}
             </TouchableOpacity>
 
             {expanded ? (
                 <View style={styles.leaguesWrapper}>
                     {showSpinner ? (
-                        <ActivityIndicator color="#a855f7" style={{ marginVertical: 16 }} />
+                        <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
                     ) : leagueGroups.length === 0 ? (
                         <Text style={styles.emptyMatches}>—</Text>
                     ) : (
@@ -302,6 +309,8 @@ const LeagueFavoriteRow = memo(function LeagueFavoriteRow({
     league: StoredFollowedLeague;
     onOpenLeague?: (league: StoredFollowedLeague) => void;
 }) {
+    const { colors } = useMatchesTheme();
+    const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     const { language } = useTranslation();
     return (
         <TouchableOpacity
@@ -337,7 +346,7 @@ const LeagueFavoriteRow = memo(function LeagueFavoriteRow({
                     </Text>
                 ) : null}
             </View>
-            <ChevronRight size={16} color="rgba(255,255,255,0.5)" />
+            <ChevronRight size={16} color={colors.iconMuted} />
         </TouchableOpacity>
     );
 });
@@ -351,6 +360,8 @@ const NotifiedFavoriteBlock = memo(function NotifiedFavoriteBlock({
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
     liveById: Record<string, FavoriteLiveFields>;
 }) {
+    const { colors } = useMatchesTheme();
+    const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     const base = useMemo(() => [storedMatchToListFixture(match)], [match]);
     const storeFixtures = useFavoritesLiveOverlay(base);
     const fixtures = useMemo(
@@ -398,6 +409,8 @@ export default function FavoritesTab({
     onLoad,
     onCommitLayoutEffect,
 }: FavoritesTabProps) {
+  const { colors } = useMatchesTheme();
+  const styles = useMemo(() => createFavoritesStyles(colors), [colors]);
     const { t } = useTranslation();
     const chooseLabel =
         t.matches.screen.favoritesChooseTeamCta ?? 'Choose your favorite team now';
@@ -517,7 +530,7 @@ export default function FavoritesTab({
                 empty ? (
                     <View style={styles.emptyWrap}>
                         <View style={styles.emptyIconRing}>
-                            <Heart size={28} color="#c4b5fd" />
+                            <Heart size={28} color={colors.primarySoft} />
                         </View>
                         <Text style={styles.emptyTitle}>{t.matches.screen.favoritesEmptyTitle}</Text>
                         <Text style={styles.emptySub}>{t.matches.screen.favoritesEmptyBody}</Text>
@@ -529,180 +542,124 @@ export default function FavoritesTab({
                         ) : null}
                     </View>
                 ) : loading ? (
-                    <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
+                    <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
                 ) : null
             }
         />
     );
 }
 
-const styles = StyleSheet.create({
-    sectionHeader: {
-        paddingTop: 8,
-        paddingBottom: 4,
-    },
+function createFavoritesStyles(c: MatchesThemeColors) {
+  return StyleSheet.create({
+    sectionHeader: { paddingTop: 8, paddingBottom: 4 },
     sectionTitle: {
-        color: 'rgba(255,255,255,0.55)',
-        fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
+      color: c.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
     },
     teamContainer: {
-        borderRadius: 14,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+      borderRadius: 14,
+      overflow: 'hidden',
+      backgroundColor: c.cardBg,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
     },
     teamHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        gap: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10,
     },
-    teamLogo: {
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-    },
-    placeholderLogo: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-    },
-    teamTitleWrap: {
-        flex: 1,
-        minWidth: 0,
-    },
-    teamName: {
-        flexShrink: 1,
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#FFFFFF',
-    },
-    teamSub: {
-        marginTop: 2,
-        fontSize: 12,
-        fontWeight: '500',
-        color: 'rgba(255,255,255,0.45)',
-    },
+    teamLogo: { width: 28, height: 28, borderRadius: 8 },
+    placeholderLogo: { backgroundColor: c.logoStubBg },
+    teamTitleWrap: { flex: 1, minWidth: 0 },
+    teamName: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: c.textPrimary },
+    teamSub: { marginTop: 2, fontSize: 12, fontWeight: '500', color: c.textMuted },
     totalBadge: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.5)',
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 10,
-        overflow: 'hidden',
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.textSecondary,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      overflow: 'hidden',
     },
-    leaguesWrapper: {
-        paddingHorizontal: 8,
-        paddingBottom: 8,
-    },
+    leaguesWrapper: { paddingHorizontal: 8, paddingBottom: 8 },
     leagueSection: {
-        marginTop: 4,
-        borderRadius: 10,
-        backgroundColor: 'rgba(255,255,255,0.02)',
-        overflow: 'hidden',
+      marginTop: 4,
+      borderRadius: 10,
+      backgroundColor: c.chipBg,
+      overflow: 'hidden',
     },
     leagueHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        gap: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      gap: 8,
     },
-    leagueLogo: {
-        width: 20,
-        height: 20,
-        borderRadius: 4,
-    },
-    leagueName: {
-        flex: 1,
-        fontSize: 13,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.85)',
-    },
-    matchCount: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.4)',
-        marginEnd: 4,
-    },
-    matchesContainer: {
-        paddingHorizontal: 4,
-        paddingBottom: 6,
-        gap: 4,
-    },
-    emptyMatches: {
-        color: 'rgba(255,255,255,0.35)',
-        textAlign: 'center',
-        paddingVertical: 12,
-        fontSize: 13,
-    },
-    emptyWrap: {
-        alignItems: 'center',
-        paddingVertical: 48,
-        paddingHorizontal: 24,
-        gap: 10,
-    },
+    leagueLogo: { width: 20, height: 20, borderRadius: 4 },
+    leagueName: { flex: 1, fontSize: 13, fontWeight: '600', color: c.textPrimary },
+    matchCount: { fontSize: 11, fontWeight: '600', color: c.textMuted, marginEnd: 4 },
+    matchesContainer: { paddingHorizontal: 4, paddingBottom: 6, gap: 4 },
+    emptyMatches: { color: c.textMuted, textAlign: 'center', paddingVertical: 12, fontSize: 13 },
+    emptyWrap: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
     emptyIconRing: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(139,92,246,0.16)',
-        borderWidth: 1,
-        borderColor: 'rgba(196,181,253,0.28)',
-        marginBottom: 6,
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.primaryMuted,
+      borderWidth: 1,
+      borderColor: c.primaryBorder,
+      marginBottom: 6,
     },
-    emptyTitle: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '800',
-        textAlign: 'center',
-    },
+    emptyTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '800', textAlign: 'center' },
     emptySub: {
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 13,
-        textAlign: 'center',
-        lineHeight: 19,
-        marginBottom: 8,
+      color: c.textSecondary,
+      fontSize: 13,
+      textAlign: 'center',
+      lineHeight: 19,
+      marginBottom: 8,
     },
     ctaOuter: {
-        width: '100%',
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginTop: 4,
-        shadowColor: '#7C3AED',
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 6,
+      width: '100%',
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginTop: 4,
+      shadowColor: c.primary,
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6,
     },
     ctaGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingVertical: 15,
-        paddingHorizontal: 16,
-        minHeight: 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 15,
+      paddingHorizontal: 16,
+      minHeight: 56,
     },
     ctaIconWrap: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.18)',
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.18)',
     },
     ctaLabel: {
-        flex: 1,
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '800',
-        letterSpacing: 0.2,
+      flex: 1,
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '800',
+      letterSpacing: 0.2,
     },
-});
+  });
+}

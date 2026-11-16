@@ -4,19 +4,13 @@ import { User, Video, BarChart2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
 import BottomNav from '@/components/navigation/BottomNav';
+import { useMatchesTheme } from '@/hooks/useMatchesTheme';
 import { useLiveFixtureSync } from '../../hooks/useLiveFixtureSync';
 
 function LiveFixtureSyncBootstrap() {
   useLiveFixtureSync();
   return null;
 }
-
-const TAB_STACK_OPTIONS = {
-  headerShown: false,
-  contentStyle: { backgroundColor: '#000' },
-  lazy: true,
-  freezeOnBlur: true,
-} as const;
 
 function isLandingTab(pathname: string | null): boolean {
   const p = (pathname ?? '').toLowerCase();
@@ -28,6 +22,13 @@ export default function TabLayout() {
   const pathname = usePathname();
   const navigation = useNavigation();
   const { isLoaded, isSignedIn } = useAuth();
+  const { colors } = useMatchesTheme();
+  const tabStackOptions = {
+    headerShown: false,
+    contentStyle: { backgroundColor: colors.pageBg },
+    lazy: true,
+    freezeOnBlur: true,
+  } as const;
 
   // No tab content without an account — invite / deep links must land on /auth.
   useEffect(() => {
@@ -79,16 +80,16 @@ export default function TabLayout() {
   }, [navigation, pathname, router]);
 
   if (!isLoaded || !isSignedIn) {
-    return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+    return <View style={{ flex: 1, backgroundColor: colors.pageBg }} />;
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
       <LiveFixtureSyncBootstrap />
       <Tabs
         initialRouteName="matches"
         screenOptions={{
-          ...TAB_STACK_OPTIONS,
+          ...tabStackOptions,
           tabBarStyle: {
             display: 'none',
           },

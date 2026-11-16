@@ -27,6 +27,7 @@ import { useTranslation } from '../../src/i18n';
 import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
 import { isMisTaggedWorldCupLeagueName } from '../../constants/worldCup';
+import { useMatchesTheme, type MatchesThemeColors } from '../../hooks/useMatchesTheme';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
@@ -40,6 +41,8 @@ const CountryFlagThumb = memo(function CountryFlagThumb({
   country: string;
   apiFlag: string | null;
 }) {
+  const { colors } = useMatchesTheme();
+  const styles = useMemo(() => createAccordionStyles(colors), [colors]);
   const uri = useMemo(() => getCountryFlagUri(country, apiFlag), [country, apiFlag]);
   const emoji = useMemo(() => getCountryFlagEmoji(country, apiFlag), [country, apiFlag]);
 
@@ -87,6 +90,8 @@ const LeagueSection = memo(function LeagueSection({
   // match cards. The user explicitly asked for this and it's also much
   // faster on first paint.
   const [expanded, setExpanded] = useState(false);
+  const { colors } = useMatchesTheme();
+  const styles = useMemo(() => createAccordionStyles(colors), [colors]);
 
   const toggle = useCallback(() => {
     if (ANIMATE_TOGGLE) {
@@ -133,9 +138,9 @@ const LeagueSection = memo(function LeagueSection({
         <Text style={styles.leagueName} numberOfLines={1}>{localizedLeagueName}</Text>
         <Text style={styles.matchCount}>{matchCount}</Text>
         {expanded ? (
-          <ChevronUp size={14} color="rgba(255,255,255,0.4)" />
+          <ChevronUp size={14} color={colors.iconMuted} />
         ) : (
-          <ChevronDown size={14} color="rgba(255,255,255,0.4)" />
+          <ChevronDown size={14} color={colors.iconMuted} />
         )}
       </TouchableOpacity>
 
@@ -179,6 +184,8 @@ export const CountryAccordion = memo(function CountryAccordion({
   // FlashList recycles cells: plain useState would carry another country's
   // expanded state over and ignore defaultExpanded.
   const [expanded, setExpanded] = useRecyclingState(defaultExpanded, [countryGroup.country]);
+  const { colors } = useMatchesTheme();
+  const styles = useMemo(() => createAccordionStyles(colors), [colors]);
   const { language } = useTranslation();
   const localizedCountryName = getCountryDisplayName(countryGroup.country, language);
 
@@ -201,9 +208,9 @@ export const CountryAccordion = memo(function CountryAccordion({
         <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
         <Text style={styles.totalBadge}>{totalMatches}</Text>
         {expanded ? (
-          <ChevronUp size={16} color="rgba(255,255,255,0.5)" />
+          <ChevronUp size={16} color={colors.iconMuted} />
         ) : (
-          <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
+          <ChevronDown size={16} color={colors.iconMuted} />
         )}
       </TouchableOpacity>
 
@@ -226,129 +233,129 @@ export const CountryAccordion = memo(function CountryAccordion({
   );
 });
 
-const styles = StyleSheet.create({
-  countryContainer: {
-    marginBottom: 8,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  countryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  countryFlag: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 2,
-  },
-  flagWrap: {
-    width: 24,
-    height: 16,
-    borderRadius: 2,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  flagEmoji: {
-    fontSize: 16,
-    width: 24,
-    textAlign: 'center',
-  },
-  flagEmojiPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 16,
-    opacity: 0.85,
-  },
-  countryName: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  totalBadge: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  leaguesWrapper: {
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-  },
-  leagueSection: {
-    marginTop: 4,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    overflow: 'hidden',
-  },
-  leagueHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  leagueLogo: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-  },
-  placeholderLogo: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  leagueName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
-  },
-  matchCount: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
-    marginEnd: 4,
-  },
-  matchesContainer: {
-    paddingHorizontal: 4,
-    paddingBottom: 6,
-    gap: 4,
-  },
-  viewAllBtn: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    marginTop: 2,
-    borderRadius: 8,
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.2)',
-  },
-  viewAllText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#A78BFA',
-  },
-  leagueEmptyWrap: {
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-  leagueEmptyText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.45)',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-});
-
-export default CountryAccordion;
+function createAccordionStyles(c: MatchesThemeColors) {
+  return StyleSheet.create({
+    countryContainer: {
+      marginBottom: 8,
+      borderRadius: 14,
+      overflow: 'hidden',
+      backgroundColor: c.cardBg,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
+    },
+    countryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 10,
+    },
+    countryFlag: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 2,
+    },
+    flagWrap: {
+      width: 24,
+      height: 16,
+      borderRadius: 2,
+      overflow: 'hidden',
+      backgroundColor: c.logoStubBg,
+    },
+    flagEmoji: {
+      fontSize: 16,
+      width: 24,
+      textAlign: 'center',
+    },
+    flagEmojiPlaceholder: {
+      ...StyleSheet.absoluteFillObject,
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 16,
+      opacity: 0.85,
+    },
+    countryName: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '700',
+      color: c.textPrimary,
+    },
+    totalBadge: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.textSecondary,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      overflow: 'hidden',
+    },
+    leaguesWrapper: {
+      paddingHorizontal: 8,
+      paddingBottom: 8,
+    },
+    leagueSection: {
+      marginTop: 4,
+      borderRadius: 10,
+      backgroundColor: c.chipBg,
+      overflow: 'hidden',
+    },
+    leagueHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      gap: 8,
+    },
+    leagueLogo: {
+      width: 20,
+      height: 20,
+      borderRadius: 4,
+    },
+    placeholderLogo: {
+      backgroundColor: c.logoStubBg,
+    },
+    leagueName: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.textPrimary,
+    },
+    matchCount: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: c.textMuted,
+      marginEnd: 4,
+    },
+    matchesContainer: {
+      paddingHorizontal: 4,
+      paddingBottom: 6,
+      gap: 4,
+    },
+    viewAllBtn: {
+      alignItems: 'center',
+      paddingVertical: 8,
+      marginTop: 2,
+      borderRadius: 8,
+      backgroundColor: c.primaryMuted,
+      borderWidth: 1,
+      borderColor: c.primaryBorder,
+    },
+    viewAllText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.primarySoft,
+    },
+    leagueEmptyWrap: {
+      paddingVertical: 14,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+    },
+    leagueEmptyText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: c.textMuted,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+  });
+}
