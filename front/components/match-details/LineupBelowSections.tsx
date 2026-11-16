@@ -16,14 +16,14 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from './MatchText';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 import { useLocalizedName } from '../../hooks/useLocalizedName';
 import { shortPlayerName, type LineupPitchPlayer } from '../../utils/lineupMatchState';
 import { getCountryDisplayName } from '../../utils/i18nHelpers';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
-import { LINEUP_ICON } from './lineupAssets';
+import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
+import { AthleteCutoutImage } from './AthleteCutoutImage';
 import type { Injury } from '../../services/apiFootball';
 import type { Language } from '../../src/i18n';
 
@@ -141,6 +141,7 @@ function SectionHeader({
 function SquadPlayerCard({
   name,
   number,
+  athleteId,
   photoUri,
   nationality,
   secondary,
@@ -151,6 +152,7 @@ function SquadPlayerCard({
 }: {
   name: string;
   number?: number | null;
+  athleteId?: number | null;
   photoUri?: string | null;
   nationality?: string | null;
   /** Plain secondary line (injury reason / position) when not a country. */
@@ -201,19 +203,15 @@ function SquadPlayerCard({
         ) : null}
       </View>
       <View style={styles.playerPhotoWrap}>
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={styles.playerPhoto}
-            contentFit="cover"
-            contentPosition="top"
-            transition={0}
-          />
-        ) : (
-          <View style={[styles.playerPhotoFallback, isDark && { backgroundColor: '#1C1240' }]}>
-            <Ionicons name="person" size={28} color="#8B5CF6" />
-          </View>
-        )}
+        <AthleteCutoutImage
+          athleteId={athleteId}
+          photo={photoUri}
+          width={PHOTO_W}
+          height={PHOTO_H}
+          plateColor={isDark ? '#1C1240' : '#F3EDFF'}
+          contentFit="contain"
+          recyclingKey={athleteId ?? photoUri ?? name}
+        />
         {number != null && number > 0 ? (
           <View
             style={[
@@ -301,19 +299,25 @@ function CoachSection({
             ) : null}
           </View>
         </View>
-        <View style={styles.coachPhotoWrap}>
+        <View style={[styles.coachPhotoWrap, isDark && { backgroundColor: '#1C1240' }]}>
           {coach.photo ? (
+            <AthleteCutoutImage
+              athleteId={coach.id}
+              photo={coach.photo}
+              width={COACH_PHOTO_W}
+              height={CARD_H}
+              plateColor={isDark ? '#1C1240' : '#F3EDFF'}
+              contentFit="contain"
+              recyclingKey={coach.id ?? coach.photo}
+            />
+          ) : (
             <Image
-              source={{ uri: coach.photo }}
+              source={LINEUP_ART.coachCharacter}
               style={styles.coachPhoto}
               contentFit="cover"
               contentPosition="top"
               transition={0}
             />
-          ) : (
-            <View style={[styles.coachPhotoFallback, isDark && { backgroundColor: '#1C1240' }]}>
-              <Ionicons name="person" size={32} color="#8B5CF6" />
-            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -432,6 +436,7 @@ export function LineupBelowSections({
                     key={`sub-${player.id ?? player.name}-${player.number}`}
                     name={player.name}
                     number={player.number}
+                    athleteId={player.id}
                     photoUri={
                       player.id
                         ? resolvePhoto(player.id, player.photo, 160) || player.photo
@@ -472,6 +477,7 @@ export function LineupBelowSections({
                     key={`abs-${injury.player.id}-${injury.reason}`}
                     name={injury.player.name}
                     number={null}
+                    athleteId={injury.player.id}
                     photoUri={injury.player.photo}
                     secondary={injury.reason || injury.type || null}
                     language={language}
@@ -676,18 +682,7 @@ const styles = StyleSheet.create({
   playerPhotoWrap: {
     width: PHOTO_W,
     height: PHOTO_H,
-    backgroundColor: '#F8F7FF',
     overflow: 'hidden',
-  },
-  playerPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  playerPhotoFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8F7FF',
   },
   numberBadge: {
     position: 'absolute',

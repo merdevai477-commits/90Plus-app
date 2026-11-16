@@ -23,6 +23,8 @@ export const LINEUP_ART = {
   /** Best-players card (node 550:2809). */
   bestPlayersBg: require('../../assets/images/match-lineup/best-players-bg.webp'),
   bestSideOverlay: require('../../assets/images/match-lineup/best-side-overlay.png'),
+  /** Character placeholder when coach photo is missing. */
+  coachCharacter: require('../../assets/images/match-lineup/coach-character.jpg'),
 } as const;
 
 export const LINEUP_ICON = {

@@ -2176,7 +2176,7 @@ const MatchDetailsScreen = () => {
     const visibleLineups = selectedLineup ? [selectedLineup] : [];
 
     return (
-      <View style={styles.lineupScreen}>
+      <View style={[styles.lineupScreen, { backgroundColor: mdIsDark ? '#030303' : mdColors.pageBg }]}>
           {visibleLineups.map((lineup, index) => {
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
@@ -3476,7 +3476,6 @@ const styles = StyleSheet.create({
   lineupScreen: {
     marginHorizontal: -16,
     marginTop: -8,
-    backgroundColor: '#030303',
   },
   lineupScreenBody: {
     paddingBottom: 28,

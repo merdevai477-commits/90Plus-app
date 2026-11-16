@@ -40,6 +40,55 @@ export function buildScores365AthleteCutoutUrl(
   );
 }
 
+/**
+ * Rewrite an existing 365Scores athlete URL into a transparent cutout
+ * (`e_background_removal`), or build one from the athlete id.
+ */
+export function toScores365CutoutUrl(
+  athleteId: number | null | undefined,
+  preferred?: string | null,
+  size = 256,
+  imageVersion?: number | null,
+): string | undefined {
+  const fromPreferred = preferScores365AthletesPhotoUrl(preferred?.trim() || null);
+  if (fromPreferred && isScores365ImageUrl(fromPreferred)) {
+    const version =
+      imageVersion ?? scores365AthleteImageVersionFromUrl(fromPreferred);
+    const versionSegment =
+      version != null && version > 0 ? `v${version}/` : '';
+    const idMatch = /\/Athletes\/(\d+)/.exec(fromPreferred);
+    const id = idMatch ? Number(idMatch[1]) : athleteId;
+    if (id && id > 0) {
+      return buildScores365AthleteCutoutUrl(id, size, version);
+    }
+    // Keep host + athlete path but force background-removal transforms.
+    return fromPreferred.replace(
+      /\/image\/upload\/[^/]+\//,
+      `/image/upload/e_background_removal,f_png,w_${size},h_${size},c_limit,q_auto:eco,dpr_2/${versionSegment}`,
+    );
+  }
+  if (athleteId != null && athleteId > 0) {
+    return buildScores365AthleteCutoutUrl(athleteId, size, imageVersion);
+  }
+  return undefined;
+}
+
+/** Cutout first, then regular headshot candidates — for “مجسم” lineup cards. */
+export function scores365AthleteCutoutCandidates(
+  athleteId: number,
+  preferred?: string | null,
+  size = 256,
+  imageVersion?: number | null,
+): string[] {
+  const urls: string[] = [];
+  const cutout = toScores365CutoutUrl(athleteId, preferred, size, imageVersion);
+  if (cutout) urls.push(cutout);
+  urls.push(...scores365AthletePhotoCandidates(athleteId, preferred, 250, imageVersion));
+  const preferredFixed = preferScores365AthletesPhotoUrl(preferred?.trim() || null);
+  if (preferredFixed) urls.push(preferredFixed);
+  return [...new Set(urls.filter(Boolean))];
+}
+
 /** Reads the `/v{n}/` segment from a 365 athlete image URL, if present. */
 export function scores365AthleteImageVersionFromUrl(
   url: string | null | undefined,
