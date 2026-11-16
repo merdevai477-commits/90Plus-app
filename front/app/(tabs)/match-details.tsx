@@ -242,7 +242,7 @@ function PullableTabBody({ children }: { children: React.ReactNode }) {
 }
 
 const MatchDetailsScreen = () => {
-  const { colors: mdColors } = useMatchDetailsTheme();
+  const { colors: mdColors, isDark: mdIsDark } = useMatchDetailsTheme();
   useScreenFont();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -2406,35 +2406,93 @@ const MatchDetailsScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Head-to-head (direct meetings) */}
-        <View style={styles.formContainer}>
-          <View style={styles.formHeader}>
-            <Text style={styles.formTitle}>{t.matchDetails.headToHead}</Text>
+        {/* Head-to-head (direct meetings) — Figma 1896:5276 */}
+        <View
+          style={[
+            styles.formContainer,
+            {
+              backgroundColor: 'transparent',
+              paddingHorizontal: 0,
+              paddingTop: 0,
+            },
+          ]}
+        >
+          <View style={styles.h2hSectionHeader}>
+            <Text style={[styles.h2hBothLink, { color: mdColors.primary }]}>
+              {t.matchDetails.headToHeadBothTeams}
+            </Text>
+            <View style={styles.h2hTitleRow}>
+              <Text style={[styles.h2hTitle, { color: mdColors.textPrimary }]}>
+                {t.matchDetails.headToHead}
+              </Text>
+              <ExpoImage
+                source={require('../../assets/images/match-form/trophy.svg')}
+                style={styles.h2hTrophy}
+                contentFit="contain"
+              />
+            </View>
           </View>
           {h2hFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
               {h2hFixtures.map((row, index) => (
-                <View key={`h2h-${index}`} style={styles.fixtureCard}>
-                  <View style={styles.h2hTeamsRow}>
-                    <TeamBadge
-                      name={row.teams.home.name}
-                      logo={row.teams.home.logo}
-                      size={32}
-                      color="transparent"
-                    />
-                    <TeamBadge
-                      name={row.teams.away.name}
-                      logo={row.teams.away.logo}
-                      size={32}
-                      color="transparent"
-                    />
+                <View
+                  key={`h2h-${index}`}
+                  style={[
+                    styles.h2hCard,
+                    {
+                      backgroundColor: mdColors.cardBg,
+                      borderColor: mdColors.cardBorder,
+                      shadowColor: '#4B1FA3',
+                    },
+                  ]}
+                >
+                  <View style={styles.h2hCardRow}>
+                    <View style={styles.h2hTeamSide}>
+                      <TeamBadge
+                        name={row.teams.home.name}
+                        logo={row.teams.home.logo}
+                        size={40}
+                        color="transparent"
+                      />
+                      <Text
+                        style={[styles.h2hTeamName, { color: mdColors.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {getTeamDisplayName(row.teams.home.name, language)}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.h2hScoreCapsule,
+                        { backgroundColor: mdIsDark ? 'rgba(168,85,247,0.18)' : '#F2EBFC' },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.h2hScoreText,
+                          { color: mdIsDark ? '#E9D5FF' : '#4B1FA3' },
+                        ]}
+                      >
+                        {row.goals.home ?? '-'} - {row.goals.away ?? '-'}
+                      </Text>
+                    </View>
+                    <View style={[styles.h2hTeamSide, styles.h2hTeamSideEnd]}>
+                      <Text
+                        style={[styles.h2hTeamName, styles.h2hTeamNameEnd, { color: mdColors.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {getTeamDisplayName(row.teams.away.name, language)}
+                      </Text>
+                      <TeamBadge
+                        name={row.teams.away.name}
+                        logo={row.teams.away.logo}
+                        size={40}
+                        color="transparent"
+                      />
+                    </View>
                   </View>
-                  <View style={styles.fixtureInfo}>
-                    <Text style={styles.fixtureOpponent} numberOfLines={1}>
-                      {getTeamDisplayName(row.teams.home.name, language)} {t.matchDetails.vs}{' '}
-                      {getTeamDisplayName(row.teams.away.name, language)}
-                    </Text>
-                    <Text style={styles.fixtureLeague}>
+                  <View style={styles.h2hMetaRow}>
+                    <Text style={[styles.h2hMetaText, { color: mdColors.textMuted }]} numberOfLines={1}>
                       {getLeagueDisplayName(
                         row.league.name,
                         language,
@@ -2442,18 +2500,20 @@ const MatchDetailsScreen = () => {
                         undefined,
                       )}
                     </Text>
-                  </View>
-                  <View style={styles.fixtureResult}>
-                    <Text style={styles.fixtureScore}>
-                      {row.goals.home} - {row.goals.away}
-                    </Text>
+                    <ExpoImage
+                      source={require('../../assets/images/match-form/calendar.svg')}
+                      style={styles.h2hCalendar}
+                      contentFit="contain"
+                    />
                   </View>
                 </View>
               ))}
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>{t.matchDetails.noHeadToHead}</Text>
+              <Text style={[styles.emptyStateText, { color: mdColors.textSecondary }]}>
+                {t.matchDetails.noHeadToHead}
+              </Text>
             </View>
           )}
         </View>
@@ -2467,7 +2527,16 @@ const MatchDetailsScreen = () => {
         />
 
         {/* Selected Team Last 5 Matches */}
-        <View style={styles.formContainer}>
+        <View
+          style={[
+            styles.formContainer,
+            {
+              backgroundColor: mdIsDark ? '#1a1a1a' : mdColors.cardBg,
+              borderWidth: mdIsDark ? 0 : 1,
+              borderColor: mdColors.cardBorder,
+            },
+          ]}
+        >
           <View style={styles.formHeader}>
             <TeamBadge
               name={selectedTeamSide === 'home' ? homeTeamName : awayTeamName}
@@ -2475,10 +2544,12 @@ const MatchDetailsScreen = () => {
               size={50}
               color="transparent"
             />
-            <Text style={styles.formTeamName}>
+            <Text style={[styles.formTeamName, { color: mdColors.textPrimary }]}>
               {getTeamDisplayName(selectedTeamSide === 'home' ? homeTeamName : awayTeamName, language)}
             </Text>
-            <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
+            <Text style={[styles.formTitle, { color: mdColors.textMuted }]}>
+              {t.matchDetails.last5Matches}
+            </Text>
           </View>
           {selectedLastFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
@@ -2490,13 +2561,23 @@ const MatchDetailsScreen = () => {
                 const result = resolveFormResult(teamScore, opponentScore);
 
                 return (
-                  <View key={index} style={styles.fixtureCard}>
+                  <View
+                    key={index}
+                    style={[
+                      styles.fixtureCard,
+                      {
+                        backgroundColor: mdIsDark ? '#252525' : '#F8F5FF',
+                        borderWidth: mdIsDark ? 0 : 1,
+                        borderColor: mdColors.cardBorder,
+                      },
+                    ]}
+                  >
                     <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
-                      <Text style={styles.fixtureOpponent} numberOfLines={1}>
+                      <Text style={[styles.fixtureOpponent, { color: mdColors.textPrimary }]} numberOfLines={1}>
                         {t.matchDetails.vs} {getTeamDisplayName(opponent.name, language)}
                       </Text>
-                      <Text style={styles.fixtureLeague}>
+                      <Text style={[styles.fixtureLeague, { color: mdColors.textMuted }]}>
                         {getLeagueDisplayName(
                           fixture.league.name,
                           language,
@@ -2505,9 +2586,17 @@ const MatchDetailsScreen = () => {
                         )}
                       </Text>
                     </View>
-                    <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
-                    result === 'lose' && styles.fixtureLose,
-                    result === 'draw' && styles.fixtureDraw]}>
+                    <View
+                      style={[
+                        styles.fixtureResult,
+                        !mdIsDark && result === 'win' && { backgroundColor: '#22c55e' },
+                        !mdIsDark && result === 'lose' && { backgroundColor: '#ef4444' },
+                        !mdIsDark && result === 'draw' && { backgroundColor: '#f59e0b' },
+                        result === 'win' && styles.fixtureWin,
+                        result === 'lose' && styles.fixtureLose,
+                        result === 'draw' && styles.fixtureDraw,
+                      ]}
+                    >
                       <Text style={styles.fixtureScore}>{teamScore} - {opponentScore}</Text>
                     </View>
                   </View>
@@ -2516,7 +2605,9 @@ const MatchDetailsScreen = () => {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>{t.matchDetails.noPreviousMatches}</Text>
+              <Text style={[styles.emptyStateText, { color: mdColors.textSecondary }]}>
+                {t.matchDetails.noPreviousMatches}
+              </Text>
             </View>
           )}
         </View>
@@ -3713,7 +3804,99 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   fixturesList: {
-    gap: 12,
+    gap: 14,
+  },
+  h2hSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    width: '100%',
+  },
+  h2hBothLink: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  h2hTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  h2hTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  h2hTrophy: {
+    width: 24,
+    height: 24,
+  },
+  h2hCard: {
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 81,
+    justifyContent: 'center',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 2,
+  },
+  h2hCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    minHeight: 48,
+    gap: 8,
+  },
+  h2hTeamSide: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+  },
+  h2hTeamSideEnd: {
+    justifyContent: 'flex-end',
+  },
+  h2hTeamName: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  h2hTeamNameEnd: {
+    textAlign: 'right',
+  },
+  h2hScoreCapsule: {
+    minWidth: 78,
+    height: 29,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  h2hScoreText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  h2hMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingHorizontal: 12,
+    minHeight: 16,
+  },
+  h2hMetaText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  h2hCalendar: {
+    width: 15,
+    height: 15,
   },
   h2hTeamsRow: {
     flexDirection: 'row',

@@ -38,6 +38,9 @@ import {
   ChatKeyboardStickyView,
   isKeyboardControllerActive,
 } from '@/utils/keyboardControllerSafe';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
+
+const CHAT_EMPTY_ILLUSTRATION = require('../../assets/images/match-chat/empty-bubbles.svg');
 
 export type MatchChatScorer = { name: string; minute: string };
 
@@ -549,6 +552,7 @@ export function MatchChatTab({
   const router = useRouter();
   const { user: clerkUser } = useUser();
   const { t } = useTranslation();
+  const { colors, isDark } = useMatchDetailsTheme();
   const md = t.matchDetails;
   const listRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
   const fullListRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
@@ -815,9 +819,19 @@ export function MatchChatTab({
 
   const empty = (
     <View style={styles.emptyState}>
-      <Ionicons name="chatbubble-ellipses-outline" size={32} color="#3B0769" />
-      <Text style={styles.emptyTitle}>{signedIn ? md.chatEmptyFirst : md.chatLoginTitle}</Text>
-      {!signedIn ? <Text style={styles.emptyHint}>{md.chatLoginHint}</Text> : null}
+      <ExpoImage
+        source={CHAT_EMPTY_ILLUSTRATION}
+        style={styles.emptyIllustration}
+        contentFit="contain"
+      />
+      <Text style={[styles.emptyTitle, { color: isDark ? '#6B5B7A' : colors.primary }]}>
+        {signedIn ? md.chatEmptyFirst : md.chatLoginTitle}
+      </Text>
+      {!signedIn ? (
+        <Text style={[styles.emptyHint, !isDark && { color: colors.textSecondary }]}>
+          {md.chatLoginHint}
+        </Text>
+      ) : null}
       {!signedIn ? (
         <Pressable style={styles.loginBtn} onPress={() => router.push('/auth')} accessibilityRole="button">
           <Text style={styles.loginBtnText}>{md.chatLoginCta}</Text>
@@ -871,10 +885,15 @@ export function MatchChatTab({
       replyTarget?.user.displayName?.trim() || replyTarget?.user.username?.trim() || '';
     return (
       <LinearGradient
-        colors={['#07040D', '#0C051A']}
+        colors={
+          isDark
+            ? (['#07040D', '#0C051A'] as const)
+            : (['#FAF5FF', '#F3EDFF'] as const)
+        }
         style={[
           styles.composerBar,
           {
+            borderTopColor: isDark ? '#24193B' : '#F3EDFF',
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
@@ -918,11 +937,20 @@ export function MatchChatTab({
           <SendButtonIcon size={53} disabled={!canSend && signedIn} />
         </Pressable>
 
-        <View style={[styles.inputContainer, (frozen || chatClosed || !signedIn) && styles.inputContainerDisabled]}>
+        <View
+          style={[
+            styles.inputContainer,
+            !isDark && {
+              backgroundColor: '#F2E5FF',
+              borderColor: '#E4D6FF',
+            },
+            (frozen || chatClosed || !signedIn) && styles.inputContainerDisabled,
+          ]}
+        >
           <FaceSmileIcon size={24} />
           <TextInput
             ref={inputRef}
-            style={styles.input}
+            style={[styles.input, !isDark && { color: colors.textPrimary }]}
             placeholder={
               chatClosed
                 ? md.chatClosedPlaceholder
@@ -932,7 +960,7 @@ export function MatchChatTab({
                     ? md.chatLoginHint
                     : md.chatPlaceholder
             }
-            placeholderTextColor="#484050"
+            placeholderTextColor={isDark ? '#484050' : '#4B1FA3'}
             textAlign="right"
             textAlignVertical="center"
             editable={signedIn && !frozen && !chatClosed}
@@ -945,7 +973,9 @@ export function MatchChatTab({
             onFocus={keyboard.onInputFocus}
           />
           {draft.length > maxLength - 40 ? (
-            <Text style={styles.counter}>{maxLength - draft.length}</Text>
+            <Text style={[styles.counter, !isDark && { color: colors.textMuted }]}>
+              {maxLength - draft.length}
+            </Text>
           ) : null}
         </View>
         </View>
@@ -1009,15 +1039,25 @@ export function MatchChatTab({
   );
 
   return (
-    <View collapsable={false} style={styles.wrap}>
+    <View
+      collapsable={false}
+      style={[styles.wrap, !isDark && { backgroundColor: colors.pageBg }]}
+    >
       {banners}
 
-      <View collapsable={false} style={styles.compactBody}>
+      <View
+        collapsable={false}
+        style={[styles.compactBody, !isDark && { backgroundColor: colors.pageBg }]}
+      >
         {feedBody('compact', compactMessages)}
 
         {showAllCta ? (
           <LinearGradient
-            colors={['rgba(10,5,21,0)', 'rgba(10,5,21,0.54)', '#0A0515']}
+            colors={
+              isDark
+                ? (['rgba(10,5,21,0)', 'rgba(10,5,21,0.54)', '#0A0515'] as const)
+                : (['rgba(244,241,250,0)', 'rgba(244,241,250,0.7)', colors.pageBg] as const)
+            }
             locations={[0, 0.35, 1]}
             style={styles.showAllOverlay}
             pointerEvents="box-none"
@@ -1042,9 +1082,21 @@ export function MatchChatTab({
         onRequestClose={onCloseFull}
         statusBarTranslucent
       >
-        <View collapsable={false} style={styles.fullWrap}>
-          <StatusBar barStyle="light-content" backgroundColor="#07040D" />
-          <View style={[styles.fullInner, { paddingTop: Math.max(insets.top, 12) }]}>
+        <View
+          collapsable={false}
+          style={[styles.fullWrap, !isDark && { backgroundColor: colors.pageBg }]}
+        >
+          <StatusBar
+            barStyle={colors.statusBar}
+            backgroundColor={isDark ? '#07040D' : colors.pageBg}
+          />
+          <View
+            style={[
+              styles.fullInner,
+              { paddingTop: Math.max(insets.top, 12) },
+              !isDark && { backgroundColor: colors.pageBg },
+            ]}
+          >
             {matchSummary ? (
               <ChatScoreHeader
                 summary={matchSummary}
@@ -1112,13 +1164,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    paddingVertical: 60,
-    gap: 10,
+    paddingVertical: 40,
+    gap: 12,
+  },
+  emptyIllustration: {
+    width: 280,
+    height: 200,
   },
   emptyTitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#6B5B7A',
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'center',
   },
   emptyHint: {

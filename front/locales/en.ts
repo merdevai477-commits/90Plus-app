@@ -592,6 +592,7 @@ export const en = {
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
     headToHead: 'Head to Head',
+    headToHeadBothTeams: 'Both teams',
     noHeadToHead: 'No previous meetings between these teams',
     noPreviousMatches: 'No previous matches',
     goalkeeper: 'Goalkeeper',

@@ -17,13 +17,9 @@ import TeamBadge from '../common/TeamBadge';
 import {
   PURPLE_PRIMARY,
   PURPLE_DARK,
-  GLASS_BORDER_SIDE,
-  GLASS_BORDER_TOP,
-  BG_MID,
-  TEXT_PRIMARY,
-  TEXT_MUTED,
   RADIUS_LG,
 } from '../../constants/tokens';
+import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 type TeamLegend = {
   name: string;
@@ -43,9 +39,8 @@ type Props = {
   awayTeam?: TeamLegend;
 };
 
-const AWAY_GREY = '#3A3A42';
-const GRID = 'rgba(255,255,255,0.12)';
-const AXIS = 'rgba(255,255,255,0.35)';
+const AWAY_GREY_DARK = '#3A3A42';
+const AWAY_GREY_LIGHT = '#6B6B73';
 const PAD_X = 14;
 const PAD_TOP = 28;
 const PAD_BOTTOM = 28;
@@ -97,7 +92,27 @@ function buildAreaPath(
   return d;
 }
 
-function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: number; uid: string }) {
+function MomentumChart({
+  series,
+  width,
+  uid,
+  isDark,
+  axisColor,
+  gridColor,
+  axisMidColor,
+  stemColor,
+  awayFill,
+}: {
+  series: MomentumSeries;
+  width: number;
+  uid: string;
+  isDark: boolean;
+  axisColor: string;
+  gridColor: string;
+  axisMidColor: string;
+  stemColor: string;
+  awayFill: string;
+}) {
   const innerW = Math.max(1, width - PAD_X * 2);
   const midY = PAD_TOP + CHART_H / 2;
   const halfH = CHART_H / 2 - 6;
@@ -126,12 +141,12 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
       <Svg width={width} height={totalH}>
         <Defs>
           <LinearGradient id={homeGrad} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={PURPLE_PRIMARY} stopOpacity="0.95" />
-            <Stop offset="1" stopColor={PURPLE_DARK} stopOpacity="0.45" />
+            <Stop offset="0" stopColor={isDark ? PURPLE_PRIMARY : '#A78BFA'} stopOpacity={isDark ? 0.95 : 0.9} />
+            <Stop offset="1" stopColor={isDark ? PURPLE_DARK : '#6A2BD9'} stopOpacity={isDark ? 0.45 : 0.95} />
           </LinearGradient>
           <LinearGradient id={awayGrad} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={AWAY_GREY} stopOpacity="0.55" />
-            <Stop offset="1" stopColor={AWAY_GREY} stopOpacity="0.95" />
+            <Stop offset="0" stopColor={awayFill} stopOpacity={isDark ? 0.55 : 0.7} />
+            <Stop offset="1" stopColor={awayFill} stopOpacity={isDark ? 0.95 : 0.95} />
           </LinearGradient>
         </Defs>
 
@@ -142,7 +157,7 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
             y1={y}
             x2={PAD_X + innerW}
             y2={y}
-            stroke={GRID}
+            stroke={gridColor}
             strokeWidth={1}
           />
         ))}
@@ -156,7 +171,7 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
               y1={PAD_TOP}
               x2={x}
               y2={PAD_TOP + CHART_H}
-              stroke={m === Math.round(series.duration / 2) ? AXIS : GRID}
+              stroke={m === Math.round(series.duration / 2) ? axisMidColor : gridColor}
               strokeWidth={m === Math.round(series.duration / 2) ? 1.2 : 1}
             />
           );
@@ -177,7 +192,7 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
               y1={peakY}
               x2={x}
               y2={iconY}
-              stroke="rgba(233,213,255,0.55)"
+              stroke={stemColor}
               strokeWidth={1}
             />
           );
@@ -204,7 +219,7 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
             key={l.text}
             style={[
               styles.axisLabel,
-              { left: minuteToXRtl(l.m, series.duration, innerW, PAD_X) - 14, width: 28 },
+              { left: minuteToXRtl(l.m, series.duration, innerW, PAD_X) - 14, width: 28, color: axisColor },
             ]}
           >
             {l.text}
@@ -218,16 +233,18 @@ function MomentumChart({ series, width, uid }: { series: MomentumSeries; width: 
 function LegendRow({
   color,
   team,
+  labelColor,
 }: {
   color: string;
   team?: TeamLegend;
+  labelColor: string;
 }) {
   if (!team?.name) return null;
   return (
     <View style={styles.legendItem}>
       <View style={[styles.legendDot, { backgroundColor: color }]} />
       <TeamBadge name={team.name} logo={team.logo} size={18} color="transparent" />
-      <Text style={styles.legendName} numberOfLines={1}>
+      <Text style={[styles.legendName, { color: labelColor }]} numberOfLines={1}>
         {team.name}
       </Text>
     </View>
@@ -239,9 +256,14 @@ function LegendRow({
  */
 export function MatchMomentumGraph(props: Props) {
   const { width: screenW } = useWindowDimensions();
+  const { colors, isDark } = useMatchDetailsTheme();
   const cardW = Math.min(screenW - 32, 420);
   const uid = useId().replace(/:/g, '');
   const [remote, setRemote] = useState<MomentumSeries | null | undefined>(undefined);
+  const awayFill = isDark ? AWAY_GREY_DARK : AWAY_GREY_LIGHT;
+  const gridColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(106,43,217,0.16)';
+  const axisMidColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(106,43,217,0.45)';
+  const stemColor = isDark ? 'rgba(233,213,255,0.55)' : 'rgba(106,43,217,0.45)';
 
   const localSeries = useMemo(
     () =>
@@ -295,12 +317,33 @@ export function MatchMomentumGraph(props: Props) {
   if (!series) return null;
 
   return (
-    <View style={[styles.card, { width: cardW }]}>
-      <MomentumChart series={series} width={cardW} uid={uid} />
+    <View
+      style={[
+        styles.card,
+        {
+          width: cardW,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.cardBg,
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : colors.cardBorder,
+          shadowOpacity: isDark ? 0 : 0.18,
+          elevation: isDark ? 0 : 3,
+        },
+      ]}
+    >
+      <MomentumChart
+        series={series}
+        width={cardW}
+        uid={uid}
+        isDark={isDark}
+        axisColor={colors.textPrimary}
+        gridColor={gridColor}
+        axisMidColor={axisMidColor}
+        stemColor={stemColor}
+        awayFill={awayFill}
+      />
       {(props.homeTeam || props.awayTeam) && (
         <View style={styles.legend}>
-          <LegendRow color={PURPLE_PRIMARY} team={props.homeTeam} />
-          <LegendRow color={AWAY_GREY} team={props.awayTeam} />
+          <LegendRow color={PURPLE_PRIMARY} team={props.homeTeam} labelColor={colors.textSecondary} />
+          <LegendRow color={awayFill} team={props.awayTeam} labelColor={colors.textSecondary} />
         </View>
       )}
     </View>
@@ -315,9 +358,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS_LG,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: GLASS_BORDER_SIDE,
-    borderTopColor: GLASS_BORDER_TOP,
-    backgroundColor: BG_MID,
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 4,
   },
   marker: {
     position: 'absolute',
@@ -334,10 +377,9 @@ const styles = StyleSheet.create({
   },
   axisLabel: {
     position: 'absolute',
-    color: TEXT_PRIMARY,
     fontSize: 12,
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   legend: {
     flexDirection: 'row',
@@ -361,7 +403,6 @@ const styles = StyleSheet.create({
   },
   legendName: {
     flex: 1,
-    color: TEXT_MUTED,
     fontSize: 11,
     fontWeight: '600',
   },
