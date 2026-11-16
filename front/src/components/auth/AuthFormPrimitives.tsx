@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import { useAuthScale } from './authLayoutMetrics';
 import { useAuthTheme } from './useAuthTheme';
-import { AppleLogo, GoogleLogo } from './AuthSocialIcons';
+import { AppleLogo, DoorEnterIcon, GoogleLogo } from './AuthSocialIcons';
 
 const SOCIAL_BTN_HEIGHT = 50;
 const SOCIAL_BTN_RADIUS = 14;
@@ -91,6 +91,42 @@ export function AuthPrimaryButton({
         </Text>
         <View style={styles.primaryArrowSlot} />
       </LinearGradient>
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * Figma 1620:6000 — white outlined login CTA (ink label + door-enter icon).
+ */
+export function AuthSecondaryButton({
+  label,
+  onPress,
+  disabled,
+  style,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  style?: ViewStyle;
+}) {
+  const styles = useAuthPrimitiveStyles();
+  const { colors } = useAuthTheme();
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[
+        styles.secondaryBtn,
+        disabled && { opacity: 0.6 },
+        style,
+      ]}
+    >
+      <Text style={styles.secondaryTxt}>{label}</Text>
+      <DoorEnterIcon size={21} color={colors.textPrimary} />
     </TouchableOpacity>
   );
 }
@@ -385,6 +421,27 @@ function createAuthPrimitiveStyles(
       width: s(25),
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    secondaryBtn: {
+      height: Math.max(s(54), MIN_TOUCH_TARGET),
+      borderRadius: s(18),
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      backgroundColor: '#FFFFFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(12),
+      width: '100%',
+      paddingVertical: s(6),
+      overflow: 'hidden',
+    },
+    secondaryTxt: {
+      fontSize: f(16),
+      fontWeight: '600',
+      lineHeight: f(22),
+      color: colors.textPrimary,
+      textAlign: 'center',
     },
     divider: {
       flexDirection: 'row',

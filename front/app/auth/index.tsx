@@ -11,11 +11,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { UserRound, LogIn } from 'lucide-react-native';
+import { UserRound } from 'lucide-react-native';
 import { useTranslation } from '@/src/i18n';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
 import {
   AuthDivider,
+  AuthSecondaryButton,
   AuthSocialButtons,
 } from '@/src/components/auth';
 import { AuthThemeProvider, useAuthTheme } from '@/src/components/auth/useAuthTheme';
@@ -71,8 +72,6 @@ function AuthLandingInner() {
   };
 
   // Landing chrome is always the Figma light palette (1620:5898).
-  const ink = colors.textPrimary;
-  const border = colors.inputBorder;
   const muted = colors.textSecondary;
   const primary = colors.primary;
 
@@ -115,19 +114,11 @@ function AuthLandingInner() {
           </LinearGradient>
         </Pressable>
 
-        <Pressable
+        {/* Figma 1620:6000 — white outlined login CTA */}
+        <AuthSecondaryButton
+          label={copy.login}
           onPress={() => router.push('/auth/login')}
-          style={({ pressed }) => [
-            styles.secondaryBtn,
-            { borderColor: border, backgroundColor: '#FFFFFF' },
-            pressed && { opacity: 0.9 },
-          ]}
-        >
-          <Text style={[styles.secondaryTxt, { color: ink }]}>
-            {copy.login}
-          </Text>
-          <LogIn size={21} color={primary} strokeWidth={2.25} />
-        </Pressable>
+        />
 
         <View style={styles.dividerWrap}>
           <AuthDivider label={copy.divider} />
@@ -212,21 +203,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
-  },
-  secondaryBtn: {
-    height: 54,
-    borderRadius: 18,
-    borderWidth: 1,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  secondaryTxt: {
-    fontSize: 16,
-    fontWeight: '600',
-    lineHeight: 22,
   },
   dividerWrap: {
     marginTop: 4,

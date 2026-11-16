@@ -2,10 +2,11 @@ export { AuthScreenShell } from './AuthScreenShell';
 export { AuthTextField } from './AuthTextField';
 export { AuthHeroBlock } from './AuthHeroBlock';
 export { AuthBrandHeader } from './AuthBrandHeader';
-export { GoogleLogo, AppleLogo } from './AuthSocialIcons';
+export { GoogleLogo, AppleLogo, DoorEnterIcon } from './AuthSocialIcons';
 export {
   AuthPanelHeader,
   AuthPrimaryButton,
+  AuthSecondaryButton,
   AuthDivider,
   AuthSocialButtons,
   AuthFooterLink,
