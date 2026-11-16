@@ -249,22 +249,22 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash/splash-logo-lmt-light.png",
-          "imageWidth": 260,
+          "image": "./assets/images/splash/splash-brand-icon.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#F8F7FF",
           "dark": {
             "backgroundColor": "#0A0618",
-            "image": "./assets/images/splash/splash-logo-lmt.png"
+            "image": "./assets/images/splash/splash-brand-icon.png"
           },
           "android": {
             "backgroundColor": "#F8F7FF",
-            "image": "./assets/images/splash/splash-logo-lmt-light.png",
-            "imageWidth": 260,
+            "image": "./assets/images/splash/splash-brand-icon.png",
+            "imageWidth": 220,
             "resizeMode": "contain",
             "dark": {
               "backgroundColor": "#0A0618",
-              "image": "./assets/images/splash/splash-logo-lmt.png"
+              "image": "./assets/images/splash/splash-brand-icon.png"
             }
           }
         }

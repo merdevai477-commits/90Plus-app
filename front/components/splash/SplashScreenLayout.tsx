@@ -15,21 +15,20 @@ import { useAppSettings } from '../../src/store/useAppSettings';
 
 /** Figma light splash surface (1593:4238). */
 export const SPLASH_BG_LIGHT = '#F8F7FF';
-/** Dark splash — matches LMT wordmark contrast. */
+/** Dark splash surface. */
 export const SPLASH_BG_DARK = '#0A0618';
 
 /** Back-compat alias used by boot screens / layout. */
 export const SPLASH_BG_COLOR = SPLASH_BG_LIGHT;
 
-const LOGO_WIDTH = 280;
-const LOGO_HEIGHT = 53; // 512×96 wordmark aspect
+/** Full brand mark — complete 90 PLUS lockup, not the cropped pitch wordmark. */
+export const SPLASH_BRAND_ICON = require('../../assets/images/splash/splash-brand-icon.png');
+/** Back-compat aliases. */
+export const SPLASH_LOGO = SPLASH_BRAND_ICON;
+export const SPLASH_LOGO_LIGHT = SPLASH_BRAND_ICON;
+export const SPLASH_LOGO_DARK = SPLASH_BRAND_ICON;
 
-/** LMT pitch wordmark — white 90 + purple PLUS (for dark surfaces). */
-export const SPLASH_LOGO_DARK = require('../../assets/images/splash/splash-logo-lmt.png');
-/** Same lockup with ink 90 for light surfaces. */
-export const SPLASH_LOGO_LIGHT = require('../../assets/images/splash/splash-logo-lmt-light.png');
-/** Prefer light asset as default export for older imports. */
-export const SPLASH_LOGO = SPLASH_LOGO_LIGHT;
+const LOGO_SIZE = 196;
 
 interface SplashScreenLayoutProps {
   children?: React.ReactNode;
@@ -46,7 +45,7 @@ function resolveSplashDark(
 }
 
 /**
- * Shared splash: LMT 90+PLUS wordmark on light or dark surface.
+ * Shared splash: full 90PLUS brand icon on light/dark surface.
  * Native splash stays up until the logo has painted (avoids logo swap flash).
  */
 export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreenLayoutProps) {
@@ -55,14 +54,9 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
   const isDark = resolveSplashDark(preference, system);
 
   const bg = isDark ? SPLASH_BG_DARK : SPLASH_BG_LIGHT;
-  const logo = isDark ? SPLASH_LOGO_DARK : SPLASH_LOGO_LIGHT;
 
   const LogoWrap = logoAnimatedStyle ? Animated.View : View;
   const [logoReady, setLogoReady] = useState(false);
-
-  useEffect(() => {
-    setLogoReady(false);
-  }, [isDark]);
 
   useEffect(() => {
     if (!logoReady) return;
@@ -76,13 +70,10 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
   useEffect(() => {
     const t = setTimeout(() => setLogoReady(true), 1800);
     return () => clearTimeout(t);
-  }, [isDark]);
+  }, []);
 
   const glowStyle = useMemo(
-    () => [
-      styles.glow,
-      isDark ? styles.glowDark : styles.glowLight,
-    ],
+    () => [styles.glow, isDark ? styles.glowDark : styles.glowLight],
     [isDark],
   );
 
@@ -96,10 +87,9 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
 
       <LogoWrap style={[styles.logoContainer, logoAnimatedStyle]} pointerEvents="none">
         <Image
-          key={isDark ? 'dark' : 'light'}
-          source={logo}
+          source={SPLASH_BRAND_ICON}
           style={styles.logo}
-          contentFit="contain"
+          contentFit="cover"
           priority="high"
           cachePolicy={Platform.OS === 'android' ? 'none' : 'memory'}
           onLoad={() => setLogoReady(true)}
@@ -123,24 +113,37 @@ const styles = StyleSheet.create({
   },
   glow: {
     position: 'absolute',
-    width: 340,
-    height: 200,
-    borderRadius: 100,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
   },
   glowLight: {
-    backgroundColor: 'rgba(106, 43, 217, 0.06)',
+    backgroundColor: 'rgba(106, 43, 217, 0.08)',
   },
   glowDark: {
-    backgroundColor: 'rgba(106, 43, 217, 0.18)',
+    backgroundColor: 'rgba(106, 43, 217, 0.22)',
   },
   logoContainer: {
-    width: LOGO_WIDTH,
-    height: LOGO_HEIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: 44,
+    overflow: 'hidden',
+    // Soft lift so the mark reads as a complete brand tile, not a cropped strip.
+    ...Platform.select({
+      ios: {
+        shadowColor: '#24104E',
+        shadowOpacity: 0.18,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 10 },
+      },
+      android: {
+        elevation: 10,
+      },
+      default: {},
+    }),
   },
   logo: {
-    width: LOGO_WIDTH,
-    height: LOGO_HEIGHT,
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
   },
 });
