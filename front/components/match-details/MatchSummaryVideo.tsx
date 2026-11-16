@@ -1,7 +1,8 @@
-import React from 'react';
-import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { HighlightVideoSheet } from './HighlightVideoSheet';
 
 const PLAY_ICON = require('../../assets/images/match-events/summary-play.svg');
 
@@ -15,25 +16,31 @@ type Props = {
 export function MatchSummaryVideo({ thumbnail, url, playLabel }: Props) {
   const { width: screenW } = useWindowDimensions();
   const cardW = Math.min(screenW - 32, 420);
+  const [open, setOpen] = useState(false);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={playLabel}
-      disabled={!url}
-      onPress={() => {
-        if (url) Linking.openURL(url).catch(() => undefined);
-      }}
-      style={[styles.card, { width: cardW }]}
-    >
-      {thumbnail ? (
-        <ExpoImage source={{ uri: thumbnail }} style={styles.image} contentFit="cover" />
-      ) : (
-        <View style={[styles.image, styles.fallback]} />
-      )}
-      <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']} style={styles.shade} />
-      <ExpoImage source={PLAY_ICON} style={styles.play} contentFit="contain" />
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={playLabel}
+        disabled={!url}
+        onPress={() => {
+          if (url) setOpen(true);
+        }}
+        style={[styles.card, { width: cardW }]}
+      >
+        {thumbnail ? (
+          <ExpoImage source={{ uri: thumbnail }} style={styles.image} contentFit="cover" />
+        ) : (
+          <View style={[styles.image, styles.fallback]} />
+        )}
+        <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']} style={styles.shade} />
+        <ExpoImage source={PLAY_ICON} style={styles.play} contentFit="contain" />
+      </Pressable>
+      {url ? (
+        <HighlightVideoSheet visible={open} url={url} onClose={() => setOpen(false)} closeLabel={playLabel} />
+      ) : null}
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Pressable, Linking } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { Text } from './MatchText';
@@ -9,6 +9,7 @@ import type { FixtureEvent } from '../../services/apiFootball';
 import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
+import { HighlightVideoSheet } from './HighlightVideoSheet';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
@@ -87,6 +88,7 @@ export function MatchEventsTimeline({
   const baseMark = rtl ? RLM : LRM;
   const lastIndex = events.length - 1;
   const clipsByEvent = assignGoalClips(events, goalClips);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   return (
     <View
@@ -182,7 +184,7 @@ export function MatchEventsTimeline({
                     accessibilityRole="button"
                     accessibilityLabel={goalClipPlayLabel.replace('{player}', scorerName || event.team.name)}
                     onPress={() => {
-                      if (playUrl) Linking.openURL(playUrl).catch(() => undefined);
+                      if (playUrl) setVideoUrl(playUrl);
                     }}
                     style={styles.clipMedia}
                   >
@@ -242,6 +244,14 @@ export function MatchEventsTimeline({
           );
         })}
       </View>
+      {videoUrl ? (
+        <HighlightVideoSheet
+          visible
+          url={videoUrl}
+          onClose={() => setVideoUrl(null)}
+          closeLabel={goalClipPlayLabel}
+        />
+      ) : null}
     </View>
   );
 }
