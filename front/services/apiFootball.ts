@@ -1959,19 +1959,31 @@ export const ApiFootballService = {
   },
 
   /**
-   * Stored post-match goal videos. Empty when none have been published.
+   * Stored post-match summary and goal videos.
    */
-  async getFixtureHighlights(fixtureId: number): Promise<FixtureGoalClip[]> {
+  async getFixtureHighlights(fixtureId: number): Promise<FixtureHighlightsPayload> {
+    const empty: FixtureHighlightsPayload = {
+      status: 'unavailable',
+      summary: null,
+      goals: [],
+      checkedAt: null,
+    };
     try {
       const payload = await fetchFromProxy<FixtureHighlightsPayload | FixtureGoalClip[]>(
         `/fixtures/${fixtureId}/highlights`,
         {},
         { timeout: 8_000 },
       );
-      if (!payload || Array.isArray(payload)) return [];
-      return Array.isArray(payload.goals) ? payload.goals.filter((clip) => clip?.url || clip?.embedUrl) : [];
+      if (!payload || Array.isArray(payload)) return empty;
+      const goals = Array.isArray(payload.goals)
+        ? payload.goals.filter((clip) => clip?.url || clip?.embedUrl)
+        : [];
+      const summary = payload.summary && (payload.summary.url || payload.summary.embedUrl)
+        ? payload.summary
+        : null;
+      return { ...payload, summary, goals };
     } catch {
-      return [];
+      return empty;
     }
   },
 

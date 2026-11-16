@@ -69,6 +69,7 @@ import { MatchStandingsTable } from '../../components/match-details/MatchStandin
 import { MatchEventsTimeline } from '../../components/match-details/MatchEventsTimeline';
 import type { GoalClipMedia } from '../../utils/assignGoalClips';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
+import { MatchSummaryVideo } from '../../components/match-details/MatchSummaryVideo';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
@@ -296,6 +297,7 @@ const MatchDetailsScreen = () => {
   const parsedFixtureId = parseInt(String(rawFixtureId ?? '').trim(), 10);
   const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
   const [goalClips, setGoalClips] = useState<GoalClipMedia[]>([]);
+  const [matchSummary, setMatchSummary] = useState<GoalClipMedia | null>(null);
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
@@ -512,15 +514,20 @@ const MatchDetailsScreen = () => {
   useEffect(() => {
     if (!fixtureId || !isFinishedMatch()) {
       setGoalClips([]);
+      setMatchSummary(null);
       return;
     }
     let cancelled = false;
     ApiFootballService.getFixtureHighlights(fixtureId)
-      .then((clips) => {
-        if (!cancelled) setGoalClips(clips);
+      .then((payload) => {
+        if (cancelled) return;
+        setGoalClips(payload.goals ?? []);
+        setMatchSummary(payload.summary);
       })
       .catch(() => {
-        if (!cancelled) setGoalClips([]);
+        if (cancelled) return;
+        setGoalClips([]);
+        setMatchSummary(null);
       });
     return () => {
       cancelled = true;
@@ -2071,24 +2078,32 @@ const MatchDetailsScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <MatchMomentumGraph
-          events={events}
-          fixtureId={fixtureId || fixture?.fixture?.id}
-          homeTeamId={fixture?.teams?.home?.id}
-          awayTeamId={fixture?.teams?.away?.id}
-          homeGoals={fixture?.goals?.home}
-          awayGoals={fixture?.goals?.away}
-          matchElapsed={matchClock}
-          finished={isFinishedMatch()}
-          homeTeam={{
-            name: getTeamDisplayName(homeTeamName, language),
-            logo: homeTeamLogo,
-          }}
-          awayTeam={{
-            name: getTeamDisplayName(awayTeamName, language),
-            logo: awayTeamLogo,
-          }}
-        />
+        {matchSummary ? (
+          <MatchSummaryVideo
+            thumbnail={matchSummary.thumbnail}
+            url={matchSummary.url || matchSummary.embedUrl}
+            playLabel={t.matchDetails.matchSummaryPlay || 'تشغيل ملخص المباراة'}
+          />
+        ) : (
+          <MatchMomentumGraph
+            events={events}
+            fixtureId={fixtureId || fixture?.fixture?.id}
+            homeTeamId={fixture?.teams?.home?.id}
+            awayTeamId={fixture?.teams?.away?.id}
+            homeGoals={fixture?.goals?.home}
+            awayGoals={fixture?.goals?.away}
+            matchElapsed={matchClock}
+            finished={isFinishedMatch()}
+            homeTeam={{
+              name: getTeamDisplayName(homeTeamName, language),
+              logo: homeTeamLogo,
+            }}
+            awayTeam={{
+              name: getTeamDisplayName(awayTeamName, language),
+              logo: awayTeamLogo,
+            }}
+          />
+        )}
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
           {eventsFeedAvailable === false ? (

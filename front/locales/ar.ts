@@ -841,6 +841,7 @@ export const ar = {
     goalFor: 'هدف لـ {team}',
     goalClipScorer: 'سجل الهدف: {player}',
     goalClipPlay: 'تشغيل هدف {player}',
+    matchSummaryPlay: 'تشغيل ملخص المباراة',
     eventsNoneRecorded: 'لم تُسجَّل أحداث لهذه المباراة',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',

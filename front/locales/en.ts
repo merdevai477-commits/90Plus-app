@@ -605,6 +605,7 @@ export const en = {
     goalFor: 'Goal for {team}',
     goalClipScorer: 'Scored by: {player}',
     goalClipPlay: 'Play {player} goal',
+    matchSummaryPlay: 'Play match summary',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
