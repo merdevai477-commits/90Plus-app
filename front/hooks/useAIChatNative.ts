@@ -715,9 +715,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
     if (!id) {
       // No active assistant message — nothing to do. Stop the timer.
+      // If the network already finished, still run the completion callback.
+      // Dropping it left isLoading true and blocked every later send.
       if (typingTimerRef.current) {
         clearInterval(typingTimerRef.current);
         typingTimerRef.current = null;
+      }
+      if (networkDoneRef.current) {
+        const cb = pendingDoneCallbackRef.current;
+        pendingDoneCallbackRef.current = null;
+        cb?.();
       }
       return;
     }
@@ -971,11 +978,20 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             }
             // Tell the renderer to drain remaining tokens and call us back
             // once every visible word has been rendered.
+            // Unlock the composer when the reply is fully on screen. Waiting
+            // for xhr.onload left isLoading stuck whenever the socket stayed
+            // open after the last SSE event, so the next message never sent.
             completeStreaming(() => {
               if (finishedConvId) {
                 AsyncStorage.removeItem(`${DRAFT_KEY_PREFIX}${finishedConvId}`).catch(() => {});
               }
               retryCountRef.current = 0;
+              setIsLoading(false);
+              setIsThinking(false);
+              setIsRetrying(false);
+              setStreamingMessageId(null);
+              fetchConversations().catch(() => {});
+              fetchLimit().catch(() => {});
             });
           }
 
@@ -1034,10 +1050,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setError(errMsg);
         return;
       }
-      // Drain remaining queue, then clear UI state. If `done` already fired
-      // inside onreadystatechange the renderer will be in drain mode and
-      // this just chains another drain callback (idempotent — the queue
-      // empties once and the message is finalised once).
+      // `done` already scheduled the unlock. Replacing that callback here
+      // could drop it and leave the composer stuck on the stop button.
+      if (networkDoneRef.current) return;
       completeStreaming(() => {
         setIsLoading(false);
         setIsThinking(false);

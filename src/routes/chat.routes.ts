@@ -679,11 +679,14 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         res.end();
     };
 
-    // If the client disconnects mid-stream, upstream will throw the next time
-    // we try to write. No server-side cleanup needed beyond the try/catch.
+    // Node emits `req` "close" as soon as express.json() finishes reading the
+    // body — before any token is written. Treating that as a disconnect made
+    // every real question skip the model and return without ending the SSE
+    // response, so the app sat on the first reply until the client timed out.
+    // `res` "close" before writableEnded is an actual client disconnect.
     let clientClosed = false;
-    req.on('close', () => {
-        clientClosed = true;
+    res.on('close', () => {
+        if (!res.writableEnded) clientClosed = true;
     });
 
     try {
@@ -861,7 +864,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
             try {
                 const abort = new AbortController();
-                req.on('close', () => abort.abort());
+                res.on('close', () => {
+                    if (!res.writableEnded) abort.abort();
+                });
 
                 const agentResult = await runFootballAgent({
                     systemPrompt: agentSystemPrompt,
@@ -1125,6 +1130,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 } catch {
                     /* ignore */
                 }
+            }
+            if (!res.writableEnded) {
+                try { res.end(); } catch { /* socket already gone */ }
             }
             return;
         }
