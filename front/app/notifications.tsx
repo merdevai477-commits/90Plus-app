@@ -36,23 +36,19 @@ import {
     Video,
 } from 'lucide-react-native';
 import BottomNav from '@/components/navigation/BottomNav';
+import { StatusBar } from 'expo-status-bar';
 import {
-    TEXT_PRIMARY,
-    TEXT_MUTED,
-    TEXT_SECONDARY,
-    GOLD_PRIMARY,
-    BLUE_PRIMARY,
-    PURPLE_SOFT,
-    PURPLE_PRIMARY,
-    BORDER_ARENA,
     RADIUS_LG,
     SCREEN_PADDING_H,
     SECTION_GAP,
-    GRADIENT_BG_COLORS,
-    GRADIENT_BG_LOCATIONS,
-    BG_BASE,
 } from '../constants/tokens';
 import { useNotifications } from '../components/notifications/hooks/useNotifications';
+import {
+    getNotificationsTheme,
+    kindVisual,
+    type NotificationsTheme,
+} from '../components/notifications/notificationsTheme';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useAuth } from '@clerk/clerk-expo';
 import { NotificationService, type SocialNotification } from '../src/services/authService';
 import { syncExpoPushTokenIfGranted } from '../src/hooks/usePushNotifications';
@@ -78,23 +74,23 @@ type Kind =
     | 'gift'
     | 'lucky';
 
-const KIND_META: Record<Kind, { Icon: LucideIcon; color: string; tint: string }> = {
-    match: { Icon: Trophy, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
-    quiz: { Icon: Sparkles, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
-    social: { Icon: Users, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
-    system: { Icon: Bell, color: TEXT_MUTED, tint: 'rgba(255,255,255,0.08)' },
-    like: { Icon: Heart, color: '#ef4444', tint: 'rgba(239,68,68,0.16)' },
-    comment: { Icon: MessageCircle, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
-    mention: { Icon: AtSign, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
-    moderation: { Icon: Shield, color: '#fcd34d', tint: 'rgba(252,211,77,0.14)' },
-    report: { Icon: Flag, color: '#fb923c', tint: 'rgba(251,146,60,0.16)' },
-    avatar: { Icon: UserCircle, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
-    ai: { Icon: Bot, color: PURPLE_PRIMARY, tint: 'rgba(124,58,237,0.16)' },
-    leaderboard: { Icon: TrendingUp, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
-    levelup: { Icon: Award, color: '#22c55e', tint: 'rgba(34,197,94,0.16)' },
-    video: { Icon: Video, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
-    gift: { Icon: Gift, color: '#ec4899', tint: 'rgba(236,72,153,0.16)' },
-    lucky: { Icon: Sparkles, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
+const KIND_ICONS: Record<Kind, LucideIcon> = {
+    match: Trophy,
+    quiz: Sparkles,
+    social: Users,
+    system: Bell,
+    like: Heart,
+    comment: MessageCircle,
+    mention: AtSign,
+    moderation: Shield,
+    report: Flag,
+    avatar: UserCircle,
+    ai: Bot,
+    leaderboard: TrendingUp,
+    levelup: Award,
+    video: Video,
+    gift: Gift,
+    lucky: Sparkles,
 };
 
 function mapTypeToKind(type: SocialNotification['type']): Kind {
@@ -235,6 +231,7 @@ function formatRelativeTime(iso: string, t: ReturnType<typeof useTranslation>['t
 
 // ─── Pinned header — solid surface (blur is too expensive on this screen) ──
 type HeaderProps = {
+    theme: NotificationsTheme;
     unreadCount: number;
     total: number;
     topInset: number;
@@ -249,8 +246,7 @@ type HeaderProps = {
 };
 
 const NotificationsHeader = React.memo(function NotificationsHeader({
-    unreadCount,
-    total,
+    theme,
     topInset,
     onBack,
     onMarkAll,
@@ -262,9 +258,9 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
     backLabel,
 }: HeaderProps) {
     return (
-        <View style={[headerStyles.container, { paddingTop: topInset + 8 }]}>
+        <View style={[headerStyles.container, { paddingTop: topInset + 8, backgroundColor: theme.headerBg }]}>
             <LinearGradient
-                colors={['rgba(124,58,237,0.22)', 'rgba(10,6,18,0.96)']}
+                colors={[...theme.headerGradient]}
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -275,19 +271,27 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
                     onPress={onBack}
                     activeOpacity={0.75}
                     hitSlop={12}
-                    style={headerStyles.backBtn}
+                    style={[
+                        headerStyles.backBtn,
+                        {
+                            backgroundColor: theme.backBtnBg,
+                            borderColor: theme.backBtnBorder,
+                            borderWidth: theme.isDark ? StyleSheet.hairlineWidth : 1,
+                        },
+                        theme.elevationSoft,
+                    ]}
                     accessibilityRole="button"
                     accessibilityLabel={backLabel}
                 >
-                    <ChevronLeft color={TEXT_PRIMARY} size={22} strokeWidth={2.2} />
+                    <ChevronLeft color={theme.text} size={22} strokeWidth={2.2} />
                 </TouchableOpacity>
 
                 <View style={headerStyles.titleBlock}>
-                    <Text style={headerStyles.eyebrow}>{eyebrowLabel}</Text>
-                    <Text style={headerStyles.title} numberOfLines={1}>
+                    <Text style={[headerStyles.eyebrow, { color: theme.accentSoft }]}>{eyebrowLabel}</Text>
+                    <Text style={[headerStyles.title, { color: theme.text }]} numberOfLines={1}>
                         {title}
                     </Text>
-                    <Text style={headerStyles.sub} numberOfLines={1}>
+                    <Text style={[headerStyles.sub, { color: theme.muted }]} numberOfLines={1}>
                         {summaryLabel}
                     </Text>
                 </View>
@@ -296,22 +300,38 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
                     <TouchableOpacity
                         onPress={onMarkAll}
                         activeOpacity={0.82}
-                        style={headerStyles.markAllBtn}
+                        style={[
+                            headerStyles.markAllBtn,
+                            {
+                                backgroundColor: theme.markAllBg,
+                                borderColor: theme.markAllBorder,
+                            },
+                            theme.elevationSoft,
+                        ]}
                         accessibilityRole="button"
                         accessibilityLabel={markAllLabel}
                     >
-                        <CheckCheck size={14} color={PURPLE_SOFT} strokeWidth={2.4} />
-                        <Text style={headerStyles.markAllTxt} numberOfLines={1}>
+                        <CheckCheck size={14} color={theme.accentSoft} strokeWidth={2.4} />
+                        <Text style={[headerStyles.markAllTxt, { color: theme.accentSoft }]} numberOfLines={1}>
                             {markAllLabel}
                         </Text>
                     </TouchableOpacity>
                 ) : (
-                    <View style={headerStyles.bellWrap}>
-                        <Bell size={18} color={PURPLE_SOFT} strokeWidth={2.4} />
+                    <View
+                        style={[
+                            headerStyles.bellWrap,
+                            {
+                                backgroundColor: theme.markAllBg,
+                                borderColor: theme.markAllBorder,
+                            },
+                            theme.elevationSoft,
+                        ]}
+                    >
+                        <Bell size={18} color={theme.accentSoft} strokeWidth={2.4} />
                     </View>
                 )}
             </View>
-            <View style={headerStyles.hairline} />
+            <View style={[headerStyles.hairline, { backgroundColor: theme.hairline }]} />
         </View>
     );
 });
@@ -325,7 +345,6 @@ const headerStyles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 50,
-        backgroundColor: 'rgba(8,5,16,0.97)',
     },
     inner: {
         minHeight: HEADER_BODY_HEIGHT,
@@ -341,27 +360,21 @@ const headerStyles = StyleSheet.create({
         borderRadius: 19,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.1)',
     },
     titleBlock: { flex: 1, minWidth: 0 },
     eyebrow: {
         fontSize: 9,
         fontWeight: '800',
-        color: PURPLE_SOFT,
         letterSpacing: 1.2,
     },
     title: {
         fontSize: 17,
         fontWeight: '800',
-        color: TEXT_PRIMARY,
         letterSpacing: -0.3,
         marginTop: 1,
     },
     sub: {
         fontSize: 11,
-        color: TEXT_MUTED,
         marginTop: 1,
         fontWeight: '600',
     },
@@ -372,13 +385,10 @@ const headerStyles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 999,
-        backgroundColor: 'rgba(124,58,237,0.18)',
         borderWidth: 1,
-        borderColor: 'rgba(167,139,250,0.35)',
         maxWidth: 120,
     },
     markAllTxt: {
-        color: PURPLE_SOFT,
         fontSize: 11,
         fontWeight: '800',
         letterSpacing: 0.2,
@@ -389,20 +399,18 @@ const headerStyles = StyleSheet.create({
         borderRadius: 19,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(124,58,237,0.14)',
         borderWidth: 1,
-        borderColor: 'rgba(167,139,250,0.28)',
     },
     hairline: {
         height: StyleSheet.hairlineWidth,
         marginHorizontal: SCREEN_PADDING_H,
-        backgroundColor: 'rgba(255,255,255,0.08)',
     },
 });
 
 // ─── Row (memoized for FlashList) ─────────────────────────────────────────
 type NotificationRowProps = {
     item: SocialNotification;
+    theme: NotificationsTheme;
     onPress: (item: SocialNotification) => void;
     relativeTime: string;
     kindLabel: string;
@@ -416,12 +424,14 @@ function actorAvatarOf(item: SocialNotification): string | undefined {
 
 const NotificationRow = React.memo(function NotificationRow({
     item,
+    theme,
     onPress,
     relativeTime,
     kindLabel,
 }: NotificationRowProps) {
     const kind = mapTypeToKind(item.type);
-    const { Icon, color, tint } = KIND_META[kind];
+    const Icon = KIND_ICONS[kind];
+    const { color, tint } = kindVisual(kind, theme.isDark);
     const avatar = actorAvatarOf(item);
     const unread = !item.isRead;
 
@@ -429,51 +439,74 @@ const NotificationRow = React.memo(function NotificationRow({
         <TouchableOpacity
             activeOpacity={0.86}
             onPress={() => onPress(item)}
-            style={[styles.card, unread && styles.cardUnread]}
+            style={[
+                styles.cardOuter,
+                theme.elevationCard,
+                {
+                    backgroundColor: unread ? theme.cardUnread : theme.card,
+                    borderColor: unread ? theme.cardUnreadBorder : theme.cardBorder,
+                },
+            ]}
             accessibilityRole="button"
             accessibilityLabel={`${kindLabel}. ${item.title}`}
         >
-            <View style={[styles.accent, { backgroundColor: color }]} />
-            <View style={[styles.iconWrap, { backgroundColor: tint, borderColor: `${color}55` }]}>
-                {avatar ? (
-                    <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
-                ) : (
-                    <Icon size={18} color={color} strokeWidth={2.2} />
-                )}
-            </View>
-            <View style={styles.cardMid}>
-                <View style={styles.chipRow}>
-                    <View style={[styles.chip, { backgroundColor: tint, borderColor: `${color}44` }]}>
-                        <Text style={[styles.chipTxt, { color }]} numberOfLines={1}>
-                            {kindLabel}
+            <View style={styles.card}>
+                <View style={[styles.accent, { backgroundColor: color }]} />
+                <View style={[styles.iconWrap, { backgroundColor: tint, borderColor: `${color}55` }]}>
+                    {avatar ? (
+                        <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
+                    ) : (
+                        <Icon size={18} color={color} strokeWidth={2.2} />
+                    )}
+                </View>
+                <View style={styles.cardMid}>
+                    <View style={styles.chipRow}>
+                        <View style={[styles.chip, { backgroundColor: tint, borderColor: `${color}44` }]}>
+                            <Text style={[styles.chipTxt, { color }]} numberOfLines={1}>
+                                {kindLabel}
+                            </Text>
+                        </View>
+                        <Text style={[styles.time, { color: theme.muted }]} numberOfLines={1}>
+                            {relativeTime}
                         </Text>
                     </View>
-                    <Text style={styles.time} numberOfLines={1}>
-                        {relativeTime}
+                    <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
+                        {item.title}
+                    </Text>
+                    <Text style={[styles.cardBody, { color: theme.textSecondary }]} numberOfLines={2}>
+                        {item.message}
                     </Text>
                 </View>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                    {item.title}
-                </Text>
-                <Text style={styles.cardBody} numberOfLines={2}>
-                    {item.message}
-                </Text>
+                {unread ? (
+                    <View style={[styles.dot, { backgroundColor: theme.accentSoft }]} />
+                ) : (
+                    <View style={styles.dotSpacer} />
+                )}
             </View>
-            {unread ? <View style={styles.dot} /> : <View style={styles.dotSpacer} />}
         </TouchableOpacity>
     );
 });
 
 // ─── Skeleton (shown briefly while cache is warming) ──────────────────────
-function NotificationSkeleton() {
+function NotificationSkeleton({ theme }: { theme: NotificationsTheme }) {
     return (
         <View style={{ gap: 10 }}>
             {[0, 1, 2, 3].map(i => (
-                <View key={i} style={skelStyles.row}>
-                    <View style={skelStyles.iconBox} />
+                <View
+                    key={i}
+                    style={[
+                        skelStyles.row,
+                        {
+                            backgroundColor: theme.skelBg,
+                            borderColor: theme.cardBorder,
+                        },
+                        theme.elevationCard,
+                    ]}
+                >
+                    <View style={[skelStyles.iconBox, { backgroundColor: theme.skelFill }]} />
                     <View style={{ flex: 1, gap: 8 }}>
-                        <View style={[skelStyles.line, { width: '70%' }]} />
-                        <View style={[skelStyles.line, { width: '45%', height: 9 }]} />
+                        <View style={[skelStyles.line, { width: '70%', backgroundColor: theme.skelFill }]} />
+                        <View style={[skelStyles.line, { width: '45%', height: 9, backgroundColor: theme.skelFill }]} />
                     </View>
                 </View>
             ))}
@@ -488,20 +521,16 @@ const skelStyles = StyleSheet.create({
         padding: 12,
         borderRadius: RADIUS_LG,
         borderWidth: 1,
-        borderColor: BORDER_ARENA,
-        backgroundColor: 'rgba(16,12,26,0.6)',
         gap: 12,
     },
     iconBox: {
         width: 40,
         height: 40,
         borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.06)',
     },
     line: {
         height: 11,
         borderRadius: 4,
-        backgroundColor: 'rgba(255,255,255,0.08)',
     },
 });
 
@@ -511,6 +540,8 @@ export default function NotificationsScreen() {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation();
     const { getToken } = useAuth();
+    const { isDark } = useResolvedAppScheme();
+    const theme = useMemo(() => getNotificationsTheme(isDark), [isDark]);
     const {
         notifications,
         isLoading,
@@ -684,38 +715,51 @@ export default function NotificationsScreen() {
     const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;
 
     const listEmpty = useMemo(() => {
-        if (isLoading) return <NotificationSkeleton />;
+        if (isLoading) return <NotificationSkeleton theme={theme} />;
         if (error) {
             return (
                 <View style={styles.errorWrap}>
-                    <Text style={styles.errorTitle}>{t.notifications.loadFailed}</Text>
-                    <Text style={styles.errorSub}>{error}</Text>
+                    <Text style={[styles.errorTitle, { color: theme.text }]}>{t.notifications.loadFailed}</Text>
+                    <Text style={[styles.errorSub, { color: theme.muted }]}>{error}</Text>
                     <TouchableOpacity
                         activeOpacity={0.85}
-                        style={styles.retryBtn}
+                        style={[
+                            styles.retryBtn,
+                            { backgroundColor: theme.retryBg, borderColor: theme.retryBorder },
+                            theme.elevationSoft,
+                        ]}
                         onPress={refreshNotifications}
                     >
-                        <Text style={styles.retryTxt}>{t.notifications.tryAgain}</Text>
+                        <Text style={[styles.retryTxt, { color: theme.accentSoft }]}>{t.notifications.tryAgain}</Text>
                     </TouchableOpacity>
                 </View>
             );
         }
         return (
             <View style={styles.emptyWrap}>
-                <View style={styles.emptyIconWrap}>
-                    <MessageSquare size={22} color="rgba(167,139,250,0.55)" strokeWidth={2} />
+                <View
+                    style={[
+                        styles.emptyIconWrap,
+                        {
+                            backgroundColor: theme.emptyIconBg,
+                            borderColor: theme.emptyIconBorder,
+                        },
+                        theme.elevationSoft,
+                    ]}
+                >
+                    <MessageSquare size={22} color={theme.accentSoft} strokeWidth={2} />
                 </View>
-                <Text style={styles.emptyTitle}>{t.notifications.noNotifications}</Text>
-                <Text style={styles.emptySub}>{t.notifications.emptyDefaultSubtitle}</Text>
+                <Text style={[styles.emptyTitle, { color: theme.emptyTitle }]}>{t.notifications.noNotifications}</Text>
+                <Text style={[styles.emptySub, { color: theme.muted }]}>{t.notifications.emptyDefaultSubtitle}</Text>
             </View>
         );
-    }, [isLoading, error, refreshNotifications, t]);
+    }, [isLoading, error, refreshNotifications, t, theme]);
 
     const listFooter = useMemo(() => {
         if (notifications.length === 0) return null;
         if (!hasMore) {
             return (
-                <Text style={styles.caughtUp}>{t.notifications.inboxCaughtUp}</Text>
+                <Text style={[styles.caughtUp, { color: theme.muted }]}>{t.notifications.inboxCaughtUp}</Text>
             );
         }
         return (
@@ -726,7 +770,7 @@ export default function NotificationsScreen() {
                 }}
                 disabled={isLoadingMore}
                 activeOpacity={0.88}
-                style={styles.loadMoreWrap}
+                style={[styles.loadMoreWrap, theme.elevationCard]}
                 accessibilityRole="button"
                 accessibilityLabel={t.notifications.loadMore}
             >
@@ -744,7 +788,7 @@ export default function NotificationsScreen() {
                 </LinearGradient>
             </TouchableOpacity>
         );
-    }, [hasMore, notifications.length, isLoadingMore, handleLoadMore, t.notifications]);
+    }, [hasMore, notifications.length, isLoadingMore, handleLoadMore, t.notifications, theme]);
 
     const keyExtractor = useCallback((item: SocialNotification) => item.id, []);
 
@@ -752,25 +796,28 @@ export default function NotificationsScreen() {
         ({ item }: { item: SocialNotification }) => (
             <NotificationRow
                 item={item}
+                theme={theme}
                 onPress={handleNotificationTap}
                 relativeTime={formatRelativeTime(item.createdAt, t)}
                 kindLabel={kindLabelFor(item.type, t.notifications)}
             />
         ),
-        [handleNotificationTap, t],
+        [handleNotificationTap, t, theme],
     );
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { backgroundColor: theme.screen }]}>
+            <StatusBar style={theme.statusBar} />
             <LinearGradient
-                colors={[...GRADIENT_BG_COLORS]}
+                colors={[...theme.bgGradient]}
                 style={StyleSheet.absoluteFill}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                locations={[...GRADIENT_BG_LOCATIONS]}
+                locations={[...theme.bgLocations]}
             />
 
             <NotificationsHeader
+                theme={theme}
                 unreadCount={unreadCount}
                 total={notifications.length}
                 topInset={insets.top}
@@ -799,14 +846,14 @@ export default function NotificationsScreen() {
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={listEmpty}
                     ListFooterComponent={listFooter}
-                    extraData={`${isLoadingMore}-${hasMore}`}
+                    extraData={`${isLoadingMore}-${hasMore}-${theme.isDark}`}
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}
                             onRefresh={refreshNotifications}
-                            tintColor={PURPLE_SOFT}
-                            colors={[PURPLE_SOFT]}
-                            progressBackgroundColor={BG_BASE}
+                            tintColor={theme.accentSoft}
+                            colors={[theme.accentSoft]}
+                            progressBackgroundColor={theme.refreshBg}
                         />
                     }
                     drawDistance={80}
@@ -818,24 +865,22 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: BG_BASE },
+    root: { flex: 1 },
     scroll: { flex: 1 },
+    cardOuter: {
+        marginBottom: 10,
+        borderRadius: RADIUS_LG,
+        borderWidth: 1,
+        backgroundColor: '#FFFFFF',
+    },
     card: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 12,
         paddingHorizontal: 12,
         paddingStart: 0,
-        marginBottom: 10,
         borderRadius: RADIUS_LG,
-        borderWidth: 1,
-        borderColor: BORDER_ARENA,
-        backgroundColor: 'rgba(16,12,28,0.94)',
         overflow: 'hidden',
-    },
-    cardUnread: {
-        borderColor: 'rgba(139,92,246,0.45)',
-        backgroundColor: 'rgba(42,24,72,0.92)',
     },
     accent: {
         width: 3,
@@ -880,26 +925,22 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 14,
         fontWeight: '800',
-        color: TEXT_PRIMARY,
         letterSpacing: -0.2,
     },
     cardBody: {
         marginTop: 3,
         fontSize: 13,
         lineHeight: 18,
-        color: TEXT_SECONDARY,
     },
     time: {
         fontSize: 11,
         fontWeight: '600',
-        color: TEXT_MUTED,
         flexShrink: 0,
     },
     dot: {
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: PURPLE_SOFT,
         marginStart: 4,
     },
     dotSpacer: {
@@ -912,12 +953,10 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     errorTitle: {
-        color: TEXT_PRIMARY,
         fontSize: 15,
         fontWeight: '700',
     },
     errorSub: {
-        color: TEXT_MUTED,
         fontSize: 12,
         textAlign: 'center',
         paddingHorizontal: 24,
@@ -928,11 +967,8 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: 'rgba(167,139,250,0.3)',
-        backgroundColor: 'rgba(124,58,237,0.12)',
     },
     retryTxt: {
-        color: PURPLE_SOFT,
         fontSize: 13,
         fontWeight: '700',
     },
@@ -945,20 +981,16 @@ const styles = StyleSheet.create({
         width: 52,
         height: 52,
         borderRadius: 26,
-        backgroundColor: 'rgba(124,58,237,0.12)',
         borderWidth: 1,
-        borderColor: 'rgba(124,58,237,0.3)',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 8,
     },
     emptyTitle: {
-        color: 'rgba(167,139,250,0.8)',
         fontSize: 16,
         fontWeight: '700',
     },
     emptySub: {
-        color: TEXT_MUTED,
         fontSize: 12,
         textAlign: 'center',
         paddingHorizontal: 24,
@@ -996,7 +1028,6 @@ const styles = StyleSheet.create({
         marginTop: 8,
         marginBottom: 20,
         textAlign: 'center',
-        color: TEXT_MUTED,
         fontSize: 12,
         fontWeight: '600',
     },
