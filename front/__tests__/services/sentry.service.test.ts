@@ -25,6 +25,8 @@ import {
   setContext,
   measureAsync,
   shouldDropNativeNoiseEvent,
+  holdHighlightReplay,
+  releaseHighlightReplay,
 } from '../../services/sentry.service';
 import { logger } from '../../services/logger';
 
@@ -37,6 +39,7 @@ jest.mock('@sentry/react-native', () => ({
   addBreadcrumb: jest.fn(),
   setTag: jest.fn(),
   setContext: jest.fn(),
+  getClient: jest.fn(),
 }));
 
 // Mock expo-constants
@@ -932,6 +935,29 @@ describe('Sentry Service Unit Tests', () => {
           replaysOnErrorSampleRate: 1.0,
         })
       );
+    });
+  });
+
+  describe('highlight replay hold', () => {
+    test('stops replay before playback and buffers again after', async () => {
+      const stop = jest.fn().mockResolvedValue(undefined);
+      const startBuffering = jest.fn();
+      (Sentry.getClient as jest.Mock).mockReturnValue({
+        getIntegrationByName: (name: string) => (name === 'MobileReplay' ? { stop, startBuffering } : undefined),
+      });
+
+      await holdHighlightReplay();
+      releaseHighlightReplay();
+
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(startBuffering).toHaveBeenCalledTimes(1);
+    });
+
+    test('does nothing when replay is not installed', async () => {
+      (Sentry.getClient as jest.Mock).mockReturnValue(undefined);
+
+      await expect(holdHighlightReplay()).resolves.toBeUndefined();
+      expect(() => releaseHighlightReplay()).not.toThrow();
     });
   });
 });

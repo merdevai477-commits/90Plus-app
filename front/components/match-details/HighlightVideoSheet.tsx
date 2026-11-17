@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
+import { holdHighlightReplay, releaseHighlightReplay } from '../../services/sentry.service';
 import {
   isDirectHighlightFile,
   resolveHighlightPlaybackUrl,
@@ -50,6 +52,7 @@ true;
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [surfaceReady, setSurfaceReady] = useState(false);
   const skippedId = useRef('');
   const listKey = urls.join('|');
   const openKey = visible ? listKey : '';
@@ -61,11 +64,29 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setFailed(false);
   }
 
+  useEffect(() => {
+    if (!visible) {
+      setSurfaceReady(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      await holdHighlightReplay();
+      if (!cancelled) setSurfaceReady(true);
+    })();
+    return () => {
+      cancelled = true;
+      setSurfaceReady(false);
+      releaseHighlightReplay();
+    };
+  }, [visible]);
+
   const url = urls[index] ?? '';
   const fileUrl = resolveHighlightPlaybackUrl(url);
   const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
   const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
   const videoId = url ? youtubeVideoId(url) : null;
+  const showSurface = visible && surfaceReady;
 
   const skipBlocked = () => {
     if (videoId && skippedId.current === videoId) return;
@@ -84,15 +105,16 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     >
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
-        {visible && embedUrl && !failed ? (
+        {showSurface && embedUrl && !failed ? (
           <View style={styles.player}>
+            <View pointerEvents="none" style={styles.playerPlate} />
             <WebView
               key={`${listKey}:${embedUrl}`}
               source={{
                 uri: embedUrl,
                 headers: { Referer: 'https://90plus.pro' },
               }}
-              style={styles.video}
+              style={[styles.video, Platform.OS === 'ios' && styles.videoIos]}
               userAgent={PLAYER_AGENT}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
@@ -100,7 +122,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               sharedCookiesEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              allowsFullscreenVideo
+              allowsFullscreenVideo={Platform.OS !== 'ios'}
               javaScriptEnabled
               domStorageEnabled
               injectedJavaScript={GEO_BLOCK_PROBE}
@@ -117,11 +139,18 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
-        {visible && direct && !failed ? (
-          <DirectClipPlayer url={fileUrl} onClose={onClose} closeLabel={closeLabel} />
+        {showSurface && direct && !failed ? (
+          <DirectClipPlayer
+            key={fileUrl}
+            url={fileUrl}
+            onClose={onClose}
+            closeLabel={closeLabel}
+            onFailed={skipBlocked}
+          />
         ) : null}
         {visible && (failed || (Boolean(url) && !embedUrl && !direct)) ? (
           <View style={styles.player}>
+            <View pointerEvents="none" style={styles.playerPlate} />
             <Text style={styles.error}>الفيديو مش متاح في البلد دي</Text>
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
@@ -135,24 +164,62 @@ function DirectClipPlayer({
   url,
   onClose,
   closeLabel,
+  onFailed,
 }: {
   url: string;
   onClose: () => void;
   closeLabel: string;
+  onFailed: () => void;
 }) {
   const player = useVideoPlayer(url, (instance) => {
     instance.loop = false;
-    instance.play();
   });
+  const { status } = useEvent(player, 'statusChange', {
+    status: player.status,
+  });
+  const reported = useRef(false);
+
+  useEffect(() => {
+    if (status !== 'error' || reported.current) return;
+    reported.current = true;
+    onFailed();
+  }, [status, onFailed]);
+
+  useEffect(() => {
+    const attempt = () => {
+      try {
+        if (player.status === 'error') return;
+        if (player.status !== 'readyToPlay') {
+          if (player.playing) player.pause();
+          return;
+        }
+        if (!player.playing) player.play();
+      } catch {
+        /* player may already be released */
+      }
+    };
+    attempt();
+    const delays = Platform.OS === 'ios' ? [150, 400, 900] : [200];
+    const timers = delays.map((ms) => setTimeout(attempt, ms));
+    return () => {
+      timers.forEach(clearTimeout);
+      try {
+        if (player.playing) player.pause();
+      } catch {
+        /* player may already be released */
+      }
+    };
+  }, [player, status]);
 
   return (
     <View style={styles.player}>
+      <View pointerEvents="none" style={styles.playerPlate} />
       <VideoView
         player={player}
         style={styles.video}
         nativeControls
         contentFit="contain"
-        allowsFullscreen
+        fullscreenOptions={Platform.OS === 'ios' ? { enable: false } : undefined}
       />
       <CloseButton onClose={onClose} label={closeLabel} />
     </View>
@@ -185,16 +252,22 @@ const styles = StyleSheet.create({
   player: {
     marginHorizontal: 12,
     aspectRatio: 16 / 9,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  playerPlate: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    backgroundColor: '#000000',
   },
   video: {
     width: '100%',
     height: '100%',
     backgroundColor: '#000000',
+  },
+  videoIos: {
+    opacity: 0.99,
   },
   error: {
     color: '#FFFFFF',
@@ -211,5 +284,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    zIndex: 2,
   },
 });

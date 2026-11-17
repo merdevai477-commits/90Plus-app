@@ -164,6 +164,20 @@ export function initSentry(): void {
   const release = `${bundleId}@${version}+${buildNumber}`;
   const dist = buildNumber;
 
+  const replayIntegration = typeof Sentry.mobileReplayIntegration === 'function'
+    ? Sentry.mobileReplayIntegration({
+        // Skip the video view while a replay frame is captured.
+        excludedViewClasses: [
+          'VideoView',
+          'AVPlayerView',
+          'AVPlayerViewController',
+          'AVFullScreenViewController',
+          'OrientationAVPlayerViewController',
+          'WKWebView',
+        ],
+      })
+    : undefined;
+
   Sentry.init({
     dsn,
     environment,
@@ -172,6 +186,7 @@ export function initSentry(): void {
 
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
+    ...(replayIntegration ? { integrations: [replayIntegration] } : {}),
 
     release,
     dist,
@@ -498,6 +513,40 @@ export async function measureAsync<T>(
     );
     
     throw error;
+  }
+}
+
+type HighlightReplayControls = {
+  stop?: () => Promise<void> | void;
+  startBuffering?: () => void;
+};
+
+function highlightReplayControls(): HighlightReplayControls | undefined {
+  try {
+    const client = Sentry.getClient?.();
+    const integration = client?.getIntegrationByName?.('MobileReplay');
+    if (!integration || typeof integration !== 'object') return undefined;
+    return integration as HighlightReplayControls;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Stop replay screenshots before a native video surface is shown. No-op when replay is absent. */
+export async function holdHighlightReplay(): Promise<void> {
+  try {
+    await highlightReplayControls()?.stop?.();
+  } catch {
+    /* replay must not block playback */
+  }
+}
+
+/** Resume buffered replay after the video surface is gone. */
+export function releaseHighlightReplay(): void {
+  try {
+    highlightReplayControls()?.startBuffering?.();
+  } catch {
+    /* replay must not block closing the player */
   }
 }
 

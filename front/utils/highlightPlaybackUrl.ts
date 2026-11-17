@@ -58,6 +58,7 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
     controls: '1',
     iv_load_policy: '3',
     enablejsapi: '1',
+    origin: 'https://90plus.pro',
   });
   return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
 }
