@@ -4,6 +4,7 @@ import {
   BackHandler,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -27,7 +28,7 @@ import { PageSuggestions } from '../../components/community/PageSuggestions';
 import { filterPages, type AppPage } from '../../components/community/pageLinks';
 import { activeMentionQuery, activeSlashQuery, everyoneSuggestionMatches, isArabicText } from '../../components/community/richTextParse';
 import { communityErrorMessage, fillTemplate, isImageRejected } from '../../components/community/format';
-import { C, CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
+import { CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
 import {
   cancelImageUpload,
   newClientId,
@@ -40,6 +41,7 @@ import { findPost, updatePostEverywhere } from '../../hooks/community/communityC
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
 import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
 import { useMentionSearch } from '../../hooks/community/useMentionSearch';
+import { CommunityThemeProvider, useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { communityApi, type CommunityAuthor } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
@@ -48,7 +50,7 @@ import { getAppFont } from '../../utils/fontSetup';
 const MAX_LEN = 2000;
 const WARN_AT = 200;
 
-function UploadBar({ progress }: { progress: number }) {
+function UploadBar({ progress, accent }: { progress: number; accent: string }) {
   const value = useSharedValue(progress);
   useEffect(() => {
     value.value = withTiming(progress, { duration: 220 });
@@ -56,7 +58,7 @@ function UploadBar({ progress }: { progress: number }) {
   const style = useAnimatedStyle(() => ({ width: `${value.value * 100}%` }));
   return (
     <View style={styles.barTrack}>
-      <Animated.View style={[styles.barFill, style]} />
+      <Animated.View style={[styles.barFill, { backgroundColor: accent }, style]} />
     </View>
   );
 }
@@ -66,7 +68,7 @@ function insertAt(text: string, caret: number, insert: string): { next: string; 
   return { next, caret: Math.min(MAX_LEN, caret + insert.length) };
 }
 
-export default function ComposeScreen() {
+function ComposeScreenInner() {
   const router = useRouter();
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -74,6 +76,7 @@ export default function ComposeScreen() {
   const { t, language } = useTranslation();
   const s = t.community;
   const isAr = language === 'ar';
+  const { colors, isDark } = useCommunityTheme();
   const getToken = useCommunityToken();
   const me = useCommunityMe();
   const params = useLocalSearchParams<{ restore?: string; photo?: string; edit?: string; poll?: string }>();
@@ -300,27 +303,40 @@ export default function ComposeScreen() {
   const cta = editing ? s.save : s.post;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={[styles.topBar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.screen }]}>
+      <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
+      <View style={[styles.topBar, { flexDirection: isAr ? 'row-reverse' : 'row', backgroundColor: colors.header }]}>
         <Pressable
           onPress={confirmLeave}
-          style={styles.cancelBtn}
+          style={[
+            styles.cancelBtn,
+            {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.headerPillBg,
+              borderColor: isDark ? 'rgba(255,255,255,0.14)' : colors.headerPillBorder,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={s.cancel}
         >
-          <Text style={[styles.cancelText, { fontFamily: fonts.semibold }]}>{s.cancel}</Text>
+          <Text style={[styles.cancelText, { fontFamily: fonts.semibold, color: colors.text }]}>{s.cancel}</Text>
         </Pressable>
-        <Text style={[styles.title, { fontFamily: fonts.semibold }]} numberOfLines={1}>
+        <Text style={[styles.title, { fontFamily: fonts.semibold, color: colors.textStrong }]} numberOfLines={1}>
           {title}
         </Text>
         <Pressable
           onPress={post}
           disabled={!canPost}
-          style={[styles.postBtnWrap, !canPost && styles.postBtnDisabled]}
+          style={[styles.postBtnWrap, { shadowColor: colors.accent }, !canPost && styles.postBtnDisabled]}
           accessibilityRole="button"
         >
           <LinearGradient
-            colors={canPost ? ['#A78BFA', '#7C3AED'] : ['#3B2A63', '#2A1D4A']}
+            colors={
+              canPost
+                ? ['#A78BFA', '#7C3AED']
+                : isDark
+                  ? (['#3B2A63', '#2A1D4A'] as const)
+                  : (['#D4C4F7', '#B8A0EF'] as const)
+            }
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={styles.postBtn}
@@ -342,7 +358,7 @@ export default function ComposeScreen() {
       >
         <View style={[styles.authorRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
           <CommunityAvatar uri={me.avatar} name={name} size={44} />
-          <Text style={[styles.author, { fontFamily: fonts.semibold }]} numberOfLines={1}>
+          <Text style={[styles.author, { fontFamily: fonts.semibold, color: colors.textStrong }]} numberOfLines={1}>
             {name}
           </Text>
         </View>
@@ -351,11 +367,21 @@ export default function ComposeScreen() {
           <View style={[styles.kindToggle, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
             <Pressable
               onPress={() => setPostKind('TEXT')}
-              style={[styles.kindBtn, postKind === 'TEXT' && styles.kindBtnActive]}
+              style={[
+                styles.kindBtn,
+                { backgroundColor: colors.input, borderColor: colors.inputBorder },
+                postKind === 'TEXT' && { backgroundColor: colors.followBtn, borderColor: colors.cardBorder },
+              ]}
               accessibilityRole="button"
               accessibilityState={{ selected: postKind === 'TEXT' }}
             >
-              <Text style={[styles.kindBtnText, { fontFamily: fonts.semibold }, postKind === 'TEXT' && styles.kindBtnTextActive]}>
+              <Text
+                style={[
+                  styles.kindBtnText,
+                  { fontFamily: fonts.semibold, color: colors.muted },
+                  postKind === 'TEXT' && { color: colors.followText },
+                ]}
+              >
                 {s.textType}
               </Text>
             </Pressable>
@@ -365,11 +391,21 @@ export default function ComposeScreen() {
                 setKeepRemoteImage(false);
                 setPostKind('TEAM_POLL');
               }}
-              style={[styles.kindBtn, postKind === 'TEAM_POLL' && styles.kindBtnActive]}
+              style={[
+                styles.kindBtn,
+                { backgroundColor: colors.input, borderColor: colors.inputBorder },
+                postKind === 'TEAM_POLL' && { backgroundColor: colors.followBtn, borderColor: colors.cardBorder },
+              ]}
               accessibilityRole="button"
               accessibilityState={{ selected: postKind === 'TEAM_POLL' }}
             >
-              <Text style={[styles.kindBtnText, { fontFamily: fonts.semibold }, postKind === 'TEAM_POLL' && styles.kindBtnTextActive]}>
+              <Text
+                style={[
+                  styles.kindBtnText,
+                  { fontFamily: fonts.semibold, color: colors.muted },
+                  postKind === 'TEAM_POLL' && { color: colors.followText },
+                ]}
+              >
                 {s.pollType}
               </Text>
             </Pressable>
@@ -382,12 +418,12 @@ export default function ComposeScreen() {
           onChangeText={setText}
           onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
           placeholder={isPollMode ? s.pollQuestionPlaceholder : s.composerPlaceholder}
-          placeholderTextColor={C.placeholder}
+          placeholderTextColor={colors.placeholder}
           multiline
           scrollEnabled={false}
           maxLength={MAX_LEN + 50}
-          selectionColor={C.accent}
-          style={[styles.input, { fontFamily: fonts.medium, textAlign }]}
+          selectionColor={colors.accent}
+          style={[styles.input, { fontFamily: fonts.medium, textAlign, color: colors.text }]}
         />
 
         {isPollMode && (
@@ -398,13 +434,19 @@ export default function ComposeScreen() {
                   value={value}
                   onChangeText={(next) => setOptions((current) => current.map((item, i) => (i === index ? next : item)))}
                   placeholder={s.pollOptionPlaceholder.replace('{n}', String(index + 1))}
-                  placeholderTextColor={C.placeholder}
+                  placeholderTextColor={colors.placeholder}
                   editable={!editingPoll}
                   maxLength={40}
                   style={[
                     styles.teamInput,
                     styles.optionInput,
-                    { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' },
+                    {
+                      fontFamily: fonts.medium,
+                      textAlign: isAr ? 'right' : 'left',
+                      color: colors.text,
+                      backgroundColor: colors.contentBox,
+                      borderColor: colors.inputBorder,
+                    },
                     editingPoll && styles.teamInputLocked,
                   ]}
                 />
@@ -415,7 +457,7 @@ export default function ComposeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={s.removePhoto}
                   >
-                    <X size={18} color={C.muted} />
+                    <X size={18} color={colors.muted} />
                   </Pressable>
                 ) : null}
               </View>
@@ -426,7 +468,9 @@ export default function ComposeScreen() {
                 style={styles.addOption}
                 accessibilityRole="button"
               >
-                <Text style={[styles.addOptionText, { fontFamily: fonts.semibold }]}>{s.pollAddOption}</Text>
+                <Text style={[styles.addOptionText, { fontFamily: fonts.semibold, color: colors.accentSoft }]}>
+                  {s.pollAddOption}
+                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -463,7 +507,9 @@ export default function ComposeScreen() {
                   <Text style={[styles.previewRetry, { fontFamily: fonts.semibold }]}>{s.retry}</Text>
                 </Pressable>
               ))}
-            {draft && draft.status !== 'failed' && <UploadBar progress={draft.status === 'done' ? 1 : draft.progress} />}
+            {draft && draft.status !== 'failed' && (
+              <UploadBar progress={draft.status === 'done' ? 1 : draft.progress} accent={colors.accent} />
+            )}
             <Pressable
               onPress={() => {
                 cancelImageUpload(clientId);
@@ -502,7 +548,16 @@ export default function ComposeScreen() {
             />
           </View>
         )}
-        <View style={[styles.toolbar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+        <View
+          style={[
+            styles.toolbar,
+            {
+              flexDirection: isAr ? 'row-reverse' : 'row',
+              borderTopColor: colors.inputBorder,
+              backgroundColor: colors.composer,
+            },
+          ]}
+        >
           <View style={[styles.tools, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
             <View
               style={[
@@ -515,20 +570,20 @@ export default function ComposeScreen() {
               {!hasImage && (
                 <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
                   <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
-                  <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.addPhoto}</Text>
+                  <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>{s.addPhoto}</Text>
                 </Pressable>
               )}
               <Pressable onPress={() => applyInsert('#')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.hashtagTool}>
                 <View style={styles.toolGlyph}>
-                  <Hash size={18} color={C.accentSoft} strokeWidth={2.4} />
+                  <Hash size={18} color={colors.accentSoft} strokeWidth={2.4} />
                 </View>
-                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.hashtagTool}</Text>
+                <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>{s.hashtagTool}</Text>
               </Pressable>
               <Pressable onPress={() => applyInsert('@')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.mentionTool}>
                 <View style={styles.toolGlyph}>
-                  <AtSign size={18} color={C.accentSoft} strokeWidth={2.4} />
+                  <AtSign size={18} color={colors.accentSoft} strokeWidth={2.4} />
                 </View>
-                <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>{s.mentionTool}</Text>
+                <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>{s.mentionTool}</Text>
               </Pressable>
             </View>
             {!editing ? (
@@ -547,13 +602,18 @@ export default function ComposeScreen() {
                 accessibilityLabel={s.pollType}
                 accessibilityState={{ selected: isPollMode }}
               >
-                <View style={[styles.toolGlyph, isPollMode && styles.toolGlyphActive]}>
-                  <BarChart3 size={18} color={isPollMode ? '#FFFFFF' : C.accentSoft} strokeWidth={2.4} />
+                <View
+                  style={[
+                    styles.toolGlyph,
+                    isPollMode && { backgroundColor: colors.accent, borderColor: colors.accent },
+                  ]}
+                >
+                  <BarChart3 size={18} color={isPollMode ? '#FFFFFF' : colors.accentSoft} strokeWidth={2.4} />
                 </View>
                 <Text
                   style={[
                     styles.toolText,
-                    { fontFamily: fonts.medium },
+                    { fontFamily: fonts.medium, color: colors.accentSoft },
                     isPollMode && styles.toolTextActive,
                   ]}
                 >
@@ -563,7 +623,13 @@ export default function ComposeScreen() {
             ) : null}
           </View>
           {left <= WARN_AT && (
-            <Text style={[styles.counter, { fontFamily: fonts.semibold }, left < 0 && { color: C.danger }]}>
+            <Text
+              style={[
+                styles.counter,
+                { fontFamily: fonts.semibold, color: colors.counter },
+                left < 0 && { color: colors.danger },
+              ]}
+            >
               {fillTemplate(s.charsLeft, { n: left })}
             </Text>
           )}
@@ -584,17 +650,23 @@ export default function ComposeScreen() {
   );
 }
 
+export default function ComposeScreen() {
+  return (
+    <CommunityThemeProvider>
+      <ComposeScreenInner />
+    </CommunityThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.screen,
   },
   topBar: {
     height: 58,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    backgroundColor: C.header,
     gap: 10,
   },
   cancelBtn: {
@@ -604,18 +676,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
   },
   cancelText: {
-    color: C.text,
     fontSize: 14,
     fontWeight: '600',
   },
   title: {
     flex: 1,
-    color: C.textStrong,
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
@@ -623,7 +691,6 @@ const styles = StyleSheet.create({
   postBtnWrap: {
     borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: C.accent,
     shadowOpacity: 0.45,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -658,7 +725,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   author: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
@@ -670,21 +736,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: C.input,
     borderWidth: 1,
-    borderColor: C.inputBorder,
-  },
-  kindBtnActive: {
-    backgroundColor: C.followBtn,
-    borderColor: C.cardBorder,
   },
   kindBtnText: {
-    color: C.muted,
     fontSize: 13,
     fontWeight: '600',
-  },
-  kindBtnTextActive: {
-    color: C.followText,
   },
   pollFields: {
     gap: 10,
@@ -702,18 +758,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   addOptionText: {
-    color: C.accentSoft,
     fontSize: 15,
   },
   teamInput: {
-    color: C.text,
     fontSize: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: C.contentBox,
     borderWidth: 1,
-    borderColor: C.inputBorder,
   },
   teamInputLocked: {
     opacity: 0.7,
@@ -722,7 +774,6 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   input: {
-    color: C.text,
     fontSize: 18,
     lineHeight: 26,
     minHeight: 120,
@@ -749,7 +800,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   previewRetry: {
-    color: C.accentSoft,
+    color: '#B79AF8',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -800,7 +851,6 @@ const styles = StyleSheet.create({
   },
   barFill: {
     height: 4,
-    backgroundColor: C.accent,
   },
   toolbar: {
     alignItems: 'center',
@@ -808,8 +858,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: C.inputBorder,
-    backgroundColor: C.composer,
     gap: 10,
   },
   tools: {
@@ -836,13 +884,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(183,154,248,0.28)',
   },
-  toolGlyphActive: {
-    backgroundColor: C.accent,
-    borderColor: C.accent,
-  },
   toolIcon: { width: 24, height: 24 },
   toolText: {
-    color: C.accentSoft,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -850,7 +893,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   counter: {
-    color: C.counter,
     fontSize: 13,
   },
 });

@@ -11,7 +11,8 @@ import { MentionSuggestions } from './MentionSuggestions';
 import { PageSuggestions } from './PageSuggestions';
 import { filterPages, type AppPage } from './pageLinks';
 import { activeMentionQuery, activeSlashQuery, everyoneSuggestionMatches } from './richTextParse';
-import { C, CI } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { CI } from './theme';
 import { fillTemplate } from './format';
 
 const QUICK_EMOJI = ['⚽', '🔥', '😂', '❤️', '👏', '😮', '💪', '🏆'];
@@ -47,6 +48,7 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   { isAr, fonts, labels, onSubmit, onEdit, onError, bottomInset = 0 },
   ref,
 ) {
+  const { colors } = useCommunityTheme();
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
@@ -146,7 +148,12 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
   const replyName = replyTarget ? replyTarget.author.displayName || replyTarget.author.username : '';
 
   return (
-    <View style={[styles.wrap, { paddingBottom: 10 + bottomInset }]}>
+    <View
+      style={[
+        styles.wrap,
+        { paddingBottom: 10 + bottomInset, borderTopColor: colors.inputBorder, backgroundColor: colors.composer },
+      ]}
+    >
       {slash && (
         <PageSuggestions pages={pages} isAr={isAr} emptyLabel={labels.noPages} fontFamily={fonts.regular} onPick={pickPage} />
       )}
@@ -166,8 +173,12 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
       )}
 
       {(replyTarget || editTarget) && (
-        <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)} style={[styles.chip, { flexDirection: row }]}>
-          <Text style={[styles.chipText, { fontFamily: fonts.regular }]} numberOfLines={1}>
+        <Animated.View
+          entering={FadeIn.duration(140)}
+          exiting={FadeOut.duration(120)}
+          style={[styles.chip, { flexDirection: row, backgroundColor: colors.chipBg }]}
+        >
+          <Text style={[styles.chipText, { fontFamily: fonts.regular, color: colors.accentSoft }]} numberOfLines={1}>
             {editTarget ? (labels.editing || 'Edit') : fillTemplate(labels.replyingTo, { name: replyName })}
           </Text>
           <Pressable
@@ -178,7 +189,7 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
             }}
             hitSlop={10}
           >
-            <X size={16} color={C.muted} />
+            <X size={16} color={colors.muted} />
           </Pressable>
         </Animated.View>
       )}
@@ -200,24 +211,30 @@ export const CommentComposer = forwardRef<CommentComposerHandle, Props>(function
       )}
 
       <View style={styles.row}>
-        <View style={styles.inputBox}>
+        <View
+          style={[styles.inputBox, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
+        >
           <TextInput
             ref={inputRef}
             value={text}
             onChangeText={(v) => setText(v.slice(0, MAX_LEN))}
             onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
             placeholder={labels.placeholder}
-            placeholderTextColor={C.placeholder}
-            style={[styles.input, { fontFamily: fonts.regular, textAlign: isAr ? 'right' : 'left' }]}
+            placeholderTextColor={colors.placeholder}
+            style={[styles.input, { fontFamily: fonts.regular, textAlign: isAr ? 'right' : 'left', color: colors.textStrong }]}
             multiline
             maxLength={MAX_LEN}
-            selectionColor={C.accent}
+            selectionColor={colors.accent}
             onFocus={() => setShowEmoji(false)}
           />
         </View>
         <Pressable
           onPress={canSend ? send : () => setShowEmoji((v) => !v)}
-          style={[styles.square, canSend && styles.squareActive]}
+          style={[
+            styles.square,
+            { backgroundColor: colors.input, borderColor: colors.inputBorder },
+            canSend && { backgroundColor: colors.accent, borderColor: colors.accent },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={canSend ? 'Send' : 'Emoji'}
         >
@@ -238,9 +255,7 @@ const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: 16,
     paddingTop: 10,
-    backgroundColor: 'rgba(3,3,3,0.96)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: C.inputBorder,
   },
   chip: {
     alignItems: 'center',
@@ -250,10 +265,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(139,92,246,0.12)',
   },
   chipText: {
-    color: C.accentSoft,
     fontSize: 13,
     flex: 1,
   },
@@ -284,13 +297,10 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     justifyContent: 'center',
     borderRadius: 15,
-    backgroundColor: C.input,
     borderWidth: 1,
-    borderColor: C.inputBorder,
     paddingHorizontal: 20,
   },
   input: {
-    color: C.textStrong,
     fontSize: 14,
     paddingVertical: 12,
     maxHeight: 118,
@@ -301,12 +311,6 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: C.input,
     borderWidth: 1,
-    borderColor: C.inputBorder,
-  },
-  squareActive: {
-    backgroundColor: C.accent,
-    borderColor: C.accent,
   },
 });

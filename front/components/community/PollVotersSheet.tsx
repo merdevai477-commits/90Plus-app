@@ -7,8 +7,8 @@ import { communityApi, type CommunityAuthor } from '../../services/community.api
 import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { CommunityAvatar } from './CommunityAvatar';
-import { C } from './theme';
 
 interface Props {
   postId: string;
@@ -20,6 +20,7 @@ interface Props {
 }
 
 export function PollVotersSheet({ postId, optionIndex, optionLabel, visible, onClose, onProfile }: Props) {
+  const { colors } = useCommunityTheme();
   const insets = useSafeAreaInsets();
   const getToken = useCommunityToken();
   const { t, language } = useTranslation();
@@ -51,20 +52,25 @@ export function PollVotersSheet({ postId, optionIndex, optionLabel, visible, onC
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} />
+      <View
+        style={[
+          styles.sheet,
+          { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.sheet, borderColor: colors.cardBorder },
+        ]}
+      >
         <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.title, { fontFamily: font }]} numberOfLines={1}>
+          <Text style={[styles.title, { fontFamily: font, color: colors.text }]} numberOfLines={1}>
             {s.pollVotersTitle.replace('{option}', optionLabel)}
           </Text>
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
-            <X size={20} color={C.muted} />
+            <X size={20} color={colors.muted} />
           </Pressable>
         </View>
         {loading ? (
-          <ActivityIndicator style={{ marginVertical: 28 }} color={C.accentSoft} />
+          <ActivityIndicator style={{ marginVertical: 28 }} color={colors.accentSoft} />
         ) : !items.length ? (
-          <Text style={[styles.empty, { fontFamily: fontReg }]}>{s.pollNoVoters}</Text>
+          <Text style={[styles.empty, { fontFamily: fontReg, color: colors.muted }]}>{s.pollNoVoters}</Text>
         ) : (
           <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
             {items.map((user) => {
@@ -80,8 +86,12 @@ export function PollVotersSheet({ postId, optionIndex, optionLabel, visible, onC
                 >
                   <CommunityAvatar uri={user.avatar} name={name} size={40} />
                   <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
-                    <Text style={[styles.name, { fontFamily: font }]} numberOfLines={1}>{name}</Text>
-                    <Text style={[styles.handle, { fontFamily: fontReg }]} numberOfLines={1}>@{user.username}</Text>
+                    <Text style={[styles.name, { fontFamily: font, color: colors.text }]} numberOfLines={1}>
+                      {name}
+                    </Text>
+                    <Text style={[styles.handle, { fontFamily: fontReg, color: colors.muted }]} numberOfLines={1}>
+                      @{user.username}
+                    </Text>
                   </View>
                 </Pressable>
               );
@@ -94,19 +104,19 @@ export function PollVotersSheet({ postId, optionIndex, optionLabel, visible, onC
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backdrop: { flex: 1 },
   sheet: {
-    backgroundColor: C.screen,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 16,
     paddingHorizontal: 16,
     maxHeight: '70%',
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   header: { alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
-  title: { color: C.text, fontSize: 16, flex: 1 },
-  empty: { color: C.muted, textAlign: 'center', marginVertical: 28 },
+  title: { fontSize: 16, flex: 1 },
+  empty: { textAlign: 'center', marginVertical: 28 },
   row: { alignItems: 'center', gap: 12, paddingVertical: 10 },
-  name: { color: C.text, fontSize: 15 },
-  handle: { color: C.muted, fontSize: 13 },
+  name: { fontSize: 15 },
+  handle: { fontSize: 13 },
 });

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrendingUp } from 'lucide-react-native';
@@ -7,7 +7,6 @@ import { TrendingUp } from 'lucide-react-native';
 import { CommunityFeedList } from '../../components/community/CommunityFeedList';
 import { CommunityHeader, useCommunityHeaderOffset } from '../../components/community/CommunityHeader';
 import { ComposerCard } from '../../components/community/ComposerCard';
-import { C } from '../../components/community/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
 import {
@@ -15,6 +14,7 @@ import {
   useTrendingHashtags,
   type CommunityFeedSource,
 } from '../../hooks/community/useCommunityFeed';
+import { CommunityThemeProvider, useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 
@@ -22,13 +22,14 @@ const LATEST_FEED: CommunityFeedSource = { kind: 'feed', sort: 'latest' };
 
 function TrendingChips({ isAr, fontFamily, label }: { isAr: boolean; fontFamily: string; label: string }) {
   const router = useRouter();
+  const { colors } = useCommunityTheme();
   const { data } = useTrendingHashtags();
   if (!data?.length) return null;
   return (
     <View style={styles.trending}>
       <View style={[styles.trendingTitle, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-        <TrendingUp size={16} color={C.accentSoft} />
-        <Text style={[styles.trendingLabel, { fontFamily }]}>{label}</Text>
+        <TrendingUp size={16} color={colors.accentSoft} />
+        <Text style={[styles.trendingLabel, { fontFamily, color: colors.text }]}>{label}</Text>
       </View>
       <ScrollView
         horizontal
@@ -40,9 +41,13 @@ function TrendingChips({ isAr, fontFamily, label }: { isAr: boolean; fontFamily:
           <Pressable
             key={h.tag}
             onPress={() => router.push({ pathname: '/community/tag/[tag]', params: { tag: h.tag } })}
-            style={[styles.chip, isAr && { transform: [{ scaleX: -1 }] }]}
+            style={[
+              styles.chip,
+              { backgroundColor: colors.chipBg, borderColor: colors.chipBorder },
+              isAr && { transform: [{ scaleX: -1 }] },
+            ]}
           >
-            <Text style={[styles.chipText, { fontFamily }]}>#{h.tag}</Text>
+            <Text style={[styles.chipText, { fontFamily, color: colors.accentSoft }]}>#{h.tag}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -50,12 +55,13 @@ function TrendingChips({ isAr, fontFamily, label }: { isAr: boolean; fontFamily:
   );
 }
 
-export default function CommunityScreen() {
+function CommunityScreenInner() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
   const s = t.community;
   const isAr = language === 'ar';
+  const { colors } = useCommunityTheme();
   const me = useCommunityMe();
   const headerOffset = useCommunityHeaderOffset();
   usePrefetchCommunityFeed(true);
@@ -93,7 +99,8 @@ export default function CommunityScreen() {
   }, [router]);
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.screen }]}>
+      <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       <CommunityHeader
         title={s.title}
         fontFamily={fonts.semibold}
@@ -111,10 +118,17 @@ export default function CommunityScreen() {
   );
 }
 
+export default function CommunityScreen() {
+  return (
+    <CommunityThemeProvider>
+      <CommunityScreenInner />
+    </CommunityThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.screen,
   },
   listHeader: {
     paddingTop: 16,
@@ -130,7 +144,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   trendingLabel: {
-    color: C.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -142,12 +155,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: 'rgba(139,92,246,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.35)',
   },
   chipText: {
-    color: C.accentSoft,
     fontSize: 13,
     fontWeight: '600',
   },

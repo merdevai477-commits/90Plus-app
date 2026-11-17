@@ -2,8 +2,9 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { CommunityAvatar } from './CommunityAvatar';
-import { C, CI } from './theme';
+import { CI } from './theme';
 
 interface Props {
   isAr: boolean;
@@ -39,25 +40,43 @@ export const ComposerCard = memo(function ComposerCard({
   onPoll,
   onAvatarPress,
 }: Props) {
+  const { colors } = useCommunityTheme();
   const row = isAr ? ('row-reverse' as const) : ('row' as const);
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.composer,
+          borderColor: colors.composerBorder,
+        },
+      ]}
+    >
       <View style={[styles.top, { flexDirection: row }]}>
         <CommunityAvatar uri={avatar} name={name} size={41} ring onPress={onAvatarPress} />
         <Pressable
           onPress={onWrite}
-          style={[styles.input, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}
+          style={[
+            styles.input,
+            {
+              alignItems: isAr ? 'flex-end' : 'flex-start',
+              backgroundColor: colors.input,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={placeholder}
         >
-          <Text style={[styles.placeholder, { fontFamily: fonts.regular }]} numberOfLines={1}>
+          <Text
+            style={[styles.placeholder, { fontFamily: fonts.regular, color: colors.placeholder }]}
+            numberOfLines={1}
+          >
             {placeholder}
           </Text>
         </Pressable>
       </View>
 
-      <View style={styles.hairline} />
+      <View style={[styles.hairline, { backgroundColor: colors.composerHairline }]} />
 
       <View style={[styles.bottom, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
         <Pressable
@@ -67,10 +86,15 @@ export const ComposerCard = memo(function ComposerCard({
           accessibilityLabel={writeLabel}
           style={styles.plusHit}
         >
-          <Image source={CI.composerPlus} style={styles.plus} contentFit="contain" transition={0} />
+          <Image
+            source={CI.composerPlus}
+            style={styles.plus}
+            contentFit="contain"
+            transition={0}
+            tintColor={colors.accent}
+          />
         </Pressable>
 
-        {/* Physical LTR order matches Figma: write · poll (poll sits closer to the trailing edge). */}
         <View style={styles.shortcuts}>
           <Pressable
             onPress={onWrite}
@@ -79,13 +103,21 @@ export const ComposerCard = memo(function ComposerCard({
             accessibilityRole="button"
             accessibilityLabel={writeLabel}
           >
-            <Image source={CI.composerSmile} style={styles.icon24} contentFit="contain" transition={0} />
-            <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{writeLabel}</Text>
+            <Image
+              source={CI.composerSmile}
+              style={styles.icon24}
+              contentFit="contain"
+              transition={0}
+              tintColor={colors.icon}
+            />
+            <Text style={[styles.label, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+              {writeLabel}
+            </Text>
           </Pressable>
 
           {onPoll && pollLabel ? (
             <>
-              <View style={styles.vDivider} />
+              <View style={[styles.vDivider, { backgroundColor: colors.composerHairline }]} />
               <Pressable
                 onPress={onPoll}
                 hitSlop={8}
@@ -93,8 +125,16 @@ export const ComposerCard = memo(function ComposerCard({
                 accessibilityRole="button"
                 accessibilityLabel={pollLabel}
               >
-                <Image source={CI.composerPoll} style={styles.icon24} contentFit="contain" transition={0} />
-                <Text style={[styles.label, { fontFamily: fonts.semibold }]}>{pollLabel}</Text>
+                <Image
+                  source={CI.composerPoll}
+                  style={styles.icon24}
+                  contentFit="contain"
+                  transition={0}
+                  tintColor={colors.icon}
+                />
+                <Text style={[styles.label, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+                  {pollLabel}
+                </Text>
               </Pressable>
             </>
           ) : null}
@@ -106,13 +146,11 @@ export const ComposerCard = memo(function ComposerCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#0C0620',
     borderRadius: 24,
     paddingHorizontal: 21,
     paddingVertical: 17,
     gap: 14,
     borderWidth: 1,
-    borderColor: '#1F065A',
   },
   top: {
     alignItems: 'center',
@@ -125,16 +163,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 17,
     borderRadius: 100,
-    backgroundColor: '#130A34',
   },
   placeholder: {
-    color: '#A49BAD',
     fontSize: 13,
   },
   hairline: {
     height: StyleSheet.hairlineWidth,
     width: '100%',
-    backgroundColor: '#39246B',
   },
   bottom: {
     alignItems: 'center',
@@ -161,13 +196,11 @@ const styles = StyleSheet.create({
   },
   icon24: { width: 24, height: 24 },
   label: {
-    color: C.textStrong,
     fontSize: 14,
     fontWeight: '600',
   },
   vDivider: {
     width: StyleSheet.hairlineWidth,
     height: 19,
-    backgroundColor: '#39246B',
   },
 });

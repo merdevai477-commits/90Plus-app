@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { CI } from './theme';
 
 interface Props {
@@ -37,6 +38,7 @@ export const CommunityHeader = memo(function CommunityHeader({
   floating = true,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useCommunityTheme();
   const topPad = Math.max(insets.top, 10) + 10;
   const BackIcon = I18nManager.isRTL ? ChevronRight : ChevronLeft;
 
@@ -47,8 +49,20 @@ export const CommunityHeader = memo(function CommunityHeader({
     >
       <View style={[styles.side, styles.sideStart]} pointerEvents="box-none">
         {onBack ? (
-          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={styles.iconBtn}>
-            <BackIcon size={20} color="#FFF" strokeWidth={2.4} />
+          <Pressable
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={8}
+            style={[
+              styles.iconBtn,
+              {
+                backgroundColor: isDark ? 'rgba(168,85,247,0.15)' : 'rgba(106,43,217,0.1)',
+                borderColor: isDark ? 'rgba(168,85,247,0.35)' : 'rgba(106,43,217,0.28)',
+              },
+            ]}
+          >
+            <BackIcon size={20} color={colors.headerIcon} strokeWidth={2.4} />
           </Pressable>
         ) : null}
       </View>
@@ -58,18 +72,24 @@ export const CommunityHeader = memo(function CommunityHeader({
         disabled={!onTitlePress && !onBrandPress}
         accessibilityRole="button"
         accessibilityLabel={`90 PLUS ${title}`}
-        style={styles.logoPill}
+        style={[
+          styles.logoPill,
+          {
+            backgroundColor: colors.headerPillBg,
+            borderColor: colors.headerPillBorder,
+          },
+        ]}
       >
-        <Text style={styles.logo90}>90</Text>
+        <Text style={[styles.logo90, { color: colors.headerTitle }]}>90</Text>
         <View style={styles.plusChip}>
           <Text style={styles.logoPlus}>PLUS</Text>
         </View>
         <View style={styles.titleCol}>
-          <Text style={[styles.pillTitle, { fontFamily }]} numberOfLines={1}>
+          <Text style={[styles.pillTitle, { fontFamily, color: colors.headerTitle }]} numberOfLines={1}>
             {title}
           </Text>
           {!!subtitle && (
-            <Text style={[styles.subtitle, { fontFamily }]} numberOfLines={1}>
+            <Text style={[styles.subtitle, { fontFamily, color: colors.muted }]} numberOfLines={1}>
               {subtitle}
             </Text>
           )}
@@ -79,8 +99,25 @@ export const CommunityHeader = memo(function CommunityHeader({
       <View style={[styles.side, styles.sideEnd]} pointerEvents="box-none">
         {right ??
           (onBell ? (
-            <Pressable onPress={onBell} accessibilityRole="button" accessibilityLabel="Notifications" hitSlop={8} style={styles.iconBtn}>
-              <Image source={CI.notification} style={styles.bell} contentFit="contain" />
+            <Pressable
+              onPress={onBell}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              hitSlop={8}
+              style={[
+                styles.iconBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(168,85,247,0.15)' : 'rgba(106,43,217,0.1)',
+                  borderColor: isDark ? 'rgba(168,85,247,0.35)' : 'rgba(106,43,217,0.28)',
+                },
+              ]}
+            >
+              <Image
+                source={CI.notification}
+                style={styles.bell}
+                contentFit="contain"
+                tintColor={colors.headerIcon}
+              />
             </Pressable>
           ) : null)}
       </View>
@@ -121,9 +158,7 @@ const styles = StyleSheet.create({
     width: ROW_H,
     height: ROW_H,
     borderRadius: 14,
-    backgroundColor: 'rgba(168,85,247,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -131,16 +166,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     maxWidth: '64%',
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     gap: 5,
   },
   logo90: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.3,
@@ -162,13 +194,11 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   pillTitle: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.55)',
     fontSize: 10,
     marginTop: 1,
   },

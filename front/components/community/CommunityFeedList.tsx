@@ -22,7 +22,7 @@ import { FeedSkeleton } from './FeedSkeleton';
 import { GhostPostCard } from './GhostPostCard';
 import { PostCard } from './PostCard';
 import { communityErrorMessage, formatRelativeTime, isContentRejection, isImageRejected } from './format';
-import { C } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 
 type Row = { type: 'ghost'; key: string; pending: PendingPost } | { type: 'post'; key: string; post: CommunityPost };
 
@@ -54,6 +54,7 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const { t, language } = useTranslation();
   const s = t.community;
   const isAr = language === 'ar';
+  const { colors } = useCommunityTheme();
   const router = useRouter();
   const qc = useQueryClient();
   const getToken = useCommunityToken();
@@ -252,18 +253,20 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
   const empty =
     feed.isLoading ? null : feed.isError ? (
       <View style={styles.state}>
-        <RefreshCw size={36} color={C.accentDeep} />
-        <Text style={[styles.stateTitle, { fontFamily: fonts.semibold }]}>{s.errorTitle}</Text>
-        <Text style={[styles.stateBody, { fontFamily: fonts.regular }]}>{communityErrorMessage(feed.error, s)}</Text>
-        <Pressable onPress={() => void feed.refetch()} style={styles.stateBtn}>
+        <RefreshCw size={36} color={colors.accentDeep} />
+        <Text style={[styles.stateTitle, { fontFamily: fonts.semibold, color: colors.textStrong }]}>{s.errorTitle}</Text>
+        <Text style={[styles.stateBody, { fontFamily: fonts.regular, color: colors.muted }]}>
+          {communityErrorMessage(feed.error, s)}
+        </Text>
+        <Pressable onPress={() => void feed.refetch()} style={[styles.stateBtn, { backgroundColor: colors.accent }]}>
           <Text style={[styles.stateBtnText, { fontFamily: fonts.semibold }]}>{s.tryAgain}</Text>
         </Pressable>
       </View>
     ) : (
       <View style={styles.state}>
-        <MessagesSquare size={40} color={C.accentDeep} />
-        <Text style={[styles.stateTitle, { fontFamily: fonts.semibold }]}>{s.emptyTitle}</Text>
-        <Text style={[styles.stateBody, { fontFamily: fonts.regular }]}>{s.emptyBody}</Text>
+        <MessagesSquare size={40} color={colors.accentDeep} />
+        <Text style={[styles.stateTitle, { fontFamily: fonts.semibold, color: colors.textStrong }]}>{s.emptyTitle}</Text>
+        <Text style={[styles.stateBody, { fontFamily: fonts.regular, color: colors.muted }]}>{s.emptyBody}</Text>
       </View>
     );
 
@@ -281,9 +284,12 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
         ListEmptyComponent={empty}
         ListFooterComponent={
           feed.isFetchingNextPage ? (
-            <ActivityIndicator style={{ marginVertical: 22 }} color={C.accentSoft} />
+            <ActivityIndicator style={{ marginVertical: 22 }} color={colors.accentSoft} />
           ) : feed.isError && rows.length > 0 ? (
-            <Pressable onPress={() => void feed.fetchNextPage()} style={[styles.stateBtn, { alignSelf: 'center', marginVertical: 18 }]}>
+            <Pressable
+              onPress={() => void feed.fetchNextPage()}
+              style={[styles.stateBtn, { alignSelf: 'center', marginVertical: 18, backgroundColor: colors.accent }]}
+            >
               <Text style={[styles.stateBtnText, { fontFamily: fonts.semibold }]}>{s.tryAgain}</Text>
             </Pressable>
           ) : null
@@ -302,7 +308,11 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
 
       {hasNewPosts && (
         <Animated.View entering={FadeInUp.springify().damping(16)} exiting={FadeOutUp.duration(160)} style={styles.pillWrap} pointerEvents="box-none">
-          <Pressable onPress={() => void showNewPosts()} style={styles.pill} accessibilityRole="button">
+          <Pressable
+            onPress={() => void showNewPosts()}
+            style={[styles.pill, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
+            accessibilityRole="button"
+          >
             <ArrowUp size={16} color="#FFF" />
             <Text style={[styles.pillText, { fontFamily: fonts.semibold }]}>{s.newPosts}</Text>
           </Pressable>
@@ -356,13 +366,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   stateTitle: {
-    color: C.textStrong,
     fontSize: 17,
     fontWeight: '600',
     textAlign: 'center',
   },
   stateBody: {
-    color: C.muted,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -372,7 +380,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: C.accent,
   },
   stateBtnText: {
     color: '#FFF',
@@ -393,8 +400,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: C.accent,
-    shadowColor: C.accent,
     shadowOpacity: 0.5,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },

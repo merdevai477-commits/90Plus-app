@@ -1,15 +1,17 @@
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { postCardStyles } from './PostCard';
 import { SkeletonBlock } from './Shimmer';
 import { AVATAR_SIZE, POST_IMAGE_RADIUS } from './theme';
 
 function SkeletonCard({ isAr, withImage, imageHeight }: { isAr: boolean; withImage: boolean; imageHeight: number }) {
+  const { colors } = useCommunityTheme();
   const row = isAr ? 'row-reverse' : 'row';
   const align = isAr ? 'flex-end' : 'flex-start';
   return (
-    <View style={postCardStyles.card}>
+    <View style={[postCardStyles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
       <View style={[styles.header, { flexDirection: row }]}>
         <SkeletonBlock style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 }} />
         <View style={{ flex: 1, gap: 8, alignItems: align }}>

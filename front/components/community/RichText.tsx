@@ -2,7 +2,7 @@ import React, { memo, useMemo, useState } from 'react';
 import { Linking, Text, type StyleProp, type TextStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { C } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { isArabicText, parseRichText } from './richTextParse';
 
 interface Props {
@@ -34,6 +34,7 @@ export const RichText = memo(function RichText({
   align,
 }: Props) {
   const router = useRouter();
+  const { colors } = useCommunityTheme();
   const segments = useMemo(() => parseRichText(text), [text]);
   const detectedRtl = useMemo(() => isArabicText(text), [text]);
   const rtl = align ? align === 'right' : detectedRtl;
@@ -63,13 +64,13 @@ export const RichText = memo(function RichText({
           switch (seg.kind) {
             case 'hashtag':
               return (
-                <Text key={i} style={{ color: C.accentSoft, fontWeight: '600' }} onPress={() => onHashtag(seg.tag)} suppressHighlighting>
+                <Text key={i} style={{ color: colors.accentSoft, fontWeight: '600' }} onPress={() => onHashtag(seg.tag)} suppressHighlighting>
                   {seg.text}
                 </Text>
               );
             case 'mention':
               return (
-                <Text key={i} style={{ color: C.accentSoft, fontWeight: '600' }} onPress={() => onMention(seg.username)} suppressHighlighting>
+                <Text key={i} style={{ color: colors.accentSoft, fontWeight: '600' }} onPress={() => onMention(seg.username)} suppressHighlighting>
                   {seg.text}
                 </Text>
               );
@@ -83,7 +84,7 @@ export const RichText = memo(function RichText({
               return (
                 <Text
                   key={i}
-                  style={{ color: C.accentSoft, fontWeight: '700' }}
+                  style={{ color: colors.accentSoft, fontWeight: '700' }}
                   onPress={() => {
                     const split = seg.href.indexOf('?');
                     if (split === -1) {
@@ -117,7 +118,7 @@ export const RichText = memo(function RichText({
       {collapsible && overflowing && (
         <Text
           onPress={() => setExpanded((v) => !v)}
-          style={{ color: C.muted, fontSize: 14, marginTop: 4, textAlign: rtl ? 'right' : 'left' }}
+          style={{ color: colors.muted, fontSize: 14, marginTop: 4, textAlign: rtl ? 'right' : 'left' }}
           suppressHighlighting
         >
           {expanded ? seeLessLabel : seeMoreLabel}

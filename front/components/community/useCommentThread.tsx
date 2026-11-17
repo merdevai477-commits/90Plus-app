@@ -12,13 +12,14 @@ import type { ActionMenuItem } from './ActionMenu';
 import { CommentItem } from './CommentItem';
 import type { CommentComposerHandle } from './CommentComposer';
 import { communityErrorMessage, fillTemplate, formatRelativeTime } from './format';
-import { C } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 
 /**
  * Everything a comments surface needs — rows, renderers, composer wiring and
  * the long-press menu — shared by the feed's sheet and the post screen.
  */
 export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | null, enabled = true) {
+  const { colors } = useCommunityTheme();
   const postId = post?.id ?? '';
   const { t, language } = useTranslation();
   const s = t.community;
@@ -48,11 +49,11 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
             style={[styles.more, isAr ? { marginRight: 46, flexDirection: 'row-reverse' } : { marginLeft: 46 }]}
             hitSlop={6}
           >
-            <View style={styles.moreLine} />
+            <View style={[styles.moreLine, { backgroundColor: colors.inputBorder }]} />
             {item.loading ? (
-              <ActivityIndicator size="small" color={C.accentSoft} />
+              <ActivityIndicator size="small" color={colors.accentSoft} />
             ) : (
-              <Text style={[styles.moreText, { fontFamily: fonts.semibold }]}>
+              <Text style={[styles.moreText, { fontFamily: fonts.semibold, color: colors.muted }]}>
                 {item.remaining === 1 ? s.viewReply : fillTemplate(s.viewReplies, { count: item.remaining })}
               </Text>
             )}
@@ -76,7 +77,7 @@ export function useCommentThread(post: Pick<CommunityPost, 'id' | 'isMine'> | nu
         />
       );
     },
-    [actions.openHashtag, actions.openProfile, fonts, isAr, labels, onMenu, onReply, s, thread],
+    [actions.openHashtag, actions.openProfile, colors, fonts, isAr, labels, onMenu, onReply, s, thread],
   );
 
   const submit = useCallback(
@@ -175,10 +176,8 @@ const styles = StyleSheet.create({
   moreLine: {
     width: 24,
     height: 1,
-    backgroundColor: C.inputBorder,
   },
   moreText: {
-    color: C.muted,
     fontSize: 13,
     fontWeight: '600',
   },

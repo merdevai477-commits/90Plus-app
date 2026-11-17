@@ -25,8 +25,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { useTranslation } from '../../src/i18n';
-import { C } from './theme';
 
 export interface ActionMenuItem {
   key: string;
@@ -51,8 +51,8 @@ interface Props {
 const SPRING = { damping: 26, stiffness: 280, mass: 0.85 } as const;
 const SHEET_OFFSCREEN = 480;
 
-function iconForKey(key: string, destructive?: boolean) {
-  const color = destructive ? '#FCA5A5' : C.accentSoft;
+function iconForKey(key: string, destructive: boolean | undefined, accentSoft: string) {
+  const color = destructive ? '#FCA5A5' : accentSoft;
   const size = 18;
   const stroke = 2.2;
   switch (key) {
@@ -90,6 +90,7 @@ function iconForKey(key: string, destructive?: boolean) {
  * backdrop, and waits for the exit animation before unmounting.
  */
 export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, title }: Props) {
+  const { colors, isDark } = useCommunityTheme();
   const insets = useSafeAreaInsets();
   const { language } = useTranslation();
   const isRtl = language === 'ar';
@@ -131,9 +132,9 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
     () =>
       items.map((item) => ({
         ...item,
-        resolvedIcon: item.icon ?? iconForKey(item.key, item.destructive),
+        resolvedIcon: item.icon ?? iconForKey(item.key, item.destructive, colors.accentSoft),
       })),
-    [items],
+    [colors.accentSoft, items],
   );
 
   if (!mounted) return null;
@@ -141,24 +142,47 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
+        <Animated.View style={[styles.backdrop, { backgroundColor: colors.overlay }, backdropStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={cancelLabel} />
         </Animated.View>
-        <Animated.View style={[styles.sheet, sheetStyle, { paddingBottom: Math.max(insets.bottom, 10) + 10 }]}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            sheetStyle,
+            {
+              paddingBottom: Math.max(insets.bottom, 10) + 10,
+              backgroundColor: colors.sheet,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
           <LinearGradient
-            colors={['rgba(167,139,250,0.22)', 'transparent']}
+            colors={isDark ? ['rgba(167,139,250,0.22)', 'transparent'] : ['rgba(106,43,217,0.08)', 'transparent']}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={styles.sheetGlow}
             pointerEvents="none"
           />
-          <View style={styles.grabber} />
+          <View
+            style={[
+              styles.grabber,
+              { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(106,43,217,0.25)' },
+            ]}
+          />
           {!!title && (
-            <Text style={[styles.title, { fontFamily }]} accessibilityRole="header">
+            <Text style={[styles.title, { fontFamily, color: colors.muted }]} accessibilityRole="header">
               {title}
             </Text>
           )}
-          <View style={styles.group}>
+          <View
+            style={[
+              styles.group,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.045)' : colors.chipBg,
+                borderColor: isDark ? 'rgba(183,154,248,0.14)' : colors.chipBorder,
+              },
+            ]}
+          >
             {rows.map((item, i) => (
               <Pressable
                 key={item.key}
@@ -171,7 +195,7 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
                 style={({ pressed }) => [
                   styles.row,
                   { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                  i > 0 && styles.rowDivider,
+                  i > 0 && [styles.rowDivider, { borderTopColor: isDark ? 'rgba(255,255,255,0.07)' : colors.divider }],
                   pressed && (item.destructive ? styles.rowPressedDanger : styles.rowPressed),
                 ]}
                 accessibilityRole="button"
@@ -185,28 +209,35 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
                 <Text
                   style={[
                     styles.label,
-                    { fontFamily, textAlign: isRtl ? 'right' : 'left' },
+                    { fontFamily, textAlign: isRtl ? 'right' : 'left', color: colors.textStrong },
                     item.destructive && styles.destructive,
-                    item.selected && styles.selected,
+                    item.selected && { color: colors.accentSoft },
                   ]}
                   numberOfLines={2}
                 >
                   {item.label}
                 </Text>
-                {item.selected && <Check size={18} color={C.accentSoft} strokeWidth={2.6} />}
+                {item.selected && <Check size={18} color={colors.accentSoft} strokeWidth={2.6} />}
               </Pressable>
             ))}
           </View>
           <Pressable
             onPress={onClose}
-            style={({ pressed }) => [styles.cancel, pressed && styles.rowPressed]}
+            style={({ pressed }) => [
+              styles.cancel,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(106,43,217,0.06)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : colors.chipBorder,
+              },
+              pressed && styles.rowPressed,
+            ]}
             accessibilityRole="button"
           >
             <View style={[styles.cancelInner, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
               <View style={styles.iconWrapMuted}>
-                <X size={16} color={C.muted} strokeWidth={2.4} />
+                <X size={16} color={colors.muted} strokeWidth={2.4} />
               </View>
-              <Text style={[styles.cancelLabel, { fontFamily }]}>{cancelLabel}</Text>
+              <Text style={[styles.cancelLabel, { fontFamily, color: colors.muted }]}>{cancelLabel}</Text>
             </View>
           </Pressable>
         </Animated.View>
@@ -218,7 +249,6 @@ export function ActionMenu({ visible, items, cancelLabel, onClose, fontFamily, t
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.72)',
   },
   sheet: {
     position: 'absolute',
@@ -227,11 +257,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 14,
     paddingTop: 10,
-    backgroundColor: '#0B0714',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
-    borderColor: 'rgba(183,154,248,0.18)',
     overflow: 'hidden',
   },
   sheetGlow: {
@@ -246,11 +274,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.22)',
     marginBottom: 14,
   },
   title: {
-    color: C.muted,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
@@ -259,10 +285,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   group: {
-    backgroundColor: 'rgba(255,255,255,0.045)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(183,154,248,0.14)',
     overflow: 'hidden',
   },
   row: {
@@ -280,7 +304,6 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.07)',
   },
   iconWrap: {
     width: 36,
@@ -309,7 +332,6 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -317,15 +339,10 @@ const styles = StyleSheet.create({
   destructive: {
     color: '#FCA5A5',
   },
-  selected: {
-    color: C.accentSoft,
-  },
   cancel: {
     marginTop: 10,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     minHeight: 54,
     justifyContent: 'center',
   },
@@ -336,7 +353,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cancelLabel: {
-    color: C.muted,
     fontSize: 15,
     fontWeight: '700',
   },

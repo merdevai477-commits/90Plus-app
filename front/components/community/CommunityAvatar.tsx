@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
-import { C } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 
 interface Props {
   uri: string | null | undefined;
@@ -14,13 +14,20 @@ interface Props {
 
 /** Round avatar with the Figma violet ring and an initial fallback. */
 export const CommunityAvatar = memo(function CommunityAvatar({ uri, name, size, onPress, ring = true }: Props) {
+  const { colors } = useCommunityTheme();
   const inner = ring ? size - 4 : size;
   const initial = (name.trim()[0] ?? '?').toUpperCase();
   const content = (
     <View
       style={[
         styles.ring,
-        { width: size, height: size, borderRadius: size / 2, borderWidth: ring ? 1.5 : 0 },
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: ring ? 1.5 : 0,
+          borderColor: colors.accent,
+        },
       ]}
     >
       {uri ? (
@@ -33,8 +40,13 @@ export const CommunityAvatar = memo(function CommunityAvatar({ uri, name, size, 
           recyclingKey={uri}
         />
       ) : (
-        <View style={[styles.fallback, { width: inner, height: inner, borderRadius: inner / 2 }]}>
-          <Text style={[styles.initial, { fontSize: inner * 0.4 }]}>{initial}</Text>
+        <View
+          style={[
+            styles.fallback,
+            { width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.accentDeep },
+          ]}
+        >
+          <Text style={[styles.initial, { fontSize: inner * 0.4, color: colors.textStrong }]}>{initial}</Text>
         </View>
       )}
     </View>
@@ -49,17 +61,14 @@ export const CommunityAvatar = memo(function CommunityAvatar({ uri, name, size, 
 
 const styles = StyleSheet.create({
   ring: {
-    borderColor: C.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fallback: {
-    backgroundColor: C.accentDeep,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initial: {
-    color: C.textStrong,
     fontWeight: '700',
   },
 });

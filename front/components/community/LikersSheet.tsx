@@ -7,8 +7,8 @@ import { communityApi, type CommunityAuthor } from '../../services/community.api
 import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { CommunityAvatar } from './CommunityAvatar';
-import { C } from './theme';
 
 interface Props {
   postId: string;
@@ -18,6 +18,7 @@ interface Props {
 }
 
 export function LikersSheet({ postId, visible, onClose, onProfile }: Props) {
+  const { colors } = useCommunityTheme();
   const insets = useSafeAreaInsets();
   const getToken = useCommunityToken();
   const { t, language } = useTranslation();
@@ -57,18 +58,23 @@ export function LikersSheet({ postId, visible, onClose, onProfile }: Props) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} />
+      <View
+        style={[
+          styles.sheet,
+          { paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.sheet, borderColor: colors.cardBorder },
+        ]}
+      >
         <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.title, { fontFamily: font }]}>{s.likedBy}</Text>
+          <Text style={[styles.title, { fontFamily: font, color: colors.textStrong }]}>{s.likedBy}</Text>
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
-            <X size={20} color={C.muted} />
+            <X size={20} color={colors.muted} />
           </Pressable>
         </View>
         {loading ? (
-          <ActivityIndicator style={{ marginVertical: 28 }} color={C.accentSoft} />
+          <ActivityIndicator style={{ marginVertical: 28 }} color={colors.accentSoft} />
         ) : !items.length ? (
-          <Text style={[styles.empty, { fontFamily: fontReg }]}>{s.noLikes}</Text>
+          <Text style={[styles.empty, { fontFamily: fontReg, color: colors.muted }]}>{s.noLikes}</Text>
         ) : (
           <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
             {items.map((user) => {
@@ -84,10 +90,22 @@ export function LikersSheet({ postId, visible, onClose, onProfile }: Props) {
                 >
                   <CommunityAvatar uri={user.avatar} name={name} size={40} ring={false} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.name, { fontFamily: font, textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.name,
+                        { fontFamily: font, textAlign: isAr ? 'right' : 'left', color: colors.textStrong },
+                      ]}
+                      numberOfLines={1}
+                    >
                       {name}
                     </Text>
-                    <Text style={[styles.handle, { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.handle,
+                        { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left', color: colors.muted },
+                      ]}
+                      numberOfLines={1}
+                    >
                       @{user.username}
                     </Text>
                   </View>
@@ -97,9 +115,9 @@ export function LikersSheet({ postId, visible, onClose, onProfile }: Props) {
             {cursor ? (
               <Pressable onPress={() => void load(cursor, true)} style={styles.more} disabled={loadingMore}>
                 {loadingMore ? (
-                  <ActivityIndicator color={C.accentSoft} />
+                  <ActivityIndicator color={colors.accentSoft} />
                 ) : (
-                  <Text style={[styles.moreText, { fontFamily: font }]}>{s.loadMore}</Text>
+                  <Text style={[styles.moreText, { fontFamily: font, color: colors.accentSoft }]}>{s.loadMore}</Text>
                 )}
               </Pressable>
             ) : null}
@@ -113,16 +131,13 @@ export function LikersSheet({ postId, visible, onClose, onProfile }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
-    backgroundColor: '#12081F',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingTop: 8,
     paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderColor: 'rgba(183,154,248,0.25)',
   },
   header: {
     alignItems: 'center',
@@ -130,12 +145,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   title: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
   },
   empty: {
-    color: C.muted,
     textAlign: 'center',
     paddingVertical: 28,
     fontSize: 14,
@@ -146,12 +159,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   name: {
-    color: C.textStrong,
     fontSize: 15,
     fontWeight: '600',
   },
   handle: {
-    color: C.muted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -160,7 +171,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   moreText: {
-    color: C.accentSoft,
     fontSize: 14,
     fontWeight: '600',
   },

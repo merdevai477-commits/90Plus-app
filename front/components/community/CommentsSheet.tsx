@@ -29,8 +29,8 @@ import { ActionMenu } from './ActionMenu';
 import { ConfirmSheet } from './ConfirmSheet';
 import { CommentComposer } from './CommentComposer';
 import { formatCount } from './format';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { useCommentThread } from './useCommentThread';
-import { C } from './theme';
 
 interface Props {
   post: CommunityPost | null;
@@ -44,6 +44,7 @@ const SPRING = { damping: 26, stiffness: 260, mass: 0.9 } as const;
  * full height, flicks down to dismiss, and lifts its input with the keyboard.
  */
 export function CommentsSheet({ post, onClose }: Props) {
+  const { colors, isDark } = useCommunityTheme();
   const visible = !!post;
   const { height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -112,19 +113,23 @@ export function CommentsSheet({ post, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={close} statusBarTranslucent navigationBarTranslucent>
       <GestureHandlerRootView style={StyleSheet.absoluteFill}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { backgroundColor: colors.overlay }, backdropStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} />
         </Animated.View>
 
-        <Animated.View style={[styles.sheet, sheetStyle]}>
+        <Animated.View
+          style={[styles.sheet, sheetStyle, { backgroundColor: colors.screen, borderColor: colors.inputBorder }]}
+        >
           <GestureDetector gesture={pan}>
-            <View style={styles.handleArea}>
-              <View style={styles.grabber} />
+            <View style={[styles.handleArea, { borderBottomColor: colors.cardBorder }]}>
+              <View style={[styles.grabber, { backgroundColor: isDark ? '#3A3348' : 'rgba(106,43,217,0.25)' }]} />
               <View style={[styles.titleRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                <Text style={[styles.title, { fontFamily: fonts.semibold }]}>{s.comments}</Text>
+                <Text style={[styles.title, { fontFamily: fonts.semibold, color: colors.textStrong }]}>{s.comments}</Text>
                 {commentsCount > 0 && (
-                  <View style={styles.countPill}>
-                    <Text style={[styles.countText, { fontFamily: fonts.semibold }]}>{formatCount(commentsCount)}</Text>
+                  <View style={[styles.countPill, { backgroundColor: colors.accent }]}>
+                    <Text style={[styles.countText, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+                      {formatCount(commentsCount)}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -134,7 +139,7 @@ export function CommentsSheet({ post, onClose }: Props) {
           <View style={{ flex: 1 }}>
             {ctx.thread.isLoading ? (
               <View style={styles.center}>
-                <ActivityIndicator color={C.accentSoft} />
+                <ActivityIndicator color={colors.accentSoft} />
               </View>
             ) : (
               <FlashList
@@ -151,12 +156,14 @@ export function CommentsSheet({ post, onClose }: Props) {
                 onEndReachedThreshold={0.6}
                 ListEmptyComponent={
                   <View style={styles.empty}>
-                    <MessageCircle size={40} color={C.accentDeep} />
-                    <Text style={[styles.emptyText, { fontFamily: fonts.regular }]}>{s.noComments}</Text>
+                    <MessageCircle size={40} color={colors.accentDeep} />
+                    <Text style={[styles.emptyText, { fontFamily: fonts.regular, color: colors.muted }]}>{s.noComments}</Text>
                   </View>
                 }
                 ListFooterComponent={
-                  ctx.thread.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} color={C.accentSoft} /> : null
+                  ctx.thread.isFetchingNextPage ? (
+                    <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accentSoft} />
+                  ) : null
                 }
               />
             )}
@@ -207,19 +214,15 @@ export function CommentsSheet({ post, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    backgroundColor: C.overlay,
-  },
+  backdrop: {},
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: C.screen,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: C.inputBorder,
     overflow: 'hidden',
   },
   handleArea: {
@@ -227,13 +230,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.cardBorder,
   },
   grabber: {
     width: 42,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#3A3348',
     marginBottom: 10,
   },
   titleRow: {
@@ -241,7 +242,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: C.textStrong,
     fontSize: 17,
     fontWeight: '600',
   },
@@ -250,12 +250,10 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: 6,
     borderRadius: 999,
-    backgroundColor: C.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countText: {
-    color: C.textStrong,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -270,7 +268,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    color: C.muted,
     fontSize: 14,
     textAlign: 'center',
   },

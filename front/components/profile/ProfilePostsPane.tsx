@@ -10,8 +10,10 @@ import { CommentsSheet } from '../community/CommentsSheet';
 import { useFeedMetrics } from '../community/CommunityFeedList';
 import { PostCard } from '../community/PostCard';
 import { formatRelativeTime } from '../community/format';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 
 export function ProfilePostsPane({ username }: { username: string }) {
+  const { colors } = useCommunityTheme();
   const actions = usePostActions();
   const { t, language } = useTranslation();
   const s = t.community;
@@ -36,13 +38,13 @@ export function ProfilePostsPane({ username }: { username: string }) {
   );
 
   if (feed.isLoading) {
-    return <ActivityIndicator color="#C4B5FD" style={styles.pad} />;
+    return <ActivityIndicator color={colors.accentSoft} style={styles.pad} />;
   }
   if (feed.isError && feed.posts.length === 0) {
-    return <Text style={styles.empty}>{s.errorTitle}</Text>;
+    return <Text style={[styles.empty, { color: colors.muted }]}>{s.errorTitle}</Text>;
   }
   if (!feed.posts.length) {
-    return <Text style={styles.empty}>{s.emptyTitle}</Text>;
+    return <Text style={[styles.empty, { color: colors.muted }]}>{s.emptyTitle}</Text>;
   }
 
   return (
@@ -74,7 +76,7 @@ export function ProfilePostsPane({ username }: { username: string }) {
       ))}
       {feed.hasNextPage ? (
         <Text
-          style={styles.more}
+          style={[styles.more, { color: colors.accentSoft }]}
           onPress={() => { if (!feed.isFetchingNextPage) void feed.fetchNextPage(); }}
         >
           {feed.isFetchingNextPage ? '…' : s.loadMore}
@@ -88,6 +90,6 @@ export function ProfilePostsPane({ username }: { username: string }) {
 const styles = StyleSheet.create({
   list: { gap: 16, paddingTop: 12, paddingBottom: 24 },
   pad: { marginVertical: 28 },
-  empty: { color: '#9A93A8', textAlign: 'center', marginVertical: 28, paddingHorizontal: 24 },
-  more: { color: '#C4B5FD', textAlign: 'center', fontWeight: '700', paddingVertical: 12 },
+  empty: { textAlign: 'center', marginVertical: 28, paddingHorizontal: 24 },
+  more: { textAlign: 'center', fontWeight: '700', paddingVertical: 12 },
 });

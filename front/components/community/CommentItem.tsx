@@ -7,7 +7,8 @@ import { CommunityAvatar } from './CommunityAvatar';
 import { LikeIcon } from './PostCard';
 import { RichText } from './RichText';
 import { formatCount } from './format';
-import { C, CI, COMMENT_AVATAR_SIZE } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { CI, COMMENT_AVATAR_SIZE } from './theme';
 import UserIdentity from '../identity/UserIdentity';
 
 export interface CommentHandlers {
@@ -47,13 +48,14 @@ export const CommentItem = memo(
     onHashtag,
     onMention,
   }: Props) {
+    const { colors } = useCommunityTheme();
     const name = comment.author.displayName || comment.author.username;
     const pending = comment.id.startsWith('temp-');
     const size = isReply ? 28 : COMMENT_AVATAR_SIZE;
     const textAlign = isAr ? 'right' : 'left';
 
     const likeControl = pending ? (
-      <ActivityIndicator size="small" color={C.accentSoft} />
+      <ActivityIndicator size="small" color={colors.accentSoft} />
     ) : (
       <Pressable
         onPress={() => onLike(comment)}
@@ -68,7 +70,9 @@ export const CommentItem = memo(
           <Image source={CI.commentHeartOutlined} style={styles.heartIcon} contentFit="contain" />
         )}
         {comment.likesCount > 0 && (
-          <Text style={[styles.likeCount, { fontFamily: fonts.regular }]}>{formatCount(comment.likesCount)}</Text>
+              <Text style={[styles.likeCount, { fontFamily: fonts.regular, color: colors.muted }]}>
+                {formatCount(comment.likesCount)}
+              </Text>
         )}
       </Pressable>
     );
@@ -83,11 +87,11 @@ export const CommentItem = memo(
             user={comment.author}
             name={name}
             variant="comment"
-            nameStyle={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold }]}
+            nameStyle={[styles.name, isReply && styles.nameSmall, { fontFamily: fonts.semibold, color: colors.textStrong }]}
           />
         </View>
         <View style={[styles.timeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>
+          <Text style={[styles.time, { fontFamily: fonts.regular, color: colors.muted }]}>{timeLabel}</Text>
           <Image source={CI.earth} style={styles.icon16} contentFit="contain" />
         </View>
       </Pressable>
@@ -116,7 +120,7 @@ export const CommentItem = memo(
         <RichText
           key={comment.id}
           text={comment.content}
-          style={[styles.text, { fontFamily: fonts.medium }]}
+          style={[styles.text, { fontFamily: fonts.medium, color: colors.textStrong }]}
           align={textAlign}
           onHashtag={onHashtag}
           onMention={onMention}
@@ -126,7 +130,7 @@ export const CommentItem = memo(
         {!pending && (
           <View style={[styles.footer, { flexDirection: isAr ? 'row-reverse' : 'row', alignSelf: isAr ? 'flex-end' : 'flex-start' }]}>
             <Pressable onPress={() => onReply(comment)} hitSlop={8} accessibilityRole="button">
-              <Text style={[styles.replyBtn, { fontFamily: fonts.semibold }]}>{labels.reply}</Text>
+              <Text style={[styles.replyBtn, { fontFamily: fonts.semibold, color: colors.muted }]}>{labels.reply}</Text>
             </Pressable>
             <Pressable onPress={() => onMenu(comment)} hitSlop={8} accessibilityRole="button" accessibilityLabel="More">
               <Image source={CI.overflow} style={styles.menuIcon} contentFit="contain" />
@@ -175,7 +179,6 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   name: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
@@ -188,7 +191,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   time: {
-    color: '#a3a3a3',
     fontSize: 13,
   },
   icon16: { width: 16, height: 16 },
@@ -198,12 +200,10 @@ const styles = StyleSheet.create({
     minWidth: 24,
   },
   likeCount: {
-    color: C.muted,
     fontSize: 11,
     marginTop: 1,
   },
   text: {
-    color: C.textStrong,
     fontSize: 15,
     lineHeight: 21,
     fontWeight: '500',
@@ -214,7 +214,6 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   replyBtn: {
-    color: C.muted,
     fontSize: 13,
     fontWeight: '600',
   },

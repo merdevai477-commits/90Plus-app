@@ -15,7 +15,8 @@ import { usePublishStore, type PendingPost } from '../../hooks/community/publish
 import { CommunityAvatar } from './CommunityAvatar';
 import { ShimmerSweep } from './Shimmer';
 import { postCardStyles, postImageLayout } from './PostCard';
-import { AVATAR_SIZE, C, CI, POST_IMAGE_RADIUS } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { AVATAR_SIZE, CI, POST_IMAGE_RADIUS } from './theme';
 import { isArabicText } from './richTextParse';
 
 interface Props {
@@ -46,6 +47,7 @@ export const GhostPostCard = memo(function GhostPostCard({
   onEdit,
   onDiscard,
 }: Props) {
+  const { colors } = useCommunityTheme();
   const progress = usePublishStore((s) => s.drafts[pending.clientId]?.progress ?? (pending.image ? 0 : 1));
   const failed = pending.status === 'failed';
   const isPoll = pending.kind === 'TEAM_POLL';
@@ -75,29 +77,46 @@ export const GhostPostCard = memo(function GhostPostCard({
   const imageLayout = pending.image ? postImageLayout(contentWidth, pending.image) : null;
 
   return (
-    <Animated.View entering={FadeIn.duration(220)} style={[postCardStyles.card, styles.ghost, failed && styles.failedBorder]}>
+    <Animated.View
+      entering={FadeIn.duration(220)}
+      style={[
+        postCardStyles.card,
+        styles.ghost,
+        { backgroundColor: colors.card, borderColor: failed ? 'rgba(239,68,68,0.45)' : colors.cardBorder },
+      ]}
+    >
       <Animated.View style={[styles.inner, cardStyle]}>
         <View style={[styles.header, { flexDirection: row }]}>
           <CommunityAvatar uri={pending.author.avatar} name={name} size={AVATAR_SIZE} />
           <View style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
             <View style={[styles.nameRow, { flexDirection: row }]}>
-              <Text style={[styles.name, { fontFamily: fonts.semibold }]} numberOfLines={1}>
+              <Text style={[styles.name, { fontFamily: fonts.semibold, color: colors.textStrong }]} numberOfLines={1}>
                 {name}
               </Text>
               {pending.author.isVerified && <Image source={CI.verified} style={styles.icon16} contentFit="contain" />}
             </View>
-            <Text style={[styles.status, { fontFamily: fonts.regular }, failed && { color: C.danger }]}>
+            <Text
+              style={[
+                styles.status,
+                { fontFamily: fonts.regular, color: failed ? colors.danger : colors.accentSoft },
+              ]}
+            >
               {failed ? labels.failed : labels.publishing}
             </Text>
           </View>
         </View>
 
         {!!pending.content && (
-          <View style={styles.contentBox}>
+          <View style={[styles.contentBox, { backgroundColor: colors.contentBox }]}>
             <Text
               style={[
                 styles.content,
-                { fontFamily: fonts.medium, textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' },
+                {
+                  fontFamily: fonts.medium,
+                  textAlign: rtl ? 'right' : 'left',
+                  writingDirection: rtl ? 'rtl' : 'ltr',
+                  color: colors.text,
+                },
               ]}
               numberOfLines={6}
             >
@@ -112,8 +131,8 @@ export const GhostPostCard = memo(function GhostPostCard({
               ? pending.pollOptions
               : [pending.pollOptionA ?? '…', pending.pollOptionB ?? '…']
             ).map((label, index) => (
-              <View key={`${label}-${index}`} style={styles.pollBox}>
-                <Text style={[styles.pollText, { fontFamily: fonts.semibold }]} numberOfLines={2}>
+              <View key={`${label}-${index}`} style={[styles.pollBox, { backgroundColor: colors.pollIdle }]}>
+                <Text style={[styles.pollText, { fontFamily: fonts.semibold, color: colors.textStrong }]} numberOfLines={2}>
                   {label}
                 </Text>
               </View>
@@ -122,7 +141,7 @@ export const GhostPostCard = memo(function GhostPostCard({
         )}
 
         {pending.image && (
-          <View style={[styles.imageWrap, { height: imageLayout?.height }]}>
+          <View style={[styles.imageWrap, { height: imageLayout?.height, backgroundColor: colors.contentBox }]}>
             <Image source={{ uri: pending.image.uri }} style={StyleSheet.absoluteFill} contentFit={imageLayout?.fit ?? 'contain'} />
             {!failed && <View style={styles.imageVeil} />}
           </View>
@@ -131,7 +150,7 @@ export const GhostPostCard = memo(function GhostPostCard({
 
       {!failed && (
         <View style={styles.track}>
-          <Animated.View style={[styles.bar, barStyle]} />
+          <Animated.View style={[styles.bar, barStyle, { backgroundColor: colors.accent }]} />
           <ShimmerSweep width={contentWidth} color="rgba(255,255,255,0.35)" />
         </View>
       )}
@@ -155,19 +174,31 @@ export const GhostPostCard = memo(function GhostPostCard({
           )}
           <View style={[styles.failActions, { flexDirection: row }]}>
             {canRetry ? (
-              <Pressable onPress={onRetry} style={[styles.pill, styles.pillPrimary]} accessibilityRole="button">
+              <Pressable
+                onPress={onRetry}
+                style={[styles.pill, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                accessibilityRole="button"
+              >
                 <RotateCcw size={16} color="#FFF" />
                 <Text style={[styles.pillText, { fontFamily: fonts.semibold }]}>{labels.retry}</Text>
               </Pressable>
             ) : (
-              <Pressable onPress={onEdit} style={[styles.pill, styles.pillPrimary]} accessibilityRole="button">
+              <Pressable
+                onPress={onEdit}
+                style={[styles.pill, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                accessibilityRole="button"
+              >
                 <Pencil size={16} color="#FFF" />
                 <Text style={[styles.pillText, { fontFamily: fonts.semibold }]}>{labels.edit}</Text>
               </Pressable>
             )}
-            <Pressable onPress={onDiscard} style={styles.pill} accessibilityRole="button">
-              <X size={16} color={C.muted} />
-              <Text style={[styles.pillText, { color: C.muted, fontFamily: fonts.semibold }]}>{labels.discard}</Text>
+            <Pressable
+              onPress={onDiscard}
+              style={[styles.pill, { backgroundColor: colors.input, borderColor: colors.inputBorder }]}
+              accessibilityRole="button"
+            >
+              <X size={16} color={colors.muted} />
+              <Text style={[styles.pillText, { color: colors.muted, fontFamily: fonts.semibold }]}>{labels.discard}</Text>
             </Pressable>
           </View>
         </View>
@@ -179,10 +210,6 @@ export const GhostPostCard = memo(function GhostPostCard({
 const styles = StyleSheet.create({
   ghost: {
     overflow: 'hidden',
-    borderColor: 'rgba(139,92,246,0.35)',
-  },
-  failedBorder: {
-    borderColor: 'rgba(239,68,68,0.45)',
   },
   inner: {
     gap: 16,
@@ -200,23 +227,19 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   name: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
   },
   status: {
-    color: C.accentSoft,
     fontSize: 13,
   },
   icon16: { width: 16, height: 16 },
   content: {
-    color: C.text,
     fontSize: 20,
     lineHeight: 28,
   },
   contentBox: {
-    backgroundColor: C.contentBox,
     borderRadius: 12,
     paddingHorizontal: 23,
     paddingVertical: 10,
@@ -229,7 +252,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   pollBox: {
-    backgroundColor: C.pollIdle,
     borderRadius: 10,
     minHeight: 44,
     alignItems: 'center',
@@ -238,7 +260,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   pollText: {
-    color: C.textStrong,
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
@@ -246,7 +267,6 @@ const styles = StyleSheet.create({
   imageWrap: {
     borderRadius: POST_IMAGE_RADIUS,
     overflow: 'hidden',
-    backgroundColor: '#15111F',
   },
   imageVeil: {
     ...StyleSheet.absoluteFillObject,
@@ -262,7 +282,6 @@ const styles = StyleSheet.create({
   bar: {
     height: '100%',
     borderRadius: 2,
-    backgroundColor: C.accent,
   },
   failBox: {
     gap: 12,
@@ -292,13 +311,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: C.input,
     borderWidth: 1,
-    borderColor: C.inputBorder,
-  },
-  pillPrimary: {
-    backgroundColor: C.accent,
-    borderColor: C.accent,
   },
   pillText: {
     color: '#FFF',

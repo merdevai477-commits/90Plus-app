@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,13 +18,13 @@ import { KeyboardDock } from '../../../components/community/KeyboardDock';
 import { PostCard } from '../../../components/community/PostCard';
 import { useCommentThread } from '../../../components/community/useCommentThread';
 import { formatRelativeTime } from '../../../components/community/format';
-import { C } from '../../../components/community/theme';
 import { communityKeys, findPost } from '../../../hooks/community/communityCache';
 import { useCommunityToken } from '../../../hooks/community/useCommunityFeed';
 import { REPORT_REASONS, usePostActions } from '../../../hooks/community/usePostActions';
+import { CommunityThemeProvider, useCommunityTheme } from '../../../hooks/useCommunityTheme';
 import { CommunityApiError, communityApi, type CommunityPost } from '../../../services/community.api';
 
-export default function CommunityPostScreen() {
+function CommunityPostScreenInner() {
   const { id, comments } = useLocalSearchParams<{ id: string; comments?: string }>();
   const postId = String(id ?? '');
   const router = useRouter();
@@ -49,6 +49,7 @@ export default function CommunityPostScreen() {
   const post = postQuery.data ?? null;
   const ctx = useCommentThread(post, !!post);
   const { s, fonts, isAr } = ctx;
+  const { colors, isDark } = useCommunityTheme();
 
   useEffect(() => {
     if (comments !== '1' || !post) return;
@@ -126,24 +127,29 @@ export default function CommunityPostScreen() {
         onFollow={actions.toggleFollow}
         onVote={actions.votePoll}
       />
-      <Text style={[styles.section, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left' }]}>{s.comments}</Text>
+      <Text
+        style={[styles.section, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left', color: colors.textStrong }]}
+      >
+        {s.comments}
+      </Text>
     </View>
   ) : null;
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.screen }]}>
+      <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       <CommunityHeader title={s.postTitle} fontFamily={fonts.semibold} onBack={onBack} onBell={() => router.push('/notifications')} />
 
       {notFound ? (
         <View style={styles.state}>
-          <SearchX size={42} color={C.accentDeep} />
-          <Text style={[styles.stateText, { fontFamily: fonts.semibold }]}>{s.postNotFound}</Text>
+          <SearchX size={42} color={colors.accentDeep} />
+          <Text style={[styles.stateText, { fontFamily: fonts.semibold, color: colors.textStrong }]}>{s.postNotFound}</Text>
         </View>
       ) : !post ? (
         postQuery.isError ? (
           <View style={styles.state}>
-            <Text style={[styles.stateText, { fontFamily: fonts.semibold }]}>{s.errorTitle}</Text>
-            <Pressable onPress={() => void postQuery.refetch()} style={styles.retry}>
+            <Text style={[styles.stateText, { fontFamily: fonts.semibold, color: colors.textStrong }]}>{s.errorTitle}</Text>
+            <Pressable onPress={() => void postQuery.refetch()} style={[styles.retry, { backgroundColor: colors.accent }]}>
               <Text style={[styles.retryText, { fontFamily: fonts.semibold }]}>{s.tryAgain}</Text>
             </Pressable>
           </View>
@@ -169,20 +175,24 @@ export default function CommunityPostScreen() {
             onEndReachedThreshold={0.8}
             ListEmptyComponent={
               ctx.thread.isLoading ? (
-                <ActivityIndicator style={{ marginTop: 28 }} color={C.accentSoft} />
+                <ActivityIndicator style={{ marginTop: 28 }} color={colors.accentSoft} />
               ) : (
                 <View style={styles.empty}>
-                  <MessageCircle size={36} color={C.accentDeep} />
-                  <Text style={[styles.emptyText, { fontFamily: fonts.regular }]}>{s.noComments}</Text>
+                  <MessageCircle size={36} color={colors.accentDeep} />
+                  <Text style={[styles.emptyText, { fontFamily: fonts.regular, color: colors.muted }]}>{s.noComments}</Text>
                 </View>
               )
             }
             ListFooterComponent={
-              ctx.thread.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} color={C.accentSoft} /> : null
+              ctx.thread.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accentSoft} /> : null
             }
           />
           <KeyboardDock bottomInset={insets.bottom}>
-            <LinearGradient pointerEvents="none" colors={['transparent', '#030303']} style={styles.fade} />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['transparent', isDark ? '#030303' : colors.screen]}
+              style={styles.fade}
+            />
             <CommentComposer
               ref={ctx.composerRef}
               isAr={isAr}
@@ -246,13 +256,19 @@ export default function CommunityPostScreen() {
   );
 }
 
+export default function CommunityPostScreen() {
+  return (
+    <CommunityThemeProvider>
+      <CommunityPostScreenInner />
+    </CommunityThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.screen,
   },
   section: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
     marginTop: 20,
@@ -266,7 +282,6 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   stateText: {
-    color: C.textStrong,
     fontSize: 16,
     textAlign: 'center',
   },
@@ -274,7 +289,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: C.accent,
   },
   retryText: {
     color: '#FFF',
@@ -286,7 +300,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyText: {
-    color: C.muted,
     fontSize: 14,
   },
   fade: {

@@ -21,7 +21,8 @@ import { CommunityAvatar } from './CommunityAvatar';
 import { RichText } from './RichText';
 import { formatCount } from './format';
 import { LikersSheet } from './LikersSheet';
-import { AVATAR_SIZE, C, CARD_RADIUS, CI, POST_IMAGE_RADIUS } from './theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { AVATAR_SIZE, CARD_RADIUS, CI, POST_IMAGE_RADIUS } from './theme';
 import UserIdentity from '../identity/UserIdentity';
 
 export interface PostCardHandlers {
@@ -80,6 +81,7 @@ export function postImageLayout(
 }
 
 export const LikeIcon = memo(function LikeIcon({ liked, size = 18 }: { liked: boolean; size?: number }) {
+  const { colors } = useCommunityTheme();
   const scale = useSharedValue(1);
   const first = useRef(true);
 
@@ -99,7 +101,7 @@ export const LikeIcon = memo(function LikeIcon({ liked, size = 18 }: { liked: bo
       <Image
         source={liked ? CI.heartFilled : CI.heartOutlined}
         style={{ width: size, height: size }}
-        tintColor={liked ? C.like : C.icon}
+        tintColor={liked ? colors.like : colors.icon}
         contentFit="contain"
       />
     </Animated.View>
@@ -119,6 +121,7 @@ function PostImage({
   onDoubleTap: () => void;
   priority?: 'low' | 'normal' | 'high';
 }) {
+  const { colors, isDark } = useCommunityTheme();
   const heart = useSharedValue(0);
   const layout = postImageLayout(width, post.image);
 
@@ -150,7 +153,10 @@ function PostImage({
   if (!post.image) return null;
   return (
     <GestureDetector gesture={gesture}>
-      <View style={[styles.imageWrap, { width, height: layout.height }]} accessibilityRole="imagebutton">
+      <View
+        style={[styles.imageWrap, { width, height: layout.height, backgroundColor: isDark ? '#15111F' : colors.contentBox }]}
+        accessibilityRole="imagebutton"
+      >
         <Image
           source={{ uri: post.image.url }}
           placeholder={post.image.placeholder ? { uri: post.image.placeholder } : undefined}
@@ -185,6 +191,7 @@ function PollOptions({
   onProfile: (username: string) => void;
 }) {
   const { t } = useTranslation();
+  const { colors } = useCommunityTheme();
   const [votersFor, setVotersFor] = useState<number | null>(null);
   const poll = post.poll;
   if (!poll) return null;
@@ -201,15 +208,28 @@ function PollOptions({
         const selected = voted === option.index;
         const pct = total > 0 ? Math.round((option.votes / total) * 100) : 0;
         return (
-          <View key={option.index} style={[styles.pollOption, selected && styles.pollOptionSelected]}>
-            <View style={[styles.pollFill, { width: `${pct}%` }]} />
+          <View
+            key={option.index}
+            style={[
+              styles.pollOption,
+              { backgroundColor: colors.pollIdle },
+              selected && { backgroundColor: colors.pollSelected },
+            ]}
+          >
+            <View style={[styles.pollFill, { width: `${pct}%`, backgroundColor: colors.accent }]} />
             <Pressable
               onPress={() => onVote?.(post, option.index)}
               style={[styles.pollLabelHit, { flexDirection: row }]}
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              <Text style={[styles.pollText, { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left' }]} numberOfLines={2}>
+              <Text
+                style={[
+                  styles.pollText,
+                  { fontFamily: fonts.semibold, textAlign: isAr ? 'right' : 'left', color: colors.textStrong },
+                ]}
+                numberOfLines={2}
+              >
                 {option.label}
               </Text>
             </Pressable>
@@ -221,12 +241,17 @@ function PollOptions({
               accessibilityRole="button"
               accessibilityLabel={`${option.votes}`}
             >
-              <Text style={[styles.pollPct, { fontFamily: fonts.medium }]}>{option.votes}</Text>
+              <Text style={[styles.pollPct, { fontFamily: fonts.medium, color: colors.muted }]}>{option.votes}</Text>
             </Pressable>
           </View>
         );
       })}
-      <Text style={[styles.pollTotal, { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left' }]}>
+      <Text
+        style={[
+          styles.pollTotal,
+          { fontFamily: fonts.medium, textAlign: isAr ? 'right' : 'left', color: colors.muted },
+        ]}
+      >
         {t.community.pollVotesCount.replace('{n}', String(total))}
       </Text>
       <PollVotersSheet
@@ -250,6 +275,7 @@ function ActionButton({
   isAr,
   fonts,
   selected,
+  colors,
 }: {
   label: string;
   count: number;
@@ -259,18 +285,19 @@ function ActionButton({
   isAr: boolean;
   fonts: Props['fonts'];
   selected?: boolean;
+  colors: { muted: string; icon: string };
 }) {
   const inner = isAr ? (
     <>
-      <Text style={[styles.actionLabel, { fontFamily: fonts.regular }]}>{label}</Text>
-      <Text style={[styles.actionCount, { fontFamily: fonts.regular }]}>{formatCount(count)}</Text>
+      <Text style={[styles.actionLabel, { fontFamily: fonts.regular, color: colors.muted }]}>{label}</Text>
+      <Text style={[styles.actionCount, { fontFamily: fonts.regular, color: colors.icon }]}>{formatCount(count)}</Text>
       {icon}
     </>
   ) : (
     <>
       {icon}
-      <Text style={[styles.actionCount, { fontFamily: fonts.regular }]}>{formatCount(count)}</Text>
-      <Text style={[styles.actionLabel, { fontFamily: fonts.regular }]}>{label}</Text>
+      <Text style={[styles.actionCount, { fontFamily: fonts.regular, color: colors.icon }]}>{formatCount(count)}</Text>
+      <Text style={[styles.actionLabel, { fontFamily: fonts.regular, color: colors.muted }]}>{label}</Text>
     </>
   );
   return (
@@ -311,6 +338,7 @@ function PostCardBase({
   onFollow,
   onVote,
 }: Props) {
+  const { colors } = useCommunityTheme();
   const [likersOpen, setLikersOpen] = useState(false);
   useEffect(() => {
     setLikersOpen(false);
@@ -322,7 +350,12 @@ function PostCardBase({
   const following = post.author.isFollowing;
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.cardBorder },
+      ]}
+    >
       <View style={[styles.header, { flexDirection: row }]}>
         <CommunityAvatar uri={post.author.avatar} name={name} size={AVATAR_SIZE} onPress={openProfile} />
         <Pressable onPress={openProfile} style={[styles.meta, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
@@ -331,40 +364,52 @@ function PostCardBase({
               user={post.author}
               name={name}
               variant="inline"
-              nameStyle={[styles.name, { fontFamily: fonts.semibold }]}
+              nameStyle={[styles.name, { fontFamily: fonts.semibold, color: colors.textStrong }]}
             />
           </View>
           <View style={[styles.timeRow, { flexDirection: row }]}>
-            <Text style={[styles.time, { fontFamily: fonts.regular }]}>{timeLabel}</Text>
-            <Image source={CI.earth} style={styles.icon12} contentFit="contain" />
+            <Text style={[styles.time, { fontFamily: fonts.regular, color: colors.muted }]}>{timeLabel}</Text>
+            <Image source={CI.earth} style={styles.icon12} contentFit="contain" tintColor={colors.muted} />
           </View>
         </Pressable>
         <View style={[styles.headerActions, { flexDirection: row }]}>
           {showFollow && (
             <Pressable
               onPress={() => onFollow(post)}
-              style={[styles.followBtn, following && styles.followBtnActive]}
+              style={[
+                styles.followBtn,
+                { backgroundColor: colors.followBtn },
+                following && styles.followBtnActive,
+              ]}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityState={{ selected: following }}
             >
-              <Text style={[styles.followText, { fontFamily: fonts.semibold }]}>{following ? labels.following : labels.follow}</Text>
+              <Text style={[styles.followText, { fontFamily: fonts.semibold, color: colors.followText }]}>
+                {following ? labels.following : labels.follow}
+              </Text>
             </Pressable>
           )}
           <Pressable onPress={() => onMenu(post)} hitSlop={12} style={styles.menuBtn} accessibilityRole="button" accessibilityLabel="More">
-            <Image source={CI.overflow} style={styles.icon24} contentFit="contain" />
+            <Image source={CI.overflow} style={styles.icon24} contentFit="contain" tintColor={colors.icon} />
           </Pressable>
         </View>
       </View>
 
       <View style={styles.body}>
         {(!!post.content || post.kind === 'TEAM_POLL') && (
-          <View style={[styles.contentBox, post.kind === 'TEAM_POLL' && styles.contentBoxPoll]}>
+          <View
+            style={[
+              styles.contentBox,
+              { backgroundColor: colors.contentBox },
+              post.kind === 'TEAM_POLL' && styles.contentBoxPoll,
+            ]}
+          >
             {!!post.content && (
               <RichText
                 key={post.id}
                 text={post.content}
-                style={[styles.content, { fontFamily: fonts.medium }]}
+                style={[styles.content, { fontFamily: fonts.medium, color: colors.text }]}
                 onHashtag={onHashtag}
                 onMention={onMention}
                 collapseAfterLines={post.image ? 4 : 8}
@@ -390,18 +435,20 @@ function PostCardBase({
         <ActionButton
           label={labels.share}
           count={post.sharesCount}
-          icon={<Image source={CI.share} style={styles.icon18} contentFit="contain" />}
+          icon={<Image source={CI.share} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
           onPress={() => onShare(post)}
           isAr={isAr}
           fonts={fonts}
+          colors={colors}
         />
         <ActionButton
           label={labels.comment}
           count={post.commentsCount}
-          icon={<Image source={CI.comment} style={styles.icon18} contentFit="contain" />}
+          icon={<Image source={CI.comment} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
           onPress={() => onComment(post)}
           isAr={isAr}
           fonts={fonts}
+          colors={colors}
         />
         <ActionButton
           label={labels.like}
@@ -415,18 +462,21 @@ function PostCardBase({
           isAr={isAr}
           fonts={fonts}
           selected={post.likedByMe}
+          colors={colors}
         />
       </View>
 
-      <View style={styles.footerDivider} />
+      <View style={[styles.footerDivider, { backgroundColor: colors.divider }]} />
       <View style={[styles.viewCommentsRow, { justifyContent: isAr ? 'flex-end' : 'flex-start' }]}>
         <Pressable
           onPress={() => onComment(post)}
           style={[styles.viewComments, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
           accessibilityRole="button"
         >
-          <Text style={[styles.viewCommentsText, { fontFamily: fonts.regular }]}>{labels.viewAllComments}</Text>
-          <ChevronLeft size={16} color={C.muted} style={isAr ? undefined : styles.chevronEn} />
+          <Text style={[styles.viewCommentsText, { fontFamily: fonts.regular, color: colors.muted }]}>
+            {labels.viewAllComments}
+          </Text>
+          <ChevronLeft size={16} color={colors.muted} style={isAr ? undefined : styles.chevronEn} />
         </Pressable>
       </View>
       <LikersSheet
@@ -456,9 +506,7 @@ export const postCardStyles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 25,
     borderRadius: CARD_RADIUS,
-    backgroundColor: C.card,
     borderWidth: 0.5,
-    borderColor: C.cardBorder,
     gap: 17,
   },
 });
@@ -481,13 +529,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 6,
     borderRadius: 52,
-    backgroundColor: C.followBtn,
   },
   followBtnActive: {
     opacity: 0.85,
   },
   followText: {
-    color: C.followText,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -497,7 +543,6 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   name: {
-    color: C.textStrong,
     fontSize: 15,
     fontWeight: '600',
     flexShrink: 1,
@@ -507,7 +552,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   time: {
-    color: C.muted,
     fontSize: 9,
   },
   menuBtn: {
@@ -521,7 +565,6 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   contentBox: {
-    backgroundColor: C.contentBox,
     borderRadius: 12,
     paddingHorizontal: 23,
     paddingVertical: 10,
@@ -533,7 +576,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   content: {
-    color: C.text,
     fontSize: 20,
     lineHeight: 28,
     fontWeight: '500',
@@ -546,19 +588,15 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: C.pollIdle,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  pollOptionSelected: {
-    backgroundColor: 'rgba(94, 63, 190, 0.35)',
   },
   pollFill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: 'rgba(139, 92, 246, 0.28)',
+    opacity: 0.28,
   },
   pollLabelHit: {
     flex: 1,
@@ -572,7 +610,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   pollTotal: {
-    color: C.muted,
     fontSize: 13,
   },
   pollRow: {
@@ -584,9 +621,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     minHeight: 88,
     justifyContent: 'center',
-  },
-  pollIdle: {
-    backgroundColor: C.pollIdle,
   },
   pollGradient: {
     flex: 1,
@@ -606,13 +640,11 @@ const styles = StyleSheet.create({
     paddingVertical: 19,
   },
   pollText: {
-    color: C.textStrong,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   pollPct: {
-    color: C.textStrong,
     fontSize: 13,
     fontWeight: '500',
     opacity: 0.9,
@@ -621,7 +653,6 @@ const styles = StyleSheet.create({
   imageWrap: {
     borderRadius: POST_IMAGE_RADIUS,
     overflow: 'hidden',
-    backgroundColor: '#15111F',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -641,16 +672,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionLabel: {
-    color: C.muted,
     fontSize: 12,
   },
   actionCount: {
-    color: C.muted,
     fontSize: 12,
   },
   footerDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: C.divider,
   },
   viewCommentsRow: {
     width: '100%',
@@ -667,7 +695,6 @@ const styles = StyleSheet.create({
     transform: [{ scaleX: -1 }],
   },
   viewCommentsText: {
-    color: C.muted,
     fontSize: 12,
   },
 });
