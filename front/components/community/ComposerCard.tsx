@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { CommunityAvatar } from './CommunityAvatar';
-import { CI } from './theme';
+import { CI, COMMUNITY_LIGHT_ELEVATION } from './theme';
 
 interface Props {
   isAr: boolean;
@@ -40,7 +40,7 @@ export const ComposerCard = memo(function ComposerCard({
   onPoll,
   onAvatarPress,
 }: Props) {
-  const { colors } = useCommunityTheme();
+  const { colors, isDark } = useCommunityTheme();
   const row = isAr ? ('row-reverse' as const) : ('row' as const);
 
   return (
@@ -51,6 +51,7 @@ export const ComposerCard = memo(function ComposerCard({
           backgroundColor: colors.composer,
           borderColor: colors.composerBorder,
         },
+        !isDark && COMMUNITY_LIGHT_ELEVATION.card,
       ]}
     >
       <View style={[styles.top, { flexDirection: row }]}>
@@ -62,6 +63,8 @@ export const ComposerCard = memo(function ComposerCard({
             {
               alignItems: isAr ? 'flex-end' : 'flex-start',
               backgroundColor: colors.input,
+              borderColor: isDark ? 'transparent' : colors.inputBorder,
+              borderWidth: isDark ? 0 : 1,
             },
           ]}
           accessibilityRole="button"

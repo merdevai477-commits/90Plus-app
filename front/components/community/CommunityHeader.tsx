@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
-import { CI } from './theme';
+import { CI, COMMUNITY_LIGHT_ELEVATION } from './theme';
 
 interface Props {
   title: string;
@@ -60,6 +60,7 @@ export const CommunityHeader = memo(function CommunityHeader({
                 backgroundColor: isDark ? 'rgba(168,85,247,0.15)' : 'rgba(106,43,217,0.1)',
                 borderColor: isDark ? 'rgba(168,85,247,0.35)' : 'rgba(106,43,217,0.28)',
               },
+              !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
             ]}
           >
             <BackIcon size={20} color={colors.headerIcon} strokeWidth={2.4} />
@@ -78,6 +79,7 @@ export const CommunityHeader = memo(function CommunityHeader({
             backgroundColor: colors.headerPillBg,
             borderColor: colors.headerPillBorder,
           },
+          !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
         ]}
       >
         <Text style={[styles.logo90, { color: colors.headerTitle }]}>90</Text>
@@ -110,6 +112,7 @@ export const CommunityHeader = memo(function CommunityHeader({
                   backgroundColor: isDark ? 'rgba(168,85,247,0.15)' : 'rgba(106,43,217,0.1)',
                   borderColor: isDark ? 'rgba(168,85,247,0.35)' : 'rgba(106,43,217,0.28)',
                 },
+                !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
               ]}
             >
               <Image

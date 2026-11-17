@@ -16,7 +16,7 @@ import { CommunityAvatar } from './CommunityAvatar';
 import { ShimmerSweep } from './Shimmer';
 import { postCardStyles, postImageLayout } from './PostCard';
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
-import { AVATAR_SIZE, CI, POST_IMAGE_RADIUS } from './theme';
+import { AVATAR_SIZE, CI, COMMUNITY_LIGHT_ELEVATION, POST_IMAGE_RADIUS } from './theme';
 import { isArabicText } from './richTextParse';
 
 interface Props {
@@ -47,7 +47,7 @@ export const GhostPostCard = memo(function GhostPostCard({
   onEdit,
   onDiscard,
 }: Props) {
-  const { colors } = useCommunityTheme();
+  const { colors, isDark } = useCommunityTheme();
   const progress = usePublishStore((s) => s.drafts[pending.clientId]?.progress ?? (pending.image ? 0 : 1));
   const failed = pending.status === 'failed';
   const isPoll = pending.kind === 'TEAM_POLL';
@@ -82,7 +82,12 @@ export const GhostPostCard = memo(function GhostPostCard({
       style={[
         postCardStyles.card,
         styles.ghost,
-        { backgroundColor: colors.card, borderColor: failed ? 'rgba(239,68,68,0.45)' : colors.cardBorder },
+        {
+          backgroundColor: colors.card,
+          borderColor: failed ? 'rgba(239,68,68,0.45)' : colors.cardBorder,
+          borderWidth: isDark ? 0.5 : 1,
+        },
+        !isDark && COMMUNITY_LIGHT_ELEVATION.card,
       ]}
     >
       <Animated.View style={[styles.inner, cardStyle]}>

@@ -22,7 +22,7 @@ import { RichText } from './RichText';
 import { formatCount } from './format';
 import { LikersSheet } from './LikersSheet';
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
-import { AVATAR_SIZE, CARD_RADIUS, CI, POST_IMAGE_RADIUS } from './theme';
+import { AVATAR_SIZE, CARD_RADIUS, CI, COMMUNITY_LIGHT_ELEVATION, POST_IMAGE_RADIUS } from './theme';
 import UserIdentity from '../identity/UserIdentity';
 
 export interface PostCardHandlers {
@@ -154,7 +154,16 @@ function PostImage({
   return (
     <GestureDetector gesture={gesture}>
       <View
-        style={[styles.imageWrap, { width, height: layout.height, backgroundColor: isDark ? '#15111F' : colors.contentBox }]}
+        style={[
+          styles.imageWrap,
+          {
+            width,
+            height: layout.height,
+            backgroundColor: isDark ? '#15111F' : colors.contentBox,
+            borderColor: isDark ? 'transparent' : 'rgba(75,31,163,0.12)',
+            borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+          },
+        ]}
         accessibilityRole="imagebutton"
       >
         <Image
@@ -191,7 +200,7 @@ function PollOptions({
   onProfile: (username: string) => void;
 }) {
   const { t } = useTranslation();
-  const { colors } = useCommunityTheme();
+  const { colors, isDark } = useCommunityTheme();
   const [votersFor, setVotersFor] = useState<number | null>(null);
   const poll = post.poll;
   if (!poll) return null;
@@ -212,8 +221,15 @@ function PollOptions({
             key={option.index}
             style={[
               styles.pollOption,
-              { backgroundColor: colors.pollIdle },
-              selected && { backgroundColor: colors.pollSelected },
+              {
+                backgroundColor: colors.pollIdle,
+                borderColor: isDark ? 'transparent' : colors.cardBorder,
+                borderWidth: isDark ? 0 : 1,
+              },
+              selected && {
+                backgroundColor: colors.pollSelected,
+                borderColor: isDark ? 'transparent' : colors.accent,
+              },
             ]}
           >
             <View style={[styles.pollFill, { width: `${pct}%`, backgroundColor: colors.accent }]} />
@@ -338,7 +354,7 @@ function PostCardBase({
   onFollow,
   onVote,
 }: Props) {
-  const { colors } = useCommunityTheme();
+  const { colors, isDark } = useCommunityTheme();
   const [likersOpen, setLikersOpen] = useState(false);
   useEffect(() => {
     setLikersOpen(false);
@@ -353,7 +369,12 @@ function PostCardBase({
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.card, borderColor: colors.cardBorder },
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.cardBorder,
+          borderWidth: isDark ? 0.5 : 1,
+        },
+        !isDark && COMMUNITY_LIGHT_ELEVATION.card,
       ]}
     >
       <View style={[styles.header, { flexDirection: row }]}>
@@ -378,7 +399,11 @@ function PostCardBase({
               onPress={() => onFollow(post)}
               style={[
                 styles.followBtn,
-                { backgroundColor: colors.followBtn },
+                {
+                  backgroundColor: colors.followBtn,
+                  borderColor: isDark ? 'transparent' : colors.cardBorder,
+                  borderWidth: isDark ? 0 : 1,
+                },
                 following && styles.followBtnActive,
               ]}
               hitSlop={8}
@@ -401,7 +426,11 @@ function PostCardBase({
           <View
             style={[
               styles.contentBox,
-              { backgroundColor: colors.contentBox },
+              {
+                backgroundColor: colors.contentBox,
+                borderColor: isDark ? 'transparent' : colors.cardBorder,
+                borderWidth: isDark || post.kind === 'TEAM_POLL' ? 0 : 1,
+              },
               post.kind === 'TEAM_POLL' && styles.contentBoxPoll,
             ]}
           >

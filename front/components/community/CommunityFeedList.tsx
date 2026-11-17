@@ -352,7 +352,8 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
 }
 
 function Separator() {
-  return <View style={{ height: 14 }} />;
+  const { isDark } = useCommunityTheme();
+  return <View style={{ height: isDark ? 14 : 16 }} />;
 }
 
 const styles = StyleSheet.create({
