@@ -79,7 +79,10 @@ const CompCard: React.FC<CompCardProps> = ({
     [slotWidth],
   );
   const overlayStyles = useMemo(() => createOverlayStyles(m), [m]);
+  /** Figma 1957:566 — AR: title block on the right, CTA on the left with ← before label. */
   const Chevron = isRTL ? ChevronLeft : ChevronRight;
+  const textAlign = isRTL ? ('right' as const) : ('left' as const);
+  const alignEnd = isRTL ? ('flex-end' as const) : ('flex-start' as const);
 
   if (variant === 'stack') {
     return (
@@ -107,15 +110,21 @@ const CompCard: React.FC<CompCardProps> = ({
             transition={0}
           />
         </View>
-        <View style={[stackStyles.footer, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
-          <View style={[stackStyles.copy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+        {/*
+          Figma footer: justify-between + items-end.
+          LTR row → copy left / CTA right; RTL row-reverse → copy right / CTA left.
+        */}
+        <View
+          style={[
+            stackStyles.footer,
+            { flexDirection: isRTL ? 'row-reverse' : 'row' },
+          ]}
+        >
+          <View style={[stackStyles.copy, { alignItems: alignEnd }]}>
             <Text
               style={[
                 stackStyles.title,
-                {
-                  color: theme.stackTitle,
-                  textAlign: isRTL ? 'right' : 'left',
-                },
+                { color: theme.stackTitle, textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' },
               ]}
               numberOfLines={1}
             >
@@ -124,21 +133,20 @@ const CompCard: React.FC<CompCardProps> = ({
             <Text
               style={[
                 stackStyles.sub,
-                {
-                  color: theme.stackSub,
-                  textAlign: isRTL ? 'right' : 'left',
-                },
+                { color: theme.stackSub, textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' },
               ]}
-              numberOfLines={2}
+              numberOfLines={1}
             >
               {sub}
             </Text>
           </View>
-          <View style={[stackStyles.cta, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
+          {/* Physical order matches Figma AR: ← label ; EN flips to label → */}
+          <View style={stackStyles.cta}>
+            {isRTL ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
             <Text style={[stackStyles.ctaText, { color: theme.stackCta }]} numberOfLines={1}>
               {ctaLabel}
             </Text>
-            <Chevron size={16} color={theme.stackCta} strokeWidth={2.4} />
+            {!isRTL ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
           </View>
         </View>
       </Pressable>
@@ -200,7 +208,7 @@ const CompCard: React.FC<CompCardProps> = ({
 
 export default CompCard;
 
-/** Figma stack card: 390×254 = image 390×175 + footer 390×79 (nodes 1969:1448…). */
+/** Figma stack card 1957:564 — 390×254 = image 175 + footer 79 (1957:566). */
 const STACK_IMAGE_H = 175;
 const STACK_FOOTER_H = 79;
 const STACK_RADIUS = 16;
@@ -233,24 +241,28 @@ const stackStyles = StyleSheet.create({
     gap: 8,
     minWidth: 0,
     justifyContent: 'center',
+    // Figma copy block ~265×48 inside 390 footer.
+    maxWidth: '72%',
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 25,
     width: '100%',
   },
   sub: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '400',
-    lineHeight: 13,
+    lineHeight: 15,
     width: '100%',
   },
   cta: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     flexShrink: 0,
-    paddingBottom: 2,
+    height: 18,
   },
   ctaText: {
     fontSize: 13,
