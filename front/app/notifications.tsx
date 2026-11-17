@@ -276,7 +276,7 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
                         {
                             backgroundColor: theme.backBtnBg,
                             borderColor: theme.backBtnBorder,
-                            borderWidth: theme.isDark ? StyleSheet.hairlineWidth : 1,
+                            borderWidth: 1,
                         },
                         theme.elevationSoft,
                     ]}
@@ -445,14 +445,31 @@ const NotificationRow = React.memo(function NotificationRow({
                 {
                     backgroundColor: unread ? theme.cardUnread : theme.card,
                     borderColor: unread ? theme.cardUnreadBorder : theme.cardBorder,
+                    borderWidth: unread && !theme.isDark ? 1.5 : 1,
                 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`${kindLabel}. ${item.title}`}
         >
             <View style={styles.card}>
-                <View style={[styles.accent, { backgroundColor: color }]} />
-                <View style={[styles.iconWrap, { backgroundColor: tint, borderColor: `${color}55` }]}>
+                <View
+                    style={[
+                        styles.accent,
+                        {
+                            backgroundColor: color,
+                            width: unread && !theme.isDark ? 4 : 3,
+                        },
+                    ]}
+                />
+                <View
+                    style={[
+                        styles.iconWrap,
+                        {
+                            backgroundColor: theme.isDark ? tint : '#F7F4FC',
+                            borderColor: theme.isDark ? `${color}55` : 'rgba(75,31,163,0.14)',
+                        },
+                    ]}
+                >
                     {avatar ? (
                         <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
                     ) : (
@@ -461,8 +478,16 @@ const NotificationRow = React.memo(function NotificationRow({
                 </View>
                 <View style={styles.cardMid}>
                     <View style={styles.chipRow}>
-                        <View style={[styles.chip, { backgroundColor: tint, borderColor: `${color}44` }]}>
-                            <Text style={[styles.chipTxt, { color }]} numberOfLines={1}>
+                        <View
+                            style={[
+                                styles.chip,
+                                {
+                                    backgroundColor: theme.isDark ? tint : '#F7F4FC',
+                                    borderColor: theme.isDark ? `${color}44` : 'rgba(75,31,163,0.16)',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.chipTxt, { color: theme.isDark ? color : theme.accent }]} numberOfLines={1}>
                                 {kindLabel}
                             </Text>
                         </View>
@@ -478,7 +503,7 @@ const NotificationRow = React.memo(function NotificationRow({
                     </Text>
                 </View>
                 {unread ? (
-                    <View style={[styles.dot, { backgroundColor: theme.accentSoft }]} />
+                    <View style={[styles.dot, { backgroundColor: theme.accent }]} />
                 ) : (
                     <View style={styles.dotSpacer} />
                 )}
@@ -868,18 +893,18 @@ const styles = StyleSheet.create({
     root: { flex: 1 },
     scroll: { flex: 1 },
     cardOuter: {
-        marginBottom: 10,
-        borderRadius: RADIUS_LG,
+        marginBottom: 12,
+        borderRadius: 16,
         borderWidth: 1,
         backgroundColor: '#FFFFFF',
     },
     card: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 13,
         paddingHorizontal: 12,
         paddingStart: 0,
-        borderRadius: RADIUS_LG,
+        borderRadius: 16,
         overflow: 'hidden',
     },
     accent: {

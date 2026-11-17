@@ -4,7 +4,7 @@
  */
 
 import { StyleSheet } from 'react-native';
-import { COMMUNITY_THEME, COMMUNITY_LIGHT_ELEVATION } from '../community/theme';
+import { COMMUNITY_THEME } from '../community/theme';
 import {
   BG_BASE,
   GRADIENT_BG_COLORS,
@@ -46,8 +46,20 @@ export type NotificationsTheme = {
   bgGradient: readonly [string, string, string, string];
   bgLocations: readonly [number, number, number, number];
   systemIcon: string;
-  elevationCard: typeof COMMUNITY_LIGHT_ELEVATION.card | null;
-  elevationSoft: typeof COMMUNITY_LIGHT_ELEVATION.soft | null;
+  elevationCard: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  } | null;
+  elevationSoft: {
+    shadowColor: string;
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  } | null;
   statusBar: 'light' | 'dark';
 };
 
@@ -90,38 +102,56 @@ export function getNotificationsTheme(isDark: boolean): NotificationsTheme {
     };
   }
 
+  /** Crisp card lift — tighter than community feed so rows don't look like a glow. */
+  const cardElevation = {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  } as const;
+  const softElevation = {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  } as const;
+
   return {
     isDark: false,
-    screen: c.screen,
-    headerBg: c.header,
-    headerGradient: ['rgba(106,43,217,0.1)', c.header],
-    card: c.card,
-    cardBorder: c.cardBorder,
-    cardUnread: 'rgba(106,43,217,0.07)',
-    cardUnreadBorder: 'rgba(75,31,163,0.28)',
+    // Cool grey-lavender page so pure white cards separate cleanly.
+    screen: '#E9E4F4',
+    headerBg: '#E9E4F4',
+    headerGradient: ['rgba(106,43,217,0.06)', '#E9E4F4'],
+    card: '#FFFFFF',
+    cardBorder: 'rgba(75,31,163,0.16)',
+    // Unread stays white — only border + dot mark state (no muddy purple wash).
+    cardUnread: '#FFFFFF',
+    cardUnreadBorder: 'rgba(106,43,217,0.38)',
     text: c.textStrong,
     textSecondary: c.muted,
     muted: c.muted,
     accent: c.accent,
     accentSoft: c.accentSoft,
     backBtnBg: '#FFFFFF',
-    backBtnBorder: c.cardBorder,
-    markAllBg: 'rgba(106,43,217,0.1)',
-    markAllBorder: 'rgba(75,31,163,0.22)',
-    hairline: c.divider,
-    skelBg: c.card,
+    backBtnBorder: 'rgba(75,31,163,0.2)',
+    markAllBg: '#FFFFFF',
+    markAllBorder: 'rgba(106,43,217,0.28)',
+    hairline: 'rgba(75,31,163,0.14)',
+    skelBg: '#FFFFFF',
     skelFill: 'rgba(75,31,163,0.1)',
-    emptyIconBg: c.chipBg,
-    emptyIconBorder: c.chipBorder,
+    emptyIconBg: '#FFFFFF',
+    emptyIconBorder: 'rgba(75,31,163,0.2)',
     emptyTitle: c.accentDeep,
-    retryBg: 'rgba(106,43,217,0.1)',
-    retryBorder: c.cardBorder,
-    refreshBg: c.screen,
-    bgGradient: [c.screen, c.screen, '#F5F1FB', c.screen],
+    retryBg: '#FFFFFF',
+    retryBorder: 'rgba(75,31,163,0.2)',
+    refreshBg: '#E9E4F4',
+    bgGradient: ['#E9E4F4', '#E9E4F4', '#EDE8F7', '#E9E4F4'],
     bgLocations: GRADIENT_BG_LOCATIONS,
     systemIcon: c.muted,
-    elevationCard: COMMUNITY_LIGHT_ELEVATION.card,
-    elevationSoft: COMMUNITY_LIGHT_ELEVATION.soft,
+    elevationCard: cardElevation,
+    elevationSoft: softElevation,
     statusBar: 'dark',
   };
 }
