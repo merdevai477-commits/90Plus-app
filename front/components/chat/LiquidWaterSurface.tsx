@@ -78,6 +78,10 @@ export type LiquidWaterSurfaceProps = {
   sheen?: number;
   /** Blur strength (iOS UIBlurEffect). Higher = more frost over content behind. */
   blurIntensity?: number;
+  /** Frost material — use `light` on pale screens so glass stays bright. */
+  blurTint?: 'light' | 'dark';
+  /** Soft lavender lift for light pages; keep purple glow for dark. */
+  elevate?: 'dark' | 'light' | 'none';
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 };
@@ -91,10 +95,14 @@ export function LiquidWaterSurface({
   blurTarget,
   sheen = 0.9,
   blurIntensity,
+  blurTint = 'dark',
+  elevate = 'dark',
   style,
   children,
 }: LiquidWaterSurfaceProps) {
   const frost = blurIntensity ?? (Platform.OS === 'ios' ? 28 : 36);
+  const elevateStyle =
+    elevate === 'none' ? null : elevate === 'light' ? styles.shadowLight : styles.shadow;
   const rootRef = useRef<View>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const clock = useClock();
@@ -140,7 +148,7 @@ export function LiquidWaterSurface({
     return (
       <LiquidGlassView
         {...({
-          style: [{ borderRadius: radius, overflow: 'hidden' }, style],
+          style: [{ borderRadius: radius, overflow: 'hidden' }, elevateStyle, style],
           tint,
           effect: 'regular',
           interactive: true,
@@ -156,12 +164,12 @@ export function LiquidWaterSurface({
       ref={rootRef}
       onLayout={onLayout}
       onTouchStart={onTouchStart}
-      style={[{ borderRadius: radius }, styles.shadow, style]}
+      style={[{ borderRadius: radius }, elevateStyle, style]}
     >
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
         <BlurView
           intensity={frost}
-          tint="dark"
+          tint={blurTint}
           blurMethod="dimezisBlurViewSdk31Plus"
           blurTarget={blurTarget}
           style={StyleSheet.absoluteFill}
@@ -191,7 +199,22 @@ const styles = StyleSheet.create({
         shadowRadius: 18,
         shadowOffset: { width: 0, height: 8 },
       },
-      default: {},
+      default: {
+        elevation: 6,
+      },
+    }),
+  },
+  shadowLight: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1A0A3C',
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      default: {
+        elevation: 4,
+      },
     }),
   },
 });

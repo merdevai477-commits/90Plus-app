@@ -1,11 +1,12 @@
 /**
- * CompCard — Figma rank competition tile (node 1005:2558).
- * Size control: front/components/rank/compCardMetrics.ts → COMP_CARD_SCALE
+ * CompCard — Rank competition tile.
+ * - overlay: dark full-bleed art with scrim (existing 2×2 grid)
+ * - stack: Figma 1957:131 light card — image on top, white footer, soft shadow
  */
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { LucideIcon } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ImageSourcePropType,
@@ -17,8 +18,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { getCompCardMetrics, getCompCardMetricsForLayout } from './compCardMetrics';
+import { getRankTheme, RANK_LIGHT_ELEVATION } from './rankTheme';
 
 export {
   COMP_CARD_HEIGHT,
@@ -42,6 +45,8 @@ export interface CompCardProps {
   ctaIcon?: LucideIcon;
   /** Darker, taller fade for full-bleed photos, where the text sits on busy art. */
   photoScrim?: boolean;
+  /** overlay = dark grid tile; stack = Figma light vertical card. */
+  variant?: 'overlay' | 'stack';
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }
@@ -59,19 +64,80 @@ const CompCard: React.FC<CompCardProps> = ({
   titleIcon: TitleIcon,
   ctaIcon: CtaIcon,
   photoScrim = false,
+  variant = 'overlay',
   onPress,
   style,
 }) => {
   const scrim = photoScrim ? SCRIM.photo : SCRIM.art;
   const { t, isRTL } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getRankTheme(isDark), [isDark]);
   const ctaLabel = actionText ?? t.rank.playNow;
   const [slotWidth, setSlotWidth] = useState(0);
-
   const m = useMemo(
     () => (slotWidth > 0 ? getCompCardMetricsForLayout(slotWidth) : getCompCardMetrics()),
     [slotWidth],
   );
-  const s = useMemo(() => createStyles(m), [m]);
+  const overlayStyles = useMemo(() => createOverlayStyles(m), [m]);
+  const Chevron = isRTL ? ChevronLeft : ChevronRight;
+
+  if (variant === 'stack') {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          stackStyles.card,
+          RANK_LIGHT_ELEVATION.stack,
+          {
+            backgroundColor: theme.stackCardBg,
+            borderColor: theme.stackCardBorder,
+          },
+          style,
+          pressed && { opacity: 0.94 },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+      >
+        <View style={stackStyles.imageWrap}>
+          <Image source={img} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
+        </View>
+        <View style={[stackStyles.footer, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
+          <View style={[stackStyles.copy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+            <Text
+              style={[
+                stackStyles.title,
+                {
+                  color: theme.stackTitle,
+                  textAlign: isRTL ? 'right' : 'left',
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            <Text
+              style={[
+                stackStyles.sub,
+                {
+                  color: theme.stackSub,
+                  textAlign: isRTL ? 'right' : 'left',
+                },
+              ]}
+              numberOfLines={2}
+            >
+              {sub}
+            </Text>
+          </View>
+          <View style={[stackStyles.cta, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
+            <Text style={[stackStyles.ctaText, { color: theme.stackCta }]} numberOfLines={1}>
+              {ctaLabel}
+            </Text>
+            <Chevron size={16} color={theme.stackCta} strokeWidth={2.4} />
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
@@ -82,7 +148,7 @@ const CompCard: React.FC<CompCardProps> = ({
         }
       }}
       onPress={onPress}
-      style={({ pressed }) => [s.card, style, pressed && { opacity: 0.92 }]}
+      style={({ pressed }) => [overlayStyles.card, style, pressed && { opacity: 0.92 }]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
@@ -100,23 +166,23 @@ const CompCard: React.FC<CompCardProps> = ({
         pointerEvents="none"
       />
 
-      <View style={s.content}>
-        <View style={s.textBlock}>
-          <View style={[s.titleRow, isRTL && s.titleRowRtl]}>
-            <Text style={s.title} numberOfLines={2}>
+      <View style={overlayStyles.content}>
+        <View style={overlayStyles.textBlock}>
+          <View style={[overlayStyles.titleRow, isRTL && overlayStyles.titleRowRtl]}>
+            <Text style={overlayStyles.title} numberOfLines={2}>
               {title}
             </Text>
             {TitleIcon ? (
-              <TitleIcon size={m.titleIconSize} color="#fff" strokeWidth={2} style={s.titleIcon} />
+              <TitleIcon size={m.titleIconSize} color="#fff" strokeWidth={2} style={overlayStyles.titleIcon} />
             ) : null}
           </View>
-          <Text style={s.sub} numberOfLines={3}>
+          <Text style={overlayStyles.sub} numberOfLines={3}>
             {sub}
           </Text>
         </View>
 
-        <View style={[s.cta, isRTL && s.ctaRtl]}>
-          <Text style={s.ctaText} numberOfLines={1}>
+        <View style={[overlayStyles.cta, isRTL && overlayStyles.ctaRtl]}>
+          <Text style={overlayStyles.ctaText} numberOfLines={1}>
             {ctaLabel}
           </Text>
           {CtaIcon ? <CtaIcon size={m.ctaIconSize} color="#fff" strokeWidth={2.5} /> : null}
@@ -128,7 +194,55 @@ const CompCard: React.FC<CompCardProps> = ({
 
 export default CompCard;
 
-function createStyles(m: ReturnType<typeof getCompCardMetrics>) {
+const stackStyles = StyleSheet.create({
+  card: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  imageWrap: {
+    width: '100%',
+    height: 175,
+    backgroundColor: '#EDE7F6',
+  },
+  footer: {
+    minHeight: 79,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  copy: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    width: '100%',
+  },
+  sub: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
+    width: '100%',
+  },
+  cta: {
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+    paddingBottom: 2,
+  },
+  ctaText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});
+
+function createOverlayStyles(m: ReturnType<typeof getCompCardMetrics>) {
   return StyleSheet.create({
     card: {
       width: '100%',

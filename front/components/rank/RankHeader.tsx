@@ -1,26 +1,27 @@
 /**
  * RankHeader
  *
- * Floating header for the Rank tab. Centered brand pill matches Matches /
- * Predict & Win (90 + purple PLUS chip + screen title). Search (users, posts,
- * hashtags) on the leading edge; live coin balance on the trailing edge.
+ * Floating header for the Rank tab. Search (users, posts, hashtags) stays on
+ * the leading edge (top-right in Arabic). Brand pill + coin chip adapt to
+ * light/dark from Figma 1957:131.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView, type BlurTint } from 'expo-blur';
 import { Crown, Search, Zap } from 'lucide-react-native';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCoins } from '../../contexts/CoinsContext';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { glassProps } from '../../constants/ui';
 import AdvancedSearchBar from '../common/AdvancedSearchBar';
 import { CoinsInfoModal } from '../common/CoinsInfoModal';
 import { FeatureInfoModal } from '../common/FeatureInfoModal';
+import { getRankTheme, RANK_LIGHT_ELEVATION } from './rankTheme';
 
 const ACCENT = '#A855F7';
-const blurTint: BlurTint = 'dark';
 
 interface RankHeaderProps {
   topInset: number;
@@ -29,53 +30,81 @@ interface RankHeaderProps {
 const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getRankTheme(isDark), [isDark]);
   const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
   const [showRankInfo, setShowRankInfo] = React.useState(false);
   const [showUserSearch, setShowUserSearch] = React.useState(false);
 
   const display: string = loading ? '—' : String(coins);
+  const blurTint: BlurTint = isDark ? 'dark' : 'light';
 
   const shellStyle = [
     s.headerContainer,
     { paddingTop: Math.max(topInset, 10) + 10 },
+    !isDark && { borderBottomColor: 'rgba(106,43,217,0.08)' },
   ];
 
   const headerChrome = (
     <>
+      {/* Leading edge — top-right in Arabic; keep search here as requested. */}
       <View style={[s.sideSlot, s.sideSlotStart]}>
         <Pressable
-          style={s.searchBtn}
+          style={[
+            s.searchBtn,
+            {
+              backgroundColor: theme.searchBg,
+              borderColor: theme.searchBorder,
+            },
+            !isDark && RANK_LIGHT_ELEVATION.soft,
+          ]}
           onPress={() => setShowUserSearch(true)}
           accessibilityRole="button"
           accessibilityLabel={t.rank.a11ySearch}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Search size={20} color="#e9d5ff" />
+          <Search size={20} color={theme.searchIcon} />
         </Pressable>
       </View>
 
       <Pressable
-        style={s.logoPill}
+        style={[
+          s.logoPill,
+          {
+            backgroundColor: theme.pillBg,
+            borderColor: theme.pillBorder,
+          },
+          !isDark && RANK_LIGHT_ELEVATION.soft,
+        ]}
         onPress={() => setShowRankInfo(true)}
         accessibilityRole="button"
         accessibilityLabel={t.rankInfo.title}
       >
-        <Text style={s.logo90}>90</Text>
+        <Text style={[s.logo90, { color: theme.headerTitle }]}>90</Text>
         <View style={s.plusChip}>
           <Text style={s.logoPlus}>PLUS</Text>
         </View>
-        <Text style={s.pillTitle}>rank</Text>
+        <Text style={[s.pillTitle, { color: theme.headerTitle }]}>
+          {t.rank.competitions.title}
+        </Text>
       </Pressable>
 
       <View style={[s.sideSlot, s.sideSlotEnd]}>
         <Pressable
-          style={s.coinChip}
+          style={[
+            s.coinChip,
+            {
+              backgroundColor: theme.coinBg,
+              borderColor: theme.coinBorder,
+            },
+            !isDark && RANK_LIGHT_ELEVATION.soft,
+          ]}
           onPress={() => setShowCoinsInfo(true)}
           accessibilityRole="button"
           accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
         >
           <Zap size={13} color={ACCENT} fill={ACCENT} />
-          <Text style={s.coinTxt}>{display}</Text>
+          <Text style={[s.coinTxt, { color: theme.coinText }]}>{display}</Text>
         </Pressable>
       </View>
     </>
@@ -86,7 +115,7 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
       {headerChrome}
     </LiquidGlassView>
   ) : (
-    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+    <BlurView intensity={isDark ? 15 : 28} tint={blurTint} style={shellStyle}>
       {headerChrome}
     </BlurView>
   );
@@ -153,25 +182,21 @@ const s = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 14,
-    backgroundColor: 'rgba(168,85,247,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     gap: 5,
+    maxWidth: '58%',
   },
   logo90: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '900',
     letterSpacing: 0.3,
@@ -189,22 +214,20 @@ const s = StyleSheet.create({
     letterSpacing: 0.8,
   },
   pillTitle: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: -0.2,
     marginLeft: 2,
+    flexShrink: 1,
   },
   coinChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
     gap: 5,
   },
-  coinTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  coinTxt: { fontSize: 13, fontWeight: '800' },
 });
