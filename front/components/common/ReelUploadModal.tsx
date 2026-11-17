@@ -48,7 +48,8 @@ import {
 } from '../community/richTextParse';
 import { useMentionSearch } from '../../hooks/community/useMentionSearch';
 import type { CommunityAuthor } from '../../services/community.api';
-import { C } from '../community/theme';
+import { COMMUNITY_LIGHT_ELEVATION } from '../community/theme';
+import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 
 const CAPTION_MAX = 500;
 
@@ -77,6 +78,7 @@ export default function ReelUploadModal({
   const { isSignedIn } = useAuth();
   const { t, language } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useCommunityTheme();
   const isAr = language === 'ar';
   const fonts = useMemo(
     () => ({
@@ -87,6 +89,9 @@ export default function ReelUploadModal({
     [language],
   );
   const community = t.community;
+  const softSurface = isDark ? 'rgba(183,154,248,0.12)' : 'rgba(106,43,217,0.08)';
+  const softBorder = isDark ? 'rgba(183,154,248,0.28)' : colors.cardBorder;
+  const disabledGradient = isDark ? (['#3B2A63', '#2A1D4A'] as const) : (['#C4B5FD', '#A78BFA'] as const);
 
   const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [caption, setCaption] = useState('');
@@ -407,26 +412,59 @@ export default function ReelUploadModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.container}>
-        <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
+      <View style={[styles.container, { backgroundColor: colors.overlay }]}>
+        <BlurView intensity={40} style={StyleSheet.absoluteFill} tint={isDark ? 'dark' : 'light'} />
 
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardWrap}
         >
-          <View style={[styles.content, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
-            <View style={styles.handle} />
+          <View
+            style={[
+              styles.content,
+              {
+                paddingBottom: Math.max(16, insets.bottom + 8),
+                backgroundColor: colors.sheet,
+                borderColor: colors.composerBorder,
+              },
+              !isDark && COMMUNITY_LIGHT_ELEVATION.card,
+            ]}
+          >
+            <View
+              style={[
+                styles.handle,
+                { backgroundColor: isDark ? 'rgba(183,154,248,0.35)' : 'rgba(106,43,217,0.28)' },
+              ]}
+            />
             <LinearGradient
-              colors={[C.accentSoft, C.accent, 'transparent']}
+              colors={[colors.accentSoft, colors.accent, 'transparent']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.topAccent}
             />
 
-            <View style={[styles.header, { flexDirection: row }]}>
-              <Text style={[styles.title, { fontFamily: fonts.semibold }]}>{t.reels.uploadTitle}</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={10}>
-                <X size={18} color={C.textStrong} strokeWidth={2.4} />
+            <View
+              style={[
+                styles.header,
+                { flexDirection: row, borderBottomColor: colors.composerHairline },
+              ]}
+            >
+              <Text style={[styles.title, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+                {t.reels.uploadTitle}
+              </Text>
+              <TouchableOpacity
+                onPress={onClose}
+                style={[
+                  styles.closeButton,
+                  {
+                    backgroundColor: colors.followBtn,
+                    borderColor: colors.cardBorder,
+                  },
+                  !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
+                ]}
+                hitSlop={10}
+              >
+                <X size={18} color={colors.textStrong} strokeWidth={2.4} />
               </TouchableOpacity>
             </View>
 
@@ -436,24 +474,41 @@ export default function ReelUploadModal({
               contentContainerStyle={styles.scrollBody}
             >
               {uploadLocked && (
-                <View style={[styles.lockedBanner, { flexDirection: row }]}>
-                  <ActivityIndicator size="small" color={C.accentSoft} />
-                  <Text style={[styles.lockedBannerText, { fontFamily: fonts.regular }]}>
+                <View
+                  style={[
+                    styles.lockedBanner,
+                    {
+                      flexDirection: row,
+                      backgroundColor: softSurface,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={colors.accentSoft} />
+                  <Text style={[styles.lockedBannerText, { fontFamily: fonts.regular, color: colors.accentSoft }]}>
                     {t.reels.uploadLockedBanner}
                   </Text>
                 </View>
               )}
 
               <TouchableOpacity
-                style={[styles.uploadArea, (uploadLocked || isPickingVideo) && styles.uploadAreaDisabled]}
+                style={[
+                  styles.uploadArea,
+                  {
+                    backgroundColor: colors.input,
+                    borderColor: colors.inputBorder,
+                  },
+                  !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
+                  (uploadLocked || isPickingVideo) && styles.uploadAreaDisabled,
+                ]}
                 onPress={pickVideo}
                 activeOpacity={uploadLocked || isPickingVideo ? 1 : 0.8}
                 disabled={uploadLocked || isPickingVideo}
               >
                 {isPickingVideo ? (
                   <View style={styles.placeholderContainer}>
-                    <ActivityIndicator color={C.accentSoft} size="large" />
-                    <Text style={[styles.uploadText, { fontFamily: fonts.semibold }]}>
+                    <ActivityIndicator color={colors.accentSoft} size="large" />
+                    <Text style={[styles.uploadText, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
                       {t.reels.uploadPreparing}
                     </Text>
                   </View>
@@ -464,21 +519,34 @@ export default function ReelUploadModal({
                       style={styles.videoPreview}
                       contentFit="cover"
                     />
-                    <View style={styles.changeOverlay}>
-                      <Text style={[styles.changeText, { fontFamily: fonts.semibold }]}>
+                    <View
+                      style={[
+                        styles.changeOverlay,
+                        {
+                          backgroundColor: isDark ? 'rgba(12,6,32,0.82)' : 'rgba(255,255,255,0.92)',
+                          borderColor: colors.cardBorder,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.changeText, { fontFamily: fonts.semibold, color: colors.accentSoft }]}>
                         {t.reels.uploadChangeVideo}
                       </Text>
                     </View>
                   </View>
                 ) : (
                   <View style={styles.placeholderContainer}>
-                    <View style={styles.uploadIconWrap}>
-                      <Ionicons name="cloud-upload-outline" size={28} color={C.accentSoft} />
+                    <View
+                      style={[
+                        styles.uploadIconWrap,
+                        { backgroundColor: softSurface, borderColor: softBorder },
+                      ]}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={28} color={colors.accentSoft} />
                     </View>
-                    <Text style={[styles.uploadText, { fontFamily: fonts.semibold }]}>
+                    <Text style={[styles.uploadText, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
                       {t.reels.uploadPickVideo}
                     </Text>
-                    <Text style={[styles.uploadSubText, { fontFamily: fonts.regular }]}>
+                    <Text style={[styles.uploadSubText, { fontFamily: fonts.regular, color: colors.muted }]}>
                       {(t.reels.uploadDurationHint as string).replace('{max}', String(MAX_REEL_VIDEO_MB))}
                     </Text>
                   </View>
@@ -504,24 +572,34 @@ export default function ReelUploadModal({
                 />
               ) : null}
 
-              <View style={[styles.inputCard, uploadLocked && styles.inputDisabled]}>
+              <View
+                style={[
+                  styles.inputCard,
+                  {
+                    backgroundColor: colors.composer,
+                    borderColor: colors.composerBorder,
+                  },
+                  !isDark && COMMUNITY_LIGHT_ELEVATION.soft,
+                  uploadLocked && styles.inputDisabled,
+                ]}
+              >
                 <TextInput
                   ref={inputRef}
                   style={[
                     styles.input,
-                    { fontFamily: fonts.regular, textAlign: captionAlign },
+                    { fontFamily: fonts.regular, textAlign: captionAlign, color: colors.text },
                   ]}
                   placeholder={t.reels.uploadCaptionPlaceholder}
-                  placeholderTextColor={C.placeholder}
+                  placeholderTextColor={colors.placeholder}
                   value={caption}
                   onChangeText={(v) => setCaption(v.slice(0, CAPTION_MAX))}
                   onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
                   multiline
                   maxLength={CAPTION_MAX}
                   editable={!uploadLocked}
-                  selectionColor={C.accent}
+                  selectionColor={colors.accent}
                 />
-                <Text style={[styles.charCount, { fontFamily: fonts.regular }]}>
+                <Text style={[styles.charCount, { fontFamily: fonts.regular, color: colors.counter }]}>
                   {caption.length}/{CAPTION_MAX}
                 </Text>
               </View>
@@ -534,10 +612,10 @@ export default function ReelUploadModal({
                   accessibilityRole="button"
                   accessibilityLabel={community.hashtagTool}
                 >
-                  <View style={styles.toolGlyph}>
-                    <Hash size={16} color={C.accentSoft} strokeWidth={2.4} />
+                  <View style={[styles.toolGlyph, { backgroundColor: softSurface, borderColor: softBorder }]}>
+                    <Hash size={16} color={colors.accentSoft} strokeWidth={2.4} />
                   </View>
-                  <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>
+                  <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>
                     {community.hashtagTool}
                   </Text>
                 </Pressable>
@@ -548,29 +626,36 @@ export default function ReelUploadModal({
                   accessibilityRole="button"
                   accessibilityLabel={community.mentionTool}
                 >
-                  <View style={styles.toolGlyph}>
-                    <AtSign size={16} color={C.accentSoft} strokeWidth={2.4} />
+                  <View style={[styles.toolGlyph, { backgroundColor: softSurface, borderColor: softBorder }]}>
+                    <AtSign size={16} color={colors.accentSoft} strokeWidth={2.4} />
                   </View>
-                  <Text style={[styles.toolText, { fontFamily: fonts.medium }]}>
+                  <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>
                     {community.mentionTool}
                   </Text>
                 </Pressable>
               </View>
 
               {isUploading && (
-                <View style={styles.progressContainer}>
-                  <Animated.View style={[styles.progressBar, progressStyle]} />
+                <View
+                  style={[
+                    styles.progressContainer,
+                    { backgroundColor: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(106,43,217,0.12)' },
+                  ]}
+                >
+                  <Animated.View
+                    style={[styles.progressBar, progressStyle, { backgroundColor: colors.accent }]}
+                  />
                 </View>
               )}
 
               <TouchableOpacity
                 onPress={handleUpload}
                 disabled={!canPublish}
-                style={{ opacity: canPublish ? 1 : 0.5 }}
+                style={[{ opacity: canPublish ? 1 : 0.5 }, !isDark && COMMUNITY_LIGHT_ELEVATION.soft]}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={canPublish ? ['#A78BFA', '#7C3AED'] : ['#3B2A63', '#2A1D4A']}
+                  colors={canPublish ? ['#A78BFA', '#7C3AED'] : [...disabledGradient]}
                   style={styles.submitButton}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
@@ -611,17 +696,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: C.overlay,
   },
   keyboardWrap: {
     justifyContent: 'flex-end',
   },
   content: {
-    backgroundColor: C.sheet,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
-    borderColor: C.composerBorder,
     paddingHorizontal: 20,
     paddingTop: 10,
     maxHeight: '92%',
@@ -632,7 +714,6 @@ const styles = StyleSheet.create({
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(183,154,248,0.35)',
     marginBottom: 10,
   },
   topAccent: {
@@ -650,21 +731,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.composerHairline,
   },
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: C.textStrong,
     letterSpacing: 0.2,
     flex: 1,
   },
   closeButton: {
     padding: 8,
-    backgroundColor: C.followBtn,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: C.cardBorder,
   },
   scrollBody: {
     paddingBottom: 8,
@@ -672,10 +749,8 @@ const styles = StyleSheet.create({
   },
   uploadArea: {
     height: 200,
-    backgroundColor: C.input,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: C.inputBorder,
     borderStyle: 'dashed',
     overflow: 'hidden',
   },
@@ -692,19 +767,15 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(183,154,248,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(183,154,248,0.28)',
     marginBottom: 4,
   },
   uploadText: {
-    color: C.textStrong,
     fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },
   uploadSubText: {
-    color: C.muted,
     fontSize: 12,
     textAlign: 'center',
   },
@@ -720,29 +791,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 10,
     alignSelf: 'center',
-    backgroundColor: 'rgba(12,6,32,0.82)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: C.cardBorder,
   },
   changeText: {
-    color: C.accentSoft,
     fontSize: 12,
     fontWeight: '600',
   },
   inputCard: {
-    backgroundColor: C.composer,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: C.composerBorder,
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 8,
   },
   input: {
-    color: C.text,
     fontSize: 16,
     lineHeight: 24,
     minHeight: 88,
@@ -750,7 +815,6 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   charCount: {
-    color: C.counter,
     fontSize: 12,
     textAlign: 'right',
     marginTop: 6,
@@ -769,12 +833,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(183,154,248,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(183,154,248,0.28)',
   },
   toolText: {
-    color: C.accentSoft,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -791,13 +852,11 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     height: 4,
-    backgroundColor: 'rgba(139,92,246,0.15)',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
-    backgroundColor: C.accent,
     borderRadius: 2,
   },
   uploadingContent: {
@@ -808,15 +867,12 @@ const styles = StyleSheet.create({
   lockedBanner: {
     alignItems: 'center',
     gap: 10,
-    backgroundColor: 'rgba(139,92,246,0.12)',
     borderWidth: 1,
-    borderColor: C.cardBorder,
     borderRadius: 14,
     padding: 12,
   },
   lockedBannerText: {
     flex: 1,
-    color: C.accentSoft,
     fontSize: 13,
     lineHeight: 18,
   },
