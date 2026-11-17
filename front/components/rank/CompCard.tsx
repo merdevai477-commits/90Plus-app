@@ -99,7 +99,13 @@ const CompCard: React.FC<CompCardProps> = ({
         accessibilityLabel={title}
       >
         <View style={stackStyles.imageWrap}>
-          <Image source={img} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
+          <Image
+            source={img}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            contentPosition="center"
+            transition={0}
+          />
         </View>
         <View style={[stackStyles.footer, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
           <View style={[stackStyles.copy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
@@ -194,51 +200,61 @@ const CompCard: React.FC<CompCardProps> = ({
 
 export default CompCard;
 
+/** Figma stack card: 390×254 = image 390×175 + footer 390×79 (nodes 1969:1448…). */
+const STACK_IMAGE_H = 175;
+const STACK_FOOTER_H = 79;
+const STACK_RADIUS = 16;
+
 const stackStyles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: STACK_RADIUS,
     borderWidth: 1,
     overflow: 'hidden',
   },
   imageWrap: {
     width: '100%',
-    height: 175,
+    height: STACK_IMAGE_H,
     backgroundColor: '#EDE7F6',
+    borderTopLeftRadius: STACK_RADIUS,
+    borderTopRightRadius: STACK_RADIUS,
+    overflow: 'hidden',
   },
   footer: {
-    minHeight: 79,
+    height: STACK_FOOTER_H,
     paddingHorizontal: 18,
     paddingVertical: 16,
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
   },
   copy: {
     flex: 1,
-    gap: 6,
+    gap: 8,
     minWidth: 0,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
+    lineHeight: 25,
     width: '100%',
   },
   sub: {
     fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 15,
+    fontWeight: '400',
+    lineHeight: 13,
     width: '100%',
   },
   cta: {
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
     flexShrink: 0,
     paddingBottom: 2,
   },
   ctaText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });
 

@@ -122,6 +122,18 @@ export default function RankScreen() {
     [insets.top, insets.bottom, isDark],
   );
 
+  /** Light stack art from Figma nodes 1969:1449 / 1957:565 / 1969:1427 / 1969:1438 / 1969:1413. */
+  const lightArt = useMemo(
+    () => ({
+      share: require('../../assets/images/rank/figma-light/comp-share.png') as ImageSourcePropType,
+      scorers: require('../../assets/images/rank/figma-light/comp-scorers.png') as ImageSourcePropType,
+      predictions: require('../../assets/images/rank/figma-light/comp-predictions.png') as ImageSourcePropType,
+      coach: require('../../assets/images/rank/figma-light/comp-coach.png') as ImageSourcePropType,
+      sponsors: require('../../assets/images/rank/figma-light/comp-sponsors.png') as ImageSourcePropType,
+    }),
+    [],
+  );
+
   const competitions = useMemo(
     () => [
       {
@@ -130,7 +142,9 @@ export default function RankScreen() {
         sub: t.rank.competitionNames.shareAndEarn.sub,
         actionText: t.rank.competitionNames.shareAndEarn.action,
         rewardHint: shareRewardHint(),
-        img: require('../../assets/images/rank/comp-share.webp') as ImageSourcePropType,
+        img: isDark
+          ? (require('../../assets/images/rank/comp-share.webp') as ImageSourcePropType)
+          : lightArt.share,
         titleIcon: Gift,
         ctaIcon: Share2,
       },
@@ -139,7 +153,9 @@ export default function RankScreen() {
         title: t.rank.competitionNames.engagementHero.title,
         sub: t.rank.competitionNames.engagementHero.sub,
         actionText: t.rank.competitionNames.engagementHero.action,
-        img: require('../../assets/images/rank/comp-top-scorers-five.jpg') as ImageSourcePropType,
+        img: isDark
+          ? (require('../../assets/images/rank/comp-top-scorers-five.jpg') as ImageSourcePropType)
+          : lightArt.scorers,
         photoScrim: true,
         titleIcon: Zap,
         ctaIcon: Zap,
@@ -149,7 +165,9 @@ export default function RankScreen() {
         title: t.rank.competitionNames.kingOfPredictions.title,
         sub: t.rank.competitionNames.kingOfPredictions.sub,
         actionText: t.rank.competitionNames.kingOfPredictions.action,
-        img: require('../../assets/images/rank/comp-predictions.webp') as ImageSourcePropType,
+        img: isDark
+          ? (require('../../assets/images/rank/comp-predictions.webp') as ImageSourcePropType)
+          : lightArt.predictions,
         titleIcon: Crown,
         ctaIcon: Crown,
       },
@@ -158,7 +176,9 @@ export default function RankScreen() {
         title: t.rank.coachKing.title,
         sub: t.rank.coachKing.subtitle,
         actionText: t.rank.coachKing.start,
-        img: require('../../assets/images/coach-king/banner/promo.png') as ImageSourcePropType,
+        img: isDark
+          ? (require('../../assets/images/coach-king/banner/promo.png') as ImageSourcePropType)
+          : lightArt.coach,
         titleIcon: Target,
         ctaIcon: Target,
       },
@@ -167,12 +187,14 @@ export default function RankScreen() {
         title: t.rank.competitionNames.sponsors.title,
         sub: t.rank.competitionNames.sponsors.sub,
         actionText: t.rank.competitionNames.sponsors.action,
-        img: require('../../assets/images/rank/comp-sponsors.png') as ImageSourcePropType,
+        img: isDark
+          ? (require('../../assets/images/rank/comp-sponsors.png') as ImageSourcePropType)
+          : lightArt.sponsors,
         titleIcon: Handshake,
         ctaIcon: Target,
       },
     ],
-    [t, shareRewardHint],
+    [t, shareRewardHint, isDark, lightArt],
   );
 
   /** Dark keeps the original 4-tile grid (coach lives in CoachKingSection). */
@@ -453,10 +475,11 @@ const s = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  /** Figma list: left 20, width 390, gap 20 between cards. */
   stackList: {
     paddingHorizontal: 20,
     gap: 20,
-    marginTop: 8,
+    marginTop: 12,
     marginBottom: 24,
   },
 });
