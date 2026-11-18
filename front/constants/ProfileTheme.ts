@@ -2,44 +2,44 @@
  * ProfileTheme
  *
  * Shared color palette + spacing tokens for the profile-related UI.
- * Light / white surface so cards, chips, and borders stay clearly visible.
+ * Light mode with strong borders so cards and chips stay clearly visible.
  */
 
 export const ProfileTheme = {
   colors: {
-    // Base surfaces
+    // Base surfaces — gray page so white cards read with clear edges
     deepBlack: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceElevated: '#F7F7F9',
+    surfaceElevated: '#F2F2F5',
 
     // Text
-    textPrimary: '#111111',
-    textSecondary: 'rgba(17, 17, 17, 0.68)',
-    textTertiary: 'rgba(17, 17, 17, 0.48)',
-    textDisabled: 'rgba(17, 17, 17, 0.34)',
+    textPrimary: '#0F0F12',
+    textSecondary: 'rgba(15, 15, 18, 0.72)',
+    textTertiary: 'rgba(15, 15, 18, 0.52)',
+    textDisabled: 'rgba(15, 15, 18, 0.36)',
 
-    // Borders / dividers — stronger so edges read clearly on white
-    border: 'rgba(17, 17, 17, 0.16)',
-    borderSoft: 'rgba(17, 17, 17, 0.1)',
+    // Borders / dividers — dark enough to read on white cards
+    border: 'rgba(15, 15, 18, 0.28)',
+    borderSoft: 'rgba(15, 15, 18, 0.18)',
 
-    // Brand accents (matches the reels/home palette)
+    // Brand accents
     neonGreen: '#22A822',
     neonBlue: '#0090C8',
     neonPurple: '#7C3AED',
     neonRed: '#E11D48',
     gold: '#D4A017',
 
-    // Profile v2 — white mode with defined edges
-    profileBg: '#FFFFFF',
+    // Profile v2 — light mode, defined edges
+    profileBg: '#EDEDF1',
     profileCard: '#FFFFFF',
-    profileCardBorder: '#D4D4DA',
+    profileCardBorder: '#8F8F9A',
     profileChip: '#FFFFFF',
     profileFilledChip: '#FFFFFF',
-    profileEmptyChip: '#F3F3F6',
-    profileMuted: '#6B6B73',
-    profileHandle: '#6B6B73',
+    profileEmptyChip: '#F5F5F8',
+    profileMuted: '#55555F',
+    profileHandle: '#4A4A54',
     profileTabBar: '#FFFFFF',
-    profileTabBorder: '#D4D4DA',
+    profileTabBorder: '#8F8F9A',
     profilePrimary: '#7C3AED',
     avatarRing: '#7C3AED',
 
@@ -50,24 +50,19 @@ export const ProfileTheme = {
     info: '#2196F3',
 
     // Glass overlays (light surfaces)
-    glass: 'rgba(17, 17, 17, 0.04)',
-    glassMedium: 'rgba(17, 17, 17, 0.08)',
-    glassDark: 'rgba(17, 17, 17, 0.03)',
-    glassWhite: 'rgba(255, 255, 255, 0.92)',
-    glassBlack: 'rgba(255, 255, 255, 0.88)',
-    glassBorder: 'rgba(17, 17, 17, 0.14)',
+    glass: 'rgba(15, 15, 18, 0.05)',
+    glassMedium: 'rgba(15, 15, 18, 0.09)',
+    glassDark: 'rgba(15, 15, 18, 0.04)',
+    glassWhite: 'rgba(255, 255, 255, 0.94)',
+    glassBlack: 'rgba(255, 255, 255, 0.9)',
+    glassBorder: 'rgba(15, 15, 18, 0.22)',
   },
 
   gradients: {
-    /** Brand gradient used by action buttons. */
     primary: ['#7C3AED', '#5B21B6'] as const,
-    /** Soft fade under cover imagery into the white page. */
-    cover: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.72)'] as const,
-    /** Overlay used over the cover when buttons need contrast. */
-    darkOverlay: ['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)'] as const,
-    /** Gold accent used on the FIFA card. */
+    cover: ['rgba(237,237,241,0)', 'rgba(237,237,241,0.88)'] as const,
+    darkOverlay: ['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.42)'] as const,
     gold: ['#FFD700', '#FFA500'] as const,
-    /** Pink → purple gradient for highlight sections. */
     highlight: ['#F5576C', '#8E54E9'] as const,
   },
 

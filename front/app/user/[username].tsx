@@ -979,7 +979,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   unfollowTxt: {
@@ -1021,7 +1021,7 @@ const s = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: -1,
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderTopWidth: 0,
     borderColor: ProfileTheme.colors.profileTabBorder,
     borderBottomLeftRadius: 16,

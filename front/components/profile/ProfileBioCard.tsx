@@ -61,8 +61,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     height: 106,
     borderRadius: 16,
-    backgroundColor: ProfileTheme.colors.surfaceElevated,
-    borderWidth: 1,
+    backgroundColor: ProfileTheme.colors.profileCard,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     borderStyle: 'dashed',
     flexDirection: 'row',
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     height: 106,
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     backgroundColor: ProfileTheme.colors.profileCard,
     justifyContent: 'center',
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   ball: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.35,
+    opacity: 0.22,
   },
   copy: {
     alignSelf: 'flex-end',
@@ -99,13 +99,14 @@ const styles = StyleSheet.create({
   about: {
     color: ProfileTheme.colors.profilePrimary,
     fontSize: 19,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'right',
   },
   bio: {
-    color: ProfileTheme.colors.textSecondary,
-    fontSize: 11,
+    color: ProfileTheme.colors.textPrimary,
+    fontSize: 13,
     textAlign: 'right',
-    lineHeight: 16,
+    lineHeight: 18,
+    fontWeight: '500',
   },
 });

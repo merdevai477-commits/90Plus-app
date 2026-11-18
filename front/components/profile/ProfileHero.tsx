@@ -158,8 +158,8 @@ const ProfileHero = memo(function ProfileHero({
           priority="high"
         />
         <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0.96)']}
-          locations={[0, 0.55, 1]}
+          colors={['rgba(237,237,241,0)', 'rgba(237,237,241,0.55)', 'rgba(237,237,241,0.98)']}
+          locations={[0, 0.52, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -497,8 +497,8 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     paddingVertical: 4,
     paddingHorizontal: 5,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     height: 75,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 24,
     backgroundColor: '#F5F0FF',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profilePrimary,
     borderRadius: 42,
     paddingHorizontal: 10,
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   sideSlotFilled: {
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -717,12 +717,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: ProfileTheme.colors.textPrimary,
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
   },
   handle: {
     color: ProfileTheme.colors.profileHandle,
-    fontSize: 18,
+    fontSize: 16,
+    fontWeight: '600',
     marginTop: 6,
   },
 });

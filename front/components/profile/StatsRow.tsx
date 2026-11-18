@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: isLiquidGlassSupported ? 'transparent' : ProfileTheme.colors.profileCard,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   divider: {

@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     justifyContent: 'space-between',
     backgroundColor: ProfileTheme.colors.profileTabBar,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileTabBorder,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

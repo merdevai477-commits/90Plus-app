@@ -84,7 +84,7 @@ const statStyles = StyleSheet.create({
     width: '48%',
     minHeight: 96,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     backgroundColor: ProfileTheme.colors.profileCard,
     overflow: 'hidden',
