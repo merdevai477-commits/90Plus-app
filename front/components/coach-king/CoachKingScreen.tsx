@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +21,7 @@ import {
   type CkPlayer,
   type CkPoolKind,
 } from '../../services/coachKing.service';
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
@@ -36,6 +37,7 @@ import { CoachKingMoney } from './CoachKingCoin';
 import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
 import { CoachKingPitch } from './CoachKingPitch';
+import { getCoachKingTheme } from './theme';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 const CLUB_LIMIT = 3;
@@ -111,6 +113,8 @@ export default function CoachKingScreen() {
   const fontSemi = useAppFont(600);
   const fontMed = useAppFont(500);
   const fontBold = useAppFont(700);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   const [tab, setTab] = useState<CkTab>('pitch');
   const [home, setHome] = useState<CkHome | null>(null);
@@ -317,53 +321,65 @@ export default function CoachKingScreen() {
   const row = isAr ? 'row-reverse' : 'row';
 
   return (
-    <View style={styles.root} testID="coach-king-screen">
-      <View style={[styles.header, { paddingTop: insets.top + 8, flexDirection: row }]}>
+    <View style={[styles.root, { backgroundColor: theme.screen }]} testID="coach-king-screen">
+      <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + 8,
+            flexDirection: row,
+            backgroundColor: theme.headerBg,
+            borderBottomWidth: theme.headerBorder === 'transparent' ? 0 : StyleSheet.hairlineWidth,
+            borderBottomColor: theme.headerBorder,
+          },
+        ]}
+      >
         <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" testID="ck-back">
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={26} color="#fff" />
+          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={26} color={theme.headerIcon} />
         </Pressable>
-        <Text style={[styles.headerTitle, { fontFamily: fontSemi }]}>{copy.title}</Text>
+        <Text style={[styles.headerTitle, { fontFamily: fontSemi, color: theme.ink }]}>{copy.title}</Text>
         <View style={{ width: 26 }} />
       </View>
 
-      {loading && !home ? <ActivityIndicator color="#8C5CF6" style={{ marginTop: 40 }} /> : null}
-      {error && !home ? <Text style={[styles.error, { fontFamily: fontMed }]}>{error}</Text> : null}
+      {loading && !home ? <ActivityIndicator color={theme.refresh} style={{ marginTop: 40 }} /> : null}
+      {error && !home ? <Text style={[styles.error, { fontFamily: fontMed, color: theme.danger }]}>{error}</Text> : null}
 
       {tab === 'pitch' && shown ? (
         <ScrollView contentContainerStyle={{ paddingBottom: bottomPad }} showsVerticalScrollIndicator={false}>
           <LinearGradient
-            colors={['#1A0B3A', '#0A001C']}
+            colors={[...theme.profileGradient]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.profile, { flexDirection: row }]}
+            style={[styles.profile, { flexDirection: row, borderColor: theme.profileBorder }]}
           >
             <View style={[styles.identity, { flexDirection: row }]}>
-              <Image source={shown.user.avatar ? { uri: shown.user.avatar } : PLACEHOLDER} style={styles.avatar} cachePolicy="memory-disk" />
+              <Image source={shown.user.avatar ? { uri: shown.user.avatar } : PLACEHOLDER} style={[styles.avatar, { borderColor: theme.secondary }]} cachePolicy="memory-disk" />
               <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
-                <Text style={[styles.userName, { fontFamily: fontSemi }]} numberOfLines={1}>{shown.user.displayName}</Text>
+                <Text style={[styles.userName, { fontFamily: fontSemi, color: theme.ink }]} numberOfLines={1}>{shown.user.displayName}</Text>
                 <View style={[styles.metaRow, { flexDirection: row }]}>
-                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{`${copy.level} ${shown.user.level}`}</Text>
-                  <View style={styles.metaDot} />
-                  <Ionicons name="trophy" size={12} color="#F8C94A" />
-                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{shown.user.rank ? `#${shown.user.rank}` : '—'}</Text>
-                  <View style={styles.metaDot} />
-                  <Ionicons name="flash" size={12} color="#C2ABFC" />
-                  <Text style={[styles.meta, { fontFamily: fontMed }]}>{shown.squad.points}</Text>
+                  <Text style={[styles.meta, { fontFamily: fontMed, color: theme.muted }]}>{`${copy.level} ${shown.user.level}`}</Text>
+                  <View style={[styles.metaDot, { backgroundColor: theme.metaDot }]} />
+                  <Ionicons name="trophy" size={12} color={theme.accent} />
+                  <Text style={[styles.meta, { fontFamily: fontMed, color: theme.muted }]}>{shown.user.rank ? `#${shown.user.rank}` : '—'}</Text>
+                  <View style={[styles.metaDot, { backgroundColor: theme.metaDot }]} />
+                  <Ionicons name="flash" size={12} color={theme.flash} />
+                  <Text style={[styles.meta, { fontFamily: fontMed, color: theme.muted }]}>{shown.squad.points}</Text>
                 </View>
               </View>
             </View>
             <View style={[styles.budget, { alignItems: isAr ? 'flex-start' : 'flex-end' }]}>
-              <Text style={[styles.budgetHint, { fontFamily: fontMed }]}>{copy.budgetLabel}</Text>
+              <Text style={[styles.budgetHint, { fontFamily: fontMed, color: theme.subtle }]}>{copy.budgetLabel}</Text>
               <CoachKingMoney
                 milli={shown.wallet.remainingMilli}
                 lang={language}
                 size="lg"
-                color={shown.wallet.remainingMilli < 0 ? '#F87171' : '#FFFFFF'}
+                color={shown.wallet.remainingMilli < 0 ? theme.danger : theme.budgetValue}
                 testID="ck-remaining"
               />
               <View style={[styles.ofRow, { flexDirection: row }]}>
-                <Text style={[styles.budgetHint, { fontFamily: fontMed }]}>{copy.budgetOf.replace('{bank}', '')}</Text>
-                <CoachKingMoney milli={shown.wallet.balanceMilli} lang={language} size="sm" color="#C2ABFC" />
+                <Text style={[styles.budgetHint, { fontFamily: fontMed, color: theme.subtle }]}>{copy.budgetOf.replace('{bank}', '')}</Text>
+                <CoachKingMoney milli={shown.wallet.balanceMilli} lang={language} size="sm" color={theme.budgetOf} />
               </View>
             </View>
           </LinearGradient>
@@ -375,7 +391,7 @@ export default function CoachKingScreen() {
               locked
             />
           ) : (
-            <Text style={[styles.meta, { fontFamily: fontMed, marginTop: 8 }]}>{copy.deadline.tipOpen}</Text>
+            <Text style={[styles.meta, { fontFamily: fontMed, color: theme.muted, marginTop: 8 }]}>{copy.deadline.tipOpen}</Text>
           )}
           {shown.squad.dirty && !closed ? (
             <Text
@@ -390,12 +406,12 @@ export default function CoachKingScreen() {
                   }
                 })();
               }}
-              style={[styles.meta, { fontFamily: fontBold, color: '#C4B5FD', marginTop: 8 }]}
+              style={[styles.meta, { fontFamily: fontBold, color: theme.secondary, marginTop: 8 }]}
             >
               {copy.confirmSquad}
             </Text>
           ) : null}
-          {error && home ? <Text style={[styles.error, { fontFamily: fontMed }]} testID="ck-error">{error}</Text> : null}
+          {error && home ? <Text style={[styles.error, { fontFamily: fontMed, color: theme.danger }]} testID="ck-error">{error}</Text> : null}
 
           <CoachKingPitch
             slots={shown.squad.slots}
@@ -412,7 +428,7 @@ export default function CoachKingScreen() {
 
       {tab === 'ranking' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.sectionTitle, { fontFamily: fontBold, textAlign: isAr ? 'right' : 'left' }]}>
+          <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: theme.ink, textAlign: isAr ? 'right' : 'left' }]}>
             {copy.rankingTitle}
           </Text>
           <CoachKingBoard
@@ -501,16 +517,15 @@ export default function CoachKingScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#030303' },
+  root: { flex: 1 },
   header: {
     paddingHorizontal: 18,
     paddingBottom: 10,
-    backgroundColor: '#0D051A',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: { color: '#fff', fontSize: 20 },
-  error: { color: '#F87171', textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
+  headerTitle: { fontSize: 20 },
+  error: { textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
   profile: {
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -520,19 +535,17 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     borderWidth: 0.5,
-    borderColor: '#3A1D7A',
   },
   identity: { alignItems: 'center', columnGap: 10, flex: 1 },
-  avatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 1, borderColor: '#8C5CF5' },
-  userName: { color: '#fff', fontSize: 16 },
+  avatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 1 },
+  userName: { fontSize: 16 },
   metaRow: { alignItems: 'center', columnGap: 5, marginTop: 4 },
-  meta: { color: '#C9C9C9', fontSize: 12 },
-  metaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
+  meta: { fontSize: 12 },
+  metaDot: { width: 3, height: 3, borderRadius: 2 },
   budget: { rowGap: 4 },
-  budgetHint: { color: '#9E9E9E', fontSize: 10 },
+  budgetHint: { fontSize: 10 },
   ofRow: { alignItems: 'center', columnGap: 4 },
   sectionTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     marginTop: 8,
     marginBottom: 14,

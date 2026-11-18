@@ -33,15 +33,16 @@ import {
   type CkPlayer,
   type CkPoolKind,
 } from '../../services/coachKing.service';
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { CoachKingLeagueChips } from './CoachKingLeagueChips';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_DESIGN_WIDTH } from '../TopScorersFive/assets';
 import { CoachKingMoney } from './CoachKingCoin';
+import { getCoachKingTheme, type CoachKingTheme } from './theme';
 
 export type CkPick = (CkPlayer | CkCoach) & { kind: CkPoolKind };
 
-const BG = '#030303';
 const ACTIVE = '#8C5CF5';
 const COLUMNS = 3;
 const CARD = { width: 112.48, height: 176.7 };
@@ -96,6 +97,8 @@ export function CoachKingCardGrid({
   const fontRegular = useAppFont(400);
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   const [query, setQuery] = useState('');
   const [league, setLeague] = useState<CkLeagueKey | 'all'>('all');
@@ -200,7 +203,7 @@ export function CoachKingCardGrid({
       onShow={() => setShown(true)}
       statusBarTranslucent
     >
-      <View style={styles.root} testID="ck-grid">
+      <View style={[styles.root, { backgroundColor: theme.pickerBg }]} testID="ck-grid">
         <View
           style={[
             styles.header,
@@ -213,12 +216,12 @@ export function CoachKingCardGrid({
           ]}
         >
           <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" testID="ck-grid-close">
-            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color="#FFFFFF" />
+            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color={theme.headerIcon} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20) }]} numberOfLines={1}>
+          <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20), color: theme.ink }]} numberOfLines={1}>
             {kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
           </Text>
-          <CoachKingMoney milli={budget} lang={language} size="sm" />
+          <CoachKingMoney milli={budget} lang={language} size="sm" color={theme.budgetValue} />
         </View>
 
         <CoachKingLeagueChips
@@ -239,30 +242,32 @@ export function CoachKingCardGrid({
               paddingHorizontal: s(14),
               columnGap: s(8),
               flexDirection: isAr ? 'row-reverse' : 'row',
+              backgroundColor: theme.searchBg,
+              borderColor: theme.searchBorder,
             },
           ]}
         >
-          <Ionicons name="search" size={s(18)} color="#8C8C8C" />
+          <Ionicons name="search" size={s(18)} color={theme.emptyText} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={copy.search}
-            placeholderTextColor="#6E6E6E"
+            placeholderTextColor={theme.searchPlaceholder}
             selectionColor={ACTIVE}
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
             testID="ck-grid-search"
-            style={[styles.searchInput, { fontFamily: fontRegular, fontSize: s(15), textAlign: isAr ? 'right' : 'left' }]}
+            style={[styles.searchInput, { fontFamily: fontRegular, fontSize: s(15), color: theme.searchText, textAlign: isAr ? 'right' : 'left' }]}
           />
           {query ? (
             <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
-              <Ionicons name="close-circle" size={s(18)} color="#8C8C8C" />
+              <Ionicons name="close-circle" size={s(18)} color={theme.emptyText} />
             </TouchableOpacity>
           ) : null}
         </View>
 
-        {(loading || !shown) && rows.length === 0 ? <ActivityIndicator color={ACTIVE} style={{ marginTop: s(32) }} /> : null}
+        {(loading || !shown) && rows.length === 0 ? <ActivityIndicator color={theme.refresh} style={{ marginTop: s(32) }} /> : null}
 
         <FlatList
           key={`${kind ?? 'none'}-${slotKey ?? 'x'}-${league}`}
@@ -286,7 +291,7 @@ export function CoachKingCardGrid({
             paddingBottom: Math.max(insets.bottom, 12) + s(12),
           }}
           ListEmptyComponent={loading || !shown ? null : (
-            <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32) }]}>
+            <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32), color: theme.emptyText }]}>
               {query
                 ? copy.searchEmpty
                 : league !== 'all'
@@ -305,6 +310,7 @@ export function CoachKingCardGrid({
             budget={budget}
             confirming={confirming}
             error={error}
+            theme={theme}
             onConfirm={() => onConfirm(pending)}
             onCancel={closePending}
             onViewProfile={pending.kind !== 'COACH' ? () => onViewProfile(pending as CkPlayer) : undefined}
@@ -321,12 +327,13 @@ type SheetProps = {
   budget: number;
   confirming: boolean;
   error: string | null;
+  theme: CoachKingTheme;
   onConfirm: () => void;
   onCancel: () => void;
   onViewProfile?: () => void;
 };
 
-function ConfirmSheet({ pick, scale, budget, confirming, error, onConfirm, onCancel, onViewProfile }: SheetProps) {
+function ConfirmSheet({ pick, scale, budget, confirming, error, theme, onConfirm, onCancel, onViewProfile }: SheetProps) {
   const { t, language } = useTranslation();
   const copy = t.coachKingGame;
   const isAr = language === 'ar';
@@ -340,8 +347,22 @@ function ConfirmSheet({ pick, scale, budget, confirming, error, onConfirm, onCan
 
   return (
     <View style={styles.sheetBackdrop}>
-      <View accessibilityViewIsModal testID="ck-confirm-sheet" style={[styles.sheet, { width: s(392), borderRadius: s(22), padding: s(20), rowGap: s(14) }]}>
-        <Text style={[styles.sheetTitle, { fontFamily: fontSemi, fontSize: s(19) }]} maxFontSizeMultiplier={1.15}>
+      <View
+        accessibilityViewIsModal
+        testID="ck-confirm-sheet"
+        style={[
+          styles.sheet,
+          {
+            width: s(392),
+            borderRadius: s(22),
+            padding: s(20),
+            rowGap: s(14),
+            backgroundColor: theme.sheetBg,
+            borderColor: theme.sheetBorder,
+          },
+        ]}
+      >
+        <Text style={[styles.sheetTitle, { fontFamily: fontSemi, fontSize: s(19), color: theme.sheetTitle }]} maxFontSizeMultiplier={1.15}>
           {coach ? copy.confirmCoachTitle : copy.confirmTitle}
         </Text>
 
@@ -361,28 +382,40 @@ function ConfirmSheet({ pick, scale, budget, confirming, error, onConfirm, onCan
         </View>
 
         <View style={{ rowGap: s(2), alignItems: 'center' }}>
-          <Text style={[styles.sheetName, { fontFamily: fontBold, fontSize: s(18) }]} numberOfLines={1}>{pick.name}</Text>
-          <Text style={[styles.sheetMeta, { fontFamily: fontRegular, fontSize: s(13) }]} numberOfLines={1}>{pick.club}</Text>
+          <Text style={[styles.sheetName, { fontFamily: fontBold, fontSize: s(18), color: theme.sheetTitle }]} numberOfLines={1}>{pick.name}</Text>
+          <Text style={[styles.sheetMeta, { fontFamily: fontRegular, fontSize: s(13), color: theme.sheetMeta }]} numberOfLines={1}>{pick.club}</Text>
         </View>
 
-        <View style={[styles.ledger, { flexDirection: row, borderRadius: s(14), paddingVertical: s(10), paddingHorizontal: s(14) }]}>
+        <View
+          style={[
+            styles.ledger,
+            {
+              flexDirection: row,
+              borderRadius: s(14),
+              paddingVertical: s(10),
+              paddingHorizontal: s(14),
+              backgroundColor: theme.sheetCardBg,
+              borderColor: theme.sheetCardBorder,
+            },
+          ]}
+        >
           <View style={styles.ledgerCell}>
-            <Text style={[styles.ledgerLabel, { fontFamily: fontRegular, fontSize: s(11) }]}>{copy.price}</Text>
+            <Text style={[styles.ledgerLabel, { fontFamily: fontRegular, fontSize: s(11), color: theme.subtle }]}>{copy.price}</Text>
             <CoachKingMoney milli={pick.priceMilli} lang={language} size="md" />
           </View>
-          <View style={styles.ledgerRule} />
+          <View style={[styles.ledgerRule, { backgroundColor: theme.sheetCardBorder }]} />
           <View style={styles.ledgerCell}>
-            <Text style={[styles.ledgerLabel, { fontFamily: fontRegular, fontSize: s(11) }]}>{copy.remainingAfter}</Text>
-            <CoachKingMoney milli={after} lang={language} size="md" color={after < 0 ? '#F87171' : '#FFFFFF'} />
+            <Text style={[styles.ledgerLabel, { fontFamily: fontRegular, fontSize: s(11), color: theme.subtle }]}>{copy.remainingAfter}</Text>
+            <CoachKingMoney milli={after} lang={language} size="md" color={after < 0 ? theme.danger : theme.budgetValue} />
           </View>
         </View>
 
-        <Text style={[styles.sheetBody, { fontFamily: fontRegular, fontSize: s(13), lineHeight: s(19) }]} maxFontSizeMultiplier={1.15}>
+        <Text style={[styles.sheetBody, { fontFamily: fontRegular, fontSize: s(13), lineHeight: s(19), color: theme.sheetBody }]} maxFontSizeMultiplier={1.15}>
           {copy.confirmBody}
         </Text>
 
         {error ? (
-          <Text style={[styles.sheetError, { fontFamily: fontSemi, fontSize: s(13) }]} testID="ck-confirm-error">{error}</Text>
+          <Text style={[styles.sheetError, { fontFamily: fontSemi, fontSize: s(13), color: theme.danger }]} testID="ck-confirm-error">{error}</Text>
         ) : null}
 
         {onViewProfile ? (
@@ -393,8 +426,8 @@ function ConfirmSheet({ pick, scale, budget, confirming, error, onConfirm, onCan
             accessibilityRole="button"
             style={{ flexDirection: row, alignItems: 'center', columnGap: s(6) }}
           >
-            <Ionicons name="person-circle-outline" size={s(18)} color={ACTIVE} />
-            <Text style={[styles.sheetLink, { fontFamily: fontSemi, fontSize: s(14) }]}>{copy.viewProfile}</Text>
+            <Ionicons name="person-circle-outline" size={s(18)} color={theme.secondary} />
+            <Text style={[styles.sheetLink, { fontFamily: fontSemi, fontSize: s(14), color: theme.secondary }]}>{copy.viewProfile}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -427,9 +460,13 @@ function ConfirmSheet({ pick, scale, budget, confirming, error, onConfirm, onCan
             activeOpacity={0.85}
             accessibilityRole="button"
             testID="ck-confirm-no"
-            style={[styles.sheetButton, styles.secondary, { height: s(50), borderRadius: s(15) }]}
+            style={[
+              styles.sheetButton,
+              styles.secondary,
+              { height: s(50), borderRadius: s(15), borderColor: theme.sheetCardBorder },
+            ]}
           >
-            <Text style={[styles.primaryText, { fontFamily: fontSemi, fontSize: s(15) }]}>{copy.confirmNo}</Text>
+            <Text style={[styles.primaryText, { fontFamily: fontSemi, fontSize: s(15), color: theme.ink }]}>{copy.confirmNo}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -564,18 +601,16 @@ function searchKey(raw: string): string {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG },
+  root: { flex: 1 },
   header: { alignItems: 'center', justifyContent: 'space-between', columnGap: 12 },
-  headerTitle: { flex: 1, color: '#FFFFFF', textAlign: 'center' },
+  headerTitle: { flex: 1, textAlign: 'center' },
   search: {
     alignSelf: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
-  searchInput: { flex: 1, color: '#FFFFFF', paddingVertical: 0 },
-  empty: { color: '#8C8C8C', textAlign: 'center', paddingHorizontal: 24 },
+  searchInput: { flex: 1, paddingVertical: 0 },
+  empty: { textAlign: 'center', paddingHorizontal: 24 },
   row: { flexDirection: 'row', alignSelf: 'center' },
   clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
@@ -607,28 +642,24 @@ const styles = StyleSheet.create({
   },
   sheet: {
     alignItems: 'center',
-    backgroundColor: '#0D081A',
     borderWidth: 0.5,
-    borderColor: '#B896FC',
     boxShadow: '0px 2px 24px rgba(163,77,245,0.45)',
   },
-  sheetTitle: { color: '#FFFFFF', textAlign: 'center' },
-  sheetName: { color: '#FFFFFF', textAlign: 'center' },
-  sheetMeta: { color: '#B896FC', textAlign: 'center' },
+  sheetTitle: { textAlign: 'center' },
+  sheetName: { textAlign: 'center' },
+  sheetMeta: { textAlign: 'center' },
   ledger: {
     alignSelf: 'stretch',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
   ledgerCell: { flex: 1, alignItems: 'center', rowGap: 6 },
-  ledgerLabel: { color: '#9E9E9E' },
-  ledgerRule: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.16)' },
-  sheetBody: { color: '#9E9E9E', textAlign: 'center' },
-  sheetError: { color: '#F87171', textAlign: 'center' },
-  sheetLink: { color: ACTIVE },
+  ledgerLabel: {},
+  ledgerRule: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
+  sheetBody: { textAlign: 'center' },
+  sheetError: { textAlign: 'center' },
+  sheetLink: {},
   sheetButton: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  secondary: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  secondary: { borderWidth: 1 },
   primaryText: { color: '#FFFFFF' },
 });

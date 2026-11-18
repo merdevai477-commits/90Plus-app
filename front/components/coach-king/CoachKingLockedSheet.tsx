@@ -3,19 +3,19 @@
  * what he cost, his gameweek points, and when the lock lifts.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { CoachKingMoney } from './CoachKingCoin';
+import { getCoachKingTheme } from './theme';
 
 const ACTIVE = '#8C5CF5';
-const STROKE = '#B896FC';
-const LABEL = '#CF9BFC';
 
 export type CkLockedNotice = {
   name: string;
@@ -57,6 +57,8 @@ export function CoachKingLockedSheet({ notice, onClose, onViewProfile }: Props) 
   const lift = useRef(new Animated.Value(0)).current;
   const [now, setNow] = useState(Date.now());
   const visible = notice != null;
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   useEffect(() => {
     if (!visible) return;
@@ -93,6 +95,8 @@ export function CoachKingLockedSheet({ notice, onClose, onViewProfile }: Props) 
           styles.sheet,
           {
             width: Math.min(392, width - 32),
+            backgroundColor: theme.sheetBg,
+            borderColor: theme.sheetBorder,
             transform: [
               { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) },
               { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) },
@@ -100,54 +104,54 @@ export function CoachKingLockedSheet({ notice, onClose, onViewProfile }: Props) 
           },
         ]}
       >
-        <View style={styles.lockRing}>
+        <View style={[styles.lockRing, { backgroundColor: theme.sheetBg, borderColor: theme.sheetBorder }]}>
           <LinearGradient colors={['#A78BFA', ACTIVE, '#5B21B6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.lockBadge}>
             <Ionicons name="lock-closed" size={26} color="#FFFFFF" />
           </LinearGradient>
         </View>
 
         <View style={{ alignItems: 'center', rowGap: 8 }}>
-          <Text style={[styles.title, { fontFamily: fontBold }]}>{copy.lockedTitle}</Text>
+          <Text style={[styles.title, { fontFamily: fontBold, color: theme.sheetTitle }]}>{copy.lockedTitle}</Text>
           {opensIn ? (
-            <View style={[styles.chip, { flexDirection: row }]}>
-              <Ionicons name="time-outline" size={13} color={LABEL} />
-              <Text style={[styles.chipText, { fontFamily: fontSemi }]}>{copy.lockedOpensIn.replace('{time}', opensIn)}</Text>
+            <View style={[styles.chip, { flexDirection: row, backgroundColor: theme.chipBg, borderColor: theme.chipBorder }]}>
+              <Ionicons name="time-outline" size={13} color={theme.sheetMeta} />
+              <Text style={[styles.chipText, { fontFamily: fontSemi, color: theme.sheetMeta }]}>{copy.lockedOpensIn.replace('{time}', opensIn)}</Text>
             </View>
           ) : null}
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.sheetCardBg, borderColor: theme.sheetCardBorder }]}>
           <View style={{ flexDirection: row, alignItems: 'center', columnGap: 12 }}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, { backgroundColor: theme.faceBg, borderColor: theme.secondary }]}>
               {notice.photo ? (
                 <Image source={{ uri: notice.photo }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" cachePolicy="memory-disk" />
               ) : (
-                <Ionicons name="person" size={26} color="#FFFFFF" />
+                <Ionicons name="person" size={26} color={theme.faceIcon} />
               )}
             </View>
             <View style={{ flex: 1, rowGap: 4 }}>
-              <Text numberOfLines={1} style={[styles.name, { fontFamily: fontBold, textAlign }]}>{notice.name}</Text>
+              <Text numberOfLines={1} style={[styles.name, { fontFamily: fontBold, textAlign, color: theme.sheetTitle }]}>{notice.name}</Text>
               <View style={{ flexDirection: row, alignItems: 'center', columnGap: 6 }}>
                 {notice.teamLogo ? (
                   <Image source={{ uri: notice.teamLogo }} style={{ width: 16, height: 16 }} contentFit="contain" cachePolicy="memory-disk" />
                 ) : null}
-                <Text numberOfLines={1} style={[styles.meta, { fontFamily: fontRegular, textAlign }]}>{notice.club}</Text>
+                <Text numberOfLines={1} style={[styles.meta, { fontFamily: fontRegular, textAlign, color: theme.sheetMeta }]}>{notice.club}</Text>
               </View>
             </View>
           </View>
           <View style={{ flexDirection: row, columnGap: 8 }}>
-            <View style={[styles.stat, styles.statAccent]}>
-              <Text style={[styles.statValue, { fontFamily: fontBold, color: LABEL }]}>{notice.points}</Text>
-              <Text style={[styles.statLabel, { fontFamily: fontRegular }]}>{copy.weekPoints}</Text>
+            <View style={[styles.stat, styles.statAccent, { backgroundColor: theme.chipBg, borderColor: theme.chipBorder }]}>
+              <Text style={[styles.statValue, { fontFamily: fontBold, color: theme.sheetMeta }]}>{notice.points}</Text>
+              <Text style={[styles.statLabel, { fontFamily: fontRegular, color: theme.subtle }]}>{copy.weekPoints}</Text>
             </View>
-            <View style={styles.stat}>
+            <View style={[styles.stat, { backgroundColor: theme.sheetStatBg }]}>
               <CoachKingMoney milli={notice.pricePaidMilli} lang={language} size="md" />
-              <Text style={[styles.statLabel, { fontFamily: fontRegular }]}>{copy.paid}</Text>
+              <Text style={[styles.statLabel, { fontFamily: fontRegular, color: theme.subtle }]}>{copy.paid}</Text>
             </View>
           </View>
         </View>
 
-        <Text style={[styles.body, { fontFamily: fontRegular }]}>{copy.lockedBody.replace('{name}', notice.name)}</Text>
+        <Text style={[styles.body, { fontFamily: fontRegular, color: theme.sheetBody }]}>{copy.lockedBody.replace('{name}', notice.name)}</Text>
 
         <View style={{ alignSelf: 'stretch', rowGap: 10 }}>
           {notice.canViewProfile ? (
@@ -168,9 +172,20 @@ export function CoachKingLockedSheet({ notice, onClose, onViewProfile }: Props) 
             activeOpacity={0.85}
             accessibilityRole="button"
             testID="ck-locked-ok"
-            style={[styles.secondary, !notice.canViewProfile && styles.secondaryFilled]}
+            style={[
+              styles.secondary,
+              { borderColor: theme.sheetCardBorder },
+              !notice.canViewProfile && styles.secondaryFilled,
+            ]}
           >
-            <Text style={[styles.primaryText, { fontFamily: fontSemi }]}>{copy.lockedGotIt}</Text>
+            <Text
+              style={[
+                styles.primaryText,
+                { fontFamily: fontSemi, color: !notice.canViewProfile ? '#FFFFFF' : theme.ink },
+              ]}
+            >
+              {copy.lockedGotIt}
+            </Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -189,9 +204,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     alignItems: 'center',
-    backgroundColor: '#0D081A',
     borderWidth: 0.5,
-    borderColor: STROKE,
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 46,
@@ -208,32 +221,26 @@ const styles = StyleSheet.create({
     borderRadius: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0D081A',
     borderWidth: 0.5,
-    borderColor: STROKE,
     boxShadow: '0px 0px 18px rgba(140,92,245,0.65)',
   },
   lockBadge: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#FFFFFF', fontSize: 20, textAlign: 'center' },
+  title: { fontSize: 20, textAlign: 'center' },
   chip: {
     alignItems: 'center',
     columnGap: 6,
     paddingHorizontal: 12,
     height: 26,
     borderRadius: 13,
-    backgroundColor: 'rgba(140,92,245,0.14)',
     borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.45)',
   },
-  chipText: { color: LABEL, fontSize: 12 },
+  chipText: { fontSize: 12 },
   card: {
     alignSelf: 'stretch',
     borderRadius: 18,
     padding: 12,
     rowGap: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
   avatar: {
     width: 60,
@@ -241,13 +248,11 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2E146A',
     borderWidth: 1.5,
-    borderColor: '#A78BFA',
     overflow: 'hidden',
   },
-  name: { color: '#FFFFFF', fontSize: 17 },
-  meta: { color: STROKE, fontSize: 13, flexShrink: 1 },
+  name: { fontSize: 17 },
+  meta: { fontSize: 13, flexShrink: 1 },
   stat: {
     flex: 1,
     alignItems: 'center',
@@ -255,12 +260,11 @@ const styles = StyleSheet.create({
     rowGap: 4,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  statAccent: { backgroundColor: 'rgba(140,92,245,0.14)', borderWidth: 0.5, borderColor: 'rgba(184,150,252,0.35)' },
-  statValue: { color: '#FFFFFF', fontSize: 18 },
-  statLabel: { color: '#9E9E9E', fontSize: 11 },
-  body: { color: '#A1A1AA', textAlign: 'center', fontSize: 14, lineHeight: 21 },
+  statAccent: { borderWidth: 0.5 },
+  statValue: { fontSize: 18 },
+  statLabel: { fontSize: 11 },
+  body: { textAlign: 'center', fontSize: 14, lineHeight: 21 },
   buttonHit: { height: 50, borderRadius: 15, overflow: 'hidden' },
   primary: { flex: 1, alignItems: 'center', justifyContent: 'center', columnGap: 8 },
   primaryText: { color: '#FFFFFF', fontSize: 15 },
@@ -270,7 +274,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
   secondaryFilled: { backgroundColor: ACTIVE, borderColor: ACTIVE },
 });

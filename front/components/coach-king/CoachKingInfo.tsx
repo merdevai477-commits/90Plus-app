@@ -3,12 +3,14 @@
  * Values match `computeCoachKingPoints` in the backend.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { getCoachKingTheme } from './theme';
 
 type RowKind =
   | 'assist'
@@ -42,14 +44,14 @@ const ROWS: RowDef[] = [
   { key: 'ownGoal', points: '- 2', positive: false, icon: 'own' },
 ];
 
-function RowIcon({ kind }: { kind: RowDef['icon'] }) {
+function RowIcon({ kind, iconColor }: { kind: RowDef['icon']; iconColor: string }) {
   if (kind === 'yellow') {
     return <View style={[styles.cardPip, { backgroundColor: '#FFD400' }]} />;
   }
   if (kind === 'red') {
     return <View style={[styles.cardPip, { backgroundColor: '#FF244B' }]} />;
   }
-  const color = kind === 'own' ? '#FF7181' : '#FFFFFF';
+  const color = kind === 'own' ? '#FF7181' : iconColor;
   if (kind === 'shoe') {
     return <MaterialCommunityIcons name="shoe-cleat" size={16} color={color} />;
   }
@@ -73,6 +75,8 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
   const fontReg = useAppFont(400);
   const fontBold = useAppFont(700);
   const [open, setOpen] = useState(true);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   return (
     <ScrollView
@@ -80,25 +84,25 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
       showsVerticalScrollIndicator={false}
       testID="ck-info"
     >
-      <View style={styles.panel}>
+      <View style={[styles.panel, { backgroundColor: theme.infoPanelBg, borderColor: theme.infoPanelBorder }]}>
         <Pressable
           onPress={() => setOpen((v) => !v)}
           style={[styles.head, { flexDirection: isAr ? 'row' : 'row-reverse' }]}
           accessibilityRole="button"
           testID="ck-info-points-toggle"
         >
-          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={22} color="#FFFFFF" />
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={22} color={theme.ink} />
           <View style={[styles.headTextWrap, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
             <View style={{ flex: 1, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
-              <Text style={[styles.title, { fontFamily: fontMed, textAlign: isAr ? 'right' : 'left' }]}>
+              <Text style={[styles.title, { fontFamily: fontMed, color: theme.infoTitle, textAlign: isAr ? 'right' : 'left' }]}>
                 {copy.pointsTitle}
               </Text>
-              <Text style={[styles.subtitle, { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left' }]}>
+              <Text style={[styles.subtitle, { fontFamily: fontReg, color: theme.infoSubtitle, textAlign: isAr ? 'right' : 'left' }]}>
                 {copy.pointsSubtitle}
               </Text>
             </View>
             <View style={styles.energy}>
-              <Ionicons name="flash" size={20} color="#C2ABFC" />
+              <Ionicons name="flash" size={20} color={theme.flash} />
             </View>
           </View>
         </Pressable>
@@ -106,7 +110,13 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
         {open ? (
           <View style={styles.list}>
             {ROWS.map((item) => (
-              <View key={item.key} style={[styles.row, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+              <View
+                key={item.key}
+                style={[
+                  styles.row,
+                  { flexDirection: isAr ? 'row' : 'row-reverse', backgroundColor: theme.infoRowBg },
+                ]}
+              >
                 <View style={styles.pointsCluster}>
                   <Text
                     style={[
@@ -116,12 +126,12 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
                   >
                     {item.points}
                   </Text>
-                  <View style={styles.iconBubble}>
-                    <RowIcon kind={item.icon} />
+                  <View style={[styles.iconBubble, { backgroundColor: theme.infoIconBg }]}>
+                    <RowIcon kind={item.icon} iconColor={theme.infoIcon} />
                   </View>
                 </View>
                 <Text
-                  style={[styles.rowLabel, { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left' }]}
+                  style={[styles.rowLabel, { fontFamily: fontReg, color: theme.infoRowLabel, textAlign: isAr ? 'right' : 'left' }]}
                   numberOfLines={2}
                 >
                   {copy.rows[item.key]}
@@ -137,9 +147,7 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: '#09001D',
     borderWidth: 1,
-    borderColor: '#200E4A',
     borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 22,
@@ -164,12 +172,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { color: '#FFFFFF', fontSize: 16 },
-  subtitle: { color: '#CDCDCD', fontSize: 14, marginTop: 4 },
+  title: { fontSize: 16 },
+  subtitle: { fontSize: 14, marginTop: 4 },
   list: { rowGap: 6 },
   row: {
     flexDirection: 'row',
-    backgroundColor: '#13072C',
     borderRadius: 12,
     minHeight: 40,
     paddingHorizontal: 11,
@@ -188,7 +195,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 42,
-    backgroundColor: '#1F0B46',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -199,7 +205,6 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     flex: 1,
-    color: '#B9ACDA',
     fontSize: 13,
   },
 });

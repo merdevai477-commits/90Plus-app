@@ -2,12 +2,15 @@
  * King of Coaches fixtures — branded match cards for the squad's leagues.
  */
 
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { CkFixture } from '../../services/coachKing.service';
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useAppFont } from '../../utils/fontSetup';
+import { getCoachKingTheme, type CoachKingTheme } from './theme';
 
 type Props = {
   fixtures: CkFixture[];
@@ -21,6 +24,8 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
   const fontMed = useAppFont(500);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   return (
     <View style={styles.list}>
@@ -32,9 +37,13 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
         const badge = statusLabel(fixture.status);
 
         return (
-          <View key={fixture.fixtureId} style={styles.card} testID={`ck-match-${fixture.fixtureId}`}>
+          <View
+            key={fixture.fixtureId}
+            style={[styles.card, { backgroundColor: theme.matchCardBg, borderColor: theme.matchCardBorder }]}
+            testID={`ck-match-${fixture.fixtureId}`}
+          >
             <LinearGradient
-              colors={['rgba(140,92,245,0.18)', 'rgba(14,6,28,0.0)']}
+              colors={[...theme.matchGlow]}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
               style={styles.cardGlow}
@@ -42,12 +51,25 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
             />
 
             <View style={styles.meta}>
-              <Text style={[styles.date, { fontFamily: fontMed }]} numberOfLines={1}>
+              <Text style={[styles.date, { fontFamily: fontMed, color: theme.matchDate }]} numberOfLines={1}>
                 {kickoff}
               </Text>
               {badge ? (
-                <View style={[styles.badge, live && styles.badgeLive]}>
-                  <Text style={[styles.badgeTxt, { fontFamily: fontSemi }, live && styles.badgeTxtLive]} numberOfLines={1}>
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: theme.matchBadgeBg, borderColor: theme.matchBadgeBorder },
+                    live && styles.badgeLive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.badgeTxt,
+                      { fontFamily: fontSemi, color: theme.matchBadgeText },
+                      live && styles.badgeTxtLive,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {badge}
                   </Text>
                 </View>
@@ -63,14 +85,21 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
                 fontSemi={fontSemi}
                 fontBold={fontBold}
                 align="left"
+                theme={theme}
               />
 
-              <View style={[styles.center, live && !scored && styles.centerLive]}>
+              <View
+                style={[
+                  styles.center,
+                  { backgroundColor: theme.matchCenterBg, borderColor: theme.matchCenterBorder },
+                  live && !scored && styles.centerLive,
+                ]}
+              >
                 <Text
                   style={[
                     styles.centerTxt,
-                    { fontFamily: fontBold },
-                    scored && styles.scoreTxt,
+                    { fontFamily: fontBold, color: theme.matchCenterText },
+                    scored && { color: theme.matchScore, fontSize: 18 },
                     live && !scored && styles.liveTxt,
                   ]}
                   numberOfLines={1}
@@ -85,6 +114,7 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
                 fontSemi={fontSemi}
                 fontBold={fontBold}
                 align="right"
+                theme={theme}
               />
             </View>
           </View>
@@ -100,26 +130,28 @@ function Team({
   fontSemi,
   fontBold,
   align,
+  theme,
 }: {
   name: string;
   logo: string;
   fontSemi: string;
   fontBold: string;
   align: 'left' | 'right';
+  theme: CoachKingTheme;
 }) {
   return (
     <View style={[styles.team, { alignItems: align === 'left' ? 'flex-start' : 'flex-end' }]}>
       {logo ? (
         <Image source={{ uri: logo }} style={styles.logo} contentFit="contain" cachePolicy="memory-disk" />
       ) : (
-        <View style={styles.logoFallback}>
-          <Text style={[styles.logoFallbackTxt, { fontFamily: fontBold }]} allowFontScaling={false}>
+        <View style={[styles.logoFallback, { backgroundColor: theme.chipBg, borderColor: theme.chipBorder }]}>
+          <Text style={[styles.logoFallbackTxt, { fontFamily: fontBold, color: theme.matchBadgeText }]} allowFontScaling={false}>
             {initials(name)}
           </Text>
         </View>
       )}
       <Text
-        style={[styles.teamName, { fontFamily: fontSemi, textAlign: align }]}
+        style={[styles.teamName, { fontFamily: fontSemi, textAlign: align, color: theme.matchTeam }]}
         numberOfLines={2}
       >
         {name}
@@ -165,9 +197,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 18,
-    backgroundColor: '#0A001C',
     borderWidth: 0.5,
-    borderColor: '#3A1D7A',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
@@ -185,7 +215,6 @@ const styles = StyleSheet.create({
     columnGap: 10,
   },
   date: {
-    color: '#C2ABFC',
     fontSize: 12,
     flex: 1,
   },
@@ -193,16 +222,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(140,92,245,0.16)',
     borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.4)',
   },
   badgeLive: {
     backgroundColor: 'rgba(239,68,68,0.18)',
     borderColor: 'rgba(248,113,113,0.55)',
   },
   badgeTxt: {
-    color: '#E9D5FF',
     fontSize: 11,
   },
   badgeTxtLive: {
@@ -228,16 +254,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(140,92,245,0.18)',
     borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.35)',
   },
   logoFallbackTxt: {
-    color: '#E9D5FF',
     fontSize: 12,
   },
   teamName: {
-    color: '#FFFFFF',
     fontSize: 13,
     lineHeight: 18,
     width: '100%',
@@ -249,21 +271,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(140,92,245,0.14)',
     borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.4)',
   },
   centerLive: {
     backgroundColor: 'rgba(239,68,68,0.16)',
     borderColor: 'rgba(248,113,113,0.5)',
   },
   centerTxt: {
-    color: '#C2ABFC',
     fontSize: 14,
-  },
-  scoreTxt: {
-    color: '#FFFFFF',
-    fontSize: 18,
   },
   liveTxt: {
     color: '#FCA5A5',

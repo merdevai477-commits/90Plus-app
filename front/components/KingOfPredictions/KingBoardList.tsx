@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import type { KingLeaderboardEntry, KingPeriod } from '../../services/predictions.service';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ART, KING_ICON } from './assets';
@@ -37,6 +38,10 @@ export function KingPeriodTabs({
 }) {
   const fontBold = useAppFont(700);
   const fontRegular = useAppFont(400);
+  const { isDark } = useResolvedAppScheme();
+  const idleBg = isDark ? '#080709' : '#F3EDFF';
+  const idleText = isDark ? '#FFFFFF' : '#6B7280';
+  const idleBorder = isDark ? '#161419' : '#E9D5FF';
   const tab = (id: KingPeriod, label: string, side: 'left' | 'right') => {
     const active = period === id;
     const round = side === 'left' ? styles.tabLeft : styles.tabRight;
@@ -48,8 +53,12 @@ export function KingPeriodTabs({
       );
     }
     return (
-      <Pressable key={id} onPress={() => onChange(id)} style={[styles.tab, styles.tabIdle, round]}>
-        <Text maxFontSizeMultiplier={1.15} style={[styles.tabText, { fontFamily: fontRegular }]}>{label}</Text>
+      <Pressable
+        key={id}
+        onPress={() => onChange(id)}
+        style={[styles.tab, styles.tabIdle, round, { backgroundColor: idleBg, borderColor: idleBorder }]}
+      >
+        <Text maxFontSizeMultiplier={1.15} style={[styles.tabText, { fontFamily: fontRegular, color: idleText }]}>{label}</Text>
       </Pressable>
     );
   };
@@ -88,6 +97,8 @@ export function KingEmptyState({
 }) {
   const fontSemi = useAppFont(600);
   const fontBold = useAppFont(700);
+  const { isDark } = useResolvedAppScheme();
+  const emptyTitleColor = isDark ? '#858585' : '#24104E';
   const blobW = 283.8 * scale;
   const blobH = 243.7 * scale;
   return (
@@ -107,7 +118,7 @@ export function KingEmptyState({
           contentFit="fill"
         />
       </View>
-      <Text maxFontSizeMultiplier={1.15} style={[styles.emptyTitle, { fontFamily: fontSemi }]}>{title}</Text>
+      <Text maxFontSizeMultiplier={1.15} style={[styles.emptyTitle, { fontFamily: fontSemi, color: emptyTitleColor }]}>{title}</Text>
       {onAction && actionLabel ? (
         <Pressable onPress={onAction} style={styles.emptyBtnWrap}>
           <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.emptyBtn, { height: scale < 1 ? 40 : 52 }]}>

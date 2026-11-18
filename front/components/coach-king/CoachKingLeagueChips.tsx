@@ -1,15 +1,16 @@
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useAppFont } from '../../utils/fontSetup';
 import {
   TSF_LEAGUE_LOGO,
   TSF_LOGO_TINT_ON_DARK,
   type TsfEuropeLeagueKey,
 } from '../TopScorersFive/assets';
-
-const ACTIVE = '#8C5CF5';
+import { getCoachKingTheme } from './theme';
 
 type Props = {
   options: readonly string[];
@@ -22,6 +23,8 @@ type Props = {
 export function CoachKingLeagueChips({ options, active, label, isAr, onChange }: Props) {
   const fontSemi = useAppFont(600);
   const fontMed = useAppFont(500);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
   if (options.length === 0) return null;
 
   return (
@@ -34,7 +37,8 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
         const on = key === active;
         const league = key === 'all' ? null : (key as TsfEuropeLeagueKey);
         const logo = league ? TSF_LEAGUE_LOGO[league] : null;
-        const tint = league ? TSF_LOGO_TINT_ON_DARK[league] : undefined;
+        const tint = league && isDark ? TSF_LOGO_TINT_ON_DARK[league] : undefined;
+        const textColor = on ? theme.chipActiveText : theme.chipText;
         return (
           <TouchableOpacity
             key={key}
@@ -42,7 +46,14 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             testID={`ck-league-${key}`}
-            style={[styles.chip, on && styles.chipOn, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+            style={[
+              styles.chip,
+              {
+                flexDirection: isAr ? 'row-reverse' : 'row',
+                backgroundColor: on ? theme.chipActiveBg : theme.chipBg,
+                borderColor: on ? theme.chipActiveBg : theme.chipBorder,
+              },
+            ]}
           >
             {logo ? (
               <Image
@@ -53,10 +64,10 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
               />
             ) : (
               <View style={styles.allIcon}>
-                <Ionicons name="globe-outline" size={14} color={on ? '#FFFFFF' : '#C2ABFC'} />
+                <Ionicons name="globe-outline" size={14} color={textColor} />
               </View>
             )}
-            <Text style={[styles.txt, { fontFamily: on ? fontSemi : fontMed, color: on ? '#FFFFFF' : '#C2ABFC' }]}>
+            <Text style={[styles.txt, { fontFamily: on ? fontSemi : fontMed, color: textColor }]}>
               {label(key)}
             </Text>
           </TouchableOpacity>
@@ -80,13 +91,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     columnGap: 8,
-    backgroundColor: 'rgba(140,92,245,0.12)',
     borderWidth: 0.5,
-    borderColor: 'rgba(184,150,252,0.35)',
-  },
-  chipOn: {
-    backgroundColor: ACTIVE,
-    borderColor: ACTIVE,
   },
   logo: {
     width: 20,

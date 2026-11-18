@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import {
@@ -16,18 +17,27 @@ import {
   splitCkCountdown,
   type CkSelectionWindow,
 } from './coachKingSelectionWindow';
+import { getCoachKingTheme, type CoachKingTheme } from './theme';
 
 function useSelectionWindow(nowMs: number): CkSelectionWindow {
   return useMemo(() => resolveCkSelectionWindow(new Date(nowMs)), [nowMs]);
 }
 
-function UnitBox({ value, label }: { value: string; label: string }) {
+function UnitBox({
+  value,
+  label,
+  theme,
+}: {
+  value: string;
+  label: string;
+  theme: CoachKingTheme;
+}) {
   const fontBold = useAppFont(700);
   const fontReg = useAppFont(400);
   return (
-    <View style={styles.unit}>
-      <Text style={[styles.unitValue, { fontFamily: fontBold }]}>{value}</Text>
-      <Text style={[styles.unitLabel, { fontFamily: fontReg }]}>{label}</Text>
+    <View style={[styles.unit, { backgroundColor: theme.deadlineUnitBg }]}>
+      <Text style={[styles.unitValue, { fontFamily: fontBold, color: theme.deadlineUnitValue }]}>{value}</Text>
+      <Text style={[styles.unitLabel, { fontFamily: fontReg, color: theme.deadlineUnitLabel }]}>{label}</Text>
     </View>
   );
 }
@@ -46,6 +56,8 @@ export function CoachKingDeadline({ startAt, endAt, locked = false }: DeadlinePr
   const isAr = language === 'ar';
   const fontSemi = useAppFont(600);
   const fontReg = useAppFont(400);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -73,44 +85,48 @@ export function CoachKingDeadline({ startAt, endAt, locked = false }: DeadlinePr
   const row = isAr ? 'row-reverse' : 'row';
 
   return (
-    <View style={styles.card} testID="ck-deadline">
+    <View
+      style={[styles.card, { backgroundColor: theme.deadlineBg, borderColor: theme.deadlineBorder }]}
+      testID="ck-deadline"
+    >
       <View style={[styles.header, { flexDirection: row }]}>
-        <View style={styles.badge}>
-          <Text style={[styles.badgeTxt, { fontFamily: fontSemi }]}>{copy.currentRound}</Text>
+        <View style={[styles.badge, { backgroundColor: theme.deadlineBadgeBg }]}>
+          <Text style={[styles.badgeTxt, { fontFamily: fontSemi, color: theme.deadlineBadgeText }]}>{copy.currentRound}</Text>
         </View>
         <View style={[styles.headline, { flexDirection: row }]}>
-          <Ionicons name={phase === 'open' ? 'lock-open' : 'lock-closed'} size={16} color="#F8C94A" />
-          <Text style={[styles.headlineTxt, { fontFamily: fontReg }]}>{headline}</Text>
+          <Ionicons name={phase === 'open' ? 'lock-open' : 'lock-closed'} size={16} color={theme.accent} />
+          <Text style={[styles.headlineTxt, { fontFamily: fontReg, color: theme.ink }]}>{headline}</Text>
         </View>
       </View>
 
       <View style={[styles.units, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <UnitBox value={parts.seconds} label={copy.seconds} />
-        <Text style={styles.colon}>:</Text>
-        <UnitBox value={parts.minutes} label={copy.minutes} />
-        <Text style={styles.colon}>:</Text>
-        <UnitBox value={parts.hours} label={copy.hours} />
+        <UnitBox value={parts.seconds} label={copy.seconds} theme={theme} />
+        <Text style={[styles.colon, { color: theme.deadlineUnitLabel }]}>:</Text>
+        <UnitBox value={parts.minutes} label={copy.minutes} theme={theme} />
+        <Text style={[styles.colon, { color: theme.deadlineUnitLabel }]}>:</Text>
+        <UnitBox value={parts.hours} label={copy.hours} theme={theme} />
         {parts.showDays ? (
           <>
-            <Text style={styles.colon}>:</Text>
-            <UnitBox value={parts.days} label={copy.days} />
+            <Text style={[styles.colon, { color: theme.deadlineUnitLabel }]}>:</Text>
+            <UnitBox value={parts.days} label={copy.days} theme={theme} />
           </>
         ) : null}
       </View>
 
-      <View style={styles.track}>
+      <View style={[styles.track, { backgroundColor: theme.deadlineTrack }]}>
         <View
           style={[
             styles.fill,
             {
               width: `${Math.round(progress * 100)}%`,
               alignSelf: isAr ? 'flex-end' : 'flex-start',
+              backgroundColor: theme.deadlineFill,
             },
           ]}
         />
       </View>
 
-      <Text style={[styles.tip, { fontFamily: fontReg }]}>{tip}</Text>
+      <Text style={[styles.tip, { fontFamily: fontReg, color: theme.deadlineTip }]}>{tip}</Text>
     </View>
   );
 }
@@ -122,9 +138,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#09001D',
     borderWidth: 1,
-    borderColor: '#200E4A',
     rowGap: 13,
     shadowColor: '#8B5CF6',
     shadowOpacity: 0.25,
@@ -136,21 +150,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   badge: {
-    backgroundColor: 'rgba(197,174,250,0.2)',
     borderRadius: 58,
     paddingHorizontal: 14,
     paddingVertical: 5,
   },
-  badgeTxt: { color: '#C7B1F9', fontSize: 11 },
+  badgeTxt: { fontSize: 11 },
   headline: { alignItems: 'center', columnGap: 4 },
-  headlineTxt: { color: '#FFFFFF', fontSize: 12 },
+  headlineTxt: { fontSize: 12 },
   units: {
     alignItems: 'center',
     justifyContent: 'center',
     columnGap: 12,
   },
   unit: {
-    backgroundColor: '#170835',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 9,
@@ -158,23 +170,20 @@ const styles = StyleSheet.create({
     rowGap: 6,
     minWidth: 60,
   },
-  unitValue: { color: '#FFFFFF', fontSize: 20, textAlign: 'center' },
-  unitLabel: { color: '#B9A9E8', fontSize: 14, textAlign: 'center' },
-  colon: { color: '#B9A9E8', fontSize: 24, marginBottom: 10 },
+  unitValue: { fontSize: 20, textAlign: 'center' },
+  unitLabel: { fontSize: 14, textAlign: 'center' },
+  colon: { fontSize: 24, marginBottom: 10 },
   track: {
     height: 6,
     borderRadius: 43,
-    backgroundColor: '#281443',
     overflow: 'hidden',
     width: '100%',
   },
   fill: {
     height: 6,
     borderRadius: 43,
-    backgroundColor: '#8B5CF6',
   },
   tip: {
-    color: '#8B8B8B',
     fontSize: 11,
     textAlign: 'center',
   },
