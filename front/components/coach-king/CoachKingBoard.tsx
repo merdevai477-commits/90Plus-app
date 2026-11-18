@@ -121,6 +121,7 @@ function BoardRow({
       accessibilityLabel={`${rank}. ${name}. ${entry.points} ${xpUnit}`}
       style={({ pressed }) => [
         styles.row,
+        !theme.isDark ? styles.rowLift : null,
         {
           height: s(ROW.height),
           borderRadius: s(ROW.radius),
@@ -220,6 +221,13 @@ function BoardRow({
 const styles = StyleSheet.create({
   root: { width: '100%' },
   row: { alignItems: 'center', justifyContent: 'space-between' },
+  rowLift: {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
   xp: { flexDirection: 'row', alignItems: 'baseline' },
   who: { alignItems: 'center', flexShrink: 1 },
   whoName: { alignItems: 'center', flexShrink: 1 },

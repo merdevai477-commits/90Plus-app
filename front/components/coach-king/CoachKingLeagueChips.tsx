@@ -31,6 +31,7 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={[styles.row, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
     >
       {options.map((key) => {
@@ -48,6 +49,8 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
             testID={`ck-league-${key}`}
             style={[
               styles.chip,
+              !isDark && !on ? styles.chipLift : null,
+              on ? styles.chipActiveLift : null,
               {
                 flexDirection: isAr ? 'row-reverse' : 'row',
                 backgroundColor: on ? theme.chipActiveBg : theme.chipBg,
@@ -78,9 +81,15 @@ export function CoachKingLeagueChips({ options, active, label, isAr, onChange }:
 }
 
 const styles = StyleSheet.create({
+  /** Prevent horizontal ScrollView from eating vertical flex and pushing search down. */
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   row: {
     columnGap: 8,
     paddingHorizontal: 16,
+    paddingTop: 4,
     paddingBottom: 10,
     alignItems: 'center',
   },
@@ -91,7 +100,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     columnGap: 8,
-    borderWidth: 0.5,
+    borderWidth: 1,
+  },
+  chipLift: {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chipActiveLift: {
+    shadowColor: '#6A2BD9',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 5,
   },
   logo: {
     width: 20,

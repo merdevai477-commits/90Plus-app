@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 18,
-    borderWidth: 0.5,
+    borderWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
@@ -211,15 +211,15 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#1A0A3C',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 2,
+        elevation: 4,
       },
       default: {
-        boxShadow: '0px 2px 8px rgba(26,10,60,0.08)',
+        boxShadow: '0px 3px 10px rgba(26,10,60,0.12)',
       },
     }),
   },

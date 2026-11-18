@@ -200,71 +200,84 @@ export function CoachKingCardGrid({
       <View style={[styles.root, { backgroundColor: theme.pickerBg }]} testID="ck-grid">
         <View
           style={[
-            styles.header,
+            styles.chrome,
             {
-              paddingTop: insets.top + s(10),
-              paddingBottom: s(10),
-              paddingHorizontal: s(24),
-              flexDirection: isAr ? 'row-reverse' : 'row',
+              backgroundColor: theme.isDark ? theme.pickerBg : theme.headerBg,
+              borderBottomColor: theme.headerBorder === 'transparent' ? theme.searchBorder : theme.headerBorder,
+              paddingBottom: s(12),
             },
+            !theme.isDark ? styles.chromeLift : null,
           ]}
         >
-          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" testID="ck-grid-close">
-            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color={theme.headerIcon} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20), color: theme.ink }]} numberOfLines={1}>
-            {kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
-          </Text>
-          <CoachKingMoney milli={budget} lang={language} size="sm" color={theme.budgetValue} />
-        </View>
-
-        <CoachKingLeagueChips
-          options={LEAGUE_OPTIONS}
-          active={league}
-          isAr={isAr}
-          label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
-          onChange={(key) => setLeague(key as CkLeagueKey | 'all')}
-        />
-
-        <View
-          style={[
-            styles.search,
-            {
-              width: s(GRID_WIDTH),
-              height: s(44),
-              borderRadius: s(12),
-              paddingHorizontal: s(14),
-              columnGap: s(8),
-              flexDirection: isAr ? 'row-reverse' : 'row',
-              backgroundColor: theme.searchBg,
-              borderColor: theme.searchBorder,
-            },
-          ]}
-        >
-          <Ionicons name="search" size={s(18)} color={theme.emptyText} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={copy.search}
-            placeholderTextColor={theme.searchPlaceholder}
-            selectionColor={ACTIVE}
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-            testID="ck-grid-search"
-            style={[styles.searchInput, { fontFamily: fontRegular, fontSize: s(15), color: theme.searchText, textAlign: isAr ? 'right' : 'left' }]}
-          />
-          {query ? (
-            <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
-              <Ionicons name="close-circle" size={s(18)} color={theme.emptyText} />
+          <View
+            style={[
+              styles.header,
+              {
+                paddingTop: insets.top + s(10),
+                paddingBottom: s(10),
+                paddingHorizontal: s(24),
+                flexDirection: isAr ? 'row-reverse' : 'row',
+              },
+            ]}
+          >
+            <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" testID="ck-grid-close">
+              <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color={theme.headerIcon} />
             </TouchableOpacity>
-          ) : null}
-        </View>
+            <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20), color: theme.ink }]} numberOfLines={1}>
+              {kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
+            </Text>
+            <CoachKingMoney milli={budget} lang={language} size="sm" color={theme.budgetValue} />
+          </View>
 
-        {loading && rows.length === 0 ? <ActivityIndicator color={theme.refresh} style={{ marginTop: s(32) }} /> : null}
+          <CoachKingLeagueChips
+            options={LEAGUE_OPTIONS}
+            active={league}
+            isAr={isAr}
+            label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
+            onChange={(key) => setLeague(key as CkLeagueKey | 'all')}
+          />
+
+          <View
+            style={[
+              styles.search,
+              !theme.isDark ? styles.searchLift : null,
+              {
+                width: s(GRID_WIDTH),
+                height: s(46),
+                borderRadius: s(14),
+                marginTop: s(2),
+                paddingHorizontal: s(14),
+                columnGap: s(8),
+                flexDirection: isAr ? 'row-reverse' : 'row',
+                backgroundColor: theme.searchBg,
+                borderColor: theme.searchBorder,
+              },
+            ]}
+          >
+            <Ionicons name="search" size={s(18)} color={theme.emptyText} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={copy.search}
+              placeholderTextColor={theme.searchPlaceholder}
+              selectionColor={ACTIVE}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              testID="ck-grid-search"
+              style={[styles.searchInput, { fontFamily: fontRegular, fontSize: s(15), color: theme.searchText, textAlign: isAr ? 'right' : 'left' }]}
+            />
+            {query ? (
+              <TouchableOpacity onPress={() => setQuery('')} hitSlop={10} accessibilityRole="button">
+                <Ionicons name="close-circle" size={s(18)} color={theme.emptyText} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         <FlatList
           key={`${kind ?? 'none'}-${slotKey ?? 'x'}-${league}`}
+          style={styles.list}
           data={matches}
           keyExtractor={keyOf}
           renderItem={renderItem}
@@ -281,20 +294,24 @@ export function CoachKingCardGrid({
           contentContainerStyle={{
             flexGrow: 1,
             alignItems: 'center',
-            paddingTop: s(GRID.top + 7),
+            paddingTop: s(GRID.top),
             paddingBottom: Math.max(insets.bottom, 12) + s(12),
           }}
-          ListEmptyComponent={loading && rows.length === 0 ? null : (
-            <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32), color: theme.emptyText }]}>
-              {query
-                ? copy.searchEmpty
-                : league !== 'all'
-                  ? copy.leagueEmpty
-                  : rows.length > 0
-                    ? copy.searchEmpty
-                    : copy.poolEmpty}
-            </Text>
-          )}
+          ListEmptyComponent={
+            loading && rows.length === 0 ? (
+              <ActivityIndicator color={theme.refresh} style={{ marginTop: s(28) }} />
+            ) : (
+              <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(28), color: theme.emptyText }]}>
+                {query
+                  ? copy.searchEmpty
+                  : league !== 'all'
+                    ? copy.leagueEmpty
+                    : rows.length > 0
+                      ? copy.searchEmpty
+                      : copy.poolEmpty}
+              </Text>
+            )
+          }
         />
 
         {pending ? (
@@ -595,14 +612,35 @@ function searchKey(raw: string): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  chrome: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    zIndex: 2,
+  },
+  chromeLift: {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   header: { alignItems: 'center', justifyContent: 'space-between', columnGap: 12 },
   headerTitle: { flex: 1, textAlign: 'center' },
   search: {
     alignSelf: 'center',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
+  },
+  searchLift: {
+    shadowColor: '#1A0A3C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   searchInput: { flex: 1, paddingVertical: 0 },
+  list: { flex: 1 },
   empty: { textAlign: 'center', paddingHorizontal: 24 },
   row: { flexDirection: 'row', alignSelf: 'center' },
   clip: { overflow: 'hidden' },
