@@ -12,7 +12,6 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import {
-  Pressable,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -24,7 +23,6 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import { useShareWin, type ShareChannel } from '../../hooks/useShareWin';
 import { useTranslation } from '../../src/i18n';
@@ -33,6 +31,7 @@ import { useScreenFont } from '../../utils/fontSetup';
 import { SW_ASSET } from './assets';
 import LuckyWheelCard from './components/LuckyWheelCard';
 import ShareCard from './components/ShareCard';
+import ShareWinPageHeader from './components/ShareWinPageHeader';
 import ShareWinSkeleton from './components/ShareWinSkeleton';
 import StatsBar from './components/StatsBar';
 import WeeklyPrizes from './components/WeeklyPrizes';
@@ -51,9 +50,6 @@ export default function ShareWinScreen() {
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s } = metrics;
-  /** Figma Frame123 is authored RTL; mirror chrome for Arabic even though app layout stays LTR. */
-  const mirrorRtl = language === 'ar';
-  const BackIcon = mirrorRtl ? ChevronRight : ChevronLeft;
 
   const {
     overview,
@@ -87,41 +83,12 @@ export default function ShareWinScreen() {
     router.replace('/(tabs)/rank');
   }, [isSignedIn, router]);
 
-  const backButton = (
-    <Pressable
-      onPress={handleLeave}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel={copy.backToRank ?? copy.close}
-      testID="share-win-back"
-      style={({ pressed }) => [sw.pageBackButton, pressed && { opacity: 0.7 }]}
-    >
-      <BackIcon size={s(24)} color={theme.headerIcon} strokeWidth={2.4} />
-    </Pressable>
-  );
-
   const pageHeader = (
-    <View
-      style={[
-        sw.pageHeader,
-        {
-          paddingTop: insets.top + s(10),
-          paddingBottom: s(10),
-          paddingLeft: Math.max(insets.left, s(20)),
-          paddingRight: Math.max(insets.right, s(20)),
-          // Arabic (Figma): back on the right → ; English: back on the left ←
-          flexDirection: mirrorRtl ? 'row-reverse' : 'row',
-        },
-      ]}
-    >
-      {backButton}
-
-      <Text style={sw.pageHeaderTitle} numberOfLines={1}>
-        {`${copy.titleHighlight}${copy.titleRest}`}
-      </Text>
-
-      <View style={sw.pageBackButton} pointerEvents="none" />
-    </View>
+    <ShareWinPageHeader
+      title={`${copy.titleHighlight}${copy.titleRest}`}
+      onBack={handleLeave}
+      backLabel={copy.backToRank ?? copy.close}
+    />
   );
 
   const handleChannelShared = useCallback(

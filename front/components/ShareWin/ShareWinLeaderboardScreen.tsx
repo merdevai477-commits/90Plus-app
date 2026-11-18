@@ -39,7 +39,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import { useShareWinLeaderboard } from '../../hooks/useShareWinLeaderboard';
 import type { ShareWinLeaderboardEntry } from '../../services/shareWin.service';
@@ -47,6 +46,7 @@ import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 import { displayNameOf, formatNumber } from './data';
 import LeaderboardRow from './components/LeaderboardRow';
+import ShareWinPageHeader from './components/ShareWinPageHeader';
 import { useShareWinStyles } from './styles';
 
 /** Row height (~68) + gap (8) in Figma units — drives getItemLayout. */
@@ -71,7 +71,6 @@ export default function ShareWinLeaderboardScreen() {
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s } = metrics;
-  const mirrorRtl = language === 'ar';
 
   const {
     entries,
@@ -167,39 +166,18 @@ export default function ShareWinLeaderboardScreen() {
     return <View style={sw.root} />;
   }
 
-  const BackIcon = mirrorRtl ? ChevronRight : ChevronLeft;
-
   const header = (
-    <View
-      style={[
-        sw.lbHeader,
-        {
-          paddingTop: insets.top + s(12),
-          flexDirection: mirrorRtl ? 'row-reverse' : 'row',
-        },
-      ]}
-    >
-      <Pressable
-        onPress={() => router.back()}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel={copy.close}
-        style={sw.lbCloseButton}
-      >
-        <BackIcon size={s(24)} color={theme.headerIcon} strokeWidth={2.4} />
-      </Pressable>
-
-      <View style={sw.lbHeaderTitles}>
-        <Text style={sw.lbTitle} accessibilityRole="header">
-          {copy.weeklyTitle}
-        </Text>
-        {cycle ? (
-          <Text style={sw.lbSubtitle}>
-            {copy.leaderboardCompetitors.replace('{count}', formatNumber(total, language))}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+    <ShareWinPageHeader
+      title={copy.weeklyTitle}
+      subtitle={
+        cycle
+          ? copy.leaderboardCompetitors.replace('{count}', formatNumber(total, language))
+          : null
+      }
+      onBack={() => router.back()}
+      backLabel={copy.close}
+      testID="share-win-leaderboard-back"
+    />
   );
 
   const listFooter = useMemo(() => {

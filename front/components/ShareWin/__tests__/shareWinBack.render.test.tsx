@@ -174,6 +174,19 @@ describe('the back control', () => {
     expect(source).toMatch(/import\s+\{\s*Image\s*\}\s+from\s+['"]expo-image['"]/);
     expect(source).toMatch(/<Image\s+source=\{SW_ASSET\.backV2\}/);
   });
+
+  it('keeps the back control on the left with a centered title island', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const header = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'ShareWinPageHeader.tsx'),
+      'utf8',
+    );
+    expect(header).toMatch(/ChevronLeft/);
+    expect(header).toMatch(/titleIsland/);
+    expect(header).toMatch(/titleCenter/);
+    expect(header).not.toMatch(/row-reverse/);
+  });
 });
 
 describe('the referral link the page hands out', () => {
