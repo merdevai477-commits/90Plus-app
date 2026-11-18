@@ -177,6 +177,8 @@ export default function CoachKingOpponentScreen() {
               slots={data.squad.slots}
               coach={data.squad.coach}
               coachLabel={opp.coach}
+              pickCoach={copy.pickCoach}
+              pickFormation={copy.pickFormation}
               formation={copy.formation}
               isAr={isAr}
               readOnly

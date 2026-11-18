@@ -11,7 +11,8 @@ import prisma from '../src/lib/prisma';
 import {
   CK_PRICE_TIERS_MILLI,
   CK_PLAYER_CAP_MILLI,
-  CK_COACH_PRICE_MILLI,
+  CK_COACH_CAP_MILLI,
+  CK_COACH_TIERS_MILLI,
 } from '../src/services/coach-king-pricing';
 import {
   CK_WEEKLY_BUDGET_MILLI,
@@ -44,8 +45,9 @@ async function main() {
   assert.strictEqual(coachKingNextBalanceMilli(850, 40), 1000);
   assert.strictEqual(coachKingRemainingMilli(1000, 780), 220);
   assert.strictEqual(CK_PLAYER_CAP_MILLI, 130);
-  assert.deepStrictEqual([...CK_PRICE_TIERS_MILLI], [50, 80, 130]);
-  assert.strictEqual(CK_COACH_PRICE_MILLI, 50);
+  assert.deepStrictEqual([...CK_PRICE_TIERS_MILLI], [5, 10, 30, 50, 80, 130]);
+  assert.strictEqual(CK_COACH_CAP_MILLI, 50);
+  assert.deepStrictEqual([...CK_COACH_TIERS_MILLI], [5, 10, 30, 50]);
   checks.push('budget+price constants');
 
   const sample = computeCoachKingPoints('FWD', {
@@ -164,7 +166,7 @@ async function main() {
       where: { active: true, priceMilli: { notIn: [...CK_PRICE_TIERS_MILLI] } },
     }),
     prisma.coachKingCoach.count({
-      where: { active: true, priceMilli: { not: CK_COACH_PRICE_MILLI } },
+      where: { active: true, priceMilli: { notIn: [...CK_COACH_TIERS_MILLI] } },
     }),
     prisma.coachKingPlayer.aggregate({ where: { active: true }, _max: { priceMilli: true } }),
     prisma.coachKingPlayer.count({ where: { active: true } }),
@@ -182,8 +184,8 @@ async function main() {
   if (week.status !== 'OPEN' && week.status !== 'LOCKED') fail(`unexpected week status ${week.status}`);
   if (players < 1000) fail(`too few players ${players}`);
   if (coaches < 50) fail(`too few coaches ${coaches}`);
-  if (offTier > 0) fail(`${offTier} players off 5/8/13 ladder`);
-  if (coachOff > 0) fail(`${coachOff} coaches not 5M`);
+  if (offTier > 0) fail(`${offTier} players off 0.5–13 ladder`);
+  if (coachOff > 0) fail(`${coachOff} coaches off 0.5–5 ladder`);
   if ((maxPrice._max.priceMilli ?? 0) !== CK_PLAYER_CAP_MILLI) {
     fail(`max price ${maxPrice._max.priceMilli} != ${CK_PLAYER_CAP_MILLI}`);
   }
@@ -211,7 +213,9 @@ async function main() {
     where: { active: true },
     select: { nameAr: true, priceMilli: true },
   });
-  if (!coach || coach.priceMilli !== 50) fail('coach sample bad');
+  if (!coach || !CK_COACH_TIERS_MILLI.includes(coach.priceMilli as (typeof CK_COACH_TIERS_MILLI)[number])) {
+    fail('coach sample bad');
+  }
   checks.push('sample catalog rows');
 
   // Ensure picker can fill every slot from active pool

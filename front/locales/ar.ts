@@ -4009,11 +4009,12 @@ export const ar = {
   },
 
   coachKingGame: {
-    title: 'المباراة',
+    title: 'ملك المدربين',
     budgetLabel: 'الميزانية المتبقية',
     budgetOf: 'من أصل {bank} كل أسبوع',
     coach: 'المدرب',
     formation: '4-3-3',
+    pickFormation: 'اختر تشكيلتك',
     pickPlayer: 'اختر لاعب',
     pickCoach: 'اختر المدرب',
     search: 'ابحث باسم اللاعب أو النادي',

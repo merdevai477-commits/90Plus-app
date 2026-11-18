@@ -15,7 +15,7 @@ import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
 import type { TopScorersFiveSeedClub } from '../data/top-scorers-five-laliga';
 import type { CkLine } from './coach-king-scoring';
 import {
-  CK_COACH_PRICE_MILLI,
+  CK_COACH_TIERS_MILLI,
   CK_EMPTY_STATS,
   CK_PLAYER_CAP_MILLI,
   CK_PLAYER_FLOOR_MILLI,
@@ -235,7 +235,9 @@ export async function refreshCoachKingPoolIfStale(now: Date = new Date()): Promi
     prisma.coachKingPlayer.count({
       where: { active: true, priceMilli: { notIn: [...CK_PRICE_TIERS_MILLI] } },
     }),
-    prisma.coachKingCoach.count({ where: { active: true, priceMilli: { not: CK_COACH_PRICE_MILLI } } }),
+    prisma.coachKingCoach.count({
+      where: { active: true, priceMilli: { notIn: [...CK_COACH_TIERS_MILLI] } },
+    }),
     prisma.coachKingPlayer.aggregate({
       where: { active: true },
       _max: { priceMilli: true },

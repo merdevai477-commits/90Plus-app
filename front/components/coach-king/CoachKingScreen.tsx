@@ -417,6 +417,8 @@ export default function CoachKingScreen() {
             slots={shown.squad.slots}
             coach={shown.squad.coach}
             coachLabel={copy.coach}
+            pickCoach={copy.pickCoach}
+            pickFormation={copy.pickFormation}
             formation={copy.formation}
             isAr={isAr}
             closed={closed}
@@ -427,7 +429,7 @@ export default function CoachKingScreen() {
       ) : null}
 
       {tab === 'ranking' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: 4 }} showsVerticalScrollIndicator={false}>
           <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: theme.ink, textAlign: isAr ? 'right' : 'left' }]}>
             {copy.rankingTitle}
           </Text>
@@ -458,20 +460,33 @@ export default function CoachKingScreen() {
       {tab === 'matches' ? (
         <View style={{ flex: 1 }}>
           {squadLeagues.length > 0 ? (
-            <CoachKingLeagueChips
-              options={squadLeagues}
-              active={activeMatchLeague}
-              isAr={isAr}
-              label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
-              onChange={(key) => setMatchLeague(key as CkLeagueKey)}
-            />
+            <View style={{ paddingTop: 4, paddingBottom: 6 }}>
+              <CoachKingLeagueChips
+                options={squadLeagues}
+                active={activeMatchLeague}
+                isAr={isAr}
+                label={(key) => copy.leagues[key as keyof typeof copy.leagues]}
+                onChange={(key) => setMatchLeague(key as CkLeagueKey)}
+              />
+            </View>
           ) : null}
           <ScrollView
-            contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: 4 }}
+            contentContainerStyle={{
+              paddingBottom: bottomPad,
+              paddingHorizontal: 16,
+              paddingTop: squadLeagues.length > 0 ? 8 : 12,
+              flexGrow: 1,
+            }}
             showsVerticalScrollIndicator={false}
           >
             {visibleFixtures.length === 0 ? (
-              <KingEmptyState title={copy.noMatches} actionLabel={copy.tabs.pitch} onAction={() => onTab('pitch')} />
+              <KingEmptyState
+                title={copy.noMatches}
+                actionLabel={copy.tabs.pitch}
+                onAction={() => onTab('pitch')}
+                scale={0.72}
+                style={{ alignSelf: 'center', marginTop: 20 }}
+              />
             ) : (
               <CoachKingMatches
                 fixtures={visibleFixtures}

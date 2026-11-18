@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import type { CkCoach, CkPlayer } from '../../services/coachKing.service';
@@ -13,6 +13,7 @@ const PITCH = require('../../assets/images/top-scorers-five/pitch.jpg');
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 const DESIGN_WIDTH = 448;
 const GOLD = '#F8C94A';
+const AVATAR_BLOB = '#E7DBFF';
 
 export const CK_ROWS = [
   ['lw', 'st', 'rw'],
@@ -35,6 +36,10 @@ type Props = {
   slots: CkPitchSlot[];
   coach: CkPitchCoach | null;
   coachLabel: string;
+  /** Empty-state coach name (Figma pickCoach). */
+  pickCoach: string;
+  /** Empty-state formation pill (Figma pickFormation). */
+  pickFormation: string;
   formation: string;
   isAr: boolean;
   /** Opponent view: no taps on the cards. */
@@ -44,7 +49,19 @@ type Props = {
   onCoach?: () => void;
 };
 
-export function CoachKingPitch({ slots, coach, coachLabel, formation, isAr, readOnly = false, closed = false, onSlot, onCoach }: Props) {
+export function CoachKingPitch({
+  slots,
+  coach,
+  coachLabel,
+  pickCoach,
+  pickFormation,
+  formation,
+  isAr,
+  readOnly = false,
+  closed = false,
+  onSlot,
+  onCoach,
+}: Props) {
   const { width } = useWindowDimensions();
   const s = (value: number) => (value * Math.min(width, 520)) / DESIGN_WIDTH;
   const fontSemi = useAppFont(600);
@@ -53,7 +70,10 @@ export function CoachKingPitch({ slots, coach, coachLabel, formation, isAr, read
   const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
   const byKey = new Map(slots.map((slot) => [slot.slotKey, slot]));
   const row = isAr ? 'row-reverse' : 'row';
-
+  const avatar = s(46);
+  const blob = s(56);
+  const formationLabel = coach ? formation : pickFormation;
+  const coachName = coach?.name ?? pickCoach;
   return (
     <View>
       <Pressable
@@ -68,16 +88,43 @@ export function CoachKingPitch({ slots, coach, coachLabel, formation, isAr, read
             backgroundColor: theme.coachBarBg,
             borderColor: theme.coachBarBorder,
           },
+          !isDark ? styles.coachBarLift : null,
         ]}
         onPress={onCoach}
         disabled={readOnly || !onCoach}
         testID="ck-coach"
       >
-        <Image source={coach?.photo ? { uri: coach.photo } : PLACEHOLDER} style={[styles.coachPhoto, { width: s(46), height: s(46), borderRadius: s(14) }]} cachePolicy="memory-disk" />
+        <View style={[styles.avatarWrap, { width: blob, height: blob }]}>
+          {!isDark ? (
+            <View
+              style={[
+                styles.avatarBlob,
+                {
+                  width: blob,
+                  height: blob,
+                  borderRadius: blob / 2,
+                  backgroundColor: AVATAR_BLOB,
+                },
+              ]}
+            />
+          ) : null}
+          <Image
+            source={coach?.photo ? { uri: coach.photo } : PLACEHOLDER}
+            style={[
+              styles.coachPhoto,
+              {
+                width: avatar,
+                height: avatar,
+                borderRadius: avatar / 2,
+              },
+            ]}
+            cachePolicy="memory-disk"
+          />
+        </View>
         <View style={[styles.coachCopy, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
           <Text style={[styles.coachHint, { fontFamily: fontMed, fontSize: s(11), color: theme.coachHint }]}>{coachLabel}</Text>
           <Text style={[styles.coachName, { fontFamily: fontSemi, fontSize: s(16), color: theme.ink }]} numberOfLines={1}>
-            {coach?.name ?? '—'}
+            {coachName}
           </Text>
         </View>
         {coach?.teamLogo ? (
@@ -89,13 +136,17 @@ export function CoachKingPitch({ slots, coach, coachLabel, formation, isAr, read
             styles.formation,
             {
               height: s(28),
-              paddingHorizontal: s(10),
+              paddingHorizontal: s(12),
+              columnGap: s(4),
               backgroundColor: theme.formationBg,
               borderColor: theme.formationBorder,
             },
           ]}
         >
-          <Text style={[styles.formationTxt, { fontFamily: fontSemi, fontSize: s(11), color: theme.formationText }]}>{formation}</Text>
+          <Text style={[styles.formationTxt, { fontFamily: fontSemi, fontSize: s(11), color: theme.formationText }]} numberOfLines={1}>
+            {formationLabel}
+          </Text>
+          <MaterialCommunityIcons name="soccer-field" size={s(14)} color={theme.formationText} />
         </View>
       </Pressable>
 
@@ -103,7 +154,7 @@ export function CoachKingPitch({ slots, coach, coachLabel, formation, isAr, read
         <Image source={PITCH} style={StyleSheet.absoluteFill} contentFit="cover" />
         <LinearGradient
           colors={[...theme.pitchFade]}
-          locations={[0, 0.35, 0.8, 1]}
+          locations={[0, 0.28, 0.78, 1]}
           style={StyleSheet.absoluteFill}
         />
         <View style={{ paddingTop: s(30), rowGap: s(26) }}>
@@ -285,16 +336,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     columnGap: 12,
   },
+  coachBarLift: {
+    boxShadow: '0px 4px 14px rgba(26,10,60,0.1)',
+    elevation: 3,
+  },
   formation: {
     borderRadius: 48,
     borderWidth: 0.5,
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: 140,
   },
   formationTxt: {},
   coachCopy: { flex: 1 },
   coachHint: {},
   coachName: { marginTop: 2 },
+  avatarWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarBlob: {
+    position: 'absolute',
+  },
   coachPhoto: { backgroundColor: 'rgba(128,59,69,0.5)' },
   pitchWrap: { overflow: 'hidden' },
   row: { flexDirection: 'row', justifyContent: 'center' },

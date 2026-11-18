@@ -9,7 +9,6 @@ import path from 'path';
 import { Prisma, type CoachKingGameweek } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { CK_COACH_PRICE_MILLI } from './coach-king-pricing';
 import {
   CK_WEEKLY_BUDGET_MILLI,
   coachKingRemainingMilli,
@@ -350,24 +349,8 @@ export async function listCoachKingPlayers(line: string, lang: CkLanguage, query
   });
 }
 
-let coachPricesFlat = false;
-
-/** Head coaches are a flat 5M. Rewrite stored prices once so the picker does not wait for a full pool sync. */
-async function flattenCoachKingCoachPrices(): Promise<void> {
-  if (coachPricesFlat) return;
-  const changed = await prisma.coachKingCoach.updateMany({
-    where: { priceMilli: { not: CK_COACH_PRICE_MILLI } },
-    data: { priceMilli: CK_COACH_PRICE_MILLI },
-  });
-  if (changed.count > 0) {
-    await redisCacheService.delPattern(`${CK_LIST_CACHE_PREFIX}*`).catch(() => undefined);
-  }
-  coachPricesFlat = true;
-}
-
 export async function listCoachKingCoaches(lang: CkLanguage, query: string) {
   await ensureCoachKingSchema();
-  await flattenCoachKingCoachPrices();
   const q = query.trim();
   return cachedList(q ? null : `${CK_LIST_CACHE_PREFIX}coaches:${lang}`, async () => {
     if (await prisma.coachKingCoach.count({ where: { active: true } }) === 0) {

@@ -4100,11 +4100,12 @@ export const en = {
   },
 
   coachKingGame: {
-    title: 'The Match',
+    title: 'King of Coaches',
     budgetLabel: 'Budget left',
     budgetOf: 'out of {bank} each week',
     coach: 'Coach',
     formation: '4-3-3',
+    pickFormation: 'Pick your squad',
     pickPlayer: 'Pick a player',
     pickCoach: 'Pick a coach',
     search: 'Search a player or club',

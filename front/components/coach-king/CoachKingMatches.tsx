@@ -3,7 +3,7 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -39,7 +39,11 @@ export function CoachKingMatches({ fixtures, language, vsLabel, statusLabel }: P
         return (
           <View
             key={fixture.fixtureId}
-            style={[styles.card, { backgroundColor: theme.matchCardBg, borderColor: theme.matchCardBorder }]}
+            style={[
+              styles.card,
+              { backgroundColor: theme.matchCardBg, borderColor: theme.matchCardBorder },
+              !theme.isDark ? styles.cardLift : null,
+            ]}
             testID={`ck-match-${fixture.fixtureId}`}
           >
             <LinearGradient
@@ -193,7 +197,7 @@ function initials(name: string): string {
 
 const styles = StyleSheet.create({
   list: {
-    gap: 12,
+    gap: 10,
   },
   card: {
     borderRadius: 18,
@@ -202,6 +206,22 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 16,
     overflow: 'hidden',
+  },
+  cardLift: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1A0A3C',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {
+        boxShadow: '0px 2px 8px rgba(26,10,60,0.08)',
+      },
+    }),
   },
   cardGlow: {
     ...StyleSheet.absoluteFillObject,

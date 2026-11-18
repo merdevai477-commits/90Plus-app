@@ -1,5 +1,5 @@
 /**
- * King of Coaches ranking — Figma 1277:12418 (period tabs + podium rows).
+ * King of Coaches ranking — Share & Win–style rows (readable in light + dark).
  */
 
 import type { ReactNode } from 'react';
@@ -18,60 +18,14 @@ import { getCoachKingTheme, type CoachKingTheme } from './theme';
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 const AVATAR_STROKE = 'rgba(194,194,194,0.92)';
-const ROW = { height: 62, radius: 16, gap: 10 };
+const ROW = { height: 68, radius: 16, gap: 10 };
 const RANK_SLOT = { width: 18, gap: 30 };
 
-type Weight = 'bold' | 'semi' | 'medium' | 'regular';
-
-const PODIUM: readonly {
-  bg: string;
-  xp: string;
-  xpSize: number;
-  xpWeight: Weight;
-  nameSize: number;
-  nameWeight: Weight;
-  avatar: number;
-  medal: number;
-  medalSize: number;
-  opacity?: number;
-  shadow?: boolean;
-}[] = [
-  {
-    bg: 'rgba(235,175,22,0.43)',
-    xp: '#FDF4DC',
-    xpSize: 22,
-    xpWeight: 'semi',
-    nameSize: 20,
-    nameWeight: 'bold',
-    avatar: 38,
-    medal: KING_ICON.medal1,
-    medalSize: 32,
-    shadow: true,
-  },
-  {
-    bg: 'rgba(123,123,123,0.31)',
-    xp: '#CECECE',
-    xpSize: 20,
-    xpWeight: 'medium',
-    nameSize: 18,
-    nameWeight: 'semi',
-    avatar: 36,
-    medal: KING_ICON.medal2,
-    medalSize: 30,
-    opacity: 0.8,
-  },
-  {
-    bg: 'rgba(211,151,110,0.17)',
-    xp: '#D3976E',
-    xpSize: 18,
-    xpWeight: 'medium',
-    nameSize: 16,
-    nameWeight: 'semi',
-    avatar: 34,
-    medal: KING_ICON.medal3,
-    medalSize: 28,
-  },
-];
+const MEDAL_BY_RANK: Record<number, { source: number; size: number }> = {
+  1: { source: KING_ICON.medal1, size: 32 },
+  2: { source: KING_ICON.medal2, size: 30 },
+  3: { source: KING_ICON.medal3, size: 28 },
+};
 
 type Props = {
   entries: CkBoardRow[];
@@ -88,7 +42,6 @@ export function CoachKingBoard({ entries, isAr, youLabel, xpLabel, periodTabs, e
   const s = (value: number) => (width / TSF_DESIGN_WIDTH) * value;
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
-  const fontMed = useAppFont(500);
   const fontRegular = useAppFont(400);
   const { isDark } = useResolvedAppScheme();
   const theme = useMemo(() => getCoachKingTheme(isDark), [isDark]);
@@ -109,7 +62,6 @@ export function CoachKingBoard({ entries, isAr, youLabel, xpLabel, periodTabs, e
               isAr={isAr}
               fontBold={fontBold}
               fontSemi={fontSemi}
-              fontMedium={fontMed}
               fontRegular={fontRegular}
               name={entry.isMe ? youLabel : entry.name}
               xpUnit={xpLabel}
@@ -129,7 +81,6 @@ type BoardRowProps = {
   isAr: boolean;
   fontBold: string;
   fontSemi: string;
-  fontMedium: string;
   fontRegular: string;
   name: string;
   xpUnit: string;
@@ -143,7 +94,6 @@ function BoardRow({
   isAr,
   fontBold,
   fontSemi,
-  fontMedium,
   fontRegular,
   name,
   xpUnit,
@@ -151,32 +101,18 @@ function BoardRow({
   onOpen,
 }: BoardRowProps) {
   const rank = entry.rank;
-  const podium = PODIUM[rank - 1];
-  const plain = {
-    bg: theme.boardPlainBg,
-    border: theme.boardPlainBorder,
-    xp: theme.boardXp,
-    xpUnit: theme.boardXpUnit,
-    xpSize: 18,
-    xpWeight: 'medium' as const,
-    nameSize: 16,
-    nameWeight: 'regular' as const,
-    avatar: 34,
-  };
-  const look = podium ?? plain;
-  const font: Record<Weight, string> = {
-    bold: fontBold,
-    semi: fontSemi,
-    medium: fontMedium,
-    regular: fontRegular,
-  };
+  const medal = MEDAL_BY_RANK[rank];
+  const isLead = rank <= 3;
+  const avatar = isLead ? 38 : 34;
+  const nameWeight = rank === 1 ? fontBold : rank <= 3 ? fontSemi : fontRegular;
+  const nameSize = rank === 1 ? 18 : rank <= 3 ? 16 : 15;
+  const xpSize = rank === 1 ? 20 : 18;
   const identityDirection = isAr ? 'row-reverse' : 'row';
-  /** Plain rows use a wider gap between the rank digit and the avatar (Figma: 30). */
-  const whoGap = podium ? 16 : RANK_SLOT.gap;
-  /** Two-digit ranks sit a touch closer so avatars stay in one column (Figma: 22 for "10"). */
-  const plainGap = !podium && rank >= 10 ? 22 : whoGap;
-  const nameColor = podium ? '#FFFFFF' : theme.boardName;
-  const rankColor = podium ? '#FFFFFF' : theme.boardRank;
+  const whoGap = medal ? 16 : RANK_SLOT.gap;
+  const plainGap = !medal && rank >= 10 ? 22 : whoGap;
+  const leadBorder = theme.isDark ? 'rgba(245,179,1,0.35)' : 'rgba(106,43,217,0.35)';
+  const leadBg = theme.isDark ? theme.cardAlt : theme.pale;
+  const mineBg = theme.isDark ? 'rgba(106,43,217,0.28)' : 'rgba(106,43,217,0.12)';
 
   return (
     <Pressable
@@ -188,31 +124,27 @@ function BoardRow({
         {
           height: s(ROW.height),
           borderRadius: s(ROW.radius),
-          paddingHorizontal: s(20),
+          paddingHorizontal: s(16),
           flexDirection: isAr ? 'row' : 'row-reverse',
-          backgroundColor: look.bg,
-          opacity: pressed ? 0.88 : podium?.opacity ?? 1,
+          backgroundColor: entry.isMe ? mineBg : isLead ? leadBg : theme.boardPlainBg,
+          borderWidth: entry.isMe ? 1.5 : 1,
+          borderColor: entry.isMe ? theme.youRim : isLead ? leadBorder : theme.boardPlainBorder,
+          opacity: pressed ? 0.88 : 1,
         },
-        entry.isMe
-          ? { borderWidth: 1, borderColor: theme.youRim }
-          : podium
-            ? null
-            : { borderWidth: 0.5, borderColor: plain.border },
-        podium?.shadow ? styles.rowLift : null,
       ]}
     >
-      <View style={[styles.xp, { columnGap: s(2) }]}>
+      <View style={[styles.xp, { columnGap: s(2), minWidth: s(64) }]}>
         <Text
-          style={{ color: look.xp, fontFamily: font[look.xpWeight], fontSize: s(look.xpSize) }}
+          style={{ color: theme.boardXp, fontFamily: fontSemi, fontSize: s(xpSize) }}
           allowFontScaling={false}
         >
           {entry.points}
         </Text>
         <Text
           style={{
-            color: podium ? podium.xp : plain.xpUnit,
+            color: theme.boardXpUnit,
             fontFamily: fontSemi,
-            fontSize: s(16),
+            fontSize: s(14),
           }}
           allowFontScaling={false}
         >
@@ -221,17 +153,22 @@ function BoardRow({
       </View>
 
       <View style={[styles.who, { columnGap: s(plainGap), flexDirection: identityDirection }]}>
-        {podium ? (
+        {medal ? (
           <Image
-            source={podium.medal}
-            style={{ width: s(podium.medalSize), height: s(podium.medalSize) }}
+            source={medal.source}
+            style={{ width: s(medal.size), height: s(medal.size) }}
             contentFit="contain"
           />
         ) : (
           <Text
             style={[
               styles.rankNumber,
-              { fontFamily: fontRegular, fontSize: s(16), width: s(RANK_SLOT.width), color: rankColor },
+              {
+                fontFamily: fontRegular,
+                fontSize: s(16),
+                width: s(RANK_SLOT.width),
+                color: theme.boardRank,
+              },
             ]}
             allowFontScaling={false}
           >
@@ -246,9 +183,9 @@ function BoardRow({
             style={[
               styles.avatar,
               {
-                width: s(look.avatar),
-                height: s(look.avatar),
-                borderRadius: s(look.avatar / 2),
+                width: s(avatar),
+                height: s(avatar),
+                borderRadius: s(avatar / 2),
               },
               entry.isMe ? null : { borderWidth: 0.5, borderColor: AVATAR_STROKE },
             ]}
@@ -265,7 +202,10 @@ function BoardRow({
               user={entry}
               name={name}
               variant="leaderboard"
-              nameStyle={[styles.name, { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize), color: nameColor }]}
+              nameStyle={[
+                styles.name,
+                { fontFamily: nameWeight, fontSize: s(nameSize), color: theme.boardName },
+              ]}
             />
             {entry.isMe ? (
               <Image source={KING_ICON.user} style={{ width: s(16), height: s(16) }} contentFit="contain" />
@@ -280,7 +220,6 @@ function BoardRow({
 const styles = StyleSheet.create({
   root: { width: '100%' },
   row: { alignItems: 'center', justifyContent: 'space-between' },
-  rowLift: { boxShadow: '0px 1px 5.6px rgba(70,5,132,0.25)' },
   xp: { flexDirection: 'row', alignItems: 'baseline' },
   who: { alignItems: 'center', flexShrink: 1 },
   whoName: { alignItems: 'center', flexShrink: 1 },

@@ -4,7 +4,7 @@
  * confirmed pick locks in its slot until the gameweek ends.
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -104,22 +104,18 @@ export function CoachKingCardGrid({
   const [league, setLeague] = useState<CkLeagueKey | 'all'>('all');
   const [rows, setRows] = useState<Array<CkPlayer | CkCoach>>([]);
   const [loading, setLoading] = useState(false);
-  const [shown, setShown] = useState(false);
   const [pending, setPending] = useState<CkPick | null>(null);
+  const prevKindRef = useRef<CkPoolKind | null>(null);
 
   useEffect(() => {
     setQuery('');
     setPending(null);
-    setRows([]);
-    if (!kind) {
-      setShown(false);
-      return;
-    }
+    if (!kind) return;
     let alive = true;
-    // Android can fire Modal onShow late; never hold the list back past the slide-in.
-    const reveal = setTimeout(() => {
-      if (alive) setShown(true);
-    }, 280);
+    const kindChanged = prevKindRef.current !== kind;
+    prevKindRef.current = kind;
+    // Keep prior rows when reopening the same pool so a fast cache hit has no spinner flash.
+    if (kindChanged) setRows([]);
     setLoading(true);
     resolveToken()
       .then((token) => {
@@ -139,7 +135,6 @@ export function CoachKingCardGrid({
       });
     return () => {
       alive = false;
-      clearTimeout(reveal);
     };
   }, [kind, language, resolveToken]);
 
@@ -200,7 +195,6 @@ export function CoachKingCardGrid({
       visible={kind != null}
       animationType="slide"
       onRequestClose={pending ? closePending : onClose}
-      onShow={() => setShown(true)}
       statusBarTranslucent
     >
       <View style={[styles.root, { backgroundColor: theme.pickerBg }]} testID="ck-grid">
@@ -267,11 +261,11 @@ export function CoachKingCardGrid({
           ) : null}
         </View>
 
-        {(loading || !shown) && rows.length === 0 ? <ActivityIndicator color={theme.refresh} style={{ marginTop: s(32) }} /> : null}
+        {loading && rows.length === 0 ? <ActivityIndicator color={theme.refresh} style={{ marginTop: s(32) }} /> : null}
 
         <FlatList
           key={`${kind ?? 'none'}-${slotKey ?? 'x'}-${league}`}
-          data={shown ? matches : EMPTY}
+          data={matches}
           keyExtractor={keyOf}
           renderItem={renderItem}
           numColumns={COLUMNS}
@@ -290,7 +284,7 @@ export function CoachKingCardGrid({
             paddingTop: s(GRID.top + 7),
             paddingBottom: Math.max(insets.bottom, 12) + s(12),
           }}
-          ListEmptyComponent={loading || !shown ? null : (
+          ListEmptyComponent={loading && rows.length === 0 ? null : (
             <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32), color: theme.emptyText }]}>
               {query
                 ? copy.searchEmpty
@@ -573,7 +567,6 @@ export const PickCard = memo(function PickCard({
 
 const noop = () => undefined;
 const keyOf = (row: CkPlayer | CkCoach) => row.id;
-const EMPTY: ReadonlyArray<CkPlayer | CkCoach> = [];
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();

@@ -1,37 +1,71 @@
 /**
  * King of Coaches prices from real season numbers. Output (goals, assists,
  * expected stats, defensive work) is ranked inside each line, mixed with the
- * 365 rating and the club's table position, then snapped to the public tiers:
- * 5M / 8M / 13M. Prices are tenths of a million.
+ * 365 rating and the club's table position, then snapped to the public tiers.
+ *
+ * Players: 0.5M / 1M / 3M / 5M / 8M / 13M (cap).
+ * Coaches: 0.5M / 1M / 3M / 5M (cap) from club table tier.
+ * Prices are tenths of a million (5 = 0.5M).
  */
 
 import type { CkLine, CkPriceKind } from './coach-king-scoring';
 
-/** 13M. The best player of a line sits on this cap; that player is the super. */
+/** 13M — best players of a line. */
 export const CK_PLAYER_CAP_MILLI = 130;
 
-/** Budget floor shared with head coaches. */
-export const CK_PLAYER_FLOOR_MILLI = 50;
+/** 0.5M — cheapest fringe / rotation options. */
+export const CK_PLAYER_FLOOR_MILLI = 5;
 
-/** Mid tier — solid starters between the floor and the ceiling. */
+/** 1M — budget depth. */
+export const CK_PLAYER_BUDGET_MILLI = 10;
+
+/** 3M — squad regulars. */
+export const CK_PLAYER_LOW_MILLI = 30;
+
+/** 5M — solid starters. */
+export const CK_PLAYER_STANDARD_MILLI = 50;
+
+/** 8M — strong producers. */
 export const CK_PLAYER_MID_MILLI = 80;
 
-/** Public player price ladder: 5M / 8M / 13M. */
+/** Public player price ladder: 0.5 / 1 / 3 / 5 / 8 / 13. */
 export const CK_PRICE_TIERS_MILLI = [
   CK_PLAYER_FLOOR_MILLI,
+  CK_PLAYER_BUDGET_MILLI,
+  CK_PLAYER_LOW_MILLI,
+  CK_PLAYER_STANDARD_MILLI,
   CK_PLAYER_MID_MILLI,
   CK_PLAYER_CAP_MILLI,
 ] as const;
 
-/** Every head coach costs 5M, independent of table position. */
-export const CK_COACH_PRICE_MILLI = CK_PLAYER_FLOOR_MILLI;
+/** 0.5M coach floor. */
+export const CK_COACH_FLOOR_MILLI = 5;
+
+/** 1M coach mid-cheap. */
+export const CK_COACH_BUDGET_MILLI = 10;
+
+/** 3M coach mid. */
+export const CK_COACH_MID_MILLI = 30;
+
+/** 5M coach ceiling. */
+export const CK_COACH_CAP_MILLI = 50;
+
+/** @deprecated Prefer CK_COACH_CAP_MILLI — kept for older imports. */
+export const CK_COACH_PRICE_MILLI = CK_COACH_CAP_MILLI;
+
+export const CK_COACH_TIERS_MILLI = [
+  CK_COACH_FLOOR_MILLI,
+  CK_COACH_BUDGET_MILLI,
+  CK_COACH_MID_MILLI,
+  CK_COACH_CAP_MILLI,
+] as const;
 
 export const CK_PRICE_BANDS: Record<CkPriceKind, readonly [number, number]> = {
   FWD: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
   MID: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
   DEF: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
   GK: [CK_PLAYER_FLOOR_MILLI, CK_PLAYER_CAP_MILLI],
-  COACH: [CK_COACH_PRICE_MILLI, CK_COACH_PRICE_MILLI],
+  COACH: [CK_COACH_FLOOR_MILLI, CK_COACH_CAP_MILLI],
 };
 
 export type CkSeasonStats = {
@@ -118,21 +152,22 @@ function percentiles(values: number[]): number[] {
 }
 
 /**
- * Map a 0–1 line score onto 5 / 8 / 13 (kept for tests / callers that score one pick).
- * Pool pricing uses rank bands inside each line instead.
+ * Map a 0–1 score onto the player ladder (or coach ladder for COACH).
  */
 export function ckPriceFromScore(kind: CkPriceKind, score: number): number {
-  if (kind === 'COACH') return CK_COACH_PRICE_MILLI;
+  if (kind === 'COACH') return ckCoachPrice(clamp01(score));
   const t = clamp01(score);
-  if (t >= 0.7) return CK_PLAYER_CAP_MILLI;
-  if (t >= 0.32) return CK_PLAYER_MID_MILLI;
+  if (t >= 0.88) return CK_PLAYER_CAP_MILLI;
+  if (t >= 0.7) return CK_PLAYER_MID_MILLI;
+  if (t >= 0.5) return CK_PLAYER_STANDARD_MILLI;
+  if (t >= 0.32) return CK_PLAYER_LOW_MILLI;
+  if (t >= 0.16) return CK_PLAYER_BUDGET_MILLI;
   return CK_PLAYER_FLOOR_MILLI;
 }
 
 /**
  * Price every player of the pool in one pass so lines rank against themselves.
- * Season output (goals/assists/defence) dominates — no empty-stat fringe player
- * can sit above Haaland/Mbappé on club tier alone.
+ * Season output dominates — fringe no-names stay on 0.5M / 1M.
  */
 export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
   const prices = new Map<number, number>();
@@ -157,18 +192,24 @@ export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
       }))
       .sort((a, b) => b.score - a.score || b.output - a.output || a.key - b.key);
 
-    const eliteSlots = Math.max(1, Math.round(group.length * 0.02));
-    const midSlots = Math.max(eliteSlots, Math.round(group.length * 0.2));
+    const n = group.length;
+    const eliteSlots = Math.max(1, Math.round(n * 0.02));
+    const midSlots = Math.max(eliteSlots, Math.round(n * 0.12));
+    const standardSlots = Math.max(midSlots, Math.round(n * 0.28));
+    const lowSlots = Math.max(standardSlots, Math.round(n * 0.48));
+    const budgetSlots = Math.max(lowSlots, Math.round(n * 0.72));
     let elites = 0;
     let mids = 0;
+    let standards = 0;
+    let lows = 0;
+    let budgets = 0;
 
     ranked.forEach((row) => {
-      // Curated big-club stars (Haaland, Mbappé, …) always sit on the ceiling.
+      // Curated big-club stars always sit on the 13M ceiling.
       if (row.star && row.clubTier >= 0.8) {
         prices.set(row.key, CK_PLAYER_CAP_MILLI);
         return;
       }
-      // Other 13M spots: real producers from respectable clubs only.
       if (
         elites < eliteSlots
         && row.output > 0
@@ -179,13 +220,24 @@ export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
         prices.set(row.key, CK_PLAYER_CAP_MILLI);
         return;
       }
-      // 8M for solid output, curated stars, or strong rating/club mix.
-      if (
-        row.star
-        || (mids < midSlots && (row.output > 0 || row.score >= 0.45))
-      ) {
+      if (row.star || (mids < midSlots && (row.output > 0 || row.score >= 0.55))) {
         mids += 1;
         prices.set(row.key, CK_PLAYER_MID_MILLI);
+        return;
+      }
+      if (standards < standardSlots && (row.output > 0 || row.score >= 0.4)) {
+        standards += 1;
+        prices.set(row.key, CK_PLAYER_STANDARD_MILLI);
+        return;
+      }
+      if (lows < lowSlots && (row.output > 0 || row.score >= 0.25)) {
+        lows += 1;
+        prices.set(row.key, CK_PLAYER_LOW_MILLI);
+        return;
+      }
+      if (budgets < budgetSlots) {
+        budgets += 1;
+        prices.set(row.key, CK_PLAYER_BUDGET_MILLI);
         return;
       }
       prices.set(row.key, CK_PLAYER_FLOOR_MILLI);
@@ -194,8 +246,15 @@ export function ckPricePool(inputs: CkPriceInput[]): Map<number, number> {
   return prices;
 }
 
-export function ckCoachPrice(_clubTier?: number): number {
-  return CK_COACH_PRICE_MILLI;
+/**
+ * Coach price from club table tier: top sides → 5M, mid → 1–3M, bottom → 0.5M.
+ */
+export function ckCoachPrice(clubTier?: number): number {
+  const t = clamp01(clubTier ?? 0.5);
+  if (t >= 0.75) return CK_COACH_CAP_MILLI;
+  if (t >= 0.45) return CK_COACH_MID_MILLI;
+  if (t >= 0.2) return CK_COACH_BUDGET_MILLI;
+  return CK_COACH_FLOOR_MILLI;
 }
 
 /** 1 for first place, 0 for last; mid-table when the table is unknown. */
