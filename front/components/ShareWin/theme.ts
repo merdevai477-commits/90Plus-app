@@ -20,6 +20,8 @@ export type ShareWinTheme = {
   rowBg: string;
   avatarBg: string;
   hintBg: string;
+  /** Share-card footer copy — light ink in dark mode for contrast. */
+  hintText: string;
   white: string;
   countdownGradient: readonly [string, string, string];
   pointsGradient: readonly [string, string];
@@ -49,8 +51,9 @@ export function getShareWinTheme(isDark: boolean): ShareWinTheme {
       cardAlt: '#160B2C',
       rowBg: 'rgba(243,237,255,0.08)',
       avatarBg: 'rgba(231,219,255,0.18)',
-      hintBg: 'rgba(106,43,217,0.22)',
+      hintBg: 'rgba(106,43,217,0.32)',
       white: '#FFFFFF',
+      hintText: 'rgba(233,213,255,0.92)',
       countdownGradient: ['#A855F7', '#6A2BD9', '#4B1FA3'],
       pointsGradient: ['#A855F7', '#4B1FA3'],
       prizeFeaturedGradient: ['#6A2BD9', '#3B1480', '#1C0C3D'],
@@ -80,6 +83,7 @@ export function getShareWinTheme(isDark: boolean): ShareWinTheme {
     avatarBg: '#E7DBFF',
     hintBg: '#F2ECFD',
     white: '#FFFFFF',
+    hintText: '#4B1FA3',
     countdownGradient: ['#A855F7', '#6A2BD9', '#4B1FA3'],
     pointsGradient: ['#A855F7', '#4B1FA3'],
     prizeFeaturedGradient: ['#7C3AED', '#5B21B6', '#2E1065'],

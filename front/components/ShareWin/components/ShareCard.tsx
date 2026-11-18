@@ -57,7 +57,7 @@ const ShareCard = memo(function ShareCard({
         },
         cardTexture: {
           ...StyleSheet.absoluteFillObject,
-          opacity: 0.2,
+          opacity: theme.isDark ? 0.12 : 0.2,
         },
         title: {
           fontSize: f(14),
@@ -70,7 +70,7 @@ const ShareCard = memo(function ShareCard({
           width: '100%',
           height: s(44),
           borderRadius: s(14),
-          backgroundColor: theme.card,
+          backgroundColor: theme.isDark ? theme.cardAlt : theme.card,
           // Figma: link icon left, copy button right (URL stays LTR)
           flexDirection: 'row',
           alignItems: 'center',
@@ -143,7 +143,7 @@ const ShareCard = memo(function ShareCard({
           flex: 1,
           fontSize: f(12),
           fontWeight: '600',
-          color: theme.dark,
+          color: theme.hintText,
           textAlign: 'right',
           lineHeight: f(18),
         },

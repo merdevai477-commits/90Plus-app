@@ -1,6 +1,6 @@
 /**
- * Monthly prizes — Figma 2010:5799.
- * Featured + secondary cards use Figma raster backgrounds (compressed JPEG).
+ * Monthly prizes — Figma 2003:5549 (featured) + 2003:5550 (secondary).
+ * Featured bg uses Figma's taller crop (height 134.46%, top -15.73%).
  */
 
 import React, { memo, useMemo } from 'react';
@@ -58,11 +58,18 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           height: s(341),
           borderRadius: s(28),
           overflow: 'hidden',
+          backgroundColor: theme.isDark ? '#1C0C3D' : '#3B1480',
         },
+        /**
+         * Figma 2003:5549 positions the raster taller than the card and
+         * shifts it up so the PS5 + podium land correctly under the labels.
+         */
         featuredBg: {
-          ...StyleSheet.absoluteFillObject,
+          position: 'absolute',
+          left: 0,
           width: '100%',
-          height: '100%',
+          height: '134.46%',
+          top: '-15.73%',
         },
         featuredLabels: {
           position: 'absolute',
@@ -84,6 +91,9 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           fontSize: f(14),
           color: '#DEDEDE',
           textAlign: 'center',
+          textShadowColor: 'rgba(0,0,0,0.35)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 3,
         },
         medal: {
           width: s(17),
@@ -94,6 +104,9 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           fontSize: f(30),
           color: theme.accent,
           textAlign: 'center',
+          textShadowColor: 'rgba(0,0,0,0.4)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 4,
         },
         secondary: {
           width: '100%',
@@ -106,6 +119,7 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           paddingTop: s(10),
           paddingBottom: s(10),
           gap: s(4),
+          backgroundColor: theme.isDark ? '#160B2C' : '#5B21B6',
         },
         secondaryBg: {
           ...StyleSheet.absoluteFillObject,
@@ -117,6 +131,9 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           fontSize: f(12),
           color: '#E9E9E9',
           textAlign: 'center',
+          textShadowColor: 'rgba(0,0,0,0.35)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 3,
         },
         secondaryTitle: {
           fontFamily: getAppFont(700, language),
@@ -124,10 +141,13 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           color: theme.white,
           textAlign: 'center',
           zIndex: 2,
+          textShadowColor: 'rgba(0,0,0,0.4)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 4,
         },
         secondaryImage: {
           width: '100%',
-          height: s(155),
+          aspectRatio: 1774 / 887,
           zIndex: 2,
         },
       }),
@@ -138,7 +158,6 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
 
   const featured = prizes[0];
   const featuredCopy = prizeCopy(featured, language);
-
   return (
     <View style={styles.section}>
       <View style={styles.header}>
@@ -149,13 +168,12 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
       </View>
 
       <View style={styles.stack}>
-        {/* Featured — full Figma card art includes PS5 + rays */}
+        {/* Featured — Figma 2003:5549 */}
         <View style={styles.featured}>
           <Image
             source={SW_ASSET.prizeFeaturedBg}
             style={styles.featuredBg}
-            contentFit="cover"
-            contentPosition="center"
+            contentFit="fill"
             transition={150}
             cachePolicy="memory-disk"
           />
@@ -175,15 +193,26 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           </View>
         </View>
 
-        {/* Secondary — Figma bg + jerseys row */}
+        {/* Secondary — Figma 2003:5550; dark uses deepened ray plate */}
         <View style={styles.secondary}>
           <Image
-            source={SW_ASSET.prizeSecondaryBg}
+            source={
+              theme.isDark ? SW_ASSET.prizeSecondaryBgDark : SW_ASSET.prizeSecondaryBg
+            }
             style={styles.secondaryBg}
             contentFit="cover"
             transition={150}
             cachePolicy="memory-disk"
           />
+          {theme.isDark ? (
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFillObject,
+                { backgroundColor: 'rgba(8,6,15,0.22)' },
+              ]}
+            />
+          ) : null}
           <View style={[styles.placeRow, { zIndex: 2 }]}>
             <Text style={styles.secondaryPlace}>{copy.secondThirdPlace}</Text>
             <Image

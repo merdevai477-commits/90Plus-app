@@ -62,10 +62,11 @@ export const SW_ASSET = {
   dividerLineV2: require('../../assets/images/share-win-v2/divider-line.svg'),
   shareV2: require('../../assets/images/share-win-v2/icon-share.svg'),
   coinsV2: require('../../assets/images/share-win-v2/icon-coins.svg'),
-  /** Full prize card art from Figma 2010:5799 (compressed JPEG). */
+  /** Full prize card art from Figma 2003:5549 / 2003:5550 (compressed). */
   prizeFeaturedBg: require('../../assets/images/share-win-v2/prize-featured-bg.jpg'),
   prizeSecondaryBg: require('../../assets/images/share-win-v2/prize-secondary-bg.jpg'),
-  prizeJerseysRow: require('../../assets/images/share-win-v2/prize-jerseys-row.jpg'),
+  prizeSecondaryBgDark: require('../../assets/images/share-win-v2/prize-secondary-bg-dark.jpg'),
+  prizeJerseysRow: require('../../assets/images/share-win-v2/prize-jerseys-row.webp'),
   shareCardTexture: require('../../assets/images/share-win-v2/share-card-texture.jpg'),
 } as const;
 
