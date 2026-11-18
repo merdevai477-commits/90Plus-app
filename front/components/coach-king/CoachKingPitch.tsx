@@ -343,9 +343,10 @@ const styles = StyleSheet.create({
   formation: {
     borderRadius: 48,
     borderWidth: 0.5,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: 140,
+    maxWidth: 160,
   },
   formationTxt: {},
   coachCopy: { flex: 1 },
