@@ -1,13 +1,9 @@
 /**
- * Share & Win assets — every entry is the asset exported straight from Figma
- * node 109:470 and committed under assets/images/share-win/.
- *
- * SVGs are rendered with `expo-image` (androidsvg on Android, SDWebImageSVGCoder
- * on iOS), so the committed vector bytes are what ships — nothing is redrawn.
+ * Share & Win assets — legacy pack (109:470) + v2 icons from Frame123 (1997:5301).
  */
 
 export const SW_ASSET = {
-  // Icons
+  // Icons (legacy)
   copy: require('../../assets/images/share-win/icon-copy.svg'),
   linkDiagonal: require('../../assets/images/share-win/icon-link-diagonal.svg'),
   chevronRight: require('../../assets/images/share-win/icon-chevron-right.svg'),
@@ -38,12 +34,34 @@ export const SW_ASSET = {
   medal2: require('../../assets/images/share-win/medal-2.svg'),
   medal3: require('../../assets/images/share-win/medal-3.svg'),
 
-  // Share channels
+  // Share channels (legacy fallbacks)
   facebook: require('../../assets/images/share-win/social-facebook.svg'),
   instagram: require('../../assets/images/share-win/social-instagram.svg'),
   whatsapp: require('../../assets/images/share-win/social-whatsapp.svg'),
   snapchat: require('../../assets/images/share-win/social-snapchat.svg'),
 
+  // ── Frame123 / v2 ─────────────────────────────────────────────────────────
+  giftV2: require('../../assets/images/share-win-v2/icon-gift.svg'),
+  medal1stV2: require('../../assets/images/share-win-v2/icon-medal-1st.svg'),
+  rankingV2: require('../../assets/images/share-win-v2/icon-ranking.svg'),
+  clockV2: require('../../assets/images/share-win-v2/icon-clock.svg'),
+  colonDots: require('../../assets/images/share-win-v2/colon-dots.svg'),
+  podiumTop1: require('../../assets/images/share-win-v2/podium-top-1.svg'),
+  podiumTop2: require('../../assets/images/share-win-v2/podium-top-2.svg'),
+  podiumTop3: require('../../assets/images/share-win-v2/podium-top-3.svg'),
+  chevronDownV2: require('../../assets/images/share-win-v2/icon-chevron-down.svg'),
+  linkV2: require('../../assets/images/share-win-v2/icon-link.svg'),
+  copyV2: require('../../assets/images/share-win-v2/icon-copy.svg'),
+  facebookV2: require('../../assets/images/share-win-v2/social-facebook.svg'),
+  instagramV2: require('../../assets/images/share-win-v2/social-instagram.svg'),
+  whatsappV2: require('../../assets/images/share-win-v2/social-whatsapp.svg'),
+  snapchatV2: require('../../assets/images/share-win-v2/social-snapchat.svg'),
+  statusBullet: require('../../assets/images/share-win-v2/status-bullet.svg'),
+  backV2: require('../../assets/images/share-win-v2/icon-back.svg'),
+  rankV2: require('../../assets/images/share-win-v2/icon-rank.svg'),
+  dividerLineV2: require('../../assets/images/share-win-v2/divider-line.svg'),
+  shareV2: require('../../assets/images/share-win-v2/icon-share.svg'),
+  coinsV2: require('../../assets/images/share-win-v2/icon-coins.svg'),
 } as const;
 
 /**
@@ -54,7 +72,6 @@ export const PRIZE_FALLBACK_IMAGE: Record<string, number> = {
   ps5: require('../../assets/images/share-win/prize-ps5.png'),
   kit: require('../../assets/images/share-win/prize-kit.png'),
   'kit-2': require('../../assets/images/share-win/prize-kit.png'),
-  // Remaining winners are jerseys only — no football art.
   jersey: require('../../assets/images/share-win/prize-jersey-sm.png'),
   'jersey-2': require('../../assets/images/share-win/prize-jersey-sm.png'),
   'jersey-3': require('../../assets/images/share-win/prize-jersey-sm.png'),

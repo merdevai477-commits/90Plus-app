@@ -1316,7 +1316,7 @@ export const ar = {
     ordinals: ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع'],
   },
 
-  /** شارك واربح — Share & Win (Figma node 109:470) */
+  /** شارك واربح — Share & Win (Figma Frame123 / 1997:5301) */
   shareWin: {
     // Hero
     titleHighlight: 'شارك',
@@ -1336,12 +1336,19 @@ export const ar = {
 
     // الترتيب الشهري
     weeklyTitle: 'الترتيب الشهري',
+    weeklySubtitle: 'شارك الان التطبيق مع أصدقائك لتدخل ضمن الترتيب الشهري وتربح جائزة',
     weeklyEndsIn: 'ينتهي بعد:',
+    countdownRemaining: 'الوقت المتبقي على نهاية الترتيب',
     unitDays: 'أيام',
     unitHours: 'ساعات',
     unitMinutes: 'دقائق',
-    unitSeconds: 'ثواني',
+    unitSeconds: 'ثوان',
     viewFullRanking: 'عرض الترتيب الكامل',
+    viewMoreParticipants: 'عرض المزيد من المتسابقين',
+    participantsTitle: 'ترتيب المشاركين',
+    participantsRange: 'المراكز 4–10',
+    friendsUnit: 'صديق',
+    pointsLabel: 'نقطة',
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
     leaderboardCompetitors: '{count} مشارك هذا الشهر',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
@@ -1354,16 +1361,21 @@ export const ar = {
     prizesSubtitleLine1: 'جائزة جديدة كل شهر!',
     prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
     remainingMonthsTitle: 'باقي الفائزين',
+    firstPlace: 'المركز الأول',
+    secondThirdPlace: 'المركز الثاني والثالث',
+    favoriteKitTitle: 'قميص فريقك المفضل',
 
     // بطاقة المشاركة
     shareCardTitle: 'شارك الان واربح',
-    shareCardSubtitle: 'انسخ رابطك و شاركه مع أصدقائك',
+    shareCardSubtitle: 'انسخ رابطك وشارك مع أصدقائك',
     channelFacebook: 'فيسبوك',
-    channelInstagram: 'إنستغرام',
+    channelInstagram: 'إنستجرام',
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
     referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
     referralHintXp: '1 XP',
+    referralHintFull:
+      'كل صديق يسجل من خلال رابطك يمنحك نقاطاً إضافية، ويرفع ترتيبك، ومع كل تحميل جديد تقترب أكثر من الجائزة الشهرية.',
     linkCopied: 'تم نسخ الرابط',
     linkCopiedDetail: 'الصقه في محادثة — الترتيب يزيد لما صاحبك ينضم',
     copyFailed: 'تعذّر نسخ الرابط',
@@ -1376,6 +1388,9 @@ export const ar = {
     statsRankingUnit: 'نقاط',
     statsRankThisWeek: 'ترتيبك هذا الشهر',
     statsShares: 'مشاركاتك',
+    statsMyPoints: 'عدد نقاطي',
+    statsYourShares: 'مرات مشاركتك',
+    statsYourRank: 'ترتيبك حاليا',
 
     // آخر فائز
     lastWinnerTitle: 'آخر فائز',

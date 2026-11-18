@@ -67,7 +67,7 @@ export default function ShareWinLeaderboardScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
   const insets = useSafeAreaInsets();
-  const { sw, metrics } = useShareWinStyles();
+  const { sw, metrics, theme } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s } = metrics;
@@ -154,8 +154,8 @@ export default function ShareWinLeaderboardScreen() {
       <RefreshControl
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
-        tintColor="#B772F8"
-        colors={['#B772F8']}
+        tintColor={theme.refresh}
+        colors={[theme.refresh]}
       />
     ),
     [isRefetching, refetch],
@@ -199,7 +199,7 @@ export default function ShareWinLeaderboardScreen() {
     if (isFetchingNextPage) {
       return (
         <View style={sw.lbFooter}>
-          <ActivityIndicator color="#B772F8" />
+          <ActivityIndicator color={theme.refresh} />
         </View>
       );
     }

@@ -3,31 +3,10 @@
  * SHARE & WIN SCREEN — شارك واربح
  * =============================================================================
  *
- * A 1:1 port of Figma node 109:470 ("iPhone 14 Plus - 2", 448pt artboard,
- * 22pt gutters ⇒ 404pt content column).
+ * Figma Frame123 (1997:5301) — light tokens + dark adaptation.
  *
- * ── COMPOSITION MAP ──────────────────────────────────────────────────────────
- *   Figma 758:1880 ("iPhone 14 Plus - 27").
- *   <View>                            screen shell (safe area via insets)
- *     <pageHeader/>                   back (left) · title
- *     <ScrollView>
- *       <HeroHeader/>                 "شارك واربح" + every-share XP line
- *       <ShareCard/>                  referral link, copy, channels, hint
- *       <WeeklyPrizes/>               featured + side pair + remaining months
- *       <WeeklyRankingCard/>          countdown + top 5 + full-ranking pill
- *       <LastWinnerCard/>             rank 1 of the last closed cycle
- *       <StatsBar/>                   friends · XP · rank (last scroll section)
- *
- * ── WHERE THE NUMBERS COME FROM ──────────────────────────────────────────────
- *   Everything statistical — shares, participants, score, rank, the cycle
- *   window, the leaderboard, the prizes and the last winner — is served by
- *   GET /api/share-win/me. This screen formats; it never derives.
- *
- * ── WHAT YOU CAN CHANGE HERE ─────────────────────────────────────────────────
- *   COLOURS / SIZES / RADII ......... ./styles.ts → SW_COLOR, SW_GRADIENT
- *   COPY (all strings) .............. locales/ar.ts + locales/en.ts → shareWin
- *   SHARE BEHAVIOUR ................. hooks/useShareWin.ts
- *   WHERE "full ranking" GOES ....... handleViewFullRanking() below
+ * Composition:
+ *   Header → Stats → Prizes → Share → Monthly ranking (countdown + podium + list)
  * =============================================================================
  */
 
@@ -36,6 +15,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StatusBar,
   Text,
   TouchableOpacity,
   View,
@@ -48,11 +28,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShareWin, type ShareChannel } from '../../hooks/useShareWin';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
-import type { ShareWinLastWinner } from '../../services/shareWin.service';
 
 import { SW_ASSET } from './assets';
-import HeroHeader from './components/HeroHeader';
-import LastWinnerCard from './components/LastWinnerCard';
 import LuckyWheelCard from './components/LuckyWheelCard';
 import ShareCard from './components/ShareCard';
 import ShareWinSkeleton from './components/ShareWinSkeleton';
@@ -61,12 +38,7 @@ import WeeklyPrizes from './components/WeeklyPrizes';
 import WeeklyRankingCard from './components/WeeklyRankingCard';
 import { useShareWinStyles } from './styles';
 
-/**
- * Trailing space after the last content section (the stats bar). Figma leaves
- * 16pt between it and the frame's tab bar; this route is a root Stack screen
- * with no tab bar, so the safe-area inset is added to that on device.
- */
-const PAGE_END_GAP = 16;
+const PAGE_END_GAP = 24;
 
 export default function ShareWinScreen() {
   useScreenFont();
@@ -74,7 +46,7 @@ export default function ShareWinScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
   const insets = useSafeAreaInsets();
-  const { sw, metrics } = useShareWinStyles();
+  const { sw, metrics, theme } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s } = metrics;
@@ -90,31 +62,19 @@ export default function ShareWinScreen() {
     trackShare,
   } = useShareWin();
 
-  // Invitees must register first — never browse Share & Win signed out.
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       router.replace('/auth');
     }
   }, [isLoaded, isSignedIn, router]);
 
-  /** The page simply ends after the stats bar — nothing floats over it. */
   const scrollBottomPadding = insets.bottom + s(PAGE_END_GAP);
-  /**
-   * The header now owns the top safe-area, so this is 0. The name must still
-   * appear in the ScrollView style objects: Fast Refresh / nativewind wrap-jsx
-   * looks it up after a hot reload, and dropping it crashes with
-   * `Property 'scrollTopPadding' doesn't exist`.
-   */
-  const scrollTopPadding = 0;
+  const scrollTopPadding = s(12);
 
   const handleViewFullRanking = useCallback(() => {
     router.push('/share-win/leaderboard');
   }, [router]);
 
-  /**
-   * Always Rank when signed in. Unsigned users are sent to registration —
-   * never into the main tabs without an account.
-   */
   const handleLeave = useCallback(() => {
     if (!isSignedIn) {
       router.replace('/auth');
@@ -123,7 +83,6 @@ export default function ShareWinScreen() {
     router.replace('/(tabs)/rank');
   }, [isSignedIn, router]);
 
-  /** Same header on every state — loading, error and ready. Back stays on the left; no bell. */
   const pageHeader = (
     <View
       style={[
@@ -131,8 +90,8 @@ export default function ShareWinScreen() {
         {
           paddingTop: insets.top + s(10),
           paddingBottom: s(10),
-          paddingLeft: Math.max(insets.left, s(24)),
-          paddingRight: Math.max(insets.right, s(24)),
+          paddingLeft: Math.max(insets.left, s(20)),
+          paddingRight: Math.max(insets.right, s(20)),
           flexDirection: 'row',
         },
       ]}
@@ -146,12 +105,11 @@ export default function ShareWinScreen() {
         style={({ pressed }) => [sw.pageBackButton, pressed && { opacity: 0.7 }]}
       >
         <Image
-          source={SW_ASSET.chevronRight}
+          source={SW_ASSET.backV2}
           style={{
             width: s(24),
             height: s(24),
-            tintColor: '#FFFFFF',
-            // Always point left — back sits on the left in both languages.
+            tintColor: theme.headerIcon,
             transform: [{ scaleX: -1 }],
           }}
           contentFit="contain"
@@ -163,19 +121,10 @@ export default function ShareWinScreen() {
         {`${copy.titleHighlight}${copy.titleRest}`}
       </Text>
 
-      {/* Spacer keeps the title centered after removing the bell. */}
       <View style={sw.pageBackButton} pointerEvents="none" />
     </View>
   );
 
-  const handleViewStory = useCallback(
-    (winner: ShareWinLastWinner) => {
-      router.push({ pathname: '/user/[username]', params: { username: winner.username } });
-    },
-    [router],
-  );
-
-  /** A channel tile that opened its native app still counts as a share. */
   const handleChannelShared = useCallback(
     (channel: ShareChannel) => {
       void trackShare(channel);
@@ -183,10 +132,6 @@ export default function ShareWinScreen() {
     [trackShare],
   );
 
-  /**
-   * Channels without a text-share intent (Instagram, Snapchat) and any
-   * uninstalled app fall through to the OS share sheet, which the hook owns.
-   */
   const handleFallbackShare = useCallback(
     (channel: ShareChannel) => {
       void shareReferral(language === 'ar' ? 'ar' : 'en', channel);
@@ -199,21 +144,21 @@ export default function ShareWinScreen() {
       <RefreshControl
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
-        tintColor="#B772F8"
-        colors={['#B772F8']}
+        tintColor={theme.refresh}
+        colors={[theme.refresh]}
       />
     ),
-    [isRefetching, refetch],
+    [isRefetching, refetch, theme.refresh],
   );
 
   if (!isLoaded || !isSignedIn) {
     return <View style={sw.root} />;
   }
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading && !overview) {
     return (
       <View style={sw.root}>
+        <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
         {pageHeader}
         <ScrollView
           style={sw.scroll}
@@ -229,10 +174,10 @@ export default function ShareWinScreen() {
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
   if (isError && !overview) {
     return (
       <View style={sw.root}>
+        <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
         {pageHeader}
         <View style={sw.stateWrap}>
           <Text style={sw.stateTitle}>{copy.errorTitle}</Text>
@@ -249,13 +194,18 @@ export default function ShareWinScreen() {
     );
   }
 
-  // The brief gap between "loaded" and "has data". It gets the back control
-  // too, so there is no frame of this screen without a way out.
-  if (!overview) return <View style={sw.root}>{pageHeader}</View>;
+  if (!overview) {
+    return (
+      <View style={sw.root}>
+        <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
+        {pageHeader}
+      </View>
+    );
+  }
 
-  // ── Ready ─────────────────────────────────────────────────────────────────
   return (
     <View style={sw.root}>
+      <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       {pageHeader}
       <ScrollView
         style={sw.scroll}
@@ -266,15 +216,17 @@ export default function ShareWinScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
-        <HeroHeader />
-
-        {/*
-         * Fast Refresh / nativewind wrap-jsx still looks up this tag after the
-         * wheel left the page. Keep the binding; never mount it.
-         */}
+        {/* Fast Refresh keeps this binding; never mount. */}
         {false ? <LuckyWheelCard onSpinSettled={() => undefined} /> : null}
 
-        {/* Figma 758:1880 order: Share → Prizes → Ranking → Winner → Stats */}
+        <StatsBar
+          score={overview.score}
+          shareCount={overview.shareCount}
+          rank={overview.rank}
+        />
+
+        <WeeklyPrizes prizes={overview.prizes} />
+
         <ShareCard
           referralCode={overview.referralCode}
           referralLink={overview.referralLink}
@@ -283,20 +235,10 @@ export default function ShareWinScreen() {
           onFallbackShare={handleFallbackShare}
         />
 
-        <WeeklyPrizes prizes={overview.prizes} />
-
         <WeeklyRankingCard
           entries={overview.leaderboard}
           cycleEndAt={overview.cycle.endAt}
           onViewFullRanking={handleViewFullRanking}
-        />
-
-        <LastWinnerCard winner={overview.lastWinner} onViewStory={handleViewStory} />
-
-        <StatsBar
-          participants={overview.participants}
-          score={overview.score}
-          rank={overview.rank}
         />
       </ScrollView>
     </View>

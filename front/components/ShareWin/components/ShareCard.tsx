@@ -1,16 +1,10 @@
 /**
- * "شارك الان واربح" card — Figma node 163:154.
- *
- * Referral link + copy button, the four channel tiles, and the ranking hint.
- * Channel handling follows the convention already used by reels/ReelItem:
- * try the app's own share URL, fall back to the OS share sheet, and only
- * record the share once it actually went out.
+ * Invite & Share card — Figma Frame123 nodes 2022:6546 / 2022:6583.
  */
 
-import React, { memo, useCallback } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import React, { memo, useCallback, useMemo } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { buildReferralSharePayload } from '../../../constants/shareLinks';
 import { useTranslation } from '../../../src/i18n';
@@ -19,15 +13,13 @@ import { confirmExternalShare } from '../../../utils/confirmExternalShare';
 import { logger } from '../../../utils/logger';
 import { SW_ASSET } from '../assets';
 import { compactLink } from '../data';
-import { SW_GRADIENT, useShareWinStyles } from '../styles';
+import { useShareWinStyles } from '../styles';
 
 interface ShareCardProps {
   referralCode: string;
   referralLink: string;
   onCopyLink: () => void;
-  /** The channel's own app opened — record the share for that channel. */
   onShared: (channel: ShareChannel) => void;
-  /** No channel intent available — hand off to the OS share sheet. */
   onFallbackShare: (channel: ShareChannel) => void;
 }
 
@@ -38,23 +30,131 @@ const ShareCard = memo(function ShareCard({
   onShared,
   onFallbackShare,
 }: ShareCardProps) {
-  const { sw, metrics } = useShareWinStyles();
+  const { metrics, theme } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
-  const { s } = metrics;
+  const { s, f } = metrics;
 
-  /**
-   * Open a channel's native composer with the referral message. Anything that
-   * isn't installed (or doesn't accept pre-filled text, like Instagram and
-   * Snapchat) falls through to the OS share sheet.
-   */
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        section: {
+          width: '100%',
+          gap: s(16),
+        },
+        card: {
+          width: '100%',
+          borderRadius: s(22),
+          backgroundColor: theme.pale,
+          padding: s(10),
+          gap: s(13),
+          alignItems: 'center',
+          shadowColor: '#6A2BD9',
+          shadowOffset: { width: 0, height: 5 },
+          shadowOpacity: theme.isDark ? 0.2 : 0.12,
+          shadowRadius: 7,
+          elevation: 4,
+        },
+        title: {
+          fontSize: f(14),
+          fontWeight: '700',
+          color: theme.ink,
+          textAlign: 'center',
+          width: '100%',
+        },
+        linkRow: {
+          width: '100%',
+          height: s(44),
+          borderRadius: s(14),
+          backgroundColor: theme.card,
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: s(6),
+          gap: s(8),
+        },
+        linkText: {
+          flex: 1,
+          fontSize: f(10.5),
+          fontWeight: '600',
+          color: theme.ink,
+        },
+        copyBtn: {
+          width: s(42),
+          height: s(32),
+          borderRadius: s(11),
+          backgroundColor: theme.primary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#6A2BD9',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.22,
+          shadowRadius: 7,
+          elevation: 3,
+        },
+        socials: {
+          width: '100%',
+          flexDirection: 'row',
+          gap: s(6),
+          height: s(62),
+        },
+        socialTile: {
+          flex: 1,
+          height: s(62),
+          borderRadius: s(14),
+          backgroundColor: theme.card,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: s(1),
+          padding: s(4),
+          shadowColor: '#4B1FA3',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: theme.isDark ? 0.2 : 0.08,
+          shadowRadius: 6,
+          elevation: 2,
+        },
+        socialIcon: {
+          width: s(30),
+          height: s(30),
+        },
+        socialLabel: {
+          fontSize: f(9.5),
+          fontWeight: '600',
+          color: theme.ink,
+          textAlign: 'center',
+        },
+        hint: {
+          width: '100%',
+          borderRadius: s(12),
+          backgroundColor: theme.hintBg,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          paddingHorizontal: s(17),
+          paddingVertical: s(11),
+          gap: s(12),
+        },
+        hintText: {
+          flex: 1,
+          fontSize: f(12),
+          fontWeight: '600',
+          color: theme.dark,
+          textAlign: 'right',
+          lineHeight: f(18),
+        },
+        bullet: {
+          width: s(8),
+          height: s(8),
+        },
+      }),
+    [f, s, theme],
+  );
+
   const shareVia = useCallback(
     async (channel: ShareChannel, schemeUrl: string | null) => {
       if (schemeUrl) {
         try {
           if (await Linking.canOpenURL(schemeUrl)) {
             await Linking.openURL(schemeUrl);
-            // Only count a real leave — `inactive` alone (sheet/flash) is not enough.
             if (await confirmExternalShare(undefined, ['background'])) {
               onShared(channel);
               return;
@@ -64,7 +164,6 @@ const ShareCard = memo(function ShareCard({
           logger.debug(`[ShareWin] ${channel} scheme unavailable:`, error);
         }
       }
-
       onFallbackShare(channel);
     },
     [onFallbackShare, onShared],
@@ -79,20 +178,19 @@ const ShareCard = memo(function ShareCard({
     {
       id: 'facebook',
       label: copy.channelFacebook,
-      icon: SW_ASSET.facebook,
+      icon: SW_ASSET.facebookV2,
       scheme: `fb://share?u=${encodeURIComponent(referralLink)}`,
     },
     {
       id: 'instagram',
       label: copy.channelInstagram,
-      icon: SW_ASSET.instagram,
-      // Instagram has no text-share intent — always the OS sheet.
+      icon: SW_ASSET.instagramV2,
       scheme: null,
     },
     {
       id: 'whatsapp',
       label: copy.channelWhatsapp,
-      icon: SW_ASSET.whatsapp,
+      icon: SW_ASSET.whatsappV2,
       scheme: `whatsapp://send?text=${encodeURIComponent(
         buildReferralSharePayload(referralCode, language === 'ar' ? 'ar' : 'en').message,
       )}`,
@@ -100,87 +198,70 @@ const ShareCard = memo(function ShareCard({
     {
       id: 'snapchat',
       label: copy.channelSnapchat,
-      icon: SW_ASSET.snapchat,
-      // Snapchat's creative kit needs a native SDK — OS sheet instead.
+      icon: SW_ASSET.snapchatV2,
       scheme: null,
     },
   ];
 
   return (
-    <View style={[sw.card, sw.shareCard]}>
-      <View style={sw.shareHeader}>
-        <View style={sw.shareTitleRow}>
-          <Text style={sw.cardTitle} accessibilityRole="header">
-            {copy.shareCardTitle}
-          </Text>
-          <Image
-            source={SW_ASSET.linkDiagonal}
-            style={{ width: s(24), height: s(24) }}
-            contentFit="contain"
-            transition={0}
-          />
-        </View>
-        <Text style={sw.cardSubtitle}>{copy.shareCardSubtitle}</Text>
-      </View>
+    <View style={styles.section}>
+      <View style={styles.card}>
+        <Text style={styles.title}>{copy.shareCardSubtitle}</Text>
 
-      <View style={sw.shareBody}>
-        {/* Referral link + copy */}
         <Pressable
-          style={sw.linkRow}
+          style={styles.linkRow}
           onPress={onCopyLink}
           accessibilityRole="button"
           accessibilityLabel={`${copy.shareCardSubtitle}: ${referralLink}`}
         >
-          <Text style={sw.linkText} numberOfLines={1}>
-            {compactLink(referralLink, 42)}
-          </Text>
           <Image
-            source={SW_ASSET.copy}
-            style={{ width: s(24), height: s(24) }}
+            source={SW_ASSET.linkV2}
+            style={{ width: s(20), height: s(20) }}
             contentFit="contain"
             transition={0}
           />
+          <Text style={styles.linkText} numberOfLines={1}>
+            {compactLink(referralLink, 42)}
+          </Text>
+          <View style={styles.copyBtn}>
+            <Image
+              source={SW_ASSET.copyV2}
+              style={{ width: s(20), height: s(20) }}
+              contentFit="contain"
+              transition={0}
+            />
+          </View>
         </Pressable>
 
-        {/* Channel tiles */}
-        <View style={sw.socialsRow}>
+        <View style={styles.socials}>
           {channels.map((channel) => (
             <Pressable
               key={channel.id}
-              style={sw.socialTile}
+              style={styles.socialTile}
               onPress={() => void shareVia(channel.id, channel.scheme)}
               accessibilityRole="button"
               accessibilityLabel={channel.label}
             >
-              <LinearGradient
-                colors={SW_GRADIENT.tile}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-              />
               <Image
                 source={channel.icon}
-                style={sw.socialIcon}
+                style={styles.socialIcon}
                 contentFit="contain"
                 transition={0}
               />
-              <Text style={sw.socialLabel}>{channel.label}</Text>
+              <Text style={styles.socialLabel}>{channel.label}</Text>
             </Pressable>
           ))}
         </View>
+      </View>
 
-        <View style={sw.hintRow}>
-          <Text style={sw.hintText}>
-            {copy.referralHintLead}
-            <Text style={sw.hintEmphasis}>{copy.referralHintXp}</Text>
-          </Text>
-          <Image
-            source={SW_ASSET.gift}
-            style={sw.hintGift}
-            contentFit="contain"
-            transition={0}
-          />
-        </View>
+      <View style={styles.hint}>
+        <Text style={styles.hintText}>{copy.referralHintFull}</Text>
+        <Image
+          source={SW_ASSET.statusBullet}
+          style={styles.bullet}
+          contentFit="contain"
+          transition={0}
+        />
       </View>
     </View>
   );

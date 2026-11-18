@@ -35,9 +35,11 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useDesignScale, type DesignScale } from '../../utils/responsive';
 import { getAppFont } from '../../utils/fontSetup';
 import { useLanguageStore } from '../../src/i18n/store';
+import { getShareWinTheme, type ShareWinTheme } from './theme';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * 1. COLOUR TOKENS
@@ -248,23 +250,33 @@ export function rowTier(index: number) {
 export interface ShareWinStyles {
   sw: ReturnType<typeof buildStyles>;
   metrics: DesignScale;
+  theme: ShareWinTheme;
 }
 
-function buildStyles(scale: DesignScale, language: string) {
+function buildStyles(scale: DesignScale, language: string, theme: ShareWinTheme) {
   const { s, f } = scale;
   const font = (weight: 400 | 500 | 600 | 700 | 800) => getAppFont(weight, language);
 
   return StyleSheet.create({
-    /* ── Screen shell ──────────────────────────────────────────────────── */
+    /* ── Screen shell — Figma Frame123 (1997:5301) ─────────────────────── */
     root: {
       flex: 1,
-      backgroundColor: SW_COLOR.screen,
+      backgroundColor: theme.screen,
     },
     scroll: {
       flex: 1,
     },
     scrollContent: {
       alignItems: 'center',
+      width: '100%',
+      paddingHorizontal: s(20),
+      gap: s(22),
+    },
+    /** Content column width matching Figma 390pt on 430 artboard. */
+    column: {
+      width: '100%',
+      maxWidth: s(390),
+      alignSelf: 'center',
     },
 
     /* ── Hero (node 119:625) — left 74, top 100, width 300, gap 16 ─────── */
@@ -1272,13 +1284,13 @@ function buildStyles(scale: DesignScale, language: string) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: '#0C051A',
+      backgroundColor: theme.screen,
       zIndex: 40,
     },
     pageHeaderTitle: {
-      fontFamily: font(600),
-      fontSize: f(20),
-      color: SW_COLOR.white,
+      fontFamily: font(700),
+      fontSize: f(28),
+      color: theme.ink,
       textAlign: 'center',
       flex: 1,
     },
@@ -1300,7 +1312,7 @@ function buildStyles(scale: DesignScale, language: string) {
     lbFooterText: {
       fontFamily: font(400),
       fontSize: f(13),
-      color: SW_COLOR.bodyGrey,
+      color: theme.muted,
       textAlign: 'center',
     },
     lbSkeletonList: {
@@ -1321,23 +1333,23 @@ function buildStyles(scale: DesignScale, language: string) {
       paddingTop: s(10),
       paddingHorizontal: s(22),
       gap: s(6),
-      backgroundColor: 'rgba(3,3,3,0.94)',
+      backgroundColor: theme.isDark ? 'rgba(8,6,15,0.96)' : 'rgba(252,252,252,0.96)',
       borderTopWidth: 1,
-      borderTopColor: 'rgba(255,255,255,0.08)',
+      borderTopColor: theme.border,
     },
     lbMineLabel: {
       fontFamily: font(400),
       fontSize: f(11),
-      color: SW_COLOR.statsLabel,
+      color: theme.muted,
     },
     /** Current-user emphasis, applied on top of the normal row treatment. */
     boardRowMine: {
-      borderColor: SW_COLOR.prizeActiveBorder,
-      backgroundColor: 'rgba(116,25,204,0.14)',
+      borderColor: theme.primary,
+      backgroundColor: theme.isDark ? 'rgba(106,43,217,0.18)' : 'rgba(106,43,217,0.1)',
     },
     boardAvatarMine: {
       borderWidth: 1,
-      borderColor: SW_COLOR.prizeActiveBorder,
+      borderColor: theme.primary,
     },
 
     /* ── States ────────────────────────────────────────────────────────── */
@@ -1351,13 +1363,13 @@ function buildStyles(scale: DesignScale, language: string) {
     stateTitle: {
       fontFamily: font(700),
       fontSize: f(20),
-      color: SW_COLOR.white,
+      color: theme.ink,
       textAlign: 'center',
     },
     stateBody: {
       fontFamily: font(400),
       fontSize: f(15),
-      color: SW_COLOR.bodyGrey,
+      color: theme.muted,
       textAlign: 'center',
     },
     stateButton: {
@@ -1366,28 +1378,33 @@ function buildStyles(scale: DesignScale, language: string) {
       paddingVertical: s(12),
       borderRadius: s(SW_RADIUS.tile),
       borderWidth: 1,
-      borderColor: SW_COLOR.cardBorder,
-      backgroundColor: SW_COLOR.cardBg,
+      borderColor: theme.border,
+      backgroundColor: theme.pale,
     },
     stateButtonText: {
       fontFamily: font(600),
       fontSize: f(15),
-      color: SW_COLOR.white,
+      color: theme.primary,
     },
     /** Skeleton block used while the payload loads. */
     skeleton: {
-      backgroundColor: 'rgba(255,255,255,0.06)',
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(36,16,78,0.06)',
       borderRadius: s(SW_RADIUS.tile),
     },
   });
 }
 
-/** Scaled stylesheet + the raw metrics, for components needing `s()` inline. */
+/** Scaled stylesheet + theme for Frame123 light/dark. */
 export function useShareWinStyles(): ShareWinStyles {
   const metrics = useDesignScale();
   const language = useLanguageStore((state) => state.language);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getShareWinTheme(isDark), [isDark]);
 
-  const sw = useMemo(() => buildStyles(metrics, language), [metrics, language]);
+  const sw = useMemo(
+    () => buildStyles(metrics, language, theme),
+    [metrics, language, theme],
+  );
 
-  return { sw, metrics };
+  return { sw, metrics, theme };
 }

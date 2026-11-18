@@ -57,6 +57,10 @@ jest.mock('@clerk/clerk-expo', () => ({
   useAuth: () => ({ isLoaded: true, isSignedIn: true, getToken: async () => 'tok' }),
 }));
 
+jest.mock('@/hooks/useResolvedAppScheme', () => ({
+  useResolvedAppScheme: () => ({ scheme: 'dark', isDark: true }),
+}));
+
 import ShareWinScreen from '../ShareWinScreen';
 
 const mockRouter = jest.requireMock('expo-router').router as {

@@ -1,84 +1,152 @@
 /**
- * Stats bar — Figma node 758:2181.
- *
- * The final content section of the page, NOT a footer: it scrolls with
- * everything else and sits below the last-winner section in the same
- * 404pt column.
- *
- * Invited friends · ranking points · rank this cycle.
+ * Stats strip — Figma Frame123 node 2003:5460.
+ * Rank · Shares · Points (featured purple pill).
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTranslation } from '../../../src/i18n';
+import { getAppFont } from '../../../utils/fontSetup';
 import { SW_ASSET } from '../assets';
 import { formatNumber } from '../data';
-import { SW_GRADIENT, useShareWinStyles } from '../styles';
-import GradientText from './GradientText';
+import { useShareWinStyles } from '../styles';
 
 interface StatsBarProps {
-  participants: number;
   score: number;
-  rank: number;
+  shareCount: number;
+  rank: number | null;
 }
 
-const StatsBar = memo(function StatsBar({ participants, score, rank }: StatsBarProps) {
-  const { sw, metrics } = useShareWinStyles();
+const StatsBar = memo(function StatsBar({ score, shareCount, rank }: StatsBarProps) {
+  const { metrics, theme } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
-  const { s } = metrics;
+  const { s, f } = metrics;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        wrap: {
+          width: '100%',
+          height: s(88),
+          borderRadius: s(20),
+          backgroundColor: theme.card,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: s(7),
+          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: theme.isDark ? 0.35 : 0.12,
+          shadowRadius: 4,
+          elevation: 3,
+        },
+        col: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: s(2),
+        },
+        labelRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: s(2),
+        },
+        label: {
+          fontFamily: getAppFont(400, language),
+          fontSize: f(12),
+          color: theme.muted,
+          textAlign: 'center',
+        },
+        value: {
+          fontFamily: getAppFont(700, language),
+          fontSize: f(32),
+          color: theme.dark,
+          textAlign: 'center',
+          width: '100%',
+        },
+        pointsPill: {
+          width: s(144),
+          height: s(67),
+          borderRadius: s(16),
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        },
+        pointsLabel: {
+          fontFamily: getAppFont(600, language),
+          fontSize: f(12),
+          color: '#DDDDDD',
+          textAlign: 'center',
+        },
+        pointsValue: {
+          fontFamily: getAppFont(700, language),
+          fontSize: f(24),
+          color: theme.white,
+          textAlign: 'center',
+          width: '100%',
+        },
+        icon: {
+          width: s(15),
+          height: s(15),
+        },
+        coinsIcon: {
+          width: s(17),
+          height: s(17),
+        },
+        divider: {
+          width: 1,
+          height: s(50),
+          backgroundColor: theme.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(36,16,78,0.12)',
+        },
+      }),
+    [f, language, s, theme],
+  );
 
   return (
-    <View style={sw.statsBar}>
-      <View style={[sw.statsCol, { width: s(78) }]}>
-        <Text style={sw.statsLabel}>{copy.statsInvitedFriends}</Text>
-        <Text style={[sw.statsValue, sw.statsFriendsValue]}>
-          {copy.statsFriendsValue.replace('{count}', formatNumber(participants, language))}
+    <View style={styles.wrap}>
+      <View style={styles.col}>
+        <View style={styles.labelRow}>
+          <Text style={styles.label}>{copy.statsYourRank}</Text>
+          <Image source={SW_ASSET.rankV2} style={styles.icon} contentFit="contain" transition={0} />
+        </View>
+        <Text style={styles.value}>
+          {rank != null && rank > 0 ? `#${formatNumber(rank, language)}` : '—'}
         </Text>
       </View>
-      <Image source={SW_ASSET.usersDuo} style={sw.statsIcon} contentFit="contain" transition={0} />
 
-      <Image
-        source={SW_ASSET.dividerVertical}
-        style={sw.statsDivider}
-        contentFit="fill"
-        transition={0}
-      />
+      <View style={styles.divider} />
 
-      <View style={[sw.statsCol, { width: s(80) }]}>
-        <Text style={sw.statsLabel}>{copy.statsCurrentPoints}</Text>
-        <GradientText colors={SW_GRADIENT.purpleText} style={sw.statsValue}>
-          {`${formatNumber(score, language)} ${copy.statsRankingUnit}`}
-        </GradientText>
-      </View>
-      <View style={sw.statsXpBadge}>
-        <Image
-          source={SW_ASSET.xpPolygon}
-          style={[StyleSheet.absoluteFillObject, { width: s(26), height: s(26) }]}
-          contentFit="contain"
-          transition={0}
-        />
-        <GradientText colors={['#460BCB', '#BFABED', '#460BCB']} style={sw.statsXpBadgeText}>
-          {copy.statsRankingUnit}
-        </GradientText>
+      <View style={styles.col}>
+        <View style={styles.labelRow}>
+          <Text style={styles.label}>{copy.statsYourShares}</Text>
+          <Image source={SW_ASSET.shareV2} style={styles.icon} contentFit="contain" transition={0} />
+        </View>
+        <Text style={styles.value}>{formatNumber(shareCount, language)}</Text>
       </View>
 
-      <Image
-        source={SW_ASSET.dividerVertical}
-        style={sw.statsDivider}
-        contentFit="fill"
-        transition={0}
-      />
-
-      <View style={[sw.statsCol, { width: s(76) }]}>
-        <Text style={sw.statsLabel}>{copy.statsRankThisWeek}</Text>
-        <GradientText colors={SW_GRADIENT.purpleText} style={sw.statsValue}>
-          {`#${formatNumber(rank, language)}`}
-        </GradientText>
-      </View>
-      <Image source={SW_ASSET.chartLine} style={sw.statsIcon} contentFit="contain" transition={0} />
+      <LinearGradient
+        colors={[...theme.pointsGradient]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.pointsPill}
+      >
+        <View style={styles.labelRow}>
+          <Text style={styles.pointsLabel}>{copy.statsMyPoints}</Text>
+          <Image
+            source={SW_ASSET.coinsV2}
+            style={styles.coinsIcon}
+            contentFit="contain"
+            transition={0}
+          />
+        </View>
+        <Text style={styles.pointsValue}>{formatNumber(score, language)}</Text>
+      </LinearGradient>
     </View>
   );
 });

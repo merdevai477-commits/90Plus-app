@@ -1249,12 +1249,19 @@ export const en = {
 
     // Monthly ranking
     weeklyTitle: 'Monthly Ranking',
+    weeklySubtitle: 'Share the app with friends to join the monthly ranking and win a prize',
     weeklyEndsIn: 'Ends in:',
+    countdownRemaining: 'Time left until ranking ends',
     unitDays: 'Days',
     unitHours: 'Hours',
     unitMinutes: 'Minutes',
     unitSeconds: 'Seconds',
     viewFullRanking: 'View full ranking',
+    viewMoreParticipants: 'View more contestants',
+    participantsTitle: 'Participants ranking',
+    participantsRange: 'Ranks 4–10',
+    friendsUnit: 'friends',
+    pointsLabel: 'pts',
     leaderboardEmpty: 'No ranking yet — be the first to share!',
     leaderboardCompetitors: '{count} competing this month',
     leaderboardEnd: 'You have reached the end',
@@ -1267,16 +1274,21 @@ export const en = {
     prizesSubtitleLine1: 'A new prize every month!',
     prizesSubtitleLine2: ' Share now to be the winner',
     remainingMonthsTitle: 'More winners',
+    firstPlace: '1st place',
+    secondThirdPlace: '2nd & 3rd place',
+    favoriteKitTitle: 'Your favorite team kit',
 
     // Share card
     shareCardTitle: 'Share now & win',
-    shareCardSubtitle: 'Copy your link and share it with your friends',
+    shareCardSubtitle: 'Copy your link and share with your friends',
     channelFacebook: 'Facebook',
     channelInstagram: 'Instagram',
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
     referralHintLead: 'Every friend who signs up via your link gives you ',
     referralHintXp: '1 XP',
+    referralHintFull:
+      'Every friend who signs up via your link gives you extra points, boosts your rank, and brings you closer to the monthly prize.',
     linkCopied: 'Link copied',
     linkCopiedDetail: 'Paste it in a chat — rank rises when they join',
     copyFailed: 'Could not copy the link',
@@ -1289,6 +1301,9 @@ export const en = {
     statsRankingUnit: 'pts',
     statsRankThisWeek: 'Your rank this month',
     statsShares: 'Your shares',
+    statsMyPoints: 'My points',
+    statsYourShares: 'Your shares',
+    statsYourRank: 'Your rank',
 
     // Last winner
     lastWinnerTitle: 'Latest winner',
