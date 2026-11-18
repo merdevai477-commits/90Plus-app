@@ -424,7 +424,7 @@ export function ChatComposer({
               layout={VOICE_MORPH}
               style={voiceActive ? styles.orbWrap : styles.barWrap}
             >
-              <Animated.View style={surfaceStyle}>
+              <Animated.View style={[surfaceStyle, styles.surfaceHost]}>
                 <LiquidWaterSurface
                   radius={BAR_RADIUS}
                   tint={colors.composerInputTint}
@@ -494,6 +494,15 @@ export function ChatComposer({
                     </View>
                   )}
                 </LiquidWaterSurface>
+                {!isDark ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.lightEdge,
+                      { borderRadius: BAR_RADIUS, borderColor: colors.composerBorder },
+                    ]}
+                  />
+                ) : null}
                 <IridescentRim radius={BAR_RADIUS} focus={focus} />
               </Animated.View>
 
@@ -567,6 +576,13 @@ const styles = StyleSheet.create({
   },
   barWrap: {
     flex: 1,
+  },
+  surfaceHost: {
+    position: 'relative',
+  },
+  lightEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
   },
   orbWrap: {
     width: BAR_HEIGHT,

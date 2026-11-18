@@ -186,9 +186,16 @@ export function HistoryItem({
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
     >
-      {isActive ? <IridescentRim radius={16} filmDepth={8} /> : null}
+      {/* Light mode: every row keeps a film edge so borders stay readable on white. */}
+      {isActive || colors.statusBar === 'dark' ? (
+        <IridescentRim radius={16} filmDepth={8} />
+      ) : null}
       <View style={styles.historyItemIcon}>
-        <MessageCircle size={16} color={isActive ? colors.icon : FILM_ACCENT} strokeWidth={2} />
+        <MessageCircle
+          size={16}
+          color={isActive || colors.statusBar === 'dark' ? colors.icon : FILM_ACCENT}
+          strokeWidth={2}
+        />
       </View>
       <View style={styles.historyItemContent}>
         <View style={styles.historyItemTitleRow}>
@@ -677,6 +684,10 @@ export function ChatHistoryPanel({
 }
 
 function createHistoryPanelStyles(colors: ChatColors) {
+  /** Light mode needs a solid 1px edge so cards don't dissolve into the page. */
+  const stroke = colors.statusBar === 'dark' ? 1 : StyleSheet.hairlineWidth;
+  const isLight = colors.statusBar === 'dark';
+
   return StyleSheet.create({
   // ── History Panel ──
   panel: {
@@ -686,11 +697,13 @@ function createHistoryPanelStyles(colors: ChatColors) {
     borderTopLeftRadius: 28,
     borderBottomLeftRadius: 28,
     backgroundColor: colors.sheetBg,
+    borderLeftWidth: isLight ? 1 : 0,
+    borderLeftColor: isLight ? colors.historyRowBorder : 'transparent',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: isLight ? '#2A1060' : '#000',
         shadowOffset: { width: -8, height: 0 },
-        shadowOpacity: 0.6,
+        shadowOpacity: isLight ? 0.14 : 0.6,
         shadowRadius: 24,
       },
       android: {
@@ -742,7 +755,7 @@ function createHistoryPanelStyles(colors: ChatColors) {
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.historyRowBg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: stroke,
     borderColor: colors.historySearchBorder,
     borderRadius: 20,
     padding: 14,
@@ -808,21 +821,22 @@ function createHistoryPanelStyles(colors: ChatColors) {
     paddingHorizontal: 12,
     borderRadius: 16,
     backgroundColor: colors.historyRowBg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: stroke,
     borderColor: colors.historyRowBorder,
   },
   historyItemActive: {
     backgroundColor: colors.historyRowActiveBg,
     borderColor: colors.historyRowActiveBorder,
+    borderWidth: isLight ? 1.5 : stroke,
   },
   historyItemPressed: {
     backgroundColor: colors.bgSurfaceHover,
   },
   historyItemIcon: {
     width: 34, height: 34, borderRadius: 17,
-    backgroundColor: 'rgba(163,221,249,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(163,221,249,0.18)',
+    backgroundColor: isLight ? 'rgba(106,43,217,0.08)' : 'rgba(163,221,249,0.08)',
+    borderWidth: stroke,
+    borderColor: isLight ? colors.historyRowBorder : 'rgba(163,221,249,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
   historyItemContent: { flex: 1, gap: 2 },
@@ -871,6 +885,8 @@ function createHistoryPanelStyles(colors: ChatColors) {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.rimButtonCore,
+    borderWidth: stroke,
+    borderColor: colors.composerBorder,
   },
   newChatButtonPressed: {
     transform: [{ scale: 0.98 }],
@@ -888,7 +904,7 @@ function createHistoryPanelStyles(colors: ChatColors) {
     alignItems: 'center',
     gap: 8,
     backgroundColor: colors.historySearchBg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: stroke,
     borderColor: colors.historySearchBorder,
     borderRadius: 22,
     paddingHorizontal: 14,

@@ -97,36 +97,47 @@ function SuggestionChip({
         accessibilityRole="button"
         accessibilityLabel={`${item.title}. ${item.subtitle}`}
       >
-        <LiquidWaterSurface
-          radius={CHIP_RADIUS}
-          tint={colors.chipTint}
-          glow={CHIP_CAUSTIC}
-          strength={0.12}
-          sheen={0.12}
-          blurTarget={blurTarget}
-          blurTint={blurTint}
-          elevate={colors.elevate}
-          style={[styles.chip, isAr && styles.chipRtl]}
-        >
-          <View style={[styles.iconWrap, { backgroundColor: `${item.tint}24`, borderColor: `${item.tint}55` }]}>
-            <Icon size={16} color={item.tint} strokeWidth={2.1} />
-          </View>
-          <View style={styles.texts}>
-            <Text
-              style={[styles.title, { fontFamily: titleFont, textAlign, color: colors.textPrimary }]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-            <Text
-              style={[styles.subtitle, { fontFamily: subtitleFont, textAlign, color: colors.textMuted }]}
-              numberOfLines={1}
-            >
-              {item.subtitle}
-            </Text>
-          </View>
-        </LiquidWaterSurface>
-        <IridescentRim radius={CHIP_RADIUS} filmDepth={8} />
+        <View style={styles.chipHost}>
+          <LiquidWaterSurface
+            radius={CHIP_RADIUS}
+            tint={colors.chipTint}
+            glow={CHIP_CAUSTIC}
+            strength={0.12}
+            sheen={0.12}
+            blurTarget={blurTarget}
+            blurTint={blurTint}
+            elevate={colors.elevate}
+            style={[styles.chip, isAr && styles.chipRtl]}
+          >
+            <View style={[styles.iconWrap, { backgroundColor: `${item.tint}24`, borderColor: `${item.tint}55` }]}>
+              <Icon size={16} color={item.tint} strokeWidth={2.1} />
+            </View>
+            <View style={styles.texts}>
+              <Text
+                style={[styles.title, { fontFamily: titleFont, textAlign, color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {item.title}
+              </Text>
+              <Text
+                style={[styles.subtitle, { fontFamily: subtitleFont, textAlign, color: colors.textMuted }]}
+                numberOfLines={1}
+              >
+                {item.subtitle}
+              </Text>
+            </View>
+          </LiquidWaterSurface>
+          {colors.statusBar === 'dark' ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.lightEdge,
+                { borderRadius: CHIP_RADIUS, borderColor: colors.composerBorder },
+              ]}
+            />
+          ) : null}
+          <IridescentRim radius={CHIP_RADIUS} filmDepth={8} />
+        </View>
       </Pressable>
       </Animated.View>
     </Animated.View>
@@ -224,6 +235,15 @@ const styles = StyleSheet.create({
     gap: CHIP_GAP,
     paddingHorizontal: ROW_INSET,
     paddingVertical: RIM_GLOW,
+  },
+  chipHost: {
+    position: 'relative',
+    width: CHIP_WIDTH,
+    height: CHIP_HEIGHT,
+  },
+  lightEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
   },
   chip: {
     width: CHIP_WIDTH,

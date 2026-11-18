@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useChatTheme } from '../../hooks/useChatTheme';
+import { IridescentRim } from './IridescentRim';
 
 const BUBBLE_IMAGE = require('../../assets/images/chat/iridescent-bubble.png');
 
@@ -18,7 +19,7 @@ export type ChatIridescentBubbleProps = {
   size: number;
 };
 
-/** Black glass soap-bubble with a living iridescent rim and the 90 PLUS wordmark. */
+/** Welcome orb: black-glass film in dark mode, pearl crystal in light mode. */
 export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
   size,
 }: ChatIridescentBubbleProps) {
@@ -65,6 +66,11 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
   const numeralSize = size * 0.24;
   const plusSize = size * 0.085;
   const imageStyle = { width: size, height: size };
+  const radius = size / 2;
+  const glowId = isDark ? 'bubbleGlowDark' : 'bubbleGlowLight';
+  const pearlId = 'pearlCore';
+  const pearlRimId = 'pearlRim';
+  const pearlSpecId = 'pearlSpec';
 
   return (
     <Animated.View
@@ -82,27 +88,68 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
       >
         <Svg width={glowSize} height={glowSize} viewBox="0 0 100 100">
           <Defs>
-            <RadialGradient id="bubbleGlow" cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={colors.glowStop} stopOpacity={isDark ? '0.26' : '0.18'} />
-              <Stop offset="0.45" stopColor={colors.glowMid} stopOpacity={isDark ? '0.1' : '0.08'} />
+            <RadialGradient id={glowId} cx="50%" cy="50%" r="50%">
+              <Stop offset="0" stopColor={colors.glowStop} stopOpacity={isDark ? '0.26' : '0.22'} />
+              <Stop offset="0.45" stopColor={colors.glowMid} stopOpacity={isDark ? '0.1' : '0.12'} />
               <Stop offset="1" stopColor={colors.accentDeep} stopOpacity="0" />
             </RadialGradient>
           </Defs>
-          <Circle cx="50" cy="50" r="50" fill="url(#bubbleGlow)" />
+          <Circle cx="50" cy="50" r="50" fill={`url(#${glowId})`} />
         </Svg>
       </Animated.View>
 
-      <Image source={BUBBLE_IMAGE} style={[styles.layer, imageStyle]} resizeMode="contain" />
-      <Animated.Image
-        source={BUBBLE_IMAGE}
-        style={[styles.layer, imageStyle, filmStyle]}
-        resizeMode="contain"
-      />
-      <Animated.Image
-        source={BUBBLE_IMAGE}
-        style={[styles.layer, imageStyle, counterFilmStyle]}
-        resizeMode="contain"
-      />
+      {isDark ? (
+        <>
+          <Image source={BUBBLE_IMAGE} style={[styles.layer, imageStyle]} resizeMode="contain" />
+          <Animated.Image
+            source={BUBBLE_IMAGE}
+            style={[styles.layer, imageStyle, filmStyle]}
+            resizeMode="contain"
+          />
+          <Animated.Image
+            source={BUBBLE_IMAGE}
+            style={[styles.layer, imageStyle, counterFilmStyle]}
+            resizeMode="contain"
+          />
+        </>
+      ) : (
+        <>
+          {/* Pearl crystal body — reads as glass on lavender, not a black hole. */}
+          <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.layer}>
+            <Defs>
+              <RadialGradient id={pearlId} cx="38%" cy="32%" r="68%">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+                <Stop offset="0.35" stopColor="#F7F2FF" stopOpacity="1" />
+                <Stop offset="0.72" stopColor="#E4D8FF" stopOpacity="1" />
+                <Stop offset="1" stopColor="#CDB8F5" stopOpacity="1" />
+              </RadialGradient>
+              <RadialGradient id={pearlRimId} cx="50%" cy="50%" r="50%">
+                <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity="0" />
+                <Stop offset="0.82" stopColor="#A78BFA" stopOpacity="0.22" />
+                <Stop offset="0.94" stopColor="#38BDF8" stopOpacity="0.28" />
+                <Stop offset="1" stopColor="#F472B6" stopOpacity="0.2" />
+              </RadialGradient>
+              <RadialGradient id={pearlSpecId} cx="35%" cy="28%" r="28%">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.95" />
+                <Stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.35" />
+                <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="50" cy="50" r="48.5" fill={`url(#${pearlId})`} />
+            <Circle cx="50" cy="50" r="48.5" fill={`url(#${pearlRimId})`} />
+            <Ellipse cx="36" cy="30" rx="18" ry="12" fill={`url(#${pearlSpecId})`} />
+            <Circle
+              cx="50"
+              cy="50"
+              r="48"
+              fill="none"
+              stroke="rgba(75,31,163,0.32)"
+              strokeWidth="1.4"
+            />
+          </Svg>
+          <IridescentRim radius={radius} filmDepth={14} />
+        </>
+      )}
 
       <View pointerEvents="none" style={[styles.layer, styles.fill, styles.wordmarkWrap]}>
         <View style={styles.wordmark}>
@@ -113,7 +160,7 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
                 fontSize: numeralSize,
                 lineHeight: numeralSize * 1.1,
                 color: isDark ? '#FFFFFF' : colors.textPrimary,
-                textShadowColor: isDark ? 'rgba(196,181,253,0.7)' : 'rgba(106,43,217,0.35)',
+                textShadowColor: isDark ? 'rgba(196,181,253,0.7)' : 'rgba(106,43,217,0.28)',
               },
             ]}
           >
