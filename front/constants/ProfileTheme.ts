@@ -2,51 +2,46 @@
  * ProfileTheme
  *
  * Shared color palette + spacing tokens for the profile-related UI.
- * Re-exports a focused subset of the main design system so profile
- * components don't have to import multiple places.
- *
- * This file was accidentally deleted from the working tree in a prior
- * cleanup commit. Restored with the same shape every profile component
- * expects: `ProfileTheme.colors.<key>`.
+ * Light / white surface so cards, chips, and borders stay clearly visible.
  */
 
 export const ProfileTheme = {
   colors: {
     // Base surfaces
-    deepBlack: '#000000',
-    surface: '#0A0A0A',
-    surfaceElevated: '#1A1A1A',
+    deepBlack: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfaceElevated: '#F7F7F9',
 
     // Text
-    textPrimary: '#FFFFFF',
-    textSecondary: 'rgba(255, 255, 255, 0.7)',
-    textTertiary: 'rgba(255, 255, 255, 0.5)',
-    textDisabled: 'rgba(255, 255, 255, 0.38)',
+    textPrimary: '#111111',
+    textSecondary: 'rgba(17, 17, 17, 0.68)',
+    textTertiary: 'rgba(17, 17, 17, 0.48)',
+    textDisabled: 'rgba(17, 17, 17, 0.34)',
 
-    // Borders / dividers
-    border: 'rgba(255, 255, 255, 0.12)',
-    borderSoft: 'rgba(255, 255, 255, 0.08)',
+    // Borders / dividers — stronger so edges read clearly on white
+    border: 'rgba(17, 17, 17, 0.16)',
+    borderSoft: 'rgba(17, 17, 17, 0.1)',
 
     // Brand accents (matches the reels/home palette)
-    neonGreen: '#32CD32',
-    neonBlue: '#00D9FF',
-    neonPurple: '#8E54E9',
-    neonRed: '#FF3B30',
-    gold: '#FFD700',
+    neonGreen: '#22A822',
+    neonBlue: '#0090C8',
+    neonPurple: '#7C3AED',
+    neonRed: '#E11D48',
+    gold: '#D4A017',
 
-    // Figma profile v2 (90plus file, My Profile)
-    profileBg: '#030303',
-    profileCard: '#0E071C',
-    profileCardBorder: '#250A3F',
-    profileChip: 'rgba(8,2,21,0.84)',
-    profileFilledChip: 'rgba(8,2,21,0.74)',
-    profileEmptyChip: 'rgba(44,39,55,0.74)',
-    profileMuted: '#B7B7B7',
-    profileHandle: '#717171',
-    profileTabBar: '#0B0910',
-    profileTabBorder: '#170F27',
-    profilePrimary: '#8B5CF6',
-    avatarRing: '#D8AEFF',
+    // Profile v2 — white mode with defined edges
+    profileBg: '#FFFFFF',
+    profileCard: '#FFFFFF',
+    profileCardBorder: '#D4D4DA',
+    profileChip: '#FFFFFF',
+    profileFilledChip: '#FFFFFF',
+    profileEmptyChip: '#F3F3F6',
+    profileMuted: '#6B6B73',
+    profileHandle: '#6B6B73',
+    profileTabBar: '#FFFFFF',
+    profileTabBorder: '#D4D4DA',
+    profilePrimary: '#7C3AED',
+    avatarRing: '#7C3AED',
 
     // Semantic
     success: '#34C759',
@@ -54,22 +49,22 @@ export const ProfileTheme = {
     error: '#FF3B30',
     info: '#2196F3',
 
-    // Glass overlays
-    glass: 'rgba(255, 255, 255, 0.08)',
-    glassMedium: 'rgba(255, 255, 255, 0.12)',
-    glassDark: 'rgba(255, 255, 255, 0.04)',
-    glassWhite: 'rgba(255, 255, 255, 0.08)',
-    glassBlack: 'rgba(0, 0, 0, 0.6)',
-    glassBorder: 'rgba(255, 255, 255, 0.15)',
+    // Glass overlays (light surfaces)
+    glass: 'rgba(17, 17, 17, 0.04)',
+    glassMedium: 'rgba(17, 17, 17, 0.08)',
+    glassDark: 'rgba(17, 17, 17, 0.03)',
+    glassWhite: 'rgba(255, 255, 255, 0.92)',
+    glassBlack: 'rgba(255, 255, 255, 0.88)',
+    glassBorder: 'rgba(17, 17, 17, 0.14)',
   },
 
   gradients: {
-    /** Neon-green → blue brand gradient used by action buttons. */
-    primary: ['#32CD32', '#00D9FF'] as const,
-    /** Subtle top-down dark gradient used on the cover image. */
-    cover: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.6)'] as const,
-    /** Darker overlay used over the cover when buttons need contrast. */
-    darkOverlay: ['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.75)'] as const,
+    /** Brand gradient used by action buttons. */
+    primary: ['#7C3AED', '#5B21B6'] as const,
+    /** Soft fade under cover imagery into the white page. */
+    cover: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.72)'] as const,
+    /** Overlay used over the cover when buttons need contrast. */
+    darkOverlay: ['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)'] as const,
     /** Gold accent used on the FIFA card. */
     gold: ['#FFD700', '#FFA500'] as const,
     /** Pink → purple gradient for highlight sections. */

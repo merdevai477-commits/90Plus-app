@@ -57,7 +57,7 @@ const ContentTabs = memo(function ContentTabs({
             >
               {isActive ? (
                 <LinearGradient
-                  colors={['rgba(139,92,246,0.2)', 'rgba(81,54,144,0.08)']}
+                  colors={['rgba(124,58,237,0.14)', 'rgba(124,58,237,0.04)']}
                   start={{ x: 0.5, y: 0 }}
                   end={{ x: 0.5, y: 1 }}
                   style={styles.activePill}
@@ -140,10 +140,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tabLabelActive: {
-    color: ProfileTheme.colors.avatarRing,
+    color: ProfileTheme.colors.profilePrimary,
   },
   tabLabelIdle: {
-    color: '#7A7A7A',
+    color: ProfileTheme.colors.profileMuted,
   },
   tabIcon: {
     width: 18,

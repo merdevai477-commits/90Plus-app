@@ -256,7 +256,9 @@ const styles = StyleSheet.create({
     itemContainer: {
         borderRadius: 8,
         overflow: 'hidden',
-        backgroundColor: ProfileTheme.colors.glassBlack,
+        backgroundColor: ProfileTheme.colors.surfaceElevated,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.profileCardBorder,
     },
     thumbnail: {
         width: '100%',

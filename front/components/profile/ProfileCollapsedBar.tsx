@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassRim, GlassSheen } from '../navigation/glass';
+import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import DeveloperBadge from './DeveloperBadge';
@@ -18,8 +19,8 @@ const ISLAND_HEIGHT = 56;
 const ISLAND_RADIUS = ISLAND_HEIGHT / 2;
 const ISLAND_FILL =
   Platform.OS === 'ios'
-    ? (['rgba(70,36,128,0.62)', 'rgba(26,14,48,0.62)'] as const)
-    : (['rgba(64,32,118,0.96)', 'rgba(24,13,46,0.96)'] as const);
+    ? (['rgba(255,255,255,0.92)', 'rgba(247,247,249,0.94)'] as const)
+    : (['rgba(255,255,255,0.98)', 'rgba(247,247,249,0.98)'] as const);
 
 function GlassIsland({
   children,
@@ -31,13 +32,13 @@ function GlassIsland({
   return (
     <View style={[styles.island, style]}>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.islandClip]} />
+        <BlurView intensity={40} tint="light" style={[StyleSheet.absoluteFill, styles.islandClip]} />
       ) : null}
       <View style={[StyleSheet.absoluteFill, styles.islandClip]}>
         <LinearGradient colors={ISLAND_FILL} style={StyleSheet.absoluteFill} />
       </View>
       <GlassSheen radius={ISLAND_RADIUS} />
-      <GlassRim radius={ISLAND_RADIUS} tint="rgba(190,160,255,0.38)" />
+      <GlassRim radius={ISLAND_RADIUS} tint="rgba(17,17,17,0.12)" />
       {children}
     </View>
   );
@@ -92,7 +93,7 @@ export function ProfileCollapsedBar({
       style={({ pressed }) => pressed && styles.pressed}
     >
       <GlassIsland style={styles.roundIsland}>
-        <Ionicons name="chevron-back" size={26} color="#fff" />
+        <Ionicons name="chevron-back" size={26} color={ProfileTheme.colors.textPrimary} />
       </GlassIsland>
     </Pressable>
   ) : null;
@@ -104,7 +105,7 @@ export function ProfileCollapsedBar({
     >
       <LinearGradient
         pointerEvents="none"
-        colors={['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)']}
+        colors={['#FFFFFF', '#FFFFFF', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0)']}
         locations={[0, 0.88, 0.96, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -171,10 +172,12 @@ const styles = StyleSheet.create({
     borderRadius: ISLAND_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#7C4DFF',
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    shadowColor: '#111111',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   islandClip: {
     borderRadius: ISLAND_RADIUS,
@@ -213,16 +216,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2A2438',
+    backgroundColor: ProfileTheme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initial: { color: '#fff', fontWeight: '700' },
+  initial: { color: ProfileTheme.colors.textPrimary, fontWeight: '700' },
   name: {
     flexShrink: 1,
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 17,
   },
 });

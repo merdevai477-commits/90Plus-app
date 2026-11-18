@@ -1,7 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
@@ -38,16 +37,10 @@ const EngagementStat = memo(function EngagementStat({
 }) {
   return (
     <View style={statStyles.card}>
-      <LinearGradient
-        colors={['rgba(23,13,43,0.95)', 'rgba(32,13,68,0.85)']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 1 }}
-        end={{ x: 0.5, y: 0 }}
-      />
       {icon ? (
         <Image source={icon} style={statStyles.icon} contentFit="contain" />
       ) : ionIcon ? (
-        <Ionicons name={ionIcon} size={28} color="#D8AEFF" />
+        <Ionicons name={ionIcon} size={28} color={ProfileTheme.colors.profilePrimary} />
       ) : null}
       <Text style={statStyles.value}>{value}</Text>
       <Text style={statStyles.label}>{label}</Text>
@@ -91,8 +84,9 @@ const statStyles = StyleSheet.create({
     width: '48%',
     minHeight: 96,
     borderRadius: 12,
-    borderWidth: 0.5,
+    borderWidth: 1,
     borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -105,12 +99,12 @@ const statStyles = StyleSheet.create({
     height: 28,
   },
   value: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
   },
   label: {
-    color: '#8C8C8C',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',

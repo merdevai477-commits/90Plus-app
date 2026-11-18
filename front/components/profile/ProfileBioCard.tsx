@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ProfileTheme } from '../../constants/ProfileTheme';
 import { PROFILE_BIO_BALL } from './profileV2Assets';
 
 interface ProfileBioCardProps {
@@ -27,7 +28,7 @@ const ProfileBioCard = memo(function ProfileBioCard({
     return (
       <TouchableOpacity style={styles.empty} onPress={onPress} activeOpacity={0.82}>
         <Text style={styles.emptyText}>{addLabel}</Text>
-        <Ionicons name="add" size={24} color="#9E9E9E" />
+        <Ionicons name="add" size={24} color={ProfileTheme.colors.profileMuted} />
       </TouchableOpacity>
     );
   }
@@ -37,7 +38,7 @@ const ProfileBioCard = memo(function ProfileBioCard({
     <Card style={styles.filled} onPress={onPress} activeOpacity={onPress ? 0.88 : 1}>
       <Image source={PROFILE_BIO_BALL} style={styles.ball} contentFit="cover" />
       <LinearGradient
-        colors={['rgba(15,8,27,0.18)', 'rgba(22,9,47,0.62)']}
+        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.92)']}
         start={{ x: 1, y: 0.5 }}
         end={{ x: 0, y: 0.5 }}
         style={StyleSheet.absoluteFill}
@@ -60,14 +61,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
     height: 106,
     borderRadius: 16,
-    backgroundColor: 'rgba(44,39,55,0.3)',
+    backgroundColor: ProfileTheme.colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    borderStyle: 'dashed',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
   },
   emptyText: {
-    color: '#9E9E9E',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -78,12 +82,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1B062F',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
   ball: {
     ...StyleSheet.absoluteFillObject,
+    opacity: 0.35,
   },
   copy: {
     alignSelf: 'flex-end',
@@ -91,13 +97,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   about: {
-    color: '#9D7AEF',
+    color: ProfileTheme.colors.profilePrimary,
     fontSize: 19,
     fontWeight: '600',
     textAlign: 'right',
   },
   bio: {
-    color: '#B1B1B1',
+    color: ProfileTheme.colors.textSecondary,
     fontSize: 11,
     textAlign: 'right',
     lineHeight: 16,

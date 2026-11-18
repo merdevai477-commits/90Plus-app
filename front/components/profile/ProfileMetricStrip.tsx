@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { ProfileTheme } from '../../constants/ProfileTheme';
 import { formatProfileStat } from './formatProfileStat';
 
 export interface ProfileMetricItem {
@@ -39,14 +39,9 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
 
   if (variant === 'performance') {
     return (
-      <LinearGradient
-        colors={['#0F081B', '#16092F']}
-        start={{ x: 0.5, y: 1 }}
-        end={{ x: 0.5, y: 0 }}
-        style={[styles.card, styles.performanceCard]}
-      >
+      <View style={[styles.card, styles.performanceCard]}>
         {inner}
-      </LinearGradient>
+      </View>
     );
   }
 
@@ -109,11 +104,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: ProfileTheme.colors.profileCard,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   socialCard: {
-    backgroundColor: '#0E071C',
-    borderWidth: 0.5,
-    borderColor: '#250A3F',
     marginTop: -72,
   },
   performanceCard: {
@@ -134,7 +129,7 @@ const styles = StyleSheet.create({
   divider: {
     width: StyleSheet.hairlineWidth,
     height: 47,
-    backgroundColor: '#250A3F',
+    backgroundColor: ProfileTheme.colors.profileCardBorder,
   },
   perfDivider: {
     height: 52,
@@ -171,14 +166,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   value: {
-    color: '#FFFFFF',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 16,
     fontFamily: FONT_BOLD,
     fontWeight: '700',
     textAlign: 'center',
   },
   label: {
-    color: '#B7B7B7',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 9,
     fontFamily: FONT_MEDIUM,
     fontWeight: '500',

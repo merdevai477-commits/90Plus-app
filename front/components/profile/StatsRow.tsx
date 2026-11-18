@@ -29,7 +29,7 @@ const StatsRow = memo(function StatsRow({
   const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const glassProps = isLiquidGlassSupported
     ? { effect: 'clear' as const, interactive: false }
-    : { intensity: 18, tint: 'dark' as const };
+    : { intensity: 18, tint: 'light' as const };
 
   return (
     <View style={styles.container}>
@@ -100,14 +100,14 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.04)',
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : ProfileTheme.colors.profileCard,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   divider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: ProfileTheme.colors.profileCardBorder,
   },
   statTouchable: {
     flex: 1,
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   statLabel: {
-    color: 'rgba(255,255,255,0.45)',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 11,
     fontWeight: '500',
     letterSpacing: 0.5,

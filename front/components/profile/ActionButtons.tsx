@@ -149,8 +149,8 @@ export default function ActionButtons({
         ) : (
           /* Normal state — pure liquid glass, no tint */
           <GlassBtn style={styles.uploadNormalBtn}>
-            <Ionicons name="add-circle-outline" size={17} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.btnText}>{t.profile.uploadVideo}</Text>
+            <Ionicons name="add-circle-outline" size={17} color={ProfileTheme.colors.textPrimary} />
+            <Text style={[styles.btnText, styles.uploadText]}>{t.profile.uploadVideo}</Text>
           </GlassBtn>
         )}
       </TouchableOpacity>
@@ -206,7 +206,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     minHeight: 48,
     overflow: 'hidden',
   },
@@ -215,31 +216,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  uploadText: {
+    color: ProfileTheme.colors.textPrimary,
+  },
 
   /* Upload variants */
   uploadNormalBtn: {
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
   },
   uploadingBtn: {
-    borderColor: 'rgba(34,197,94,0.35)',
+    borderColor: 'rgba(34,197,94,0.45)',
+    backgroundColor: '#F3FBF5',
   },
   cooldownBtn: {
-    borderColor: 'rgba(239,68,68,0.3)',
+    borderColor: 'rgba(239,68,68,0.4)',
+    backgroundColor: '#FFF5F5',
   },
 
   /* Share */
   shareBtn: {
-    borderColor: 'rgba(168,85,247,0.4)',
-    shadowColor: '#A855F7',
+    borderColor: 'rgba(124,58,237,0.45)',
+    shadowColor: '#7C3AED',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 5,
   },
 
   /* QR */
   qrBtn: {
-    borderColor: 'rgba(168,85,247,0.3)',
+    borderColor: 'rgba(124,58,237,0.4)',
+    backgroundColor: '#F7F2FF',
     width: 48,
     paddingHorizontal: 0,
     flex: undefined,

@@ -450,7 +450,7 @@ function UserProfileScreen() {
   if (isLoading && !user) {
     return (
       <View style={s.container}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
@@ -459,7 +459,7 @@ function UserProfileScreen() {
   if (error || !user) {
     return (
       <View style={[s.container, s.center]}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
         <Ionicons name="person-outline" size={64} color="#555" />
         <Text style={s.errorTxt}>{error || t.publicProfile.notFound}</Text>
         <TouchableOpacity style={s.backBtnLarge} onPress={() => router.back()}>
@@ -511,7 +511,7 @@ function UserProfileScreen() {
 
   return (
     <View style={s.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
 
       {/* ── Block confirmation modal ──────────────────────────────── */}
       <Modal
@@ -619,7 +619,7 @@ function UserProfileScreen() {
             onRefresh={onRefresh}
             tintColor={ACCENT}
             colors={[ACCENT]}
-            progressBackgroundColor={ProfileTheme.colors.deepBlack}
+            progressBackgroundColor={ProfileTheme.colors.profileBg}
           />
         }
       >
@@ -926,8 +926,8 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 20 },
   hiddenTab: { display: 'none' },
 
-  loadingTxt: { color: 'rgba(255,255,255,0.5)', fontSize: 15, marginTop: 14 },
-  errorTxt: { color: '#888', fontSize: 17, marginTop: 16, marginBottom: 24 },
+  loadingTxt: { color: ProfileTheme.colors.textSecondary, fontSize: 15, marginTop: 14 },
+  errorTxt: { color: ProfileTheme.colors.profileMuted, fontSize: 17, marginTop: 16, marginBottom: 24 },
   backBtnLarge: {
     paddingHorizontal: 32,
     paddingVertical: 14,
@@ -978,12 +978,12 @@ const s = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#26095C',
-    borderWidth: 0.5,
-    borderColor: 'rgba(139,92,246,0.35)',
+    backgroundColor: ProfileTheme.colors.profileCard,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   unfollowTxt: {
-    color: '#BABABA',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 20,
     fontWeight: '600',
   },
@@ -997,7 +997,8 @@ const s = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.4)',
+    borderColor: 'rgba(124,58,237,0.45)',
+    backgroundColor: '#F7F2FF',
   },
   followingTxt: { color: ACCENT, fontSize: 16, fontWeight: '800' },
 
@@ -1005,21 +1006,21 @@ const s = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 16,
-    backgroundColor: 'rgba(239,68,68,0.1)',
+    backgroundColor: '#FFF5F5',
     borderWidth: 1.5,
-    borderColor: 'rgba(239,68,68,0.3)',
+    borderColor: 'rgba(239,68,68,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   blockedBtn: {
-    backgroundColor: 'rgba(168,85,247,0.1)',
-    borderColor: 'rgba(168,85,247,0.3)',
+    backgroundColor: '#F7F2FF',
+    borderColor: 'rgba(124,58,237,0.35)',
   },
 
   contentPanel: {
     marginHorizontal: 20,
     marginTop: -1,
-    backgroundColor: '#0E0919',
+    backgroundColor: ProfileTheme.colors.profileCard,
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: ProfileTheme.colors.profileTabBorder,
@@ -1041,22 +1042,22 @@ const s = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     letterSpacing: 0.3,
   },
   countBadge: {
-    backgroundColor: 'rgba(168,85,247,0.18)',
+    backgroundColor: 'rgba(124,58,237,0.1)',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+    borderColor: 'rgba(124,58,237,0.3)',
   },
   countTxt: { color: ACCENT, fontSize: 11, fontWeight: '700' },
 
   loadingVideos: { paddingVertical: 24, alignItems: 'center' },
   emptyVideos: { alignItems: 'center', paddingVertical: 60 },
-  emptyTxt: { color: '#555', fontSize: 15, marginTop: 12 },
+  emptyTxt: { color: ProfileTheme.colors.profileMuted, fontSize: 15, marginTop: 12 },
 
   restrictedWrap: {
     alignItems: 'center',
@@ -1071,30 +1072,30 @@ const s = StyleSheet.create({
     marginBottom: 20,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: 'rgba(239,68,68,0.08)',
+    backgroundColor: '#FFF5F5',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
+    borderColor: 'rgba(239,68,68,0.3)',
   },
   restrictedBannerText: { flex: 1 },
   restrictedBannerTitle: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 15,
     fontWeight: '800',
   },
   restrictedBannerSub: {
-    color: 'rgba(255,255,255,0.55)',
+    color: ProfileTheme.colors.textSecondary,
     fontSize: 12,
     marginTop: 4,
     lineHeight: 18,
   },
   restrictedTitle: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
   },
   restrictedSub: {
-    color: 'rgba(255,255,255,0.55)',
+    color: ProfileTheme.colors.textSecondary,
     fontSize: 13,
     marginTop: 6,
     textAlign: 'center',
@@ -1125,17 +1126,17 @@ const s = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#0E0025',
+    backgroundColor: ProfileTheme.colors.profileCard,
     borderRadius: 24,
     padding: 28,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.25)',
-    shadowColor: '#7C3AED',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    shadowColor: '#111111',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.12,
     shadowRadius: 24,
-    elevation: 20,
+    elevation: 12,
   },
   modalIconWrap: {
     width: 60,
@@ -1146,24 +1147,24 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   modalIconBlock: {
-    backgroundColor: 'rgba(239,68,68,0.12)',
+    backgroundColor: '#FFF5F5',
     borderWidth: 1.5,
-    borderColor: 'rgba(239,68,68,0.3)',
+    borderColor: 'rgba(239,68,68,0.35)',
   },
   modalIconUnblock: {
-    backgroundColor: 'rgba(168,85,247,0.12)',
+    backgroundColor: '#F7F2FF',
     borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.3)',
+    borderColor: 'rgba(124,58,237,0.35)',
   },
   modalTitle: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 10,
     textAlign: 'center',
   },
   modalBody: {
-    color: 'rgba(255,255,255,0.6)',
+    color: ProfileTheme.colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 22,
@@ -1178,14 +1179,14 @@ const s = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: ProfileTheme.colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCancelTxt: {
-    color: 'rgba(255,255,255,0.7)',
+    color: ProfileTheme.colors.textSecondary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1197,17 +1198,17 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   modalConfirmBlock: {
-    backgroundColor: 'rgba(239,68,68,0.15)',
+    backgroundColor: '#FFF5F5',
     borderWidth: 1.5,
     borderColor: 'rgba(239,68,68,0.5)',
   },
   modalConfirmUnblock: {
-    backgroundColor: 'rgba(168,85,247,0.18)',
+    backgroundColor: '#F7F2FF',
     borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.5)',
+    borderColor: 'rgba(124,58,237,0.5)',
   },
   modalConfirmTxt: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 15,
     fontWeight: '800',
   },

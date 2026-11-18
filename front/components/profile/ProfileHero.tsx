@@ -158,7 +158,7 @@ const ProfileHero = memo(function ProfileHero({
           priority="high"
         />
         <LinearGradient
-          colors={['rgba(75,14,133,0)', 'rgba(3,3,3,0.38)', 'rgba(3,3,3,0.92)']}
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0.96)']}
           locations={[0, 0.55, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -168,7 +168,7 @@ const ProfileHero = memo(function ProfileHero({
         <View style={styles.nav}>
           {onBackPress ? (
             <TouchableOpacity onPress={onBackPress} hitSlop={10} style={styles.navIcon}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
+              <Ionicons name="chevron-back" size={24} color={ProfileTheme.colors.textPrimary} />
             </TouchableOpacity>
           ) : (
             <View style={styles.navIcon} />
@@ -183,7 +183,7 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityLabel="Share profile"
               >
                 <View style={styles.navCircleIcon}>
-                  <Ionicons name="share-outline" size={24} color="#fff" />
+                  <Ionicons name="share-outline" size={24} color={ProfileTheme.colors.textPrimary} />
                 </View>
               </TouchableOpacity>
             ) : null}
@@ -196,7 +196,7 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityLabel="Settings"
               >
                 <View style={styles.navCircleIcon}>
-                  <Ionicons name="settings-outline" size={24} color="#fff" />
+                  <Ionicons name="settings-outline" size={24} color={ProfileTheme.colors.textPrimary} />
                 </View>
               </TouchableOpacity>
             ) : null}
@@ -208,7 +208,7 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole="button"
               >
                 <View style={styles.navCircleIcon}>
-                  <Ionicons name="ellipsis-horizontal" size={24} color="#fff" />
+                  <Ionicons name="ellipsis-horizontal" size={24} color={ProfileTheme.colors.textPrimary} />
                 </View>
               </TouchableOpacity>
             ) : null}
@@ -315,7 +315,7 @@ const ProfileHero = memo(function ProfileHero({
             )}
             {isAvatarUploading && (
               <View style={styles.avatarBusy}>
-                <ActivityIndicator color="#D8AEFF" />
+                <ActivityIndicator color={ProfileTheme.colors.profilePrimary} />
               </View>
             )}
           </TouchableOpacity>
@@ -337,7 +337,7 @@ const ProfileHero = memo(function ProfileHero({
                       contentFit="contain"
                     />
                   ) : (
-                    <Ionicons name="football-outline" size={22} color="#D8AEFF" />
+                    <Ionicons name="football-outline" size={22} color={ProfileTheme.colors.profilePrimary} />
                   )}
                   {!!clubName?.trim() && (
                     <Text
@@ -497,7 +497,9 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     paddingVertical: 4,
     paddingHorizontal: 5,
-    backgroundColor: 'rgba(0,0,0,0.66)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -535,6 +537,8 @@ const styles = StyleSheet.create({
     height: 75,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -545,20 +549,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 58,
     height: 24,
-    backgroundColor: '#010602',
-    borderWidth: 0.5,
-    borderColor: '#64497E',
+    backgroundColor: '#F5F0FF',
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profilePrimary,
     borderRadius: 42,
     paddingHorizontal: 10,
     gap: 3,
   },
   lvlWord: {
-    color: '#A855F7',
+    color: ProfileTheme.colors.profilePrimary,
     fontSize: 10,
     fontWeight: '600',
   },
   lvlNum: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -571,7 +575,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 6,
     borderRadius: 53,
-    backgroundColor: '#4A474E',
+    backgroundColor: '#E6E6EA',
     overflow: 'hidden',
   },
   xpFill: {
@@ -579,7 +583,7 @@ const styles = StyleSheet.create({
     borderRadius: 53,
   },
   xpCaption: {
-    color: '#C8C8C8',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 8,
     fontWeight: '500',
   },
@@ -590,6 +594,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   sideSlotFilled: {
     backgroundColor: ProfileTheme.colors.profileFilledChip,
@@ -597,6 +603,7 @@ const styles = StyleSheet.create({
   },
   sideSlotEmpty: {
     backgroundColor: ProfileTheme.colors.profileEmptyChip,
+    borderStyle: 'dashed',
     gap: 6,
   },
   slotSpacer: {
@@ -608,13 +615,13 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   slotCaption: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 9,
     fontWeight: '600',
     textAlign: 'center',
   },
   emptySlotLabel: {
-    color: '#9E9E9E',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
@@ -627,11 +634,11 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: 118,
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: ProfileTheme.colors.avatarRing,
   },
   avatarPlaceholder: {
-    backgroundColor: 'rgba(44,39,55,0.72)',
+    backgroundColor: ProfileTheme.colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -652,7 +659,7 @@ const styles = StyleSheet.create({
   avatarBusy: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 118,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -662,6 +669,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
@@ -677,7 +686,7 @@ const styles = StyleSheet.create({
     height: 21,
   },
   energyValue: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -686,7 +695,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   energyLabel: {
-    color: '#8C8C8C',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 11,
   },
   nameBlock: {
@@ -706,7 +715,7 @@ const styles = StyleSheet.create({
   },
   name: {
     flexShrink: 1,
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',

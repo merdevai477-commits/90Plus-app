@@ -108,19 +108,19 @@ const CARD_THEMES: Record<
   }
 > = {
   pending: {
-    border: '#04081F',
-    gradient: ['rgba(12,40,176,0.14)', 'rgba(5,17,77,0.14)'],
-    shadow: 'rgba(9,27,113,0.33)',
+    border: '#C9D2F5',
+    gradient: ['#F4F6FF', '#EEF1FF'],
+    shadow: 'rgba(59,79,175,0.12)',
   },
   correct: {
-    border: '#081F04',
-    gradient: ['rgba(12,176,42,0.18)', 'rgba(5,77,18,0.18)'],
-    shadow: 'rgba(25,113,9,0.33)',
+    border: '#BFE5C0',
+    gradient: ['#F3FBF3', '#EAF7EA'],
+    shadow: 'rgba(61,164,55,0.12)',
   },
   wrong: {
-    border: '#300D0D',
-    gradient: ['rgba(182,6,6,0.18)', 'rgba(80,3,3,0.18)'],
-    shadow: 'rgba(176,35,25,0.33)',
+    border: '#F0C4C4',
+    gradient: ['#FFF5F5', '#FFECEC'],
+    shadow: 'rgba(214,73,73,0.12)',
   },
 };
 
@@ -309,12 +309,6 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
       </ScrollView>
 
       <View style={styles.successCard}>
-        <LinearGradient
-          colors={['#110A22', '#2A1950']}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0.5, y: 1 }}
-          end={{ x: 0.5, y: 0 }}
-        />
         <Text style={styles.successPct}>{normalizedAccuracy}%</Text>
         <View style={[styles.successRight, RTL_ROW]}>
           <Text style={styles.successLabel}>{t.profile.successRate}</Text>
@@ -415,12 +409,12 @@ const cardStyles = StyleSheet.create({
     height: 80,
   },
   logoFallback: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 22,
     fontWeight: '700',
   },
   teamName: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
@@ -432,7 +426,7 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   vs: {
-    color: '#fff',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 32,
     fontWeight: '600',
     textAlign: 'center',
@@ -454,7 +448,7 @@ const cardStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   resultLabel: {
-    color: '#C5C5C5',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -477,8 +471,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 23,
     borderWidth: 1,
-    borderColor: '#23162E',
-    backgroundColor: '#120D1F',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -490,7 +484,7 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#41354D',
+    color: ProfileTheme.colors.profileMuted,
   },
   filterChipTextActive: {
     color: '#fff',
@@ -499,7 +493,8 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#331E64',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -508,7 +503,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   successPct: {
-    color: '#EBD9FC',
+    color: ProfileTheme.colors.profilePrimary,
     fontSize: 24,
     fontWeight: '700',
   },
@@ -518,7 +513,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   successLabel: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 12,
     fontWeight: '600',
   },

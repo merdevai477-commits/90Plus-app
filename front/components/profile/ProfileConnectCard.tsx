@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { getSocialBrandIcon } from './socialBrandIcons';
@@ -73,12 +72,6 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
               activeOpacity={0.82}
               onPress={() => openLink(link.url)}
             >
-              <LinearGradient
-                colors={['#170D2B', '#200D44']}
-                start={{ x: 0.5, y: 1 }}
-                end={{ x: 0.5, y: 0 }}
-                style={StyleSheet.absoluteFill}
-              />
               <Image
                 source={brand.source}
                 style={{ width: brand.width, height: brand.height }}
@@ -90,11 +83,11 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
         {Array.from({ length: plusCount }).map((_, index) => (
           <TouchableOpacity
             key={`plus-${index}`}
-            style={styles.slot}
+            style={[styles.slot, styles.slotEmpty]}
             activeOpacity={0.82}
             onPress={onAddLink}
           >
-            <Ionicons name="add" size={24} color="#9E9E9E" />
+            <Ionicons name="add" size={24} color={ProfileTheme.colors.profileMuted} />
           </TouchableOpacity>
         ))}
       </View>
@@ -117,7 +110,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: '#fff',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -138,11 +131,15 @@ const styles = StyleSheet.create({
     minWidth: 96,
     height: 62,
     borderRadius: 12,
-    backgroundColor: 'rgba(44,39,55,0.3)',
-    borderWidth: 0.5,
+    backgroundColor: ProfileTheme.colors.profileCard,
+    borderWidth: 1,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  slotEmpty: {
+    backgroundColor: ProfileTheme.colors.surfaceElevated,
+    borderStyle: 'dashed',
   },
 });

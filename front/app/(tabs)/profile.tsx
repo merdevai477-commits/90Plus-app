@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   contentPanel: {
     marginHorizontal: 20,
     marginTop: -1,
-    backgroundColor: '#0E0919',
+    backgroundColor: ProfileTheme.colors.profileCard,
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: ProfileTheme.colors.profileTabBorder,
@@ -204,12 +204,12 @@ const styles = StyleSheet.create({
   },
   analyticsCard: {
     width: isSmallScreen ? '100%' : '47%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: ProfileTheme.colors.profileCard,
     borderRadius: getSpacing(16),
     padding: getSpacing(20),
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
     marginBottom: isSmallScreen ? getSpacing(12) : 0,
   },
   analyticsValue: {
@@ -234,11 +234,11 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   summaryCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: ProfileTheme.colors.profileCard,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   badgesContainer: {
     alignItems: 'center',
@@ -281,8 +281,8 @@ const completionStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.3)',
-    backgroundColor: 'transparent',
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: ProfileTheme.colors.profileCard,
     gap: 12,
   },
   left: {
@@ -295,14 +295,14 @@ const completionStyles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(168,85,247,0.18)',
+    backgroundColor: 'rgba(124,58,237,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+    borderColor: 'rgba(124,58,237,0.35)',
   },
   label: {
-    color: 'rgba(255,255,255,0.85)',
+    color: ProfileTheme.colors.textPrimary,
     fontSize: 12,
     fontWeight: '600',
     flexShrink: 1,
@@ -315,17 +315,17 @@ const completionStyles = StyleSheet.create({
   barBg: {
     width: 60,
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#E6E6EA',
     borderRadius: 2,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
-    backgroundColor: '#A855F7',
+    backgroundColor: ProfileTheme.colors.profilePrimary,
     borderRadius: 2,
   },
   pct: {
-    color: '#A855F7',
+    color: ProfileTheme.colors.profilePrimary,
     fontSize: 12,
     fontWeight: '800',
     minWidth: 32,
@@ -1640,7 +1640,7 @@ function OwnProfileScreen() {
   if ((isLoading || !userData) && !cacheError) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
@@ -1652,12 +1652,12 @@ function OwnProfileScreen() {
     const isAutoRetrying = retryCountdown !== null && autoRetryCountRef.current < MAX_AUTO_RETRIES;
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
         <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
         <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
           {t.profile.profileLoadFailed}
         </Text>
-        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: 'rgba(255,255,255,0.5)' }]}>
+        <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40, color: ProfileTheme.colors.textSecondary }]}>
           {isGatewayOrServerError(cacheError) ? t.profile.serverDown : t.profile.checkConnection}
         </Text>
         {isAutoRetrying && (
@@ -1687,20 +1687,20 @@ function OwnProfileScreen() {
               }
             }}
           >
-            <Text style={{ color: ProfileTheme.colors.deepBlack, fontWeight: 'bold', fontSize: 16 }}>
+            <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 }}>
               {t.profile.retryButton}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={{
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: ProfileTheme.colors.profileCard,
               borderRadius: 12,
               paddingVertical: 12,
               paddingHorizontal: 24,
               minWidth: 120,
               alignItems: 'center',
               borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.2)'
+              borderColor: ProfileTheme.colors.profileCardBorder,
             }}
             onPress={() => {
               logger.debug('[ProfileScreen] Navigating to auth');
@@ -1720,14 +1720,14 @@ function OwnProfileScreen() {
   if (!userData) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
   }
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={ProfileTheme.colors.deepBlack} />
+      <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
 
       {/* Offline Banner */}
       {isOffline && (
@@ -2584,12 +2584,12 @@ function OwnProfileScreen() {
             onRequestClose={() => setIsCompletionDetailVisible(false)}
           >
             {/* Full-screen blur backdrop */}
-            <BlurView intensity={55} tint="dark" style={{ flex: 1 }}>
-              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(5,1,13,0.45)' }}>
+            <BlurView intensity={40} tint="light" style={{ flex: 1 }}>
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(17,17,17,0.28)' }}>
 
                 {/* Sheet */}
                 <View style={{
-                  backgroundColor: 'rgba(10,4,22,0.97)',
+                  backgroundColor: ProfileTheme.colors.profileCard,
                   borderTopLeftRadius: 32,
                   borderTopRightRadius: 32,
                   paddingTop: 0,
@@ -2597,7 +2597,7 @@ function OwnProfileScreen() {
                   paddingBottom: insets.bottom + 24,
                   maxHeight: '88%',
                   borderTopWidth: 1,
-                  borderColor: 'rgba(168,85,247,0.25)',
+                  borderColor: ProfileTheme.colors.profileCardBorder,
                   overflow: 'hidden',
                 }}>
                   {/* Purple top accent line */}
@@ -2610,31 +2610,31 @@ function OwnProfileScreen() {
 
                   {/* Drag handle */}
                   <View style={{ alignItems: 'center', paddingTop: 14, marginBottom: 20 }}>
-                    <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(168,85,247,0.4)' }} />
+                    <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: ProfileTheme.colors.profileCardBorder }} />
                   </View>
 
                   {/* Header */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                     <View>
-                      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 0.2 }}>
+                      <Text style={{ color: ProfileTheme.colors.textPrimary, fontSize: 20, fontWeight: '900', letterSpacing: 0.2 }}>
                         {t.profile.completeYourProfile}
                       </Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 3 }}>
+                      <Text style={{ color: ProfileTheme.colors.textSecondary, fontSize: 13, marginTop: 3 }}>
                         {`${completionStatus.completedSteps} ${t.profile.of} ${completionStatus.totalSteps} ${t.profile.stepsCompleted}`}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => setIsCompletionDetailVisible(false)}
-                      style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
+                      style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: ProfileTheme.colors.surfaceElevated, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: ProfileTheme.colors.profileCardBorder }}
                     >
-                      <Ionicons name="close" size={17} color="rgba(255,255,255,0.75)" />
+                      <Ionicons name="close" size={17} color={ProfileTheme.colors.textPrimary} />
                     </TouchableOpacity>
                   </View>
 
                   {/* Big percentage + progress bar */}
                   <View style={{ alignItems: 'center', marginBottom: 28 }}>
-                    <Text style={{ color: '#A855F7', fontSize: 56, fontWeight: '900', letterSpacing: -3, lineHeight: 60 }}>{pct}%</Text>
-                    <View style={{ width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 4, marginTop: 16, overflow: 'hidden' }}>
+                    <Text style={{ color: ProfileTheme.colors.profilePrimary, fontSize: 56, fontWeight: '900', letterSpacing: -3, lineHeight: 60 }}>{pct}%</Text>
+                    <View style={{ width: '100%', height: 8, backgroundColor: '#E6E6EA', borderRadius: 4, marginTop: 16, overflow: 'hidden' }}>
                       <LinearGradient
                         colors={['#A855F7', '#7C3AED', '#4F46E5']}
                         start={{ x: 0, y: 0 }}
@@ -2657,12 +2657,12 @@ function OwnProfileScreen() {
                           marginBottom: 8,
                           borderRadius: 16,
                           backgroundColor: step.completed
-                            ? 'rgba(168,85,247,0.1)'
-                            : 'rgba(255,255,255,0.04)',
+                            ? 'rgba(124,58,237,0.08)'
+                            : ProfileTheme.colors.surfaceElevated,
                           borderWidth: 1,
                           borderColor: step.completed
-                            ? 'rgba(168,85,247,0.3)'
-                            : 'rgba(255,255,255,0.07)',
+                            ? 'rgba(124,58,237,0.35)'
+                            : ProfileTheme.colors.profileCardBorder,
                         }}
                       >
                         {/* Status icon */}
@@ -2673,25 +2673,25 @@ function OwnProfileScreen() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           backgroundColor: step.completed
-                            ? 'rgba(168,85,247,0.25)'
-                            : 'rgba(255,255,255,0.06)',
+                            ? 'rgba(124,58,237,0.16)'
+                            : '#FFFFFF',
                           marginRight: 14,
                           borderWidth: 1,
                           borderColor: step.completed
-                            ? 'rgba(168,85,247,0.5)'
-                            : 'rgba(255,255,255,0.1)',
+                            ? 'rgba(124,58,237,0.45)'
+                            : ProfileTheme.colors.profileCardBorder,
                         }}>
                           <Ionicons
                             name={step.completed ? 'checkmark' : 'ellipse-outline'}
                             size={14}
-                            color={step.completed ? '#A855F7' : 'rgba(255,255,255,0.3)'}
+                            color={step.completed ? ProfileTheme.colors.profilePrimary : ProfileTheme.colors.profileMuted}
                           />
                         </View>
 
                         {/* Label */}
                         <Text style={{
                           flex: 1,
-                          color: step.completed ? '#fff' : 'rgba(255,255,255,0.55)',
+                          color: ProfileTheme.colors.textPrimary,
                           fontSize: 14,
                           fontWeight: step.completed ? '700' : '500',
                         }}
@@ -2703,14 +2703,14 @@ function OwnProfileScreen() {
                         {/* Required badge */}
                         {step.required && !step.completed && (
                           <View style={{
-                            backgroundColor: 'rgba(168,85,247,0.15)',
+                            backgroundColor: 'rgba(124,58,237,0.1)',
                             borderRadius: 8,
                             paddingHorizontal: 7,
                             paddingVertical: 3,
                             borderWidth: 1,
-                            borderColor: 'rgba(168,85,247,0.3)',
+                            borderColor: 'rgba(124,58,237,0.3)',
                           }}>
-                            <Text style={{ color: '#A855F7', fontSize: 10, fontWeight: '700' }}>{t.profile.stepRequired}</Text>
+                            <Text style={{ color: ProfileTheme.colors.profilePrimary, fontSize: 10, fontWeight: '700' }}>{t.profile.stepRequired}</Text>
                           </View>
                         )}
                       </View>
