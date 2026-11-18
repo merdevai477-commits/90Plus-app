@@ -1,16 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  I18nManager,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +27,9 @@ import { PredictionApiError, PredictionsService } from '../../services/predictio
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { getTeamDisplayName } from '../../utils/i18nHelpers';
-import { KING_ART } from './assets';
+import { KING_ART, KING_ICON } from './assets';
+import { KING_BUTTON_GRADIENT } from './KingBoardList';
+import { KingPlayHeader } from './KingPlayHeader';
 import { kingCardButton, matchHasStarted } from './kingMatchButton';
 import {
   isDefiniteRejection,
@@ -47,10 +53,25 @@ import { KingToast, type KingToastState } from './KingToast';
 const SIDE = 20;
 const NAV_HEIGHT = 51;
 const DAILY_LIMIT = 10;
+/** Finished football scores above this are almost never real — drop bad/non-soccer rows. */
+const MAX_FOOTBALL_GOALS = 20;
 
 function started(match: Match, now = Date.now()): boolean {
   const kickoff = match.fixtureDate ? new Date(match.fixtureDate).getTime() : null;
   return matchHasStarted(match.status, Number.isFinite(kickoff) ? kickoff : null, now);
+}
+
+function isPostponed(match: Match): boolean {
+  const short = String(match.statusShort ?? '').toUpperCase();
+  return short === 'PST' || match.status === 'PST';
+}
+
+/** Keep soccer-looking rows only (reject basketball-style 68–73 scores). */
+function isPlausibleFootballMatch(match: Match): boolean {
+  if (match.status !== 'finished' && match.status !== 'live') return true;
+  const home = match.score?.home ?? 0;
+  const away = match.score?.away ?? 0;
+  return home <= MAX_FOOTBALL_GOALS && away <= MAX_FOOTBALL_GOALS;
 }
 
 function parseScore(text: string): number | null {
@@ -58,8 +79,6 @@ function parseScore(text: string): number | null {
   if (!digits) return null;
   return Math.min(20, Number.parseInt(digits, 10));
 }
-
-type ScoreDraft = { home: string; away: string };
 
 export function KingPlayScreen({
   mode: modeParam,
@@ -97,14 +116,16 @@ export function KingPlayScreen({
     () => ({ ...serverPicks, ...localPicks }),
     [serverPicks, localPicks],
   );
-  const [scoreDrafts, setScoreDrafts] = useState<Record<string, ScoreDraft>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<KingToastState | null>(null);
+  const [sheetMatch, setSheetMatch] = useState<Match | null>(null);
+  const [sheetPick, setSheetPick] = useState<CardPick | null>(null);
+  const [homeText, setHomeText] = useState('');
+  const [awayText, setAwayText] = useState('');
   const navBottom = Math.max(insets.bottom, 12) + 8;
-  const listBottom = navBottom + NAV_HEIGHT + 72;
+  const listBottom = navBottom + NAV_HEIGHT + 24;
 
   const loadGenRef = useRef(0);
   const hasRows = useRef(false);
@@ -114,7 +135,7 @@ export function KingPlayScreen({
     setMatches([]);
     setError(false);
     setLoading(true);
-    setScoreDrafts({});
+    setSheetMatch(null);
   }, [dateKey, apiMode]);
 
   const load = useCallback(async () => {
@@ -122,7 +143,7 @@ export function KingPlayScreen({
     const { matches: dayMatches, calendar } = await fetchKingMatches(dateKey || cairoTodayKey());
     if (gen !== loadGenRef.current) return;
     if (calendar) setTodayKey(calendar.today);
-    setMatches(dayMatches);
+    setMatches(dayMatches.filter(isPlausibleFootballMatch));
     setError(false);
     hasRows.current = true;
 
@@ -189,41 +210,69 @@ export function KingPlayScreen({
     [apiMode, saved],
   );
 
-  const submitPick = useCallback(
-    async (
-      match: Match,
-      predictionType: CardPick,
-      home: number | null,
-      away: number | null,
-    ) => {
-      if (!isSignedIn) {
-        showError(copy.signIn);
-        return;
-      }
-      const meta = {
-        homeTeam: match.homeTeam.name,
-        awayTeam: match.awayTeam.name,
-        homeTeamLogo: match.homeTeam.logo,
-        awayTeamLogo: match.awayTeam.logo,
-        matchDate: match.fixtureDate || new Date().toISOString(),
-        leagueName: match.league?.name,
-      };
-      const picks = useKingPicksStore.getState();
-      const matchId = String(match.id);
-      const seq = picks.begin(
-        matchId,
-        { type: predictionType, home, away, correct: null },
-        meta,
-        apiMode,
-      );
+  const openSheet = (match: Match) => {
+    if (isPostponed(match) || started(match) || dayPassed) return;
+    const prev = pickFor(match.id);
+    setHomeText(prev?.home != null ? String(prev.home) : '');
+    setAwayText(prev?.away != null ? String(prev.away) : '');
+    setSheetPick(prev?.type ?? null);
+    setSheetMatch(match);
+  };
 
+  const closeSheet = () => setSheetMatch(null);
+
+  const confirmSheet = useCallback(() => {
+    const match = sheetMatch;
+    if (!match) return;
+    const home = parseScore(homeText);
+    const away = parseScore(awayText);
+    if (isGame ? sheetPick == null : home == null || away == null) return;
+    if (!isSignedIn) {
+      showError(copy.signIn);
+      return;
+    }
+    const predictionType: CardPick = isGame
+      ? (sheetPick as CardPick)
+      : home! > away! ? 'home' : away! > home! ? 'away' : 'draw';
+    const meta = {
+      homeTeam: match.homeTeam.name,
+      awayTeam: match.awayTeam.name,
+      homeTeamLogo: match.homeTeam.logo,
+      awayTeamLogo: match.awayTeam.logo,
+      matchDate: match.fixtureDate || new Date().toISOString(),
+      leagueName: match.league?.name,
+    };
+    const picks = useKingPicksStore.getState();
+    const matchId = String(match.id);
+    const seq = picks.begin(
+      matchId,
+      { type: predictionType, home: isGame ? null : home, away: isGame ? null : away, correct: null },
+      meta,
+      apiMode,
+    );
+
+    setSheetMatch(null);
+    const pickName =
+      predictionType === 'home'
+        ? teamName(match.homeTeam)
+        : predictionType === 'away'
+          ? teamName(match.awayTeam)
+          : copy.draw;
+    setToast({
+      variant: 'success',
+      title: pickFor(matchId) ? copy.updated : copy.saved,
+      pick: isGame ? pickName : `${home} - ${away}`,
+      caption: `${teamName(match.awayTeam)} ${copy.vs} ${teamName(match.homeTeam)}`,
+    });
+
+    void (async () => {
       try {
         await PredictionsService.submitPrediction(getTokenRef.current, {
           apiMatchId: match.id,
           predictionType,
           ...meta,
-          predictedHomeScore: home ?? undefined,
-          predictedAwayScore: away ?? undefined,
+          predictedHomeScore: isGame ? undefined : home!,
+          predictedAwayScore: isGame ? undefined : away!,
         });
         picks.confirm(matchId, seq, apiMode);
       } catch (err) {
@@ -235,37 +284,25 @@ export function KingPlayScreen({
         const outcome = await settleUncertainSave(getTokenRef.current, matchId, seq, apiMode);
         if (outcome !== 'confirmed') explain(err);
       }
-    },
-    [apiMode, copy.signIn, explain, isSignedIn, showError],
-  );
+    })();
+  }, [
+    apiMode,
+    awayText,
+    copy,
+    explain,
+    homeText,
+    isGame,
+    isSignedIn,
+    pickFor,
+    sheetMatch,
+    sheetPick,
+    showError,
+    teamName,
+  ]);
 
-  const onGamePick = useCallback(
-    (match: Match, next: CardPick) => {
-      if (started(match) || dayPassed) return;
-      void submitPick(match, next, null, null);
-    },
-    [dayPassed, submitPick],
-  );
-
-  const setScore = useCallback((matchId: string, side: 'home' | 'away', value: string) => {
-    setScoreDrafts((prev) => {
-      const current = prev[matchId] ?? { home: '', away: '' };
-      return { ...prev, [matchId]: { ...current, [side]: value } };
-    });
-  }, []);
-
-  const scoreFor = useCallback(
-    (match: Match): ScoreDraft => {
-      const id = String(match.id);
-      if (scoreDrafts[id]) return scoreDrafts[id];
-      const prev = pickFor(match.id);
-      return {
-        home: prev?.home != null ? String(prev.home) : '',
-        away: prev?.away != null ? String(prev.away) : '',
-      };
-    },
-    [pickFor, scoreDrafts],
-  );
+  const sheetReady = isGame
+    ? sheetPick != null
+    : parseScore(homeText) != null && parseScore(awayText) != null;
 
   const completedCount = useMemo(() => {
     return matches.reduce((count, match) => {
@@ -276,67 +313,9 @@ export function KingPlayScreen({
     }, 0);
   }, [isGame, matches, pickFor]);
 
-  const confirmAll = useCallback(async () => {
-    if (!isSignedIn) {
-      showError(copy.signIn);
-      return;
-    }
-    if (isGame) {
-      setToast({
-        variant: 'success',
-        title: completedCount > 0 ? copy.saved : copy.predictNow,
-      });
-      return;
-    }
-
-    const pending = matches.filter((match) => {
-      if (started(match) || dayPassed) return false;
-      const draft = scoreFor(match);
-      const home = parseScore(draft.home);
-      const away = parseScore(draft.away);
-      if (home == null || away == null) return false;
-      const prev = pickFor(match.id);
-      return !prev || prev.home !== home || prev.away !== away;
-    });
-
-    if (pending.length === 0) {
-      setToast({
-        variant: 'success',
-        title: completedCount > 0 ? copy.saved : copy.predictNow,
-      });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      for (const match of pending) {
-        const draft = scoreFor(match);
-        const home = parseScore(draft.home)!;
-        const away = parseScore(draft.away)!;
-        const type: CardPick = home > away ? 'home' : away > home ? 'away' : 'draw';
-        await submitPick(match, type, home, away);
-      }
-      setToast({ variant: 'success', title: copy.saved });
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    completedCount,
-    copy.predictNow,
-    copy.saved,
-    copy.signIn,
-    dayPassed,
-    isGame,
-    isSignedIn,
-    matches,
-    pickFor,
-    scoreFor,
-    showError,
-    submitPick,
-  ]);
-
   const phaseOf = useCallback(
     (match: Match): CardPhase => {
+      if (isPostponed(match)) return 'postponed';
       const prev = pickFor(match.id);
       const hasPick = isGame
         ? !!prev?.type
@@ -374,6 +353,17 @@ export function KingPlayScreen({
     [copy.draw, copy.winOf, isGame, pickFor, teamName],
   );
 
+  const scoreDisplay = useCallback(
+    (match: Match) => {
+      const prev = pickFor(match.id);
+      return {
+        home: prev?.home != null ? String(prev.home) : '',
+        away: prev?.away != null ? String(prev.away) : '',
+      };
+    },
+    [pickFor],
+  );
+
   const switchMode = (next: KingRouteMode) => {
     if (next === mode) return;
     router.setParams({ mode: next, date: dateKey || undefined } as never);
@@ -395,6 +385,7 @@ export function KingPlayScreen({
     waitingEnd: copy.waitingEnd,
     predictionEnded: copy.predictionEnded,
     notPredicted: copy.notPredicted,
+    postponed: copy.postponed,
     matchStarts: copy.matchStarts,
     matchStarted: copy.matchStarted,
     matchEnded: copy.matchEnded,
@@ -406,22 +397,13 @@ export function KingPlayScreen({
     vs: copy.vs,
   };
 
+  const sheetBg = theme.isDark ? (['#0C051A', '#07040D'] as const) : (['#FFFFFF', '#F8F7FF'] as const);
+
   return (
     <View style={[styles.root, { backgroundColor: theme.screen }]}>
       <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
 
-      <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 10) }]}>
-        <Pressable onPress={goBack} hitSlop={10} accessibilityRole="button" accessibilityLabel={copy.back} style={styles.backBtn}>
-          <Ionicons
-            name={I18nManager.isRTL ? 'chevron-forward' : 'chevron-back'}
-            size={24}
-            color={theme.headerIcon}
-          />
-          <Text style={[styles.title, { color: theme.headerTitle, fontFamily: fontBold }]} numberOfLines={1}>
-            {title}
-          </Text>
-        </Pressable>
-      </View>
+      <KingPlayHeader title={title} onBack={goBack} backLabel={copy.back} theme={theme} />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: listBottom }]}
@@ -505,7 +487,7 @@ export function KingPlayScreen({
             const prev = pickFor(match.id);
             const button = kingCardButton({
               dayPassed,
-              started: started(match),
+              started: started(match) || isPostponed(match),
               live: match.status === 'live',
               verdict:
                 prev?.correct === true
@@ -516,7 +498,7 @@ export function KingPlayScreen({
                       ? 'pending'
                       : null,
             });
-            const draft = scoreFor(match);
+            const draft = scoreDisplay(match);
             return (
               <PlayMatchCard
                 key={`${apiMode}-${match.id}`}
@@ -533,10 +515,8 @@ export function KingPlayScreen({
                 pickLabel={pickLabelOf(match)}
                 fonts={{ bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular }}
                 copy={cardCopy}
-                locked={button.locked}
-                onPick={(next) => onGamePick(match, next)}
-                onHomeScore={(value) => setScore(String(match.id), 'home', value)}
-                onAwayScore={(value) => setScore(String(match.id), 'away', value)}
+                locked={button.locked || isPostponed(match)}
+                onPress={() => openSheet(match)}
               />
             );
           })
@@ -544,16 +524,6 @@ export function KingPlayScreen({
       </ScrollView>
 
       <View pointerEvents="box-none" style={[styles.footer, { bottom: navBottom }]}>
-        <Pressable
-          onPress={() => void confirmAll()}
-          disabled={saving}
-          style={[styles.cta, { backgroundColor: theme.ctaBg, opacity: saving ? 0.7 : 1 }]}
-        >
-          <Text style={[styles.ctaText, { color: theme.ctaText, fontFamily: fontSemi }]}>
-            {`${copy.confirm} (${completedCount}/${matches.length || DAILY_LIMIT})`}
-          </Text>
-        </Pressable>
-
         <View
           style={[
             styles.nav,
@@ -564,7 +534,7 @@ export function KingPlayScreen({
             },
           ]}
         >
-          <View style={[styles.navItem, styles.navActive, { backgroundColor: theme.navActiveBg }]}>
+          <View style={[styles.navItem, { backgroundColor: theme.navActiveBg }]}>
             <Text style={[styles.navText, { color: theme.navActiveText, fontFamily: fontSemi }]}>{copy.tabPredict}</Text>
           </View>
           <Pressable onPress={openBoard} style={styles.navItem}>
@@ -573,7 +543,110 @@ export function KingPlayScreen({
         </View>
       </View>
 
-      <KingToast toast={toast} onHide={() => setToast(null)} />
+      <Modal visible={sheetMatch != null} transparent animationType="fade" onRequestClose={closeSheet}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.backdrop}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+          <LinearGradient colors={[...sheetBg]} style={[styles.sheet, { borderColor: theme.modeTrackBorder }]}>
+            <Pressable onPress={closeSheet} style={styles.close} hitSlop={8}>
+              <Ionicons name="close" size={28} color={theme.ink} />
+            </Pressable>
+            <Text style={[styles.sheetTitle, { color: theme.ink, fontFamily: fontSemi }]}>{copy.sheetTitle}</Text>
+
+            {sheetMatch && isGame ? (
+              <>
+                <Text style={[styles.pickHint, { color: theme.muted, fontFamily: fontMedium }]}>{copy.pickWinner}</Text>
+                <View style={styles.pickRow}>
+                  <PickTeam
+                    name={teamName(sheetMatch.homeTeam)}
+                    logo={sheetMatch.homeTeam.logo}
+                    selected={sheetPick === 'home'}
+                    theme={theme}
+                    font={fontSemi}
+                    onPress={() => setSheetPick('home')}
+                  />
+                  <View style={styles.pickMid}>
+                    <Pressable onPress={() => setSheetPick('draw')} accessibilityLabel={copy.draw}>
+                      <View
+                        style={[
+                          styles.drawCircle,
+                          {
+                            backgroundColor: sheetPick === 'draw' ? theme.primary : theme.surface,
+                            borderColor: theme.primary,
+                          },
+                        ]}
+                      >
+                        <Image
+                          source={KING_ICON.drawX}
+                          style={styles.drawX}
+                          contentFit="contain"
+                          tintColor={sheetPick === 'draw' ? '#fff' : theme.primary}
+                        />
+                      </View>
+                    </Pressable>
+                    <Text
+                      style={[
+                        styles.drawLabel,
+                        { color: sheetPick === 'draw' ? theme.ink : theme.muted, fontFamily: fontSemi },
+                      ]}
+                    >
+                      {copy.draw}
+                    </Text>
+                    <Text style={[styles.sheetTime, { color: theme.muted, fontFamily: fontMedium }]}>
+                      {sheetMatch.time || ''}
+                    </Text>
+                  </View>
+                  <PickTeam
+                    name={teamName(sheetMatch.awayTeam)}
+                    logo={sheetMatch.awayTeam.logo}
+                    selected={sheetPick === 'away'}
+                    theme={theme}
+                    font={fontSemi}
+                    onPress={() => setSheetPick('away')}
+                  />
+                </View>
+              </>
+            ) : sheetMatch ? (
+              <>
+                <View style={styles.sheetTeams}>
+                  <SheetTeam name={teamName(sheetMatch.homeTeam)} logo={sheetMatch.homeTeam.logo} theme={theme} font={fontSemi} />
+                  <View style={styles.sheetMid}>
+                    <Text style={[styles.sheetVs, { color: theme.primary, fontFamily: fontSemi }]}>{copy.vs}</Text>
+                    <Text style={[styles.sheetTime, { color: theme.muted, fontFamily: fontMedium }]}>
+                      {sheetMatch.time || ''}
+                    </Text>
+                  </View>
+                  <SheetTeam name={teamName(sheetMatch.awayTeam)} logo={sheetMatch.awayTeam.logo} theme={theme} font={fontSemi} />
+                </View>
+                <Text style={[styles.resultTitle, { color: theme.ink, fontFamily: fontSemi }]}>{copy.matchResult}</Text>
+                <View style={styles.scoreRow}>
+                  <ScoreInput value={homeText} onChange={setHomeText} theme={theme} font={fontBold} />
+                  <Text style={[styles.scoreColon, { color: theme.muted, fontFamily: fontSemi }]}>:</Text>
+                  <ScoreInput value={awayText} onChange={setAwayText} theme={theme} font={fontBold} />
+                </View>
+              </>
+            ) : null}
+
+            <Pressable
+              disabled={!sheetReady}
+              onPress={confirmSheet}
+              style={[styles.sheetConfirm, !sheetReady && styles.dimmed]}
+            >
+              <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.footerBtn}>
+                <Text style={[styles.footerText, { fontFamily: fontSemi }]} maxFontSizeMultiplier={1.15}>
+                  {copy.confirm}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+            <Text style={[styles.hint, { color: theme.muted, fontFamily: fontRegular }]}>{copy.editHint}</Text>
+          </LinearGradient>
+        </KeyboardAvoidingView>
+        {sheetMatch ? <KingToast toast={toast} onHide={() => setToast(null)} /> : null}
+      </Modal>
+
+      {sheetMatch ? null : <KingToast toast={toast} onHide={() => setToast(null)} />}
     </View>
   );
 }
@@ -592,20 +665,11 @@ function ModeTab({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        styles.modeTab,
-        active && { backgroundColor: theme.modeActiveBg },
-      ]}
-    >
+    <Pressable onPress={onPress} style={[styles.modeTab, active && { backgroundColor: theme.modeActiveBg }]}>
       <Text
         style={[
           styles.modeTabText,
-          {
-            color: active ? theme.modeActiveText : theme.modeIdleText,
-            fontFamily: font,
-          },
+          { color: active ? theme.modeActiveText : theme.modeIdleText, fontFamily: font },
         ]}
         numberOfLines={1}
       >
@@ -615,32 +679,107 @@ function ModeTab({
   );
 }
 
+function singleWord(name: string) {
+  return !/\s/.test(name.trim());
+}
+
+function TeamLabel({ name, style, font }: { name: string; style: object; font: string }) {
+  return (
+    <Text
+      style={[style, { fontFamily: font }]}
+      numberOfLines={singleWord(name) ? 1 : 2}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+      maxFontSizeMultiplier={1.15}
+    >
+      {name}
+    </Text>
+  );
+}
+
+function SheetTeam({
+  name,
+  logo,
+  theme,
+  font,
+}: {
+  name: string;
+  logo?: string;
+  theme: ReturnType<typeof getKingPlayTheme>;
+  font: string;
+}) {
+  return (
+    <View style={styles.sheetTeam}>
+      {logo ? <Image source={{ uri: logo }} style={styles.sheetLogo} contentFit="contain" /> : <View style={styles.sheetLogo} />}
+      <TeamLabel name={name} font={font} style={[styles.sheetName, { color: theme.ink }]} />
+    </View>
+  );
+}
+
+function PickTeam({
+  name,
+  logo,
+  selected,
+  theme,
+  font,
+  onPress,
+}: {
+  name: string;
+  logo?: string;
+  selected: boolean;
+  theme: ReturnType<typeof getKingPlayTheme>;
+  font: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} style={styles.pickPress}>
+      <View
+        style={[
+          styles.pickTeam,
+          {
+            backgroundColor: selected ? theme.primary : theme.surface,
+            borderColor: selected ? theme.primary : theme.choiceIdleBorder,
+          },
+        ]}
+      >
+        {logo ? <Image source={{ uri: logo }} style={styles.sheetLogo} contentFit="contain" /> : <View style={styles.sheetLogo} />}
+        <TeamLabel name={name} font={font} style={[styles.pickName, { color: selected ? '#fff' : theme.ink }]} />
+      </View>
+    </Pressable>
+  );
+}
+
+function ScoreInput({
+  value,
+  onChange,
+  theme,
+  font,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  theme: ReturnType<typeof getKingPlayTheme>;
+  font: string;
+}) {
+  return (
+    <View style={[styles.scoreBox, { backgroundColor: theme.scoreIdleBg, borderColor: theme.primary }]}>
+      <TextInput
+        value={value}
+        onChangeText={(text) => onChange(text.replace(/\D/g, '').slice(0, 2))}
+        keyboardType="number-pad"
+        maxLength={2}
+        placeholder="-"
+        placeholderTextColor={theme.scoreIdleText}
+        style={[styles.scoreInput, { color: theme.ink, fontFamily: font }]}
+        selectionColor={theme.primary}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  topBar: {
-    paddingHorizontal: SIDE,
-    paddingBottom: 10,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 6,
-    alignSelf: 'stretch',
-  },
-  title: { fontSize: 22, textAlign: 'right' },
-  scroll: {
-    paddingHorizontal: SIDE,
-    gap: 14,
-    paddingTop: 4,
-  },
-  banner: {
-    width: '100%',
-    height: 161,
-    borderRadius: 17,
-  },
+  scroll: { paddingHorizontal: SIDE, gap: 14, paddingTop: 4 },
+  banner: { width: '100%', height: 161, borderRadius: 17 },
   modeTrack: {
     height: 51,
     borderRadius: 16,
@@ -649,12 +788,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
   },
-  modeTab: {
-    flex: 1,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  modeTab: { flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   modeTabText: { fontSize: 14 },
   infoBox: {
     borderRadius: 14,
@@ -690,16 +824,7 @@ const styles = StyleSheet.create({
     left: SIDE,
     right: SIDE,
     alignItems: 'center',
-    gap: 12,
   },
-  cta: {
-    width: '100%',
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaText: { fontSize: 16 },
   nav: {
     width: 192,
     height: NAV_HEIGHT,
@@ -712,12 +837,96 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  navItem: {
-    flex: 1,
-    borderRadius: 12,
+  navItem: { flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  navText: { fontSize: 14 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center' },
+  sheet: {
+    marginHorizontal: 16,
+    borderRadius: 28,
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+  },
+  close: { height: 36, justifyContent: 'center', alignSelf: 'flex-start' },
+  sheetTitle: { fontSize: 22, textAlign: 'center' },
+  pickHint: { fontSize: 14, textAlign: 'center', marginTop: 8 },
+  pickRow: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    direction: 'ltr',
+  },
+  pickPress: { flex: 1, maxWidth: 140 },
+  pickTeam: {
+    width: '100%',
+    minHeight: 120,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  pickName: { fontSize: 14, textAlign: 'center' },
+  pickMid: { alignItems: 'center' },
+  drawCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navActive: {},
-  navText: { fontSize: 14 },
+  drawX: { width: 28, height: 28 },
+  drawLabel: { fontSize: 14, marginTop: 8 },
+  sheetTeams: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    direction: 'ltr',
+  },
+  sheetTeam: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8 },
+  sheetLogo: { width: 48, height: 54 },
+  sheetName: { fontSize: 15, textAlign: 'center' },
+  sheetMid: { width: 90, alignItems: 'center' },
+  sheetVs: { fontSize: 22 },
+  sheetTime: { fontSize: 12, marginTop: 4, textAlign: 'center' },
+  resultTitle: { fontSize: 20, textAlign: 'center', marginTop: 20 },
+  scoreRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    direction: 'ltr',
+  },
+  scoreBox: {
+    width: 88,
+    height: 64,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  scoreInput: {
+    flex: 1,
+    fontSize: 28,
+    textAlign: 'center',
+    padding: 0,
+  },
+  scoreColon: { fontSize: 26 },
+  sheetConfirm: { marginTop: 28 },
+  footerBtn: {
+    height: 54,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerText: { color: '#fff', fontSize: 18 },
+  hint: { marginTop: 10, fontSize: 12, textAlign: 'center' },
+  dimmed: { opacity: 0.45 },
 });

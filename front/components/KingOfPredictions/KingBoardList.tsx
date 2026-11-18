@@ -39,9 +39,9 @@ export function KingPeriodTabs({
   const fontBold = useAppFont(700);
   const fontRegular = useAppFont(400);
   const { isDark } = useResolvedAppScheme();
-  const idleBg = isDark ? '#080709' : '#F3EDFF';
+  const idleBg = isDark ? '#080709' : '#FFFFFF';
   const idleText = isDark ? '#FFFFFF' : '#6B7280';
-  const idleBorder = isDark ? '#161419' : '#E9D5FF';
+  const idleBorder = isDark ? '#161419' : '#D4C4F5';
   const tab = (id: KingPeriod, label: string, side: 'left' | 'right') => {
     const active = period === id;
     const round = side === 'left' ? styles.tabLeft : styles.tabRight;
@@ -147,15 +147,26 @@ export const KingBoardRow = memo(function KingBoardRow({
   preview?: boolean;
   fonts: { bold: string; semi: string; medium: string; regular: string };
 }) {
+  const { isDark } = useResolvedAppScheme();
   const name = mine ? youLabel : (entry.displayName || entry.username || '—');
   const tier = entry.rank >= 1 && entry.rank <= 3 ? TIERS[entry.rank - 1] : null;
   const opacity = preview ? (PREVIEW_OPACITY[index] ?? 0.2) : 1;
   const avatarSize = tier?.avatar ?? 34;
+  const lightTiers = ['#FFF8E8', '#F4F4F6', '#F8EFE8'] as const;
+  const rowBg = isDark
+    ? (tier?.bg ?? '#0D0D0D')
+    : (tier ? lightTiers[entry.rank - 1] : '#FFFFFF');
+  const rowBorder = isDark ? 'transparent' : '#E5E0F5';
   return (
     <View
       style={[
         styles.row,
-        { backgroundColor: tier?.bg ?? '#0D0D0D', opacity },
+        {
+          backgroundColor: rowBg,
+          opacity,
+          borderWidth: isDark ? 0 : 1,
+          borderColor: rowBorder,
+        },
         entry.rank === 1 && styles.rowGold,
       ]}
     >
@@ -165,13 +176,23 @@ export const KingBoardRow = memo(function KingBoardRow({
           style={[
             styles.xp,
             tier
-              ? { color: tier.xp, fontSize: tier.xpSize, fontFamily: entry.rank === 1 ? fonts.semi : fonts.medium }
-              : { color: '#EBDCFA', fontSize: 18, fontFamily: fonts.medium },
+              ? {
+                  color: isDark ? tier.xp : '#24104E',
+                  fontSize: tier.xpSize,
+                  fontFamily: entry.rank === 1 ? fonts.semi : fonts.medium,
+                }
+              : { color: isDark ? '#EBDCFA' : '#4B1FA3', fontSize: 18, fontFamily: fonts.medium },
           ]}
         >
           {entry.xp}
         </Text>
-        <Text maxFontSizeMultiplier={1.15} style={[styles.xpUnit, { color: tier ? tier.xp : '#831DE5', fontFamily: fonts.semi }]}>
+        <Text
+          maxFontSizeMultiplier={1.15}
+          style={[
+            styles.xpUnit,
+            { color: isDark ? (tier ? tier.xp : '#831DE5') : '#6A2BD9', fontFamily: fonts.semi },
+          ]}
+        >
           {xpLabel}
         </Text>
       </View>
@@ -185,6 +206,7 @@ export const KingBoardRow = memo(function KingBoardRow({
               nameStyle={[
                 styles.name,
                 {
+                  color: isDark ? '#FFFFFF' : '#24104E',
                   fontSize: tier?.nameSize ?? 16,
                   fontFamily: entry.rank === 1 ? fonts.bold : tier ? fonts.semi : fonts.regular,
                 },
@@ -194,7 +216,14 @@ export const KingBoardRow = memo(function KingBoardRow({
           </View>
           <Image
             source={entry.avatar ? { uri: entry.avatar } : PLACEHOLDER}
-            style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#2A2A2A' }}
+            style={{
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: avatarSize / 2,
+              backgroundColor: isDark ? '#2A2A2A' : '#EDE9FE',
+              borderWidth: isDark ? 0 : 1,
+              borderColor: '#D4C4F5',
+            }}
             contentFit="cover"
             recyclingKey={entry.userId}
           />
@@ -202,7 +231,10 @@ export const KingBoardRow = memo(function KingBoardRow({
         {tier ? (
           <Image source={tier.medal} style={{ width: tier.medalSize, height: tier.medalSize }} contentFit="contain" />
         ) : (
-          <Text maxFontSizeMultiplier={1.15} style={[styles.rankNum, { fontFamily: fonts.regular }]}>
+          <Text
+            maxFontSizeMultiplier={1.15}
+            style={[styles.rankNum, { color: isDark ? '#FFFFFF' : '#4B1FA3', fontFamily: fonts.regular }]}
+          >
             {entry.rank}
           </Text>
         )}
@@ -325,7 +357,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   name: {
-    color: '#fff',
     flexShrink: 1,
     textAlign: 'right',
   },
@@ -334,7 +365,6 @@ const styles = StyleSheet.create({
     height: 16,
   },
   rankNum: {
-    color: '#fff',
     fontSize: 16,
     minWidth: 10,
     textAlign: 'center',

@@ -1164,6 +1164,7 @@ export const en = {
     waitingEnd: 'Waiting for full time',
     predictionEnded: 'Prediction closed',
     notPredicted: 'No prediction',
+    postponed: 'Postponed',
     matchStarts: 'Kickoff',
     matchStarted: 'Match started',
     matchEnded: 'Full time',

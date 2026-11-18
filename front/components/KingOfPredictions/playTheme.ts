@@ -154,7 +154,7 @@ export function getKingPlayTheme(isDark: boolean): KingPlayTheme {
     pale: '#F3EDFF',
     surface: '#F8F7FF',
     card: '#FFFFFF',
-    cardBorder: 'transparent',
+    cardBorder: '#E5E0F5',
     cardShadow: '#000000',
     vs: '#6B7280',
     matchNumber: '#4B1FA3',

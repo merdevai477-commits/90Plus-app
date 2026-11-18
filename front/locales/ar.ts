@@ -1250,6 +1250,7 @@ export const ar = {
     waitingEnd: 'انتظار انتهاء المباراة',
     predictionEnded: 'انتهى التوقع',
     notPredicted: 'لم يتم التوقع',
+    postponed: 'مؤجلة',
     matchStarts: 'تبدأ المباراة',
     matchStarted: 'بدأت المباراة',
     matchEnded: 'انتهت المباراة',

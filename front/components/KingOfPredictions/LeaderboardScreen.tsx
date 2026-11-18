@@ -1,19 +1,21 @@
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { PredictionsService, type KingLeaderboard, type KingLeaderboardEntry, type KingPeriod } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ICON } from './assets';
 import { KingBoardRow, KingEmptyState, KingOrnament, KingPeriodTabs } from './KingBoardList';
-import { KingHeader } from './KingHeader';
-import { KING_BG, KING_PURPLE, parseKingMode, toApiMode } from './shared';
+import { KingPlayHeader } from './KingPlayHeader';
 import { useKingPicksStore } from './kingPicksStore';
+import { getKingPlayTheme } from './playTheme';
+import { parseKingMode, toApiMode } from './shared';
 
 export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | string[] | undefined }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
@@ -28,6 +30,8 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const fontSemi = useAppFont(600);
   const fontMedium = useAppFont(500);
   const fontRegular = useAppFont(400);
+  const { isDark } = useResolvedAppScheme();
+  const theme = useMemo(() => getKingPlayTheme(isDark), [isDark]);
 
   const [period, setPeriod] = useState<KingPeriod>('week');
   const results = useKingPicksStore((state) => state.results);
@@ -46,7 +50,6 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
       period,
     ).catch(() => null);
     setBoard(data);
-    // `results` re-runs this when a PREDICTION_RESULT push lands (D9).
   }, [mode, period, results]);
 
   useFocusEffect(
@@ -83,11 +86,16 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
     [copy.xp, copy.you, fonts, meId],
   );
 
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: '/king-of-predictions', params: { mode } } as never);
+  };
+
   const header = (
     <View>
       <View style={styles.heading}>
         <KingOrnament icon={mode === 'results' ? KING_ICON.trophy : KING_ICON.crown} />
-        <Text style={[styles.title, { fontFamily: fontBold }]}>{title}</Text>
+        <Text style={[styles.title, { fontFamily: fontBold, color: theme.ink }]}>{title}</Text>
       </View>
       <View style={styles.body}>
         <KingPeriodTabs
@@ -102,7 +110,7 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   );
 
   const empty = loading ? (
-    <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 32 }} />
+    <ActivityIndicator color={theme.primary} style={{ marginTop: 32 }} />
   ) : (
     <KingEmptyState
       title={copy.emptyTitle}
@@ -110,14 +118,15 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
       style={styles.empty}
       onAction={() => {
         if (router.canGoBack()) router.back();
-        else router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
+        else router.push({ pathname: '/king-of-predictions', params: { mode } } as never);
       }}
     />
   );
 
   return (
-    <View style={styles.root}>
-      <KingHeader />
+    <View style={[styles.root, { backgroundColor: theme.screen }]}>
+      <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
+      <KingPlayHeader title={title} onBack={goBack} backLabel={copy.back} theme={theme} />
       <FlashList
         style={{ flex: 1 }}
         data={loading ? [] : entries}
@@ -126,7 +135,10 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
         ItemSeparatorComponent={BoardGap}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}
+        contentContainerStyle={{
+          paddingHorizontal: 22,
+          paddingBottom: Math.max(insets.bottom, 16) + 24,
+        }}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -138,10 +150,10 @@ function BoardGap() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: KING_BG },
-  heading: { alignItems: 'center', gap: 8, marginTop: 20 },
-  title: { color: '#fff', fontSize: 28, textAlign: 'center' },
-  body: { marginTop: 42, marginHorizontal: 22 },
+  root: { flex: 1 },
+  heading: { alignItems: 'center', gap: 8, marginTop: 12 },
+  title: { fontSize: 24, textAlign: 'center' },
+  body: { marginTop: 28 },
   list: { marginTop: 19 },
   empty: { marginTop: 120 },
 });

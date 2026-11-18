@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Match } from '../Matches/matchCardUtils';
 import type { KingPlayTheme } from './playTheme';
@@ -14,7 +14,8 @@ export type CardPhase =
   | 'correct'
   | 'wrong'
   | 'missed'
-  | 'none';
+  | 'none'
+  | 'postponed';
 
 type Props = {
   match: Match;
@@ -35,6 +36,7 @@ type Props = {
     waitingEnd: string;
     predictionEnded: string;
     notPredicted: string;
+    postponed: string;
     matchStarts: string;
     matchStarted: string;
     matchEnded: string;
@@ -46,9 +48,7 @@ type Props = {
     vs: string;
   };
   locked: boolean;
-  onPick: (pick: CardPick) => void;
-  onHomeScore: (value: string) => void;
-  onAwayScore: (value: string) => void;
+  onPress: () => void;
 };
 
 function padIndex(index: number) {
@@ -61,6 +61,8 @@ function statusLook(phase: CardPhase, theme: KingPlayTheme, copy: Props['copy'])
       return { bg: theme.badgeDoneBg, text: theme.badgeDoneText, label: copy.predicted };
     case 'waiting':
       return { bg: theme.badgeWaitBg, text: theme.badgeWaitText, label: copy.waitingEnd };
+    case 'postponed':
+      return { bg: theme.badgeWaitBg, text: theme.badgeWaitText, label: copy.postponed };
     case 'correct':
     case 'wrong':
     case 'none':
@@ -73,7 +75,9 @@ function statusLook(phase: CardPhase, theme: KingPlayTheme, copy: Props['copy'])
 }
 
 function pickBadgeLook(phase: CardPhase, theme: KingPlayTheme) {
-  if (phase === 'waiting') return { bg: theme.badgeWaitBg, text: theme.badgeWaitText, icon: 'time' as const };
+  if (phase === 'waiting' || phase === 'postponed') {
+    return { bg: theme.badgeWaitBg, text: theme.badgeWaitText, icon: 'time' as const };
+  }
   if (phase === 'correct') return { bg: theme.badgeCorrectBg, text: theme.badgeCorrectText, icon: 'checkmark' as const };
   if (phase === 'wrong') return { bg: theme.badgeWrongBg, text: theme.badgeWrongText, icon: 'close' as const };
   return { bg: theme.badgeNoneBg, text: theme.badgeNoneText, icon: 'close' as const };
@@ -94,18 +98,28 @@ export function PlayMatchCard({
   fonts,
   copy,
   locked,
-  onPick,
-  onHomeScore,
-  onAwayScore,
+  onPress,
 }: Props) {
   const status = statusLook(phase, theme, copy);
-  const settled = phase === 'waiting' || phase === 'correct' || phase === 'wrong' || phase === 'none';
-  const showChoices = isGame && !settled;
-  const showScores = !isGame && !settled;
+  const settled =
+    phase === 'waiting' ||
+    phase === 'correct' ||
+    phase === 'wrong' ||
+    phase === 'none' ||
+    phase === 'postponed';
   const errorBorder = phase === 'missed';
   const liveMinute = match.elapsed != null ? `${match.elapsed}’` : null;
+  const borderColor = errorBorder
+    ? theme.errorBorder
+    : theme.isDark
+      ? theme.cardBorder
+      : '#E5E0F5';
+  const borderWidth = errorBorder ? 1 : theme.isDark ? (theme.cardBorder === 'transparent' ? 0 : 1) : 1;
 
   const timeLine = useMemo(() => {
+    if (phase === 'postponed') {
+      return { color: theme.badgeWaitText, text: copy.postponed, minute: null as string | null };
+    }
     if (phase === 'waiting') {
       return { color: theme.primary, text: copy.matchStarted, minute: liveMinute };
     }
@@ -117,7 +131,7 @@ export function PlayMatchCard({
       text: `${copy.matchStarts} ${match.time || ''}`.trim(),
       minute: null as string | null,
     };
-  }, [copy, liveMinute, match.time, phase, theme.muted, theme.primary, theme.time]);
+  }, [copy, liveMinute, match.time, phase, theme]);
 
   const actualScore =
     match.score.home != null && match.score.away != null
@@ -135,25 +149,27 @@ export function PlayMatchCard({
   }, [awayName, awayScore, copy.predictedDraw, copy.predictedWin, homeName, homeScore, isGame]);
 
   const winnerSide: 'home' | 'away' | 'draw' | null = useMemo(() => {
-    if (isGame || homeScore === '' || awayScore === '') return null;
+    if (isGame) return pick;
+    if (homeScore === '' || awayScore === '') return null;
     const home = Number(homeScore);
     const away = Number(awayScore);
     if (!Number.isFinite(home) || !Number.isFinite(away)) return null;
     if (home === away) return 'draw';
     return home > away ? 'home' : 'away';
-  }, [awayScore, homeScore, isGame]);
+  }, [awayScore, homeScore, isGame, pick]);
 
   return (
-    <View
-      style={[
+    <Pressable
+      disabled={locked && settled}
+      onPress={onPress}
+      style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: theme.card,
-          borderColor: errorBorder ? theme.errorBorder : theme.cardBorder,
-          borderWidth: errorBorder ? 1 : theme.cardBorder === 'transparent' ? 0 : 1,
+          borderColor,
+          borderWidth,
           shadowColor: theme.cardShadow,
-          // Figma cards are laid out LTR (home left, badge left) even on Arabic screens.
-          direction: 'ltr',
+          opacity: pressed && !locked ? 0.92 : 1,
         },
       ]}
     >
@@ -181,25 +197,20 @@ export function PlayMatchCard({
         <View style={styles.settledRow}>
           <TeamBlock logo={match.homeTeam.logo} name={null} size={54} />
           <View style={styles.settledMid}>
-            <Text style={[styles.scoreBig, { color: theme.scoreLine, fontFamily: fonts.semi }]}>{actualScore}</Text>
+            {phase === 'postponed' ? (
+              <Text style={[styles.scoreBig, { color: theme.badgeWaitText, fontFamily: fonts.semi }]}>{copy.postponed}</Text>
+            ) : (
+              <Text style={[styles.scoreBig, { color: theme.scoreLine, fontFamily: fonts.semi }]}>{actualScore}</Text>
+            )}
             <Text style={[styles.yourPickLabel, { color: theme.muted, fontFamily: fonts.regular }]}>{copy.yourPick}</Text>
-            <View
-              style={[
-                styles.pickChip,
-                { backgroundColor: pickBadgeLook(phase, theme).bg },
-              ]}
-            >
+            <View style={[styles.pickChip, { backgroundColor: pickBadgeLook(phase, theme).bg }]}>
               <Text
                 style={[styles.pickChipText, { color: pickBadgeLook(phase, theme).text, fontFamily: fonts.semi }]}
                 numberOfLines={1}
               >
                 {pickLabel ?? copy.notPredicted}
               </Text>
-              <Ionicons
-                name={pickBadgeLook(phase, theme).icon}
-                size={10}
-                color={pickBadgeLook(phase, theme).text}
-              />
+              <Ionicons name={pickBadgeLook(phase, theme).icon} size={10} color={pickBadgeLook(phase, theme).text} />
             </View>
           </View>
           <TeamBlock logo={match.awayTeam.logo} name={null} size={54} />
@@ -207,62 +218,60 @@ export function PlayMatchCard({
       ) : (
         <>
           <View style={styles.teamsRow}>
-            <TeamBlock logo={match.homeTeam.logo} name={!isGame ? homeName : null} size={44} nameColor={theme.ink} font={fonts.semi} />
+            <TeamBlock
+              logo={match.homeTeam.logo}
+              name={!isGame ? homeName : null}
+              size={44}
+              nameColor={theme.ink}
+              font={fonts.semi}
+            />
             <Text style={[styles.vs, { color: theme.vs, fontFamily: fonts.semi }]}>{copy.vs}</Text>
-            <TeamBlock logo={match.awayTeam.logo} name={!isGame ? awayName : null} size={44} nameColor={theme.ink} font={fonts.semi} />
+            <TeamBlock
+              logo={match.awayTeam.logo}
+              name={!isGame ? awayName : null}
+              size={44}
+              nameColor={theme.ink}
+              font={fonts.semi}
+            />
           </View>
 
-          {showChoices ? (
+          {isGame ? (
             <View style={styles.choices}>
               <Choice
                 label={copy.winOf.replace('{team}', homeName)}
-                selected={pick === 'home'}
-                disabled={locked}
+                selected={winnerSide === 'home'}
                 theme={theme}
                 font={fonts.semi}
-                onPress={() => onPick('home')}
               />
               <Choice
                 label={copy.draw}
-                selected={pick === 'draw'}
-                disabled={locked}
+                selected={winnerSide === 'draw'}
                 theme={theme}
                 font={fonts.semi}
                 showX
-                onPress={() => onPick('draw')}
               />
               <Choice
                 label={copy.winOf.replace('{team}', awayName)}
-                selected={pick === 'away'}
-                disabled={locked}
+                selected={winnerSide === 'away'}
                 theme={theme}
                 font={fonts.semi}
-                onPress={() => onPick('away')}
               />
             </View>
-          ) : null}
-
-          {showScores ? (
+          ) : (
             <View style={styles.scoreBlock}>
               <View style={styles.scoreRow}>
                 <ScoreBox
                   value={homeScore}
-                  onChange={onHomeScore}
                   theme={theme}
                   font={fonts.bold}
-                  locked={locked}
                   filled={winnerSide === 'home' || winnerSide === 'draw'}
-                  focusedHint={false}
                 />
                 <Text style={[styles.colon, { color: theme.muted, fontFamily: fonts.semi }]}>:</Text>
                 <ScoreBox
                   value={awayScore}
-                  onChange={onAwayScore}
                   theme={theme}
                   font={fonts.bold}
-                  locked={locked}
                   filled={winnerSide === 'away' || winnerSide === 'draw'}
-                  focusedHint={false}
                 />
               </View>
               {resultCaption ? (
@@ -271,10 +280,10 @@ export function PlayMatchCard({
                 </Text>
               ) : null}
             </View>
-          ) : null}
+          )}
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -310,30 +319,23 @@ function TeamBlock({
 function Choice({
   label,
   selected,
-  disabled,
   theme,
   font,
   showX,
-  onPress,
 }: {
   label: string;
   selected: boolean;
-  disabled: boolean;
   theme: KingPlayTheme;
   font: string;
   showX?: boolean;
-  onPress: () => void;
 }) {
   return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
+    <View
       style={[
         styles.choice,
         {
           backgroundColor: selected ? theme.choiceOnBg : theme.choiceIdleBg,
           borderColor: selected ? theme.choiceOnBg : theme.choiceIdleBorder,
-          opacity: disabled && !selected ? 0.55 : 1,
         },
       ]}
     >
@@ -348,25 +350,20 @@ function Choice({
       {showX ? (
         <Ionicons name="close" size={14} color={selected ? theme.choiceOnText : theme.choiceIdleText} />
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
 function ScoreBox({
   value,
-  onChange,
   theme,
   font,
-  locked,
   filled,
 }: {
   value: string;
-  onChange: (next: string) => void;
   theme: KingPlayTheme;
   font: string;
-  locked: boolean;
   filled: boolean;
-  focusedHint: boolean;
 }) {
   return (
     <View
@@ -374,28 +371,20 @@ function ScoreBox({
         styles.scoreBox,
         {
           backgroundColor: filled && value !== '' ? theme.scoreOnBg : theme.scoreIdleBg,
-          borderColor: theme.scoreFocusBorder,
-          borderWidth: 0,
         },
       ]}
     >
-      <TextInput
-        value={value}
-        editable={!locked}
-        onChangeText={(text) => onChange(text.replace(/\D/g, '').slice(0, 2))}
-        keyboardType="number-pad"
-        maxLength={2}
-        placeholder="-"
-        placeholderTextColor={theme.scoreIdleText}
+      <Text
         style={[
-          styles.scoreInput,
+          styles.scoreText,
           {
             color: filled && value !== '' ? theme.scoreOnText : theme.scoreIdleText,
             fontFamily: font,
           },
         ]}
-        selectionColor={theme.primary}
-      />
+      >
+        {value || '-'}
+      </Text>
     </View>
   );
 }
@@ -410,6 +399,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
     elevation: 2,
+    direction: 'ltr',
   },
   header: {
     flexDirection: 'row',
@@ -460,7 +450,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scoreInput: { width: '100%', height: '100%', fontSize: 22, textAlign: 'center', padding: 0 },
+  scoreText: { fontSize: 22, textAlign: 'center' },
   colon: { fontSize: 22 },
   scoreCaption: { fontSize: 12, textAlign: 'center' },
   settledRow: {
