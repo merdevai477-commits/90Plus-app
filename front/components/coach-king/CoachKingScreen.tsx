@@ -380,7 +380,18 @@ export default function CoachKingScreen() {
               locked
             />
           ) : (
-            <Text style={[styles.meta, { fontFamily: fontMed, color: theme.muted, marginTop: 8 }]}>{copy.deadline.tipOpen}</Text>
+            <Text
+              style={[
+                styles.tip,
+                {
+                  fontFamily: fontMed,
+                  color: theme.muted,
+                  textAlign: isAr ? 'right' : 'left',
+                },
+              ]}
+            >
+              {copy.deadline.tipOpen}
+            </Text>
           )}
           {shown.squad.dirty && !closed ? (
             <Text
@@ -395,7 +406,14 @@ export default function CoachKingScreen() {
                   }
                 })();
               }}
-              style={[styles.meta, { fontFamily: fontBold, color: theme.secondary, marginTop: 8 }]}
+              style={[
+                styles.tipAction,
+                {
+                  fontFamily: fontBold,
+                  color: theme.secondary,
+                  textAlign: isAr ? 'right' : 'left',
+                },
+              ]}
             >
               {copy.confirmSquad}
             </Text>
@@ -539,6 +557,20 @@ const styles = StyleSheet.create({
   metaRow: { alignItems: 'center', columnGap: 5, marginTop: 4 },
   meta: { fontSize: 12 },
   metaDot: { width: 3, height: 3, borderRadius: 2 },
+  tip: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  tipAction: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginHorizontal: 16,
+    marginTop: -2,
+    marginBottom: 10,
+  },
   budget: { rowGap: 4 },
   budgetHint: { fontSize: 10 },
   ofRow: { alignItems: 'center', columnGap: 4 },

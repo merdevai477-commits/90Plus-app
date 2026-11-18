@@ -332,7 +332,7 @@ function shortName(name: string): string {
 
 const styles = StyleSheet.create({
   coachBar: {
-    borderWidth: 0.5,
+    borderWidth: 1,
     alignItems: 'center',
     columnGap: 12,
   },
@@ -342,7 +342,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 10,
     elevation: 5,
-    borderWidth: 1,
   },
   formation: {
     borderRadius: 48,
