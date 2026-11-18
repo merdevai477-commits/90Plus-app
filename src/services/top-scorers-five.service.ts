@@ -1114,13 +1114,15 @@ export async function getTsfLeaderboard(params: {
   limit: number;
   tournament?: TsfTournament;
   leagueKey?: string;
+  /** Rank by the sum of every league, Egypt included. */
+  allLeagues?: boolean;
 }): Promise<TsfLeaderboardDto> {
   const tournament = params.tournament ?? 'europe';
   const competition = params.leagueKey ? tsfCompetitionKey(params.leagueKey) ?? undefined : undefined;
   const me = await prisma.user.findFirst({ where: { clerkUserId: params.clerkUserId }, select: { id: true } });
   const configs = competition
     ? [getTsfLeagueConfig(competition)!]
-    : enabledTsfCompetitions(tournament);
+    : enabledTsfCompetitions(params.allLeagues ? undefined : tournament);
   const scopes = configs.map((cfg) => tsfScopeKey(cfg));
   const gameweekIds =
     params.period === 'week'

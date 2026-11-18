@@ -171,11 +171,12 @@ router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) =
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '50'), 10) || 50, 1), 100);
   const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
   const leagueKey = typeof req.query.leagueKey === 'string' ? req.query.leagueKey : undefined;
+  const allLeagues = req.query.all === '1';
   if (leagueKey && !tsfCompetitionKey(leagueKey)) {
     sendError(req, res, ErrorCode.VALIDATION, 'Unsupported leagueKey');
     return;
   }
-  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit, tournament, leagueKey }) });
+  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit, tournament, leagueKey, allLeagues }) });
 }));
 
 /** GET /players/:playerId/fixtures — the player's club's next league fixtures. */

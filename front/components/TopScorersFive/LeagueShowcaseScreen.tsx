@@ -79,11 +79,6 @@ function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function wrap(index: number): TsfCompetitionKey {
-  const count = SHOWCASE.length;
-  return SHOWCASE[((index % count) + count) % count]!;
-}
-
 export default function LeagueShowcaseScreen() {
   useScreenFont();
   const router = useRouter();
@@ -148,28 +143,22 @@ export default function LeagueShowcaseScreen() {
     [router],
   );
 
+  const cardWidth = Math.min(width * 0.78, 340);
+  const cardHeight = cardWidth * (256 / 234);
+
   const renderPage: ListRenderItem<TsfCompetitionKey> = useCallback(
-    ({ item }) => {
-      const at = SHOWCASE.indexOf(item);
-      const previous = wrap(at - 1);
-      const next = wrap(at + 1);
-      return (
-        <View style={{ width, paddingHorizontal: 20 }}>
-          <Text style={[styles.arabicLeague, { color: colors.muted, fontFamily: fontRegular }]}>{arabicName(item)}</Text>
-          <Text style={[styles.englishLeague, { color: colors.text, fontFamily: fontBold }]}>{ENGLISH[item]}</Text>
-          <View style={styles.portraits}>
-            <Portrait league={previous} />
-            <Portrait league={item} featured />
-            <Portrait league={next} />
-          </View>
-          <View style={styles.hintRow}>
-            <Ionicons name="swap-horizontal" size={18} color={colors.purple} />
-            <Text style={[styles.hint, { color: colors.muted, fontFamily: fontRegular }]}>{pick.swipeHint}</Text>
-          </View>
+    ({ item }) => (
+      <View style={[styles.page, { width }]}>
+        <Text style={[styles.arabicLeague, { color: colors.muted, fontFamily: fontRegular }]}>{arabicName(item)}</Text>
+        <Text style={[styles.englishLeague, { color: colors.text, fontFamily: fontBold }]}>{ENGLISH[item]}</Text>
+        <Portrait league={item} width={cardWidth} height={cardHeight} />
+        <View style={styles.hintRow}>
+          <Ionicons name="swap-horizontal" size={18} color={colors.purple} />
+          <Text style={[styles.hint, { color: colors.muted, fontFamily: fontRegular }]}>{pick.swipeHint}</Text>
         </View>
-      );
-    },
-    [arabicName, colors.muted, colors.purple, colors.text, fontBold, fontRegular, pick.swipeHint, width],
+      </View>
+    ),
+    [arabicName, cardHeight, cardWidth, colors.muted, colors.purple, colors.text, fontBold, fontRegular, pick.swipeHint, width],
   );
 
   return (
@@ -194,7 +183,13 @@ export default function LeagueShowcaseScreen() {
         <View style={styles.bannerCopy}>
           <Text style={[styles.bannerTitle, { fontFamily: fontBold }]}>{pick.pointsBannerTitle}</Text>
           <Text style={[styles.bannerBody, { fontFamily: fontRegular }]}>{pick.pointsBannerBody}</Text>
-          <Text style={[styles.bannerPoints, { fontFamily: fontBold }]}>{points.toLocaleString('en-US')}</Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={[styles.bannerPoints, { fontFamily: fontBold }]}
+          >
+            {points.toLocaleString('en-US')}
+          </Text>
         </View>
       </View>
 
@@ -239,15 +234,15 @@ export default function LeagueShowcaseScreen() {
   );
 }
 
-function Portrait({ league, featured = false }: { league: TsfCompetitionKey; featured?: boolean }) {
+function Portrait({ league, width, height }: { league: TsfCompetitionKey; width: number; height: number }) {
   const lightLogo = league === 'pl' || league === 'ligue1' || league === 'egypt';
   return (
-    <View style={[styles.portrait, featured ? styles.portraitFeatured : styles.portraitSide]}>
+    <View style={[styles.portrait, { width, height }]}>
       <Image source={PORTRAIT[league]} style={StyleSheet.absoluteFill} contentFit="cover" />
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.28)']} style={StyleSheet.absoluteFill} />
       <Image
         source={CREST[league]}
-        style={featured ? styles.badgeLarge : styles.badge}
+        style={styles.badgeLarge}
         contentFit="contain"
         tintColor={lightLogo ? '#FFFFFF' : undefined}
       />
@@ -271,23 +266,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
   },
-  bannerCopy: { alignSelf: 'flex-end', width: '68%', paddingRight: 16, alignItems: 'flex-end', gap: 2 },
+  bannerCopy: { marginLeft: '34%', marginRight: 16, alignItems: 'flex-end', gap: 2 },
   bannerTitle: { color: '#FCFCFC', fontSize: 16, textAlign: 'right' },
   bannerBody: { color: '#F3EDFF', fontSize: 12, textAlign: 'right' },
-  bannerPoints: { color: '#FCFCFC', fontSize: 36, lineHeight: 42, textAlign: 'right' },
+  bannerPoints: { color: '#FCFCFC', fontSize: 34, lineHeight: 40, textAlign: 'right', width: '100%' },
+  page: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   arabicLeague: { textAlign: 'center', fontSize: 13, marginTop: 22 },
   englishLeague: { textAlign: 'center', fontSize: 22, letterSpacing: 0.4, marginTop: 2 },
-  portraits: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-  portrait: { borderRadius: 16, overflow: 'hidden' },
-  portraitSide: { width: 112, height: 148, marginHorizontal: -8 },
-  portraitFeatured: { width: 156, height: 196, zIndex: 2, marginHorizontal: -6 },
-  badge: { position: 'absolute', right: 8, bottom: 8, width: 34, height: 34 },
-  badgeLarge: { position: 'absolute', right: 10, bottom: 10, width: 46, height: 46 },
+  portrait: { borderRadius: 22, overflow: 'hidden', marginTop: 18 },
+  badgeLarge: { position: 'absolute', right: 14, bottom: 14, width: 56, height: 56 },
   hintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 16 },
   hint: { fontSize: 12 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 },

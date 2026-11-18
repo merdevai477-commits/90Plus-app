@@ -263,7 +263,10 @@ export const topScorersFiveService = {
     ),
 
   getScore: (token: string, tournament: TsfApiTournament = 'europe') =>
-    request<{ total: number; week: number }>(`/me/score?tournament=${tournament}`, { token }),
+    request<{ total: number; week: number; leagues: { leagueKey: string; total: number; week: number }[] }>(
+      `/me/score?tournament=${tournament}`,
+      { token },
+    ),
 
   getLeaderboard: (
     token: string,
@@ -271,9 +274,10 @@ export const topScorersFiveService = {
     limit = 50,
     tournament: TsfApiTournament = 'europe',
     leagueKey?: string,
+    allLeagues = false,
   ) =>
     request<TsfApiLeaderboard>(
-      `/leaderboard?period=${period}&limit=${limit}&tournament=${tournament}${leagueKey ? `&leagueKey=${leagueKey}` : ''}`,
+      `/leaderboard?period=${period}&limit=${limit}&tournament=${tournament}${leagueKey ? `&leagueKey=${leagueKey}` : ''}${allLeagues ? '&all=1' : ''}`,
       { token },
     ),
 };

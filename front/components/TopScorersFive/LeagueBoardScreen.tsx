@@ -42,9 +42,12 @@ import { logger } from '../../utils/logger';
 import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
+import UserIdentity from '../identity/UserIdentity';
 import { TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
 import { TsfNav, tsfNavBottom, type TsfTabKey } from './TsfNav';
 import { TSF_THEME, type TsfColors } from './tsfTheme';
+
+const PITCH = require('../../assets/images/top-scorers-five/pitch.jpg');
 
 const CREST: Record<TsfCompetitionKey, number> = {
   egypt: TSF_LEAGUE_LOGO.egypt1,
@@ -119,6 +122,7 @@ export default function LeagueBoardScreen() {
   const [saving, setSaving] = useState(false);
   const [detail, setDetail] = useState<TsfApiPlayer | null>(null);
   const [lockText, setLockText] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const listRef = useRef<FlatList<TsfCompetitionKey>>(null);
 
   const competition = TSF_COMPETITIONS[index] ?? 'egypt';
@@ -245,17 +249,15 @@ export default function LeagueBoardScreen() {
     ({ item }) => {
       const lineup = lineups[item];
       const slots = lineup?.slots ?? emptyLineup(item);
-      const tint = isDark && (item === 'pl' || item === 'ligue1' || item === 'egypt') ? '#FFFFFF' : undefined;
       return (
         <ScrollView
           style={{ width }}
           contentContainerStyle={{ paddingBottom: tsfNavBottom(insets.bottom) + 88, paddingHorizontal: 16 }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Image source={CREST[item]} style={styles.crest} contentFit="contain" tintColor={tint} />
-            <Text style={[styles.leagueName, { color: colors.text, fontFamily: fontBold }]}>{leagueName(item)}</Text>
-            <Text style={[styles.pointsLine, { color: colors.muted, fontFamily: fontMedium }]}>
+          <View style={styles.pitchBody}>
+            <Text style={[styles.leagueName, { color: '#FFFFFF', fontFamily: fontBold }]}>{leagueName(item)}</Text>
+            <Text style={[styles.pointsLine, { color: '#F3EDFF', fontFamily: fontMedium }]}>
               {pickCopy.yourPoints} {lineup?.points ?? 0}
             </Text>
             <Formation
@@ -271,7 +273,7 @@ export default function LeagueBoardScreen() {
         </ScrollView>
       );
     },
-    [colors, fontBold, fontMedium, fontSemi, insets.bottom, isDark, leagueName, lineups, openSlot, pickCopy, removeSlot, width],
+    [colors, fontBold, fontMedium, fontSemi, insets.bottom, leagueName, lineups, openSlot, pickCopy, removeSlot, width],
   );
 
   const filtered = useMemo(() => {
@@ -288,7 +290,19 @@ export default function LeagueBoardScreen() {
     <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       <StatusBar barStyle={colors.statusBar === 'light' ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>{copy.title}</Text>
+        <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>
+          {tab === 'pitch' ? pickCopy.formationTitle : copy.title}
+        </Text>
+        {tab === 'pitch' ? (
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            accessibilityRole="button"
+            hitSlop={12}
+            style={styles.help}
+          >
+            <Ionicons name="help-circle-outline" size={26} color={colors.text} />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           onPress={() => router.back()}
           accessibilityRole="button"
@@ -302,7 +316,8 @@ export default function LeagueBoardScreen() {
       </View>
 
       {tab === 'pitch' ? (
-        <>
+        <View style={styles.flex}>
+          <Image source={PITCH} style={StyleSheet.absoluteFill} contentFit="cover" />
           <FlatList
             ref={listRef}
             data={pages}
@@ -333,7 +348,7 @@ export default function LeagueBoardScreen() {
               ))}
             </View>
           )}
-        </>
+        </View>
       ) : null}
 
       {tab === 'matches' ? (
@@ -352,14 +367,11 @@ export default function LeagueBoardScreen() {
 
       {tab === 'ranking' ? (
         <LeagueRanking
-          competition={competition}
-          leagueName={leagueName(competition)}
-          crest={CREST[competition]}
-          tint={isDark && (competition === 'pl' || competition === 'ligue1' || competition === 'egypt')}
           colors={colors}
           isSignedIn={!!isSignedIn}
           getToken={() => getTokenRef.current()}
           onPick={() => setTab('pitch')}
+          leagueName={(key) => (key === 'egypt' ? pickCopy.leagues.egypt1 : pickCopy.leagues[key as TsfCompetitionKey] ?? key)}
         />
       ) : null}
 
@@ -405,6 +417,22 @@ export default function LeagueBoardScreen() {
         goalsLabel={pickCopy.statGoals}
         assistsLabel={pickCopy.statAssists}
       />
+
+      <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}>
+        <Pressable style={styles.scrim} onPress={() => setHelpOpen(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.sheet }]} onPress={() => undefined}>
+            <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: fontBold }]}>{pickCopy.helpTitle}</Text>
+            {pickCopy.helpRules.map((rule) => (
+              <Text key={rule} style={{ color: colors.text, fontFamily: fontMedium, textAlign: 'right', lineHeight: 22 }}>
+                {'• '}{rule}
+              </Text>
+            ))}
+            <TouchableOpacity onPress={() => setHelpOpen(false)} style={[styles.confirmBtn, { backgroundColor: colors.purple }]}>
+              <Text style={[styles.confirmText, { fontFamily: fontSemi }]}>{pickCopy.helpGotIt}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={lockText != null} transparent animationType="fade" onRequestClose={() => setLockText(null)}>
         <Pressable style={styles.scrim} onPress={() => setLockText(null)}>
@@ -626,23 +654,17 @@ function LeagueMatches({
 }
 
 function LeagueRanking({
-  competition,
-  leagueName,
-  crest,
-  tint,
   colors,
   isSignedIn,
   getToken,
   onPick,
+  leagueName,
 }: {
-  competition: TsfCompetitionKey;
-  leagueName: string;
-  crest: number;
-  tint: boolean;
   colors: TsfColors;
   isSignedIn: boolean;
   getToken: () => Promise<string | null>;
   onPick: () => void;
+  leagueName: (key: string) => string;
 }) {
   const { t } = useTranslation();
   const copy = t.topScorersFive;
@@ -652,6 +674,7 @@ function LeagueRanking({
   const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<'week' | 'all'>('week');
   const [board, setBoard] = useState<TsfApiLeaderboard | null>(null);
+  const [leagueSplit, setLeagueSplit] = useState<{ leagueKey: string; total: number }[] | null>(null);
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
@@ -662,7 +685,7 @@ function LeagueRanking({
       try {
         const token = await getTokenRef.current();
         if (!token) return;
-        const data = await topScorersFiveService.getLeaderboard(token, period, 50, 'europe', competition);
+        const data = await topScorersFiveService.getLeaderboard(token, period, 50, 'europe', undefined, true);
         if (!cancelled) setBoard(data);
       } catch (error) {
         logger.warn('[TopScorersFive] leaderboard load failed', error);
@@ -671,53 +694,102 @@ function LeagueRanking({
     return () => {
       cancelled = true;
     };
-  }, [competition, isSignedIn, period]);
+  }, [isSignedIn, period]);
+
+  const loadSplit = async () => {
+    const token = await getTokenRef.current();
+    if (!token) return;
+    const [europe, egypt] = await Promise.all([
+      topScorersFiveService.getScore(token, 'europe'),
+      topScorersFiveService.getScore(token, 'egypt'),
+    ]);
+    const rows = [...(europe?.leagues ?? []), ...(egypt?.leagues ?? [])];
+    setLeagueSplit(rows.map((row) => ({ leagueKey: row.leagueKey, total: row.total })));
+  };
+
+  const podium = [board?.entries[1], board?.entries[0], board?.entries[2]].filter((row) => row != null);
+  const rest = board?.entries.slice(3) ?? [];
 
   return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 10 }}
-    >
-      <LeagueHeading name={leagueName} crest={crest} tint={tint} colors={colors} font={fontSemi} />
-      <View style={styles.periodRow}>
-        {(['week', 'all'] as const).map((key) => {
-          const active = period === key;
-          const label = key === 'week' ? copy.ranking.filterWeek : copy.ranking.filterAll;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setPeriod(key)}
-              style={[
-                styles.periodChip,
-                { backgroundColor: active ? colors.purple : colors.card, borderColor: colors.border },
-              ]}
-            >
-              <Text style={{ color: active ? colors.onPurple : colors.text, fontFamily: fontMedium }}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {(board?.entries.length ?? 0) === 0 ? (
-        <TouchableOpacity onPress={onPick}>
-          <Text style={{ color: colors.muted, textAlign: 'center', fontFamily: fontMedium }}>{copy.ranking.emptyTitle}</Text>
+    <>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 10 }}
+      >
+        <Text style={{ color: colors.text, textAlign: 'center', fontFamily: fontBold, fontSize: 18 }}>{copy.ranking.title}</Text>
+        <TouchableOpacity onPress={() => void loadSplit()} accessibilityRole="button">
+          <Text style={{ color: colors.purple, textAlign: 'center', fontFamily: fontSemi }}>{copy.pick.viewAllLeagues}</Text>
         </TouchableOpacity>
-      ) : (
-        board?.entries.map((entry) => (
-          <View key={entry.userId} style={[styles.rankRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.rankNum, { color: colors.purple, fontFamily: fontBold }]}>{entry.rank}</Text>
-            {entry.avatar ? (
-              <Image source={{ uri: entry.avatar }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, { backgroundColor: colors.field }]} />
-            )}
-            <Text numberOfLines={1} style={[styles.rankName, { color: colors.text, fontFamily: fontSemi }]}>
-              {entry.displayName || entry.username || '—'}
-            </Text>
-            <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.xp}</Text>
-          </View>
-        ))
-      )}
-    </ScrollView>
+        <View style={styles.periodRow}>
+          {(['week', 'all'] as const).map((key) => {
+            const active = period === key;
+            const label = key === 'week' ? copy.ranking.filterWeek : copy.ranking.filterAll;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setPeriod(key)}
+                style={[styles.periodChip, { backgroundColor: active ? colors.purple : colors.card, borderColor: colors.border }]}
+              >
+                <Text style={{ color: active ? colors.onPurple : colors.text, fontFamily: fontMedium }}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {(board?.entries.length ?? 0) === 0 ? (
+          <TouchableOpacity onPress={onPick}>
+            <Text style={{ color: colors.muted, textAlign: 'center', fontFamily: fontMedium }}>{copy.ranking.emptyTitle}</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.podium}>
+              {podium.map((entry) => (
+                <View key={entry.userId} style={[styles.podiumCard, entry.rank === 1 && styles.podiumFirst, { backgroundColor: colors.card }]}>
+                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.rank}</Text>
+                  {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.avatar} /> : <View style={[styles.avatar, { backgroundColor: colors.field }]} />}
+                  <UserIdentity
+                    name={entry.displayName || entry.username || '—'}
+                    user={entry}
+                    variant="leaderboard"
+                    nameStyle={{ color: colors.text, fontFamily: fontSemi, fontSize: 12, maxWidth: 88 }}
+                  />
+                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.xp}</Text>
+                </View>
+              ))}
+            </View>
+            {rest.map((entry) => (
+              <View key={entry.userId} style={[styles.rankRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.rankNum, { color: colors.purple, fontFamily: fontBold }]}>{entry.rank}</Text>
+                {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.avatar} /> : <View style={[styles.avatar, { backgroundColor: colors.field }]} />}
+                <View style={styles.rankName}>
+                  <UserIdentity
+                    name={entry.displayName || entry.username || '—'}
+                    user={entry}
+                    variant="leaderboard"
+                    nameStyle={{ color: colors.text, fontFamily: fontSemi, fontSize: 14 }}
+                  />
+                </View>
+                <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.xp}</Text>
+              </View>
+            ))}
+          </>
+        )}
+      </ScrollView>
+      <Modal visible={leagueSplit != null} transparent animationType="slide" onRequestClose={() => setLeagueSplit(null)}>
+        <Pressable style={styles.scrim} onPress={() => setLeagueSplit(null)}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.sheet }]} onPress={() => undefined}>
+            <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: fontBold }]}>{copy.pick.viewAllLeagues}</Text>
+            <ScrollView>
+              {(leagueSplit ?? []).map((row) => (
+                <View key={row.leagueKey} style={[styles.rankRow, { borderColor: colors.border }]}>
+                  <Text style={{ flex: 1, color: colors.text, fontFamily: fontSemi }}>{leagueName(row.leagueKey)}</Text>
+                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{row.total}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -916,6 +988,11 @@ const styles = StyleSheet.create({
   header: { height: 48, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 18 },
   back: { position: 'absolute', left: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  help: { position: 'absolute', right: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  pitchBody: { alignItems: 'center', paddingTop: 12, gap: 6 },
+  podium: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 },
+  podiumCard: { width: 104, borderRadius: 16, alignItems: 'center', padding: 8, gap: 4 },
+  podiumFirst: { marginBottom: 16 },
   card: {
     borderRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
