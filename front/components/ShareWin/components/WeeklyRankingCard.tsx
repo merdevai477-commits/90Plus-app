@@ -196,7 +196,7 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
           minHeight: s(62),
           borderRadius: s(16),
           backgroundColor: theme.rowBg,
-          borderWidth: theme.isDark ? 1 : 0,
+          borderWidth: 1,
           borderColor: theme.border,
           flexDirection: 'row',
           alignItems: 'center',

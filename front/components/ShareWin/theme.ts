@@ -75,7 +75,8 @@ export function getShareWinTheme(isDark: boolean): ShareWinTheme {
     secondary: '#A855F7',
     pale: '#F3EDFF',
     light: '#E9D5FF',
-    border: '#E5E7EB',
+    /** Stronger than Figma hairline so card/row edges read on white. */
+    border: '#C9B8EF',
     accent: '#F5B301',
     card: '#FFFFFF',
     cardAlt: '#F9F5FE',

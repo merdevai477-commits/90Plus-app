@@ -67,7 +67,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
           borderRadius: s(16),
           backgroundColor: theme.rowBg,
           borderWidth: 1,
-          borderColor: theme.isDark ? theme.border : 'transparent',
+          borderColor: theme.border,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -77,9 +77,10 @@ const LeaderboardRow = memo(function LeaderboardRow({
         },
         rowLead: {
           backgroundColor: theme.isDark ? theme.cardAlt : theme.pale,
-          borderColor: theme.isDark ? 'rgba(245,179,1,0.28)' : 'rgba(106,43,217,0.18)',
+          borderColor: theme.isDark ? 'rgba(245,179,1,0.35)' : 'rgba(106,43,217,0.35)',
         },
         rowMine: {
+          borderWidth: 1.5,
           borderColor: theme.primary,
           backgroundColor: theme.isDark
             ? 'rgba(106,43,217,0.28)'

@@ -34,6 +34,8 @@ const StatsBar = memo(function StatsBar({ score, shareCount, rank }: StatsBarPro
           height: s(88),
           borderRadius: s(20),
           backgroundColor: theme.card,
+          borderWidth: 1,
+          borderColor: theme.border,
           // Figma Frame566 LTR artboard: Rank | Shares | Points(pill on the right)
           flexDirection: 'row',
           alignItems: 'center',
