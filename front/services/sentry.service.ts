@@ -13,7 +13,17 @@
 
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { logger } from './logger';
+
+/**
+ * iOS Session Replay currently crashes the app while photographing AV fullscreen /
+ * transition layers (`NSConcreteValue doubleValue` in SentryUIRedactBuilder).
+ * sentry-cocoa fixed the redact walk in 9.24+; until we ship that native SDK,
+ * keep mobile replay off on iOS. Android is unaffected.
+ * @see https://github.com/getsentry/sentry-cocoa/issues/7810
+ */
+const IOS_SESSION_REPLAY_UNSAFE = Platform.OS === 'ios';
 
 /**
  * Validate DSN format
@@ -164,19 +174,21 @@ export function initSentry(): void {
   const release = `${bundleId}@${version}+${buildNumber}`;
   const dist = buildNumber;
 
-  const replayIntegration = typeof Sentry.mobileReplayIntegration === 'function'
-    ? Sentry.mobileReplayIntegration({
-        // Skip the video view while a replay frame is captured.
-        excludedViewClasses: [
-          'VideoView',
-          'AVPlayerView',
-          'AVPlayerViewController',
-          'AVFullScreenViewController',
-          'OrientationAVPlayerViewController',
-          'WKWebView',
-        ],
-      })
-    : undefined;
+  const replayIntegration =
+    !IOS_SESSION_REPLAY_UNSAFE && typeof Sentry.mobileReplayIntegration === 'function'
+      ? Sentry.mobileReplayIntegration({
+          // Defense in depth if iOS replay is re-enabled after a native SDK bump.
+          excludedViewClasses: [
+            'VideoView',
+            'AVPlayerView',
+            'AVPlayerViewController',
+            'AVFullScreenViewController',
+            'OrientationAVPlayerViewController',
+            'AVMobileGlassControlsViewController',
+            'WKWebView',
+          ],
+        })
+      : undefined;
 
   Sentry.init({
     dsn,
@@ -184,8 +196,9 @@ export function initSentry(): void {
 
     tracesSampleRate,
 
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
+    // iOS: off until Sentry redact can survive AV/CA animations (see IOS_SESSION_REPLAY_UNSAFE).
+    replaysSessionSampleRate: IOS_SESSION_REPLAY_UNSAFE ? 0 : 0.1,
+    replaysOnErrorSampleRate: IOS_SESSION_REPLAY_UNSAFE ? 0 : 1.0,
     ...(replayIntegration ? { integrations: [replayIntegration] } : {}),
 
     release,
@@ -516,38 +529,17 @@ export async function measureAsync<T>(
   }
 }
 
-type HighlightReplayControls = {
-  stop?: () => Promise<void> | void;
-  startBuffering?: () => void;
-};
-
-function highlightReplayControls(): HighlightReplayControls | undefined {
-  try {
-    const client = Sentry.getClient?.();
-    const integration = client?.getIntegrationByName?.('MobileReplay');
-    if (!integration || typeof integration !== 'object') return undefined;
-    return integration as HighlightReplayControls;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Stop replay screenshots before a native video surface is shown. No-op when replay is absent. */
+/**
+ * Kept for HighlightVideoSheet mount gating. MobileReplay in @sentry/react-native 7.x
+ * has no stop/startBuffering API, and iOS replay is disabled entirely above.
+ */
 export async function holdHighlightReplay(): Promise<void> {
-  try {
-    await highlightReplayControls()?.stop?.();
-  } catch {
-    /* replay must not block playback */
-  }
+  /* no-op: iOS replay off; Android MobileReplay has no pause API */
 }
 
-/** Resume buffered replay after the video surface is gone. */
+/** Pair with holdHighlightReplay when the video surface unmounts. */
 export function releaseHighlightReplay(): void {
-  try {
-    highlightReplayControls()?.startBuffering?.();
-  } catch {
-    /* replay must not block closing the player */
-  }
+  /* no-op */
 }
 
 /**

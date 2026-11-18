@@ -924,38 +924,24 @@ describe('Sentry Service Unit Tests', () => {
   });
 
   describe('Session replay configuration', () => {
-    test('should configure session replay sample rates', () => {
+    test('disables session replay on iOS to avoid AV fullscreen redact crashes', () => {
       process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@sentry.io/123';
 
       initSentry();
 
       expect(Sentry.init).toHaveBeenCalledWith(
         expect.objectContaining({
-          replaysSessionSampleRate: 0.1,
-          replaysOnErrorSampleRate: 1.0,
+          replaysSessionSampleRate: 0,
+          replaysOnErrorSampleRate: 0,
         })
       );
+      const initArg = (Sentry.init as jest.Mock).mock.calls[0][0];
+      expect(initArg.integrations).toBeUndefined();
     });
   });
 
   describe('highlight replay hold', () => {
-    test('stops replay before playback and buffers again after', async () => {
-      const stop = jest.fn().mockResolvedValue(undefined);
-      const startBuffering = jest.fn();
-      (Sentry.getClient as jest.Mock).mockReturnValue({
-        getIntegrationByName: (name: string) => (name === 'MobileReplay' ? { stop, startBuffering } : undefined),
-      });
-
-      await holdHighlightReplay();
-      releaseHighlightReplay();
-
-      expect(stop).toHaveBeenCalledTimes(1);
-      expect(startBuffering).toHaveBeenCalledTimes(1);
-    });
-
-    test('does nothing when replay is not installed', async () => {
-      (Sentry.getClient as jest.Mock).mockReturnValue(undefined);
-
+    test('is a safe no-op while iOS replay stays disabled', async () => {
       await expect(holdHighlightReplay()).resolves.toBeUndefined();
       expect(() => releaseHighlightReplay()).not.toThrow();
     });
