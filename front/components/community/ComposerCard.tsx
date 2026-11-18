@@ -94,7 +94,6 @@ export const ComposerCard = memo(function ComposerCard({
             style={styles.plus}
             contentFit="contain"
             transition={0}
-            tintColor={colors.accent}
           />
         </Pressable>
 

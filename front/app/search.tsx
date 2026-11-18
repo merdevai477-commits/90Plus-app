@@ -23,6 +23,7 @@ import { Search, X, Clock, ChevronRight } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/theme';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
@@ -38,6 +39,7 @@ import TeamBadge from '../components/common/TeamBadge';
 import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
+import { getSearchUiTheme } from '../components/common/searchUiTheme';
 
 const DEBOUNCE_MS = 90;
 
@@ -50,12 +52,22 @@ function useDebouncedValue(value: string, delay: number): string {
     return debounced;
 }
 
-function SectionHeader({ title, count }: { title: string; count: number }) {
+function SectionHeader({
+    title,
+    count,
+    ink,
+    muted,
+}: {
+    title: string;
+    count: number;
+    ink: string;
+    muted: string;
+}) {
     if (count === 0) return null;
     return (
         <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.sectionCount}>{count}</Text>
+            <Text style={[styles.sectionTitle, { color: ink }]}>{title}</Text>
+            <Text style={[styles.sectionCount, { color: muted }]}>{count}</Text>
         </View>
     );
 }
@@ -64,44 +76,66 @@ function CompetitorRow({
     item,
     language,
     onPress,
+    ink,
+    muted,
 }: {
     item: SearchCompetitor365;
     language: 'ar' | 'en';
     onPress: () => void;
+    ink: string;
+    muted: string;
 }) {
     return (
-        <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
+        <TouchableOpacity
+            style={[styles.row, { borderBottomColor: muted + '33' }]}
+            onPress={onPress}
+            activeOpacity={0.75}
+        >
             <TeamBadge name={item.name} logo={item.logo ?? undefined} size={40} color="transparent" />
             <View style={styles.rowInfo}>
-                <Text style={styles.rowTitle} numberOfLines={1}>
+                <Text style={[styles.rowTitle, { color: ink }]} numberOfLines={1}>
                     {getTeamDisplayName(item.name, language, item.competitorId)}
                 </Text>
                 {item.country ? (
-                    <Text style={styles.rowSub} numberOfLines={1}>
+                    <Text style={[styles.rowSub, { color: muted }]} numberOfLines={1}>
                         {item.country}
                     </Text>
                 ) : null}
             </View>
-            <ChevronRight size={18} color={Colors.textMuted} />
+            <ChevronRight size={18} color={muted} />
         </TouchableOpacity>
     );
 }
 
-function PlayerRow({ item, onPress }: { item: SearchAthlete365; onPress: () => void }) {
+function PlayerRow({
+    item,
+    onPress,
+    ink,
+    muted,
+}: {
+    item: SearchAthlete365;
+    onPress: () => void;
+    ink: string;
+    muted: string;
+}) {
     return (
-        <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
+        <TouchableOpacity
+            style={[styles.row, { borderBottomColor: muted + '33' }]}
+            onPress={onPress}
+            activeOpacity={0.75}
+        >
             <CachedAthletePhoto uri={item.imageUrl} size={40} recyclingKey={item.athleteId} />
             <View style={styles.rowInfo}>
-                <Text style={styles.rowTitle} numberOfLines={1}>
+                <Text style={[styles.rowTitle, { color: ink }]} numberOfLines={1}>
                     {item.name}
                 </Text>
                 {item.clubName ? (
-                    <Text style={styles.rowSub} numberOfLines={1}>
+                    <Text style={[styles.rowSub, { color: muted }]} numberOfLines={1}>
                         {item.clubName}
                     </Text>
                 ) : null}
             </View>
-            <ChevronRight size={18} color={Colors.textMuted} />
+            <ChevronRight size={18} color={muted} />
         </TouchableOpacity>
     );
 }
@@ -115,6 +149,8 @@ function CompetitionRow({
     onToggleFollow,
     followLabel,
     followingLabel,
+    ink,
+    muted,
 }: {
     item: SearchCompetition365;
     language: 'ar' | 'en';
@@ -124,9 +160,11 @@ function CompetitionRow({
     onToggleFollow: () => void;
     followLabel: string;
     followingLabel: string;
+    ink: string;
+    muted: string;
 }) {
     return (
-        <View style={styles.row}>
+        <View style={[styles.row, { borderBottomColor: muted + '33' }]}>
             <TouchableOpacity
                 style={styles.rowHit}
                 onPress={onPress}
@@ -134,11 +172,11 @@ function CompetitionRow({
             >
                 <LeagueIcon name={item.name} logo={item.logo ?? undefined} size={40} />
                 <View style={styles.rowInfo}>
-                    <Text style={styles.rowTitle} numberOfLines={1}>
+                    <Text style={[styles.rowTitle, { color: ink }]} numberOfLines={1}>
                         {getLeagueDisplayName(item.name, language, item.competitionId, item.country)}
                     </Text>
                     {item.country ? (
-                        <Text style={styles.rowSub} numberOfLines={1}>
+                        <Text style={[styles.rowSub, { color: muted }]} numberOfLines={1}>
                             {item.country}
                         </Text>
                     ) : null}
@@ -178,6 +216,8 @@ export default function FootballSearchScreen() {
     const params = useLocalSearchParams<{ q?: string | string[] }>();
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
+    const { isDark } = useResolvedAppScheme();
+    const ui = useMemo(() => getSearchUiTheme(isDark), [isDark]);
     const { trigger } = useHaptic();
     const {
         isFollowing: isFollowingLeague,
@@ -356,26 +396,41 @@ export default function FootballSearchScreen() {
     );
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <StatusBar barStyle="light-content" />
+        <View style={[styles.container, { paddingTop: insets.top, backgroundColor: ui.screen }]}>
+            <StatusBar barStyle={ui.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
 
             <View style={styles.searchBar}>
                 <TouchableOpacity
                     onPress={handleBack}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={styles.backBtn}
+                    style={[
+                        styles.backBtn,
+                        {
+                            backgroundColor: ui.backBg,
+                            borderWidth: 1,
+                            borderColor: ui.fieldBorder,
+                        },
+                    ]}
                 >
-                    <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+                    <Ionicons name="chevron-back" size={24} color={ui.title} />
                 </TouchableOpacity>
-                <View style={styles.inputWrap}>
-                    <Search size={18} color={Colors.purpleSoft} />
+                <View
+                    style={[
+                        styles.inputWrap,
+                        {
+                            backgroundColor: ui.fieldBg,
+                            borderColor: ui.fieldBorder,
+                        },
+                    ]}
+                >
+                    <Search size={18} color={ui.accent} />
                     <TextInput
                         ref={inputRef}
-                        style={styles.input}
+                        style={[styles.input, { color: ui.fieldText }]}
                         value={query}
                         onChangeText={setQuery}
                         placeholder={t.searchScreen.footballPlaceholder}
-                        placeholderTextColor={Colors.textMuted}
+                        placeholderTextColor={ui.placeholder}
                         autoCorrect={false}
                         autoCapitalize="none"
                         returnKeyType="search"
@@ -385,7 +440,7 @@ export default function FootballSearchScreen() {
                     />
                     {query.length > 0 ? (
                         <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                            <X size={16} color={Colors.textMuted} />
+                            <X size={16} color={ui.placeholder} />
                         </TouchableOpacity>
                     ) : null}
                 </View>
@@ -402,23 +457,23 @@ export default function FootballSearchScreen() {
                     <>
                         {recent.length > 0 ? (
                             <View style={styles.recentHeader}>
-                                <Text style={styles.sectionTitle}>{t.searchScreen.recent}</Text>
+                                <Text style={[styles.sectionTitle, { color: ui.title }]}>{t.searchScreen.recent}</Text>
                                 <TouchableOpacity onPress={clearRecent} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                     <Text style={styles.clearAll}>{t.searchScreen.clearAll}</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : (
                             <View style={styles.emptyIdle}>
-                                <Search size={28} color={Colors.textMuted} />
-                                <Text style={styles.emptyTitle}>{t.searchScreen.startTitle}</Text>
-                                {idleHint ? <Text style={styles.emptySub}>{idleHint}</Text> : null}
+                                <Search size={28} color={ui.iconMuted} />
+                                <Text style={[styles.emptyTitle, { color: ui.title }]}>{t.searchScreen.startTitle}</Text>
+                                {idleHint ? <Text style={[styles.emptySub, { color: ui.muted }]}>{idleHint}</Text> : null}
                             </View>
                         )}
                         {recent.map((q) => (
                             <View key={q} style={styles.recentRow}>
                                 <TouchableOpacity style={styles.recentHit} onPress={() => applyRecent(q)}>
-                                    <Clock size={16} color={Colors.textMuted} />
-                                    <Text style={styles.recentText} numberOfLines={1}>
+                                    <Clock size={16} color={ui.iconMuted} />
+                                    <Text style={[styles.recentText, { color: ui.title }]} numberOfLines={1}>
                                         {q}
                                     </Text>
                                 </TouchableOpacity>
@@ -426,7 +481,7 @@ export default function FootballSearchScreen() {
                                     onPress={() => void removeRecent(q)}
                                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 >
-                                    <X size={14} color={Colors.textMuted} />
+                                    <X size={14} color={ui.iconMuted} />
                                 </TouchableOpacity>
                             </View>
                         ))}
@@ -435,14 +490,14 @@ export default function FootballSearchScreen() {
 
                 {showMinHint ? (
                     <View style={styles.emptyIdle}>
-                        <Text style={styles.emptySub}>{t.searchScreen.minCharsSub}</Text>
+                        <Text style={[styles.emptySub, { color: ui.muted }]}>{t.searchScreen.minCharsSub}</Text>
                     </View>
                 ) : null}
 
                 {showSearching ? (
                     <View style={styles.loading}>
                         <ActivityIndicator color={Colors.purpleSoft} />
-                        <Text style={styles.emptySub}>{t.searchScreen.searching}</Text>
+                        <Text style={[styles.emptySub, { color: ui.muted }]}>{t.searchScreen.searching}</Text>
                     </View>
                 ) : null}
 
@@ -454,33 +509,42 @@ export default function FootballSearchScreen() {
 
                 {showError ? (
                     <View style={styles.emptyIdle}>
-                        <Text style={styles.emptyTitle}>{t.searchScreen.errorTitle}</Text>
-                        <Text style={styles.emptySub}>{t.searchScreen.errorSub}</Text>
+                        <Text style={[styles.emptyTitle, { color: ui.title }]}>{t.searchScreen.errorTitle}</Text>
+                        <Text style={[styles.emptySub, { color: ui.muted }]}>{t.searchScreen.errorSub}</Text>
                     </View>
                 ) : null}
 
                 {showEmpty ? (
                     <View style={styles.emptyIdle}>
-                        <Text style={styles.emptyTitle}>{t.searchScreen.noResults}</Text>
-                        <Text style={styles.emptySub}>{t.searchScreen.noResultsSub}</Text>
+                        <Text style={[styles.emptyTitle, { color: ui.title }]}>{t.searchScreen.noResults}</Text>
+                        <Text style={[styles.emptySub, { color: ui.muted }]}>{t.searchScreen.noResultsSub}</Text>
                     </View>
                 ) : null}
 
                 {canSearch && results ? (
                     <>
-                        <SectionHeader title={t.searchScreen.sectionClubs} count={results.clubs.length} />
+                        <SectionHeader
+                            title={t.searchScreen.sectionClubs}
+                            count={results.clubs.length}
+                            ink={ui.title}
+                            muted={ui.muted}
+                        />
                         {results.clubs.map((c) => (
                             <CompetitorRow
                                 key={`c-${c.competitorId}`}
                                 item={c}
                                 language={language}
                                 onPress={() => openClub(c)}
+                                ink={ui.title}
+                                muted={ui.muted}
                             />
                         ))}
 
                         <SectionHeader
                             title={t.searchScreen.sectionNationalTeams}
                             count={results.nationalTeams.length}
+                            ink={ui.title}
+                            muted={ui.muted}
                         />
                         {results.nationalTeams.map((c) => (
                             <CompetitorRow
@@ -488,12 +552,16 @@ export default function FootballSearchScreen() {
                                 item={c}
                                 language={language}
                                 onPress={() => openClub(c)}
+                                ink={ui.title}
+                                muted={ui.muted}
                             />
                         ))}
 
                         <SectionHeader
                             title={t.searchScreen.sectionCompetitions}
                             count={(results.competitions ?? []).length}
+                            ink={ui.title}
+                            muted={ui.muted}
                         />
                         {(results.competitions ?? []).map((c) => (
                             <CompetitionRow
@@ -508,20 +576,41 @@ export default function FootballSearchScreen() {
                                 onToggleFollow={() => void handleToggleCompetitionFollow(c)}
                                 followLabel={followLabel}
                                 followingLabel={followingLabel}
+                                ink={ui.title}
+                                muted={ui.muted}
                             />
                         ))}
 
-                        <SectionHeader title={t.searchScreen.sectionPlayers} count={results.players.length} />
+                        <SectionHeader
+                            title={t.searchScreen.sectionPlayers}
+                            count={results.players.length}
+                            ink={ui.title}
+                            muted={ui.muted}
+                        />
                         {results.players.map((p) => (
-                            <PlayerRow key={`p-${p.athleteId}`} item={p} onPress={() => openPlayer(p)} />
+                            <PlayerRow
+                                key={`p-${p.athleteId}`}
+                                item={p}
+                                onPress={() => openPlayer(p)}
+                                ink={ui.title}
+                                muted={ui.muted}
+                            />
                         ))}
 
                         <SectionHeader
                             title={t.searchScreen.sectionCoaches}
                             count={(results.coaches ?? []).length}
+                            ink={ui.title}
+                            muted={ui.muted}
                         />
                         {(results.coaches ?? []).map((p) => (
-                            <PlayerRow key={`coach-${p.athleteId}`} item={p} onPress={() => openCoach(p)} />
+                            <PlayerRow
+                                key={`coach-${p.athleteId}`}
+                                item={p}
+                                onPress={() => openCoach(p)}
+                                ink={ui.title}
+                                muted={ui.muted}
+                            />
                         ))}
                     </>
                 ) : null}

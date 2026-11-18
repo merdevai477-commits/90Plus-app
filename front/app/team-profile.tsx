@@ -19,12 +19,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 
 import { Colors, Spacing, FontSize } from '../constants/theme';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getCountryDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
 import { ErrorDisplay } from '../components/common/ErrorDisplay';
 import ApiFootballService from '../services/apiFootball';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
+import { getProfileSurface } from '../components/TeamProfile/profileSurface';
 
 import {
     useCompetitorInfo,
@@ -57,7 +59,10 @@ export default function TeamProfileScreen() {
     const params = useLocalSearchParams() as unknown as TeamParams;
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
+    const { isDark } = useResolvedAppScheme();
+    const surface = useMemo(() => getProfileSurface(isDark), [isDark]);
     const { trigger } = useHaptic();
+    const statusBarStyle = surface.statusBar === 'dark' ? 'dark-content' : 'light-content';
 
     const rawId = parseInt(params.id ?? '0', 10);
     const hasDirectId = Number.isFinite(rawId) && rawId > 0;
@@ -260,8 +265,8 @@ export default function TeamProfileScreen() {
 
     if (!validId && !resolving) {
         return (
-            <View style={styles.container}>
-                <StatusBar barStyle="light-content" />
+            <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                <StatusBar barStyle={statusBarStyle} />
                 <ErrorDisplay
                     type="generic"
                     title={t.teamProfile.invalidTeamId}
@@ -276,8 +281,8 @@ export default function TeamProfileScreen() {
 
     if (resolving || infoQ.isLoading) {
         return (
-            <View style={styles.container}>
-                <StatusBar barStyle="light-content" />
+            <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                <StatusBar barStyle={statusBarStyle} />
                 <TeamProfileSkeleton />
             </View>
         );
@@ -285,8 +290,8 @@ export default function TeamProfileScreen() {
 
     if (infoQ.isError || !info) {
         return (
-            <View style={styles.container}>
-                <StatusBar barStyle="light-content" />
+            <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                <StatusBar barStyle={statusBarStyle} />
                 <ErrorDisplay
                     type="server"
                     title={t.teamProfile.loadFailed}
@@ -308,8 +313,8 @@ export default function TeamProfileScreen() {
     };
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
+        <View style={[styles.container, { backgroundColor: surface.screen }]}>
+            <StatusBar barStyle={statusBarStyle} />
 
             <TeamHeader
                 t={t}

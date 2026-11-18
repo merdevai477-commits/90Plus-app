@@ -3,20 +3,20 @@
  * year, stadium, and a Follow button placed opposite the logo/name block.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     Colors,
-    Gradients,
     Spacing,
     Radius,
     FontSize,
     FontWeight,
     Shadows,
 } from '../../constants/theme';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import type { Language } from '../../src/i18n/types';
 import type { TranslationKeys } from '../../src/i18n/utils';
 import TeamBadge from '../common/TeamBadge';
@@ -27,6 +27,7 @@ import {
     presentTeamLogo,
 } from '../../utils/maskedNationalTeam';
 import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
+import { getProfileSurface } from './profileSurface';
 
 interface TeamHeaderProps {
     t: TranslationKeys;
@@ -45,11 +46,11 @@ interface TeamHeaderProps {
     coachName?: string | null;
 }
 
-function MetaItem({ icon, text }: { icon: any; text: string }) {
+function MetaItem({ icon, text, muted }: { icon: any; text: string; muted: string }) {
     return (
         <View style={styles.metaItem}>
-            <Ionicons name={icon} size={13} color={Colors.textSecondary} />
-            <Text style={styles.metaText} numberOfLines={1}>
+            <Ionicons name={icon} size={13} color={muted} />
+            <Text style={[styles.metaText, { color: muted }]} numberOfLines={1}>
                 {text}
             </Text>
         </View>
@@ -72,6 +73,8 @@ export default function TeamHeader({
     topInset,
     coachName,
 }: TeamHeaderProps) {
+    const { isDark } = useResolvedAppScheme();
+    const surface = useMemo(() => getProfileSurface(isDark), [isDark]);
     const maskedTeam = isIsraelSeniorNationalTeam(name, competitorId, logo);
     const displayName = displayMatchTeamName(name, language, competitorId, logo);
     const crest = presentTeamLogo(name, logo, competitorId);
@@ -81,15 +84,25 @@ export default function TeamHeader({
 
     return (
         <LinearGradient
-            colors={[Colors.purpleDeep, 'transparent']}
+            colors={[...surface.headerGradient]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={[styles.wrapper, topInset != null ? { paddingTop: topInset + Spacing.sm } : null]}
         >
             {/* Top bar */}
             <View style={styles.topBar}>
-                <TouchableOpacity style={styles.backButton} onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+                <TouchableOpacity
+                    style={[
+                        styles.backButton,
+                        {
+                            backgroundColor: surface.backBg,
+                            borderColor: surface.border,
+                        },
+                    ]}
+                    onPress={onBack}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <Ionicons name="chevron-back" size={24} color={surface.text} />
                 </TouchableOpacity>
             </View>
 
@@ -100,7 +113,7 @@ export default function TeamHeader({
                         <TeamBadge name={displayName} logo={crest || undefined} size={64} color="transparent" />
                     </View>
                     <View style={styles.nameBlock}>
-                        <Text style={styles.name} numberOfLines={2}>
+                        <Text style={[styles.name, { color: surface.text }]} numberOfLines={2}>
                             {displayName}
                         </Text>
                         {countryLabel ? (
@@ -110,7 +123,7 @@ export default function TeamHeader({
                                 ) : (
                                     <Text style={styles.flagEmoji}>{flagEmoji}</Text>
                                 )}
-                                <Text style={styles.countryText} numberOfLines={1}>
+                                <Text style={[styles.countryText, { color: surface.muted }]} numberOfLines={1}>
                                     {countryLabel}
                                 </Text>
                             </View>
@@ -143,9 +156,21 @@ export default function TeamHeader({
 
             {/* Meta */}
             <View style={styles.metaRow}>
-                {founded ? <MetaItem icon="calendar-outline" text={`${t.teamProfile.founded} ${founded}`} /> : null}
-                {stadium ? <MetaItem icon="business-outline" text={stadium} /> : null}
-                {coachName ? <MetaItem icon="person-outline" text={`${t.teamProfile.coach}: ${coachName}`} /> : null}
+                {founded ? (
+                    <MetaItem
+                        icon="calendar-outline"
+                        text={`${t.teamProfile.founded} ${founded}`}
+                        muted={surface.muted}
+                    />
+                ) : null}
+                {stadium ? <MetaItem icon="business-outline" text={stadium} muted={surface.muted} /> : null}
+                {coachName ? (
+                    <MetaItem
+                        icon="person-outline"
+                        text={`${t.teamProfile.coach}: ${coachName}`}
+                        muted={surface.muted}
+                    />
+                ) : null}
             </View>
         </LinearGradient>
     );

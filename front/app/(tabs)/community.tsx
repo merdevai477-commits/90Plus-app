@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,18 +93,12 @@ function CommunityScreenInner() {
     [fonts, isAr, me.avatar, me.displayName, me.username, router, s],
   );
 
-  const onBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/matches');
-  }, [router]);
-
   return (
     <View style={[styles.root, { backgroundColor: colors.screen }]}>
       <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       <CommunityHeader
         title={s.title}
         fontFamily={fonts.semibold}
-        onBack={onBack}
         onBell={() => router.push('/notifications')}
       />
       <CommunityFeedList

@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/theme';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../src/i18n';
 import { getLeagueDisplayName, getTeamDisplayName } from '../utils/i18nHelpers';
 import { statBoardLabel } from '../utils/statBoardLabel';
@@ -34,6 +35,7 @@ import TeamBadge from '../components/common/TeamBadge';
 import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import MatchesTab from '../components/TeamProfile/MatchesTab';
+import { getProfileSurface } from '../components/TeamProfile/profileSurface';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
 type TabKey = 'scorers' | 'matches' | 'table';
@@ -58,6 +60,8 @@ export default function CompetitionProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const surface = useMemo(() => getProfileSurface(isDark), [isDark]);
   const { trigger } = useHaptic();
   const params = useLocalSearchParams() as {
     id?: string;
@@ -173,13 +177,16 @@ export default function CompetitionProfileScreen() {
     competitionId > 0 && infoQ.isLoading && !info && !params.name && !params.logo;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: surface.screen }]}>
+      <StatusBar barStyle={surface.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backBtn, { backgroundColor: surface.backBg, borderWidth: 1, borderColor: surface.border }]}
+        >
+          <Ionicons name="chevron-back" size={22} color={surface.text} />
         </TouchableOpacity>
-        <Text style={styles.topTitle} numberOfLines={1}>
+        <Text style={[styles.topTitle, { color: surface.text }]} numberOfLines={1}>
           {cp.title}
         </Text>
         <View style={styles.backBtn} />
@@ -188,20 +195,20 @@ export default function CompetitionProfileScreen() {
       {showFullScreenLoader ? (
         <View style={styles.center}>
           <ActivityIndicator color={Colors.purpleSoft} />
-          <Text style={styles.muted}>{cp.loading}</Text>
+          <Text style={[styles.muted, { color: surface.muted }]}>{cp.loading}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
           <View style={styles.hero}>
-            <View style={styles.crestRing}>
+            <View style={[styles.crestRing, { backgroundColor: surface.card, borderColor: surface.border }]}>
               {logo ? (
                 <Image source={{ uri: logo }} style={styles.crestImage} resizeMode="contain" />
               ) : (
                 <LeagueIcon name={name} logo={undefined} size={72} />
               )}
             </View>
-            <Text style={styles.name}>{displayName}</Text>
-            {country ? <Text style={styles.meta}>{country}</Text> : null}
+            <Text style={[styles.name, { color: surface.text }]}>{displayName}</Text>
+            {country ? <Text style={[styles.meta, { color: surface.muted }]}>{country}</Text> : null}
             {following ? (
               <Text style={styles.followHint}>{cp.followNotifHint}</Text>
             ) : (

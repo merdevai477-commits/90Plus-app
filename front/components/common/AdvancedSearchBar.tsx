@@ -36,8 +36,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { PURPLE_PRIMARY, PURPLE_SOFT } from '../../constants/tokens';
+import { getSearchUiTheme } from './searchUiTheme';
 
 const AVATAR_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
@@ -110,6 +112,8 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const { getToken } = useAuth();
   const { t } = useTranslation();
   const tSearch = t.searchModal;
+  const { isDark } = useResolvedAppScheme();
+  const ui = useMemo(() => getSearchUiTheme(isDark), [isDark]);
   const haptic = useHapticFeedback();
   const fadeAnim = useFadeIn(300);
   const slideAnim = useSlideIn('down', 300);
@@ -573,23 +577,32 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
             },
           ]}
         >
-          <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
-          <LinearGradient
-            colors={['rgba(8,4,18,0.98)', 'rgba(5,1,13,0.98)']}
+          <BlurView
+            intensity={isDark ? 90 : 48}
+            tint={ui.blurTint}
             style={StyleSheet.absoluteFill}
           />
+          <LinearGradient colors={[...ui.overlay]} style={StyleSheet.absoluteFill} />
 
           <View style={styles.header}>
             <View style={styles.searchContainer}>
-              <View style={styles.searchInputContainer}>
+              <View
+                style={[
+                  styles.searchInputContainer,
+                  {
+                    backgroundColor: ui.fieldBg,
+                    borderColor: ui.fieldBorder,
+                  },
+                ]}
+              >
                 <Search size={20} color={PURPLE_PRIMARY} />
                 <TextInput
                   ref={searchInputRef}
-                  style={styles.searchInput}
+                  style={[styles.searchInput, { color: ui.fieldText }]}
                   value={searchQuery}
                   onChangeText={handleSearch}
                   placeholder={isCommunity ? tSearch.placeholderCommunity : tSearch.placeholder}
-                  placeholderTextColor="#666"
+                  placeholderTextColor={ui.placeholder}
                   autoFocus
                   autoCorrect={false}
                   autoCapitalize="none"
@@ -597,14 +610,18 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={handleClear} style={styles.clearButton} hitSlop={8}>
-                    <X size={16} color="#666" />
+                    <X size={16} color={ui.placeholder} />
                   </TouchableOpacity>
                 )}
               </View>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8}>
-              <X size={22} color="#fff" />
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeButton, { backgroundColor: ui.closeBg, borderWidth: 1, borderColor: ui.fieldBorder }]}
+              hitSlop={8}
+            >
+              <X size={22} color={ui.closeIcon} />
             </TouchableOpacity>
           </View>
 
@@ -629,7 +646,13 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                       }
                       style={styles.tabGradient}
                     >
-                      <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                      <Text
+                        style={[
+                          styles.tabText,
+                          { color: ui.muted },
+                          activeTab === tab && styles.tabTextActive,
+                        ]}
+                      >
                         {tabLabel(tab)}
                       </Text>
                     </LinearGradient>
@@ -656,12 +679,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                 {suggestions.map((suggestion, index) => (
                   <TouchableOpacity
                     key={`${suggestion}-${index}`}
-                    style={styles.suggestionItem}
+                    style={[styles.suggestionItem, { backgroundColor: ui.cardBg, borderWidth: 1, borderColor: ui.cardBorder }]}
                     onPress={() => handleSuggestionSelect(suggestion)}
                     activeOpacity={0.7}
                   >
                     <Search size={16} color={PURPLE_PRIMARY} />
-                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                    <Text style={[styles.suggestionText, { color: ui.title }]}>{suggestion}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -672,7 +695,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                 {filteredResults.map((item) => (
                   <TouchableOpacity
                     key={`${item.type}-${item.id}`}
-                    style={styles.resultItem}
+                    style={[styles.resultItem, { backgroundColor: ui.cardBg, borderColor: ui.cardBorder }]}
                     onPress={() => handleResultSelect(item)}
                     activeOpacity={0.75}
                   >
@@ -687,17 +710,17 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                         />
                         <View style={styles.profileInfo}>
                           <View style={styles.profileHeader}>
-                            <Text style={styles.profileName} numberOfLines={1}>
+                            <Text style={[styles.profileName, { color: ui.title }]} numberOfLines={1}>
                               {item.title}
                             </Text>
                             {item.data?.isVerified ? <BadgeCheck size={14} color={PURPLE_PRIMARY} /> : null}
                             {item.data?.isDeveloper ? <Code size={12} color="#3b82f6" /> : null}
                           </View>
-                          <Text style={styles.profileUsername} numberOfLines={1}>
+                          <Text style={[styles.profileUsername, { color: ui.muted }]} numberOfLines={1}>
                             {item.subtitle}
                           </Text>
                         </View>
-                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                        <ChevronRight size={18} color={ui.iconMuted} />
                       </View>
                     ) : item.type === 'reel' ? (
                       <View style={styles.reelResult}>
@@ -708,10 +731,10 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                           cachePolicy="memory-disk"
                         />
                         <View style={styles.reelInfo}>
-                          <Text style={styles.reelTitle} numberOfLines={2}>
+                          <Text style={[styles.reelTitle, { color: ui.title }]} numberOfLines={2}>
                             {item.title}
                           </Text>
-                          <Text style={styles.reelSubtitle} numberOfLines={1}>
+                          <Text style={[styles.reelSubtitle, { color: ui.muted }]} numberOfLines={1}>
                             {item.subtitle}
                           </Text>
                         </View>
@@ -732,14 +755,14 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                           </View>
                         )}
                         <View style={styles.reelInfo}>
-                          <Text style={styles.reelTitle} numberOfLines={2}>
+                          <Text style={[styles.reelTitle, { color: ui.title }]} numberOfLines={2}>
                             {item.title}
                           </Text>
-                          <Text style={styles.reelSubtitle} numberOfLines={1}>
+                          <Text style={[styles.reelSubtitle, { color: ui.muted }]} numberOfLines={1}>
                             {item.subtitle}
                           </Text>
                         </View>
-                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                        <ChevronRight size={18} color={ui.iconMuted} />
                       </View>
                     ) : (
                       <View style={styles.hashtagResult}>
@@ -748,9 +771,9 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                         </View>
                         <View style={styles.hashtagInfo}>
                           <Text style={styles.hashtagTitle}>{item.title}</Text>
-                          <Text style={styles.hashtagSubtitle}>{item.subtitle}</Text>
+                          <Text style={[styles.hashtagSubtitle, { color: ui.muted }]}>{item.subtitle}</Text>
                         </View>
-                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                        <ChevronRight size={18} color={ui.iconMuted} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -760,15 +783,15 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
             {!isSearching && searchQuery.length > 0 && !hasResults && !showSuggestions && (
               <View style={styles.noResultsContainer}>
-                <Search size={40} color="#555" />
-                <Text style={styles.noResultsText}>{tSearch.noResults}</Text>
+                <Search size={40} color={ui.iconMuted} />
+                <Text style={[styles.noResultsText, { color: ui.title }]}>{tSearch.noResults}</Text>
               </View>
             )}
 
             {showRecentSearches && (
               <View style={styles.recentContainer}>
                 <View style={styles.recentHeader}>
-                  <Text style={styles.recentTitle}>{tSearch.recentSearches}</Text>
+                  <Text style={[styles.recentTitle, { color: ui.title }]}>{tSearch.recentSearches}</Text>
                   <TouchableOpacity onPress={handleClearRecent}>
                     <Text style={styles.clearRecentText}>{tSearch.clear}</Text>
                   </TouchableOpacity>
@@ -776,12 +799,12 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
                 {recentSearches.map((search, index) => (
                   <TouchableOpacity
                     key={`${search}-${index}`}
-                    style={styles.recentItem}
+                    style={[styles.recentItem, { backgroundColor: ui.cardBg, borderWidth: 1, borderColor: ui.cardBorder }]}
                     onPress={() => handleSuggestionSelect(search)}
                     activeOpacity={0.7}
                   >
-                    <Clock size={16} color="#666" />
-                    <Text style={styles.recentText}>{search}</Text>
+                    <Clock size={16} color={ui.iconMuted} />
+                    <Text style={[styles.recentText, { color: ui.title }]}>{search}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -791,18 +814,18 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
               <View style={styles.trendingContainer}>
                 <View style={styles.trendingHeader}>
                   <TrendingUp size={18} color={PURPLE_PRIMARY} />
-                  <Text style={styles.trendingTitle}>{tSearch.trending}</Text>
+                  <Text style={[styles.trendingTitle, { color: ui.title }]}>{tSearch.trending}</Text>
                 </View>
                 <View style={styles.trendingGrid}>
                   {trendingHashtags.slice(0, 10).map((hashtag) => (
                     <TouchableOpacity
                       key={hashtag.id}
-                      style={styles.trendingItem}
+                      style={[styles.trendingItem, { backgroundColor: ui.chipBg, borderWidth: 1, borderColor: ui.fieldBorder }]}
                       onPress={() => handleSuggestionSelect(`#${hashtag.name}`)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.trendingText}>#{hashtag.name}</Text>
-                      <Text style={styles.trendingCount}>
+                      <Text style={[styles.trendingText, { color: ui.chipText }]}>#{hashtag.name}</Text>
+                      <Text style={[styles.trendingCount, { color: ui.chipCount }]}>
                         {hashtag.postsCount ?? hashtag.reelCount}
                       </Text>
                     </TouchableOpacity>
@@ -813,9 +836,9 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
             {!isSearching && searchQuery.length === 0 && !showRecentSearches && !showTrending && (
               <View style={styles.emptyContainer}>
-                <Users size={44} color="#555" />
-                <Text style={styles.emptyText}>{tSearch.tabUsers}</Text>
-                <Text style={styles.emptySubtext}>{tSearch.placeholder}</Text>
+                <Users size={44} color={ui.iconMuted} />
+                <Text style={[styles.emptyText, { color: ui.title }]}>{tSearch.tabUsers}</Text>
+                <Text style={[styles.emptySubtext, { color: ui.muted }]}>{tSearch.placeholder}</Text>
               </View>
             )}
           </ScrollView>
