@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 12,
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',

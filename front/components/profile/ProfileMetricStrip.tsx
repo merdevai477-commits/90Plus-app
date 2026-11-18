@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   socialCard: {
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   divider: {
-    width: 1,
+    width: 1.5,
     height: 47,
     backgroundColor: ProfileTheme.colors.profileCardBorder,
   },

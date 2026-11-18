@@ -157,9 +157,10 @@ const ProfileHero = memo(function ProfileHero({
           cachePolicy="memory-disk"
           priority="high"
         />
+        {/* Clean bottom fade only — no mid-cover fog/shadow */}
         <LinearGradient
-          colors={['rgba(237,237,241,0)', 'rgba(237,237,241,0.55)', 'rgba(237,237,241,0.98)']}
-          locations={[0, 0.52, 1]}
+          colors={['rgba(232,232,238,0)', 'rgba(232,232,238,0.2)', ProfileTheme.colors.profileBg]}
+          locations={[0, 0.78, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -498,7 +499,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 5,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -537,7 +538,7 @@ const styles = StyleSheet.create({
     height: 75,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
@@ -550,7 +551,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 24,
     backgroundColor: '#F5F0FF',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profilePrimary,
     borderRadius: 42,
     paddingHorizontal: 10,
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   sideSlotFilled: {
@@ -669,7 +670,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',

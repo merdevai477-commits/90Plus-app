@@ -18,9 +18,9 @@ export const ProfileTheme = {
     textTertiary: 'rgba(15, 15, 18, 0.52)',
     textDisabled: 'rgba(15, 15, 18, 0.36)',
 
-    // Borders / dividers — dark enough to read on white cards
-    border: 'rgba(15, 15, 18, 0.28)',
-    borderSoft: 'rgba(15, 15, 18, 0.18)',
+    // Borders / dividers — high-contrast strokes on white cards
+    border: 'rgba(15, 15, 18, 0.42)',
+    borderSoft: 'rgba(15, 15, 18, 0.24)',
 
     // Brand accents
     neonGreen: '#22A822',
@@ -30,16 +30,16 @@ export const ProfileTheme = {
     gold: '#D4A017',
 
     // Profile v2 — light mode, defined edges
-    profileBg: '#EDEDF1',
+    profileBg: '#E8E8EE',
     profileCard: '#FFFFFF',
-    profileCardBorder: '#8F8F9A',
+    profileCardBorder: '#3A3A44',
     profileChip: '#FFFFFF',
     profileFilledChip: '#FFFFFF',
     profileEmptyChip: '#F5F5F8',
     profileMuted: '#55555F',
     profileHandle: '#4A4A54',
     profileTabBar: '#FFFFFF',
-    profileTabBorder: '#8F8F9A',
+    profileTabBorder: '#3A3A44',
     profilePrimary: '#7C3AED',
     avatarRing: '#7C3AED',
 
@@ -60,8 +60,8 @@ export const ProfileTheme = {
 
   gradients: {
     primary: ['#7C3AED', '#5B21B6'] as const,
-    cover: ['rgba(237,237,241,0)', 'rgba(237,237,241,0.88)'] as const,
-    darkOverlay: ['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.42)'] as const,
+    cover: ['rgba(232,232,238,0)', 'rgba(232,232,238,1)'] as const,
+    darkOverlay: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.18)'] as const,
     gold: ['#FFD700', '#FFA500'] as const,
     highlight: ['#F5576C', '#8E54E9'] as const,
   },

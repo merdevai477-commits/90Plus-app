@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     backgroundColor: ProfileTheme.colors.profileCard,
     minHeight: 48,

@@ -38,7 +38,7 @@ const ProfileBioCard = memo(function ProfileBioCard({
     <Card style={styles.filled} onPress={onPress} activeOpacity={onPress ? 0.88 : 1}>
       <Image source={PROFILE_BIO_BALL} style={styles.ball} contentFit="cover" />
       <LinearGradient
-        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.92)']}
+        colors={['rgba(255,255,255,0.72)', 'rgba(255,255,255,0.96)']}
         start={{ x: 1, y: 0.5 }}
         end={{ x: 0, y: 0.5 }}
         style={StyleSheet.absoluteFill}
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     height: 106,
     borderRadius: 16,
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     borderStyle: 'dashed',
     flexDirection: 'row',
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     height: 106,
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: ProfileTheme.colors.profileCardBorder,
     backgroundColor: ProfileTheme.colors.profileCard,
     justifyContent: 'center',
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   ball: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.22,
+    opacity: 0.12,
   },
   copy: {
     alignSelf: 'flex-end',

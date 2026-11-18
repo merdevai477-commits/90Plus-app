@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         overflow: 'hidden',
         backgroundColor: ProfileTheme.colors.surfaceElevated,
-        borderWidth: 1.5,
+        borderWidth: 2,
         borderColor: ProfileTheme.colors.profileCardBorder,
     },
     thumbnail: {
