@@ -9,7 +9,6 @@ import {
   Group,
   Skia,
   SweepGradient,
-  useClock,
   vec,
 } from '@shopify/react-native-skia';
 import Animated, {
@@ -44,25 +43,37 @@ export type ChatIridescentBubbleProps = {
 
 /** Soft pastel liquid turning inside the light pearl shell (Skia). */
 function LightLiquidCore({ size, reduceMotion }: { size: number; reduceMotion: boolean }) {
-  const clock = useClock();
   const c = size / 2;
   const r = size * 0.485;
+  const angleA = useSharedValue(0.4);
+  const angleB = useSharedValue(-0.9);
+  const breathe = useSharedValue(1);
 
-  const spinA = useDerivedValue(() => {
-    if (reduceMotion) return 0.4;
-    return (clock.value / 1000) * 0.55;
-  });
-  const spinB = useDerivedValue(() => {
-    if (reduceMotion) return -0.9;
-    return -(clock.value / 1000) * 0.38 + 1.2;
-  });
-  const breathe = useDerivedValue(() => {
-    if (reduceMotion) return 1;
-    return 0.92 + 0.08 * Math.sin(clock.value / 1000 * 1.4);
-  });
+  useEffect(() => {
+    if (reduceMotion) return;
+    angleA.value = withRepeat(
+      withTiming(Math.PI * 2 + 0.4, { duration: 11400, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    angleB.value = withRepeat(
+      withTiming(-Math.PI * 2 - 0.9, { duration: 16500, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    breathe.value = withRepeat(
+      withTiming(1.08, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion]);
 
-  const transformA = useDerivedValue(() => [{ rotate: spinA.value }]);
-  const transformB = useDerivedValue(() => [{ rotate: spinB.value }, { scale: breathe.value }]);
+  const transformA = useDerivedValue(() => [{ rotate: angleA.value }]);
+  const transformB = useDerivedValue(() => [
+    { rotate: angleB.value },
+    { scale: breathe.value },
+  ]);
 
   const clip = useMemo(() => {
     if (Platform.OS === 'web') return null;
