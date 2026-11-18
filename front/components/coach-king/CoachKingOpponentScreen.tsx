@@ -17,6 +17,7 @@ import { CkApiError, coachKingService, type CkUserSquad } from '../../services/c
 import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { CoachKingPageHeader } from './CoachKingPageHeader';
 import { CoachKingPitch } from './CoachKingPitch';
 import { getCoachKingTheme } from './theme';
 
@@ -87,26 +88,17 @@ export default function CoachKingOpponentScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.screen }]} testID="ck-opponent">
       <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 8,
-            flexDirection: row,
-            backgroundColor: theme.headerBg,
-            borderBottomWidth: theme.headerBorder === 'transparent' ? 0 : StyleSheet.hairlineWidth,
-            borderBottomColor: theme.headerBorder,
-          },
-        ]}
-      >
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" testID="ck-opponent-back">
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={30} color={theme.headerIcon} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { fontFamily: fontSemi, color: theme.ink }]}>{opp.title}</Text>
-        <Pressable onPress={() => router.push('/notifications' as never)} hitSlop={12} accessibilityRole="button">
-          <Ionicons name="notifications-outline" size={26} color={theme.headerIcon} />
-        </Pressable>
-      </View>
+      <CoachKingPageHeader
+        title={opp.title}
+        onBack={() => router.back()}
+        backLabel={t.common.back}
+        testID="ck-opponent-back"
+        trailing={(
+          <Pressable onPress={() => router.push('/notifications' as never)} hitSlop={12} accessibilityRole="button">
+            <Ionicons name="notifications-outline" size={24} color={theme.headerIcon} />
+          </Pressable>
+        )}
+      />
 
       <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }} showsVerticalScrollIndicator={false}>
         <Pressable
@@ -192,13 +184,6 @@ export default function CoachKingOpponentScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: { fontSize: 20 },
   summary: {
     marginHorizontal: 16,
     marginTop: 8,

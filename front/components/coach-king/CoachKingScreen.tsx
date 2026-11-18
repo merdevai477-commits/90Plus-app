@@ -36,6 +36,7 @@ import { CoachKingMatches } from './CoachKingMatches';
 import { CoachKingMoney } from './CoachKingCoin';
 import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
+import { CoachKingPageHeader } from './CoachKingPageHeader';
 import { CoachKingPitch } from './CoachKingPitch';
 import { getCoachKingTheme } from './theme';
 
@@ -323,24 +324,12 @@ export default function CoachKingScreen() {
   return (
     <View style={[styles.root, { backgroundColor: theme.screen }]} testID="coach-king-screen">
       <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 8,
-            flexDirection: row,
-            backgroundColor: theme.headerBg,
-            borderBottomWidth: theme.headerBorder === 'transparent' ? 0 : StyleSheet.hairlineWidth,
-            borderBottomColor: theme.headerBorder,
-          },
-        ]}
-      >
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" testID="ck-back">
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={26} color={theme.headerIcon} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { fontFamily: fontSemi, color: theme.ink }]}>{copy.title}</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <CoachKingPageHeader
+        title={copy.title}
+        onBack={() => router.back()}
+        backLabel={t.common.back}
+        testID="ck-back"
+      />
 
       {loading && !home ? <ActivityIndicator color={theme.refresh} style={{ marginTop: 40 }} /> : null}
       {error && !home ? <Text style={[styles.error, { fontFamily: fontMed, color: theme.danger }]}>{error}</Text> : null}
@@ -533,13 +522,6 @@ export default function CoachKingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    paddingHorizontal: 18,
-    paddingBottom: 10,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: { fontSize: 20 },
   error: { textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
   profile: {
     alignItems: 'center',

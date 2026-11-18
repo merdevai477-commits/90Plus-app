@@ -39,6 +39,7 @@ import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_DESIGN_WIDTH } from '../TopScorersFive/assets';
 import { CoachKingMoney } from './CoachKingCoin';
+import { CoachKingPageHeader } from './CoachKingPageHeader';
 import { getCoachKingTheme, type CoachKingTheme } from './theme';
 
 export type CkPick = (CkPlayer | CkCoach) & { kind: CkPoolKind };
@@ -209,25 +210,14 @@ export function CoachKingCardGrid({
             !theme.isDark ? styles.chromeLift : null,
           ]}
         >
-          <View
-            style={[
-              styles.header,
-              {
-                paddingTop: insets.top + s(10),
-                paddingBottom: s(10),
-                paddingHorizontal: s(24),
-                flexDirection: isAr ? 'row-reverse' : 'row',
-              },
-            ]}
-          >
-            <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" testID="ck-grid-close">
-              <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={s(28)} color={theme.headerIcon} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { fontFamily: fontSemi, fontSize: s(20), color: theme.ink }]} numberOfLines={1}>
-              {kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
-            </Text>
-            <CoachKingMoney milli={budget} lang={language} size="sm" color={theme.budgetValue} />
-          </View>
+          <CoachKingPageHeader
+            title={kind === 'COACH' ? copy.pickCoach : (slotKey ? copy.positions[slotKey as keyof typeof copy.positions] : copy.pickPlayer)}
+            onBack={onClose}
+            backLabel={t.common.back}
+            testID="ck-grid-close"
+            showBorder={false}
+            trailing={<CoachKingMoney milli={budget} lang={language} size="sm" color={theme.budgetValue} />}
+          />
 
           <CoachKingLeagueChips
             options={LEAGUE_OPTIONS}
@@ -625,8 +615,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  header: { alignItems: 'center', justifyContent: 'space-between', columnGap: 12 },
-  headerTitle: { flex: 1, textAlign: 'center' },
   search: {
     alignSelf: 'center',
     alignItems: 'center',
