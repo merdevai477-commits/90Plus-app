@@ -1,10 +1,21 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { View, Text, Image, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
+import {
+  BlurMask,
+  Canvas,
+  Circle as SkCircle,
+  Group,
+  Skia,
+  SweepGradient,
+  useClock,
+  vec,
+} from '@shopify/react-native-skia';
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useDerivedValue,
   useReducedMotion,
   useSharedValue,
   withRepeat,
@@ -15,11 +26,95 @@ import { IridescentRim } from './IridescentRim';
 
 const BUBBLE_IMAGE = require('../../assets/images/chat/iridescent-bubble.png');
 
+/** Pastel soap-film hues for the light-mode liquid swirl. */
+const LIGHT_LIQUID = [
+  '#A3DDF9',
+  '#C4B5FD',
+  '#F9A8D4',
+  '#7DD3FC',
+  '#DDD6FE',
+  '#FDA4AF',
+  '#A78BFA',
+  '#A3DDF9',
+];
+
 export type ChatIridescentBubbleProps = {
   size: number;
 };
 
-/** Welcome orb: black-glass film in dark mode, pearl crystal in light mode. */
+/** Soft pastel liquid turning inside the light pearl shell (Skia). */
+function LightLiquidCore({ size, reduceMotion }: { size: number; reduceMotion: boolean }) {
+  const clock = useClock();
+  const c = size / 2;
+  const r = size * 0.485;
+
+  const spinA = useDerivedValue(() => {
+    if (reduceMotion) return 0.4;
+    return (clock.value / 1000) * 0.55;
+  });
+  const spinB = useDerivedValue(() => {
+    if (reduceMotion) return -0.9;
+    return -(clock.value / 1000) * 0.38 + 1.2;
+  });
+  const breathe = useDerivedValue(() => {
+    if (reduceMotion) return 1;
+    return 0.92 + 0.08 * Math.sin(clock.value / 1000 * 1.4);
+  });
+
+  const transformA = useDerivedValue(() => [{ rotate: spinA.value }]);
+  const transformB = useDerivedValue(() => [{ rotate: spinB.value }, { scale: breathe.value }]);
+
+  const clip = useMemo(() => {
+    if (Platform.OS === 'web') return null;
+    const p = Skia.Path.Make();
+    p.addCircle(c, c, r);
+    return p;
+  }, [c, r]);
+
+  if (!clip) return null;
+
+  return (
+    <Canvas style={[styles.layer, { width: size, height: size }]} pointerEvents="none">
+      <Group clip={clip}>
+        {/* Translucent pearl fill — liquid sits on top of this. */}
+        <SkCircle cx={c} cy={c} r={r} color="rgba(255,255,255,0.72)" />
+        <SkCircle cx={c * 0.78} cy={c * 0.68} r={r * 0.7} color="rgba(237,230,255,0.55)">
+          <BlurMask blur={18} style="normal" />
+        </SkCircle>
+
+        {/* Slow iridescent liquid wash — same energy as the night soap film. */}
+        <Group origin={vec(c, c)} transform={transformA}>
+          <SkCircle cx={c} cy={c} r={r * 0.92} opacity={0.55}>
+            <SweepGradient c={vec(c, c)} colors={LIGHT_LIQUID} />
+            <BlurMask blur={14} style="normal" />
+          </SkCircle>
+        </Group>
+        <Group origin={vec(c, c)} transform={transformB}>
+          <SkCircle cx={c * 0.7} cy={c * 1.15} r={r * 0.55} color="rgba(56,189,248,0.28)">
+            <BlurMask blur={22} style="normal" />
+          </SkCircle>
+          <SkCircle cx={c * 1.35} cy={c * 0.7} r={r * 0.42} color="rgba(244,114,182,0.26)">
+            <BlurMask blur={18} style="normal" />
+          </SkCircle>
+          <SkCircle cx={c * 0.85} cy={c * 0.55} r={r * 0.38} color="rgba(167,139,250,0.32)">
+            <BlurMask blur={16} style="normal" />
+          </SkCircle>
+        </Group>
+
+        {/* Center bleach so the liquid never reads as a black hole. */}
+        <SkCircle cx={c * 0.92} cy={c * 0.88} r={r * 0.55} color="rgba(255,255,255,0.55)">
+          <BlurMask blur={20} style="normal" />
+        </SkCircle>
+        {/* Specular. */}
+        <SkCircle cx={c * 0.7} cy={c * 0.58} r={r * 0.28} color="rgba(255,255,255,0.7)">
+          <BlurMask blur={10} style="normal" />
+        </SkCircle>
+      </Group>
+    </Canvas>
+  );
+}
+
+/** Welcome orb: black-glass soap film (dark) / pearl shell with living pastel liquid (light). */
 export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
   size,
 }: ChatIridescentBubbleProps) {
@@ -57,6 +152,15 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
     opacity: 0.45 - shimmer.value * 0.35,
     transform: [{ rotate: `${-spin.value * 0.7 + 140}deg` }],
   }));
+  /** Light mode: faint film flecks over the pastel liquid — keeps the night-orb DNA. */
+  const lightFilmStyle = useAnimatedStyle(() => ({
+    opacity: 0.12 + shimmer.value * 0.14,
+    transform: [{ rotate: `${spin.value}deg` }],
+  }));
+  const lightCounterFilmStyle = useAnimatedStyle(() => ({
+    opacity: 0.1 + shimmer.value * 0.08,
+    transform: [{ rotate: `${-spin.value * 0.7 + 140}deg` }],
+  }));
   const glowStyle = useAnimatedStyle(() => ({
     opacity: 0.55 + shimmer.value * 0.45,
   }));
@@ -68,9 +172,6 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
   const imageStyle = { width: size, height: size };
   const radius = size / 2;
   const glowId = isDark ? 'bubbleGlowDark' : 'bubbleGlowLight';
-  const pearlId = 'pearlCore';
-  const pearlRimId = 'pearlRim';
-  const pearlSpecId = 'pearlSpec';
 
   return (
     <Animated.View
@@ -114,30 +215,28 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
         </>
       ) : (
         <>
-          {/* Pearl crystal body — reads as glass on lavender, not a black hole. */}
-          <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.layer}>
+          <LightLiquidCore size={size} reduceMotion={!!reduceMotion} />
+          {/* Soft night-film flecks — low opacity so the liquid stays light. */}
+          <Animated.Image
+            source={BUBBLE_IMAGE}
+            style={[styles.layer, imageStyle, lightFilmStyle]}
+            resizeMode="contain"
+          />
+          <Animated.Image
+            source={BUBBLE_IMAGE}
+            style={[styles.layer, imageStyle, lightCounterFilmStyle]}
+            resizeMode="contain"
+          />
+          {/* Glass shell edge + specular over the liquid. */}
+          <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.layer} pointerEvents="none">
             <Defs>
-              <RadialGradient id={pearlId} cx="38%" cy="32%" r="68%">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-                <Stop offset="0.35" stopColor="#F7F2FF" stopOpacity="1" />
-                <Stop offset="0.72" stopColor="#E4D8FF" stopOpacity="1" />
-                <Stop offset="1" stopColor="#CDB8F5" stopOpacity="1" />
-              </RadialGradient>
-              <RadialGradient id={pearlRimId} cx="50%" cy="50%" r="50%">
-                <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity="0" />
-                <Stop offset="0.82" stopColor="#A78BFA" stopOpacity="0.22" />
-                <Stop offset="0.94" stopColor="#38BDF8" stopOpacity="0.28" />
-                <Stop offset="1" stopColor="#F472B6" stopOpacity="0.2" />
-              </RadialGradient>
-              <RadialGradient id={pearlSpecId} cx="35%" cy="28%" r="28%">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.95" />
-                <Stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.35" />
+              <RadialGradient id="lightShellSpec" cx="35%" cy="28%" r="28%">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.85" />
+                <Stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.25" />
                 <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
               </RadialGradient>
             </Defs>
-            <Circle cx="50" cy="50" r="48.5" fill={`url(#${pearlId})`} />
-            <Circle cx="50" cy="50" r="48.5" fill={`url(#${pearlRimId})`} />
-            <Ellipse cx="36" cy="30" rx="18" ry="12" fill={`url(#${pearlSpecId})`} />
+            <Ellipse cx="36" cy="30" rx="18" ry="12" fill="url(#lightShellSpec)" />
             <Circle
               cx="50"
               cy="50"
