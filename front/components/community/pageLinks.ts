@@ -53,15 +53,15 @@ export const APP_PAGES: readonly AppPage[] = [
   },
   {
     id: 'king',
-    href: '/king-of-predictions/week?mode=game',
+    href: '/king-of-predictions?mode=game',
     token: 'king',
     labelAr: 'ملك اللعبة',
     labelEn: 'King of the Game',
-    aliases: ['king', 'game', 'ملك-اللعبة', 'ملك_اللعبة', 'اللعبة', 'ملك-اللعبه'],
+    aliases: ['king', 'game', 'ملك-اللعبة', 'ملك_اللعبة', 'اللعبة', 'ملك-اللعبه', 'ملك-التوقعات', 'ملك_التوقعات'],
   },
   {
     id: 'king-results',
-    href: '/king-of-predictions/week?mode=results',
+    href: '/king-of-predictions?mode=results',
     token: 'results',
     labelAr: 'ملك النتائج',
     labelEn: 'King of Results',

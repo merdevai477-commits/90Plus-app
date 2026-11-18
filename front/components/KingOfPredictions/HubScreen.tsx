@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { KingHeader } from './KingHeader';
-import { KING_BG, KING_PURPLE, type KingRouteMode } from './shared';
+import { cairoTodayKey, KING_BG, KING_PURPLE, type KingRouteMode } from './shared';
 
 const GAME_ART = require('../../assets/images/king-of-predictions/card-game.png');
 const RESULTS_ART = require('../../assets/images/king-of-predictions/card-results.png');
@@ -23,8 +23,12 @@ export function KingHubScreen() {
   const fontSemi = useAppFont(600);
   const copy = t.kingPredictions;
 
+  // Figma play UI (2032:202) is the contest surface — open it directly with today's slate.
   const open = (mode: KingRouteMode) => {
-    router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
+    router.push({
+      pathname: '/king-of-predictions/play',
+      params: { mode, date: cairoTodayKey() },
+    } as never);
   };
 
   return (

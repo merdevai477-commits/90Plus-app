@@ -385,7 +385,7 @@ export function KingPlayScreen({
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.replace({ pathname: '/king-of-predictions/week', params: { mode } } as never);
+    else router.replace('/(tabs)/rank' as never);
   };
 
   const title = isGame ? copy.playModePredictions : copy.hubResultsTitle;
