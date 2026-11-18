@@ -1,9 +1,9 @@
 /**
- * Rank tab palette — light matches Figma 1957:131; dark keeps the existing arena look.
+ * Rank tab palette — same Figma 1957:131 layout in light and dark.
+ * Light tokens from the competitions frame; dark mirrors AUTH / GATE surfaces.
  */
 
 import { AUTH_LIGHT } from '../../src/components/auth/AuthTokens';
-import { APP_BG } from '../../constants/ui';
 
 export type RankTheme = {
   isDark: boolean;
@@ -46,38 +46,38 @@ export function getRankTheme(isDark: boolean): RankTheme {
   if (isDark) {
     return {
       isDark: true,
-      screen: APP_BG,
+      screen: '#08060F',
       headerTitle: '#FFFFFF',
       headerMuted: 'rgba(255,255,255,0.55)',
       searchBg: 'rgba(168,85,247,0.15)',
       searchBorder: 'rgba(168,85,247,0.35)',
-      searchIcon: '#e9d5ff',
+      searchIcon: '#E9D5FF',
       pillBg: 'rgba(255,255,255,0.07)',
-      pillBorder: 'rgba(255,255,255,0.1)',
+      pillBorder: 'rgba(255,255,255,0.12)',
       coinBg: 'rgba(255,255,255,0.07)',
-      coinBorder: 'rgba(255,255,255,0.1)',
-      coinText: '#fff',
-      cardTint: 'rgba(36, 14, 68, 0.22)',
+      coinBorder: 'rgba(255,255,255,0.12)',
+      coinText: '#FFFFFF',
+      cardTint: 'rgba(36, 14, 68, 0.55)',
       cardGlow: [0.72, 0.48, 1],
-      cardText: '#fff',
+      cardText: '#FFFFFF',
       cardMuted: 'rgba(255,255,255,0.55)',
       cardXpTrack: 'rgba(255,255,255,0.14)',
       cardXpCur: '#A855F7',
       cardXpMax: 'rgba(255,255,255,0.55)',
-      cardBorder: 'rgba(168,85,247,0.35)',
+      cardBorder: 'rgba(168,85,247,0.28)',
       levelBadge: '#A855F7',
       blurTint: 'dark',
-      blurIntensity: 28,
-      sheen: 0.85,
-      strength: 0.34,
-      stackCardBg: '#12081F',
-      stackCardBorder: '#2E1F50',
-      stackTitle: '#fff',
-      stackSub: '#9E9E9E',
-      stackCta: '#8C5CF5',
-      heroTitle: '#fff',
-      heroSub1: '#d4d4d4',
-      heroSub2: '#a49bad',
+      blurIntensity: 36,
+      sheen: 0.7,
+      strength: 0.28,
+      stackCardBg: '#120A22',
+      stackCardBorder: 'rgba(168,85,247,0.22)',
+      stackTitle: '#FFFFFF',
+      stackSub: 'rgba(255,255,255,0.55)',
+      stackCta: '#A855F7',
+      heroTitle: '#FFFFFF',
+      heroSub1: 'rgba(255,255,255,0.72)',
+      heroSub2: 'rgba(255,255,255,0.45)',
       refresh: '#A855F7',
     };
   }
@@ -95,7 +95,6 @@ export function getRankTheme(isDark: boolean): RankTheme {
     coinBg: '#FFFFFF',
     coinBorder: 'rgba(106,43,217,0.18)',
     coinText: AUTH_LIGHT.textPrimary,
-    // Soft lavender glass so liquid frost reads on the light page.
     cardTint: 'rgba(246, 242, 253, 0.55)',
     cardGlow: [0.55, 0.3, 0.9],
     cardText: AUTH_LIGHT.textPrimary,
@@ -142,5 +141,16 @@ export const RANK_LIGHT_ELEVATION = {
     shadowOpacity: 0.18,
     shadowRadius: 3,
     elevation: 3,
+  },
+} as const;
+
+/** Dark stack elevation — slightly stronger so cards lift off #08060F. */
+export const RANK_DARK_ELEVATION = {
+  stack: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
 } as const;

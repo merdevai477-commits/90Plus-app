@@ -21,7 +21,7 @@ import {
 import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { getCompCardMetrics, getCompCardMetricsForLayout } from './compCardMetrics';
-import { getRankTheme, RANK_LIGHT_ELEVATION } from './rankTheme';
+import { getRankTheme, RANK_DARK_ELEVATION, RANK_LIGHT_ELEVATION } from './rankTheme';
 
 export {
   COMP_CARD_HEIGHT,
@@ -69,7 +69,7 @@ const CompCard: React.FC<CompCardProps> = ({
   style,
 }) => {
   const scrim = photoScrim ? SCRIM.photo : SCRIM.art;
-  const { t, isRTL } = useTranslation();
+  const { t, language } = useTranslation();
   const { isDark } = useResolvedAppScheme();
   const theme = useMemo(() => getRankTheme(isDark), [isDark]);
   const ctaLabel = actionText ?? t.rank.playNow;
@@ -79,10 +79,12 @@ const CompCard: React.FC<CompCardProps> = ({
     [slotWidth],
   );
   const overlayStyles = useMemo(() => createOverlayStyles(m), [m]);
+  /** App keeps I18nManager LTR; mirror stack chrome from language like the Rank screen. */
+  const isAr = language === 'ar';
   /** Figma 1957:566 — AR: title block on the right, CTA on the left with ← before label. */
-  const Chevron = isRTL ? ChevronLeft : ChevronRight;
-  const textAlign = isRTL ? ('right' as const) : ('left' as const);
-  const alignEnd = isRTL ? ('flex-end' as const) : ('flex-start' as const);
+  const Chevron = isAr ? ChevronLeft : ChevronRight;
+  const textAlign = isAr ? ('right' as const) : ('left' as const);
+  const alignEnd = isAr ? ('flex-end' as const) : ('flex-start' as const);
 
   if (variant === 'stack') {
     return (
@@ -90,7 +92,7 @@ const CompCard: React.FC<CompCardProps> = ({
         onPress={onPress}
         style={({ pressed }) => [
           stackStyles.card,
-          RANK_LIGHT_ELEVATION.stack,
+          isDark ? RANK_DARK_ELEVATION.stack : RANK_LIGHT_ELEVATION.stack,
           {
             backgroundColor: theme.stackCardBg,
             borderColor: theme.stackCardBorder,
@@ -117,14 +119,14 @@ const CompCard: React.FC<CompCardProps> = ({
         <View
           style={[
             stackStyles.footer,
-            { flexDirection: isRTL ? 'row-reverse' : 'row' },
+            { flexDirection: isAr ? 'row-reverse' : 'row' },
           ]}
         >
           <View style={[stackStyles.copy, { alignItems: alignEnd }]}>
             <Text
               style={[
                 stackStyles.title,
-                { color: theme.stackTitle, textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' },
+                { color: theme.stackTitle, textAlign, writingDirection: isAr ? 'rtl' : 'ltr' },
               ]}
               numberOfLines={1}
             >
@@ -133,7 +135,7 @@ const CompCard: React.FC<CompCardProps> = ({
             <Text
               style={[
                 stackStyles.sub,
-                { color: theme.stackSub, textAlign, writingDirection: isRTL ? 'rtl' : 'ltr' },
+                { color: theme.stackSub, textAlign, writingDirection: isAr ? 'rtl' : 'ltr' },
               ]}
               numberOfLines={1}
             >
@@ -142,11 +144,11 @@ const CompCard: React.FC<CompCardProps> = ({
           </View>
           {/* Physical order matches Figma AR: ← label ; EN flips to label → */}
           <View style={stackStyles.cta}>
-            {isRTL ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
+            {isAr ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
             <Text style={[stackStyles.ctaText, { color: theme.stackCta }]} numberOfLines={1}>
               {ctaLabel}
             </Text>
-            {!isRTL ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
+            {!isAr ? <Chevron size={18} color={theme.stackCta} strokeWidth={2.4} /> : null}
           </View>
         </View>
       </Pressable>
@@ -182,7 +184,7 @@ const CompCard: React.FC<CompCardProps> = ({
 
       <View style={overlayStyles.content}>
         <View style={overlayStyles.textBlock}>
-          <View style={[overlayStyles.titleRow, isRTL && overlayStyles.titleRowRtl]}>
+          <View style={[overlayStyles.titleRow, isAr && overlayStyles.titleRowRtl]}>
             <Text style={overlayStyles.title} numberOfLines={2}>
               {title}
             </Text>
@@ -195,7 +197,7 @@ const CompCard: React.FC<CompCardProps> = ({
           </Text>
         </View>
 
-        <View style={[overlayStyles.cta, isRTL && overlayStyles.ctaRtl]}>
+        <View style={[overlayStyles.cta, isAr && overlayStyles.ctaRtl]}>
           <Text style={overlayStyles.ctaText} numberOfLines={1}>
             {ctaLabel}
           </Text>
