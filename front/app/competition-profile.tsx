@@ -35,7 +35,7 @@ import TeamBadge from '../components/common/TeamBadge';
 import LeagueIcon from '../components/common/LeagueIcon';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import MatchesTab from '../components/TeamProfile/MatchesTab';
-import { getProfileSurface } from '../components/TeamProfile/profileSurface';
+import { getProfileSurface, ProfileSurfaceProvider } from '../components/TeamProfile/profileSurface';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
 type TabKey = 'scorers' | 'matches' | 'table';
@@ -176,15 +176,39 @@ export default function CompetitionProfileScreen() {
   const showFullScreenLoader =
     competitionId > 0 && infoQ.isLoading && !info && !params.name && !params.logo;
 
+  const cardElevation = surface.isDark
+    ? null
+    : {
+        shadowColor: '#2A1060',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 3,
+      };
+
   return (
+    <ProfileSurfaceProvider value={surface}>
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: surface.screen }]}>
       <StatusBar barStyle={surface.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
       <View style={styles.topBar}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={[styles.backBtn, { backgroundColor: surface.backBg, borderWidth: 1, borderColor: surface.border }]}
+          style={[
+            styles.backBtn,
+            {
+              backgroundColor: surface.backBg,
+              borderColor: surface.border,
+              shadowColor: surface.isDark ? '#000' : '#7C4DFF',
+              shadowOpacity: surface.isDark ? 0.35 : 0.22,
+              elevation: 6,
+            },
+          ]}
         >
-          <Ionicons name="chevron-back" size={22} color={surface.text} />
+          <Ionicons
+            name="chevron-back"
+            size={22}
+            color={surface.isDark ? surface.text : surface.accent}
+          />
         </TouchableOpacity>
         <Text style={[styles.topTitle, { color: surface.text }]} numberOfLines={1}>
           {cp.title}
@@ -210,9 +234,9 @@ export default function CompetitionProfileScreen() {
             <Text style={[styles.name, { color: surface.text }]}>{displayName}</Text>
             {country ? <Text style={[styles.meta, { color: surface.muted }]}>{country}</Text> : null}
             {following ? (
-              <Text style={styles.followHint}>{cp.followNotifHint}</Text>
+              <Text style={[styles.followHint, { color: surface.accent }]}>{cp.followNotifHint}</Text>
             ) : (
-              <Text style={styles.followHintMuted}>{cp.followNotifHintOff}</Text>
+              <Text style={[styles.followHintMuted, { color: surface.muted }]}>{cp.followNotifHintOff}</Text>
             )}
             {competitionId > 0 ? (
               <TouchableOpacity
@@ -250,11 +274,23 @@ export default function CompetitionProfileScreen() {
               return (
                 <TouchableOpacity
                   key={key}
-                  style={[styles.tabChip, active && styles.tabChipActive]}
+                  style={[
+                    styles.tabChip,
+                    {
+                      backgroundColor: active ? surface.chipBgActive : surface.chipBg,
+                      borderWidth: 1,
+                      borderColor: active ? surface.chipBgActive : surface.border,
+                    },
+                  ]}
                   onPress={() => setTab(key)}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      { color: active ? surface.chipTextActive : surface.chipText },
+                    ]}
+                  >
                     {tabLabel(key)}
                   </Text>
                 </TouchableOpacity>
@@ -264,12 +300,14 @@ export default function CompetitionProfileScreen() {
 
           {tab === 'scorers' ? (
             <View>
-              <Text style={styles.section}>{cp.scorers ?? cp.topScorers}</Text>
+              <Text style={[styles.section, { color: surface.textStrong }]}>
+                {cp.scorers ?? cp.topScorers}
+              </Text>
               {statsQ.isLoading ? (
                 <ActivityIndicator color={Colors.purpleSoft} style={{ marginVertical: 20 }} />
               ) : statsQ.isError || statsQ.data?.unavailable ? (
                 <View style={styles.scorersError}>
-                  <Text style={styles.mutedCenter}>
+                  <Text style={[styles.mutedCenter, { color: surface.muted }]}>
                     {cp.statsUnavailable ?? cp.noScorers}
                   </Text>
                   <TouchableOpacity
@@ -281,7 +319,7 @@ export default function CompetitionProfileScreen() {
                   </TouchableOpacity>
                 </View>
               ) : boards.length === 0 ? (
-                <Text style={styles.mutedCenter}>{cp.noScorers}</Text>
+                <Text style={[styles.mutedCenter, { color: surface.muted }]}>{cp.noScorers}</Text>
               ) : (
                 <View>
                   <ScrollView
@@ -294,12 +332,21 @@ export default function CompetitionProfileScreen() {
                       return (
                         <TouchableOpacity
                           key={`board-${board.key}-${board.typeId ?? 'x'}-${boardIdx}`}
-                          style={[styles.boardChip, active && styles.boardChipActive]}
+                          style={[
+                            styles.boardChip,
+                            {
+                              backgroundColor: active ? surface.accentSoft : surface.chipBg,
+                              borderColor: active ? surface.accent : surface.border,
+                            },
+                          ]}
                           onPress={() => setBoardKey(board.key)}
                           activeOpacity={0.85}
                         >
                           <Text
-                            style={[styles.boardChipText, active && styles.boardChipTextActive]}
+                            style={[
+                              styles.boardChipText,
+                              { color: active ? surface.accent : surface.chipText },
+                            ]}
                             numberOfLines={1}
                           >
                             {boardLabel(board, language, cp.topScorers)}
@@ -309,31 +356,40 @@ export default function CompetitionProfileScreen() {
                     })}
                   </ScrollView>
 
-                  <View style={styles.card}>
+                  <View
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: surface.card,
+                        borderColor: surface.border,
+                      },
+                      cardElevation,
+                    ]}
+                  >
                     {boardRows.map((row, idx) => (
                       <TouchableOpacity
                         key={`scorer-${activeBoard?.key ?? 'b'}-${row.athleteId || 'x'}-${idx}`}
-                        style={styles.scorerRow}
+                        style={[styles.scorerRow, { borderTopColor: surface.border }]}
                         activeOpacity={0.8}
                         onPress={() => openPlayer(row)}
                       >
-                        <Text style={styles.scorerRank}>{idx + 1}</Text>
+                        <Text style={[styles.scorerRank, { color: surface.muted }]}>{idx + 1}</Text>
                         <CachedAthletePhoto
                           uri={row.photo}
                           size={40}
                           recyclingKey={row.athleteId}
                         />
                         <View style={styles.scorerInfo}>
-                          <Text style={styles.scorerName} numberOfLines={1}>
+                          <Text style={[styles.scorerName, { color: surface.textStrong }]} numberOfLines={1}>
                             {row.name}
                           </Text>
                           {row.positionName ? (
-                            <Text style={styles.scorerPos} numberOfLines={1}>
+                            <Text style={[styles.scorerPos, { color: surface.muted }]} numberOfLines={1}>
                               {row.positionName}
                             </Text>
                           ) : null}
                         </View>
-                        <Text style={styles.scorerValue}>{row.value}</Text>
+                        <Text style={[styles.scorerValue, { color: surface.accent }]}>{row.value}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -357,27 +413,39 @@ export default function CompetitionProfileScreen() {
 
           {tab === 'table' ? (
             <View>
-              <Text style={styles.section}>{cp.table}</Text>
+              <Text style={[styles.section, { color: surface.textStrong }]}>{cp.table}</Text>
               {!hasStandings ? (
-                <Text style={styles.mutedCenter}>{cp.noTable}</Text>
+                <Text style={[styles.mutedCenter, { color: surface.muted }]}>{cp.noTable}</Text>
               ) : standingsQ.isLoading ? (
                 <ActivityIndicator color={Colors.purpleSoft} style={{ marginTop: 24 }} />
               ) : groups.length === 0 ? (
-                <Text style={styles.mutedCenter}>{cp.noTable}</Text>
+                <Text style={[styles.mutedCenter, { color: surface.muted }]}>{cp.noTable}</Text>
               ) : (
                 groups.map(([groupNum, group]) => (
-                  <View key={`standings-group-${groupNum}`} style={styles.tableCard}>
-                    {group.name ? <Text style={styles.groupName}>{group.name}</Text> : null}
-                    <View style={styles.headerRow}>
-                      <Text style={styles.cellPos}>#</Text>
-                      <Text style={[styles.teamName, { flex: 1 }]}>{' '}</Text>
-                      <Text style={styles.cell}>P</Text>
-                      <Text style={styles.cellPts}>Pts</Text>
+                  <View
+                    key={`standings-group-${groupNum}`}
+                    style={[
+                      styles.tableCard,
+                      {
+                        backgroundColor: surface.card,
+                        borderColor: surface.border,
+                      },
+                      cardElevation,
+                    ]}
+                  >
+                    {group.name ? (
+                      <Text style={[styles.groupName, { color: surface.secondary }]}>{group.name}</Text>
+                    ) : null}
+                    <View style={[styles.headerRow, { borderBottomColor: surface.border }]}>
+                      <Text style={[styles.cellPos, { color: surface.muted }]}>#</Text>
+                      <Text style={[styles.teamName, { flex: 1, color: surface.textStrong }]}>{' '}</Text>
+                      <Text style={[styles.cell, { color: surface.secondary }]}>P</Text>
+                      <Text style={[styles.cellPts, { color: surface.textStrong }]}>Pts</Text>
                     </View>
                     {group.rows.map((row, rowIdx) => (
                       <TouchableOpacity
                         key={`standings-row-${groupNum}-${row.teamId || 't'}-${row.position}-${rowIdx}`}
-                        style={styles.row}
+                        style={[styles.row, { borderTopColor: surface.border }]}
                         onPress={() =>
                           router.push({
                             pathname: '/team-profile' as any,
@@ -389,7 +457,7 @@ export default function CompetitionProfileScreen() {
                           } as any)
                         }
                       >
-                        <Text style={styles.cellPos}>{row.position}</Text>
+                        <Text style={[styles.cellPos, { color: surface.muted }]}>{row.position}</Text>
                         <View style={styles.teamCell}>
                           <TeamBadge
                             name={row.teamName}
@@ -397,12 +465,12 @@ export default function CompetitionProfileScreen() {
                             size={22}
                             color="transparent"
                           />
-                          <Text style={styles.teamName} numberOfLines={1}>
+                          <Text style={[styles.teamName, { color: surface.textStrong }]} numberOfLines={1}>
                             {getTeamDisplayName(row.teamName, language)}
                           </Text>
                         </View>
-                        <Text style={styles.cell}>{row.gamePlayed}</Text>
-                        <Text style={styles.cellPts}>{row.points}</Text>
+                        <Text style={[styles.cell, { color: surface.secondary }]}>{row.gamePlayed}</Text>
+                        <Text style={[styles.cellPts, { color: surface.textStrong }]}>{row.points}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -413,6 +481,7 @@ export default function CompetitionProfileScreen() {
         </ScrollView>
       )}
     </View>
+    </ProfileSurfaceProvider>
   );
 }
 
@@ -426,12 +495,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: 42,
+    height: 42,
     borderRadius: Radius.full,
-    backgroundColor: Colors.white08,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
   },
   topTitle: {
     color: Colors.textPrimary,
@@ -619,6 +690,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: Spacing.base,
     paddingVertical: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',

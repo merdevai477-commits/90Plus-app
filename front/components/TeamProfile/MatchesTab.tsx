@@ -16,6 +16,7 @@ import { getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import { Card, EmptyState, MatchRow } from './shared';
 import { deriveCompetitions } from './utils';
+import { useProfileSurface } from './profileSurface';
 
 type StatusFilter = 'all' | 'live' | 'upcoming' | 'finished';
 
@@ -27,6 +28,7 @@ interface MatchesTabProps {
 }
 
 export default function MatchesTab({ matches, language, t, onOpenMatch }: MatchesTabProps) {
+    const surface = useProfileSurface();
     const live = matches?.live ?? [];
     const upcoming = matches?.upcoming ?? [];
     const finished = matches?.finished ?? [];
@@ -80,14 +82,30 @@ export default function MatchesTab({ matches, language, t, onOpenMatch }: Matche
                     return (
                         <TouchableOpacity
                             key={f.key}
-                            style={[styles.statusChip, active && styles.statusChipActive]}
+                            style={[
+                                styles.statusChip,
+                                {
+                                    backgroundColor: active ? surface.chipBgActive : surface.chipBg,
+                                    borderColor: active ? surface.chipBgActive : surface.border,
+                                },
+                            ]}
                             onPress={() => setStatus(f.key)}
                         >
                             {isLive ? <View style={styles.liveDot} /> : null}
-                            <Text style={[styles.statusText, active && styles.statusTextActive]}>
+                            <Text
+                                style={[
+                                    styles.statusText,
+                                    { color: active ? surface.chipTextActive : surface.chipText },
+                                ]}
+                            >
                                 {f.label}
                             </Text>
-                            <Text style={[styles.statusCount, active && styles.statusCountActive]}>
+                            <Text
+                                style={[
+                                    styles.statusCount,
+                                    { color: active ? surface.chipTextActive : surface.muted },
+                                ]}
+                            >
                                 {f.count}
                             </Text>
                         </TouchableOpacity>
@@ -103,10 +121,25 @@ export default function MatchesTab({ matches, language, t, onOpenMatch }: Matche
                     contentContainerStyle={styles.compRow}
                 >
                     <TouchableOpacity
-                        style={[styles.compChip, league == null && styles.compChipActive]}
+                        style={[
+                            styles.compChip,
+                            {
+                                backgroundColor:
+                                    league == null ? surface.chipBgActive : surface.chipBg,
+                                borderColor: league == null ? surface.chipBgActive : surface.border,
+                            },
+                        ]}
                         onPress={() => setLeague(null)}
                     >
-                        <Text style={[styles.compText, league == null && styles.compTextActive]}>
+                        <Text
+                            style={[
+                                styles.compText,
+                                {
+                                    color: league == null ? surface.chipTextActive : surface.chipText,
+                                    fontWeight: league == null ? FontWeight.semibold : FontWeight.regular,
+                                },
+                            ]}
+                        >
                             {t.teamProfile.allCompetitions}
                         </Text>
                     </TouchableOpacity>
@@ -115,13 +148,28 @@ export default function MatchesTab({ matches, language, t, onOpenMatch }: Matche
                         return (
                             <TouchableOpacity
                                 key={c.id}
-                                style={[styles.compChip, active && styles.compChipActive]}
+                                style={[
+                                    styles.compChip,
+                                    {
+                                        backgroundColor: active ? surface.accentSoft : surface.chipBg,
+                                        borderColor: active ? surface.accent : surface.border,
+                                    },
+                                ]}
                                 onPress={() => setLeague(c.id)}
                             >
                                 {c.logo ? (
                                     <Image source={{ uri: c.logo }} style={styles.compLogo} contentFit="contain" />
                                 ) : null}
-                                <Text style={[styles.compText, active && styles.compTextActive]} numberOfLines={1}>
+                                <Text
+                                    style={[
+                                        styles.compText,
+                                        {
+                                            color: active ? surface.accent : surface.chipText,
+                                            fontWeight: active ? FontWeight.semibold : FontWeight.regular,
+                                        },
+                                    ]}
+                                    numberOfLines={1}
+                                >
                                     {getLeagueDisplayName(c.name, language, c.id, c.country)}
                                 </Text>
                             </TouchableOpacity>
@@ -169,29 +217,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.base,
         paddingVertical: Spacing.sm,
         borderRadius: Radius.chip,
-        backgroundColor: Colors.white04,
         borderWidth: 1,
-        borderColor: Colors.borderSubtle,
-    },
-    statusChipActive: {
-        backgroundColor: Colors.purplePrimary,
-        borderColor: Colors.purplePrimary,
     },
     statusText: {
-        color: Colors.textSecondary,
         fontSize: FontSize.lg,
         fontWeight: FontWeight.semibold,
     },
-    statusTextActive: {
-        color: Colors.white,
-    },
     statusCount: {
-        color: Colors.textMuted,
         fontSize: FontSize.sm,
         fontWeight: FontWeight.bold,
-    },
-    statusCountActive: {
-        color: Colors.white80,
     },
     liveDot: {
         width: 6,
@@ -210,26 +244,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.md,
         paddingVertical: Spacing.sm,
         borderRadius: Radius.chip,
-        backgroundColor: Colors.white04,
         borderWidth: 1,
-        borderColor: Colors.borderSubtle,
-    },
-    compChipActive: {
-        backgroundColor: Colors.purpleMuted,
-        borderColor: Colors.purpleSoft,
     },
     compLogo: {
         width: 16,
         height: 16,
     },
     compText: {
-        color: Colors.textSecondary,
         fontSize: FontSize.base,
         maxWidth: 150,
-    },
-    compTextActive: {
-        color: Colors.purpleSoft,
-        fontWeight: FontWeight.semibold,
     },
     list: {
         paddingHorizontal: Spacing.base,

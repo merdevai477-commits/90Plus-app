@@ -36,6 +36,7 @@ import {
     formatTime,
 } from './shared';
 import { computeStatsFromFixtures, getMatchPhase, formatMatchCardDate } from './utils';
+import { useProfileSurface } from './profileSurface';
 
 interface OverviewTabProps {
     competitorId: number;
@@ -63,6 +64,7 @@ function FeaturedMatchCard({
     t: TranslationKeys;
     onPress: () => void;
 }) {
+    const surface = useProfileSurface();
     const merged = useMergedFixture(fixture);
     const home = fixture.teams?.home;
     const away = fixture.teams?.away;
@@ -78,7 +80,10 @@ function FeaturedMatchCard({
                         {league ? (
                             <>
                                 <LeagueIcon name={league.name} logo={league.logo} leagueId={league.id} size={20} />
-                                <Text style={styles.featuredLeagueText} numberOfLines={1}>
+                                <Text
+                                    style={[styles.featuredLeagueText, { color: surface.secondary }]}
+                                    numberOfLines={1}
+                                >
                                     {getLeagueDisplayName(league.name, language, league.id, league.country)}
                                 </Text>
                             </>
@@ -101,7 +106,10 @@ function FeaturedMatchCard({
                 <View style={styles.featuredBody}>
                     <View style={styles.featuredTeam}>
                         <TeamBadge name={home?.name ?? ''} logo={home?.logo} size={52} color="transparent" />
-                        <Text style={styles.featuredTeamName} numberOfLines={2}>
+                        <Text
+                            style={[styles.featuredTeamName, { color: surface.textStrong }]}
+                            numberOfLines={2}
+                        >
                             {getTeamDisplayName(home?.name, language)}
                         </Text>
                     </View>
@@ -109,11 +117,21 @@ function FeaturedMatchCard({
                     <View style={styles.featuredCenter}>
                         {isUpcoming ? (
                             <>
-                                <Text style={styles.featuredTime}>{formatTime(kickoff)}</Text>
-                                <Text style={styles.featuredDate}>{formatMatchCardDate(kickoff, t.teamProfile.weekdayShort)}</Text>
+                                <Text style={[styles.featuredTime, { color: surface.textStrong }]}>
+                                    {formatTime(kickoff)}
+                                </Text>
+                                <Text style={[styles.featuredDate, { color: surface.secondary }]}>
+                                    {formatMatchCardDate(kickoff, t.teamProfile.weekdayShort)}
+                                </Text>
                             </>
                         ) : (
-                            <Text style={[styles.featuredScore, merged.phase === 'live' && styles.featuredScoreLive]}>
+                            <Text
+                                style={[
+                                    styles.featuredScore,
+                                    { color: surface.textStrong },
+                                    merged.phase === 'live' && styles.featuredScoreLive,
+                                ]}
+                            >
                                 {merged.homeGoals ?? 0} - {merged.awayGoals ?? 0}
                             </Text>
                         )}
@@ -121,7 +139,10 @@ function FeaturedMatchCard({
 
                     <View style={styles.featuredTeam}>
                         <TeamBadge name={away?.name ?? ''} logo={away?.logo} size={52} color="transparent" />
-                        <Text style={styles.featuredTeamName} numberOfLines={2}>
+                        <Text
+                            style={[styles.featuredTeamName, { color: surface.textStrong }]}
+                            numberOfLines={2}
+                        >
                             {getTeamDisplayName(away?.name, language)}
                         </Text>
                     </View>
@@ -129,8 +150,8 @@ function FeaturedMatchCard({
 
                 {fixture.fixture?.venue?.name ? (
                     <View style={styles.featuredVenue}>
-                        <Ionicons name="location-outline" size={13} color={Colors.textMuted} />
-                        <Text style={styles.featuredVenueText} numberOfLines={1}>
+                        <Ionicons name="location-outline" size={13} color={surface.muted} />
+                        <Text style={[styles.featuredVenueText, { color: surface.muted }]} numberOfLines={1}>
                             {fixture.fixture.venue.name}
                             {fixture.fixture.venue.city ? ` • ${fixture.fixture.venue.city}` : ''}
                         </Text>
@@ -152,6 +173,7 @@ function SeasonForm({
     finished: Fixture[];
     t: TranslationKeys;
 }) {
+    const surface = useProfileSurface();
     const stats = useMemo(
         () => computeStatsFromFixtures(finished, competitorId),
         [finished, competitorId],
@@ -172,7 +194,9 @@ function SeasonForm({
             <View style={styles.statsHeader}>
                 <WinRateRing percent={stats.winRate} />
                 <View style={styles.statsHeaderRight}>
-                    <Text style={styles.winRateLabel}>{t.teamProfile.winRate}</Text>
+                    <Text style={[styles.winRateLabel, { color: surface.secondary }]}>
+                        {t.teamProfile.winRate}
+                    </Text>
                     <View style={styles.wdlRow}>
                         <Text style={[styles.wdl, { color: Colors.success }]}>
                             {stats.wins}
@@ -189,7 +213,9 @@ function SeasonForm({
                     </View>
                     {stats.form.length > 0 ? (
                         <View style={styles.formWrap}>
-                            <Text style={styles.formLabel}>{t.teamProfile.form}</Text>
+                            <Text style={[styles.formLabel, { color: surface.secondary }]}>
+                                {t.teamProfile.form}
+                            </Text>
                             <FormBadges form={stats.form} />
                         </View>
                     ) : null}
@@ -228,6 +254,7 @@ function TopScorers({
     language: Language;
     onOpenPlayer: (athleteId: number, name: string, photo: string | null) => void;
 }) {
+    const surface = useProfileSurface();
     // Prefer the goals board; fall back to the first available leaderboard.
     const board = useMemo(() => {
         const boards = stats?.leaderboards ?? [];
@@ -260,23 +287,23 @@ function TopScorers({
             {rows.map((row, idx) => (
                 <TouchableOpacity
                     key={`${row.athleteId}-${idx}`}
-                    style={styles.scorerRow}
+                    style={[styles.scorerRow, { borderBottomColor: surface.border }]}
                     activeOpacity={0.8}
                     onPress={() => onOpenPlayer(row.athleteId, row.name, row.photo)}
                 >
-                    <Text style={styles.scorerRank}>{idx + 1}</Text>
+                    <Text style={[styles.scorerRank, { color: surface.muted }]}>{idx + 1}</Text>
                     <CachedAthletePhoto uri={row.photo} size={36} recyclingKey={row.athleteId} />
                     <View style={styles.scorerInfo}>
-                        <Text style={styles.scorerName} numberOfLines={1}>
+                        <Text style={[styles.scorerName, { color: surface.textStrong }]} numberOfLines={1}>
                             {row.name}
                         </Text>
                         {row.leftClub && row.competitorId !== competitorId ? (
-                            <Text style={styles.scorerLeft} numberOfLines={1}>
+                            <Text style={[styles.scorerLeft, { color: surface.muted }]} numberOfLines={1}>
                                 {t.teamProfile.leftClub}
                             </Text>
                         ) : null}
                     </View>
-                    <Text style={styles.scorerValue}>{row.value}</Text>
+                    <Text style={[styles.scorerValue, { color: surface.accent }]}>{row.value}</Text>
                 </TouchableOpacity>
             ))}
         </Card>
@@ -297,6 +324,7 @@ export default function OverviewTab({
     onOpenPlayer,
     onOpenCoach,
 }: OverviewTabProps) {
+    const surface = useProfileSurface();
     const live = matches?.live ?? [];
     const upcoming = matches?.upcoming ?? [];
     const finished = matches?.finished ?? [];
@@ -326,12 +354,14 @@ export default function OverviewTab({
                             recyclingKey={coach.athleteId}
                         />
                         <View style={styles.coachInfo}>
-                            <Text style={styles.coachLabel}>{t.teamProfile.coachInformation}</Text>
-                            <Text style={styles.coachName} numberOfLines={1}>
+                            <Text style={[styles.coachLabel, { color: surface.muted }]}>
+                                {t.teamProfile.coachInformation}
+                            </Text>
+                            <Text style={[styles.coachName, { color: surface.textStrong }]} numberOfLines={1}>
                                 {coach.name}
                             </Text>
                             {coach.nationality || coach.age ? (
-                                <Text style={styles.coachMeta} numberOfLines={1}>
+                                <Text style={[styles.coachMeta, { color: surface.secondary }]} numberOfLines={1}>
                                     {[coach.nationality, coach.age != null ? String(coach.age) : null]
                                         .filter(Boolean)
                                         .join(' · ')}
@@ -340,15 +370,21 @@ export default function OverviewTab({
                         </View>
                     </View>
                     {coach.bio ? (
-                        <Text style={styles.coachBio} numberOfLines={3}>
+                        <Text style={[styles.coachBio, { color: surface.secondary }]} numberOfLines={3}>
                             {coach.bio}
                         </Text>
                     ) : null}
                     {coach.trophies && coach.trophies.length > 0 ? (
                         <View style={styles.coachTrophies}>
                             {coach.trophies.slice(0, 4).map((trophy) => (
-                                <View key={`${trophy.competitionId}-${trophy.name}`} style={styles.trophyChip}>
-                                    <Text style={styles.trophyChipText} numberOfLines={1}>
+                                <View
+                                    key={`${trophy.competitionId}-${trophy.name}`}
+                                    style={[styles.trophyChip, { backgroundColor: surface.accentSoft }]}
+                                >
+                                    <Text
+                                        style={[styles.trophyChipText, { color: surface.secondary }]}
+                                        numberOfLines={1}
+                                    >
                                         {trophy.displayName || trophy.name}
                                         {trophy.count > 1 ? ` ×${trophy.count}` : ''}
                                     </Text>
@@ -362,7 +398,7 @@ export default function OverviewTab({
 
             {/* Featured / Next match */}
             <View style={styles.section}>
-                <Text style={styles.blockTitle}>
+                <Text style={[styles.blockTitle, { color: surface.textStrong }]}>
                     {featured && getMatchPhase(featured.fixture?.status?.short) === 'live'
                         ? t.matches.tabs.live
                         : t.teamProfile.nextMatch}
@@ -440,21 +476,17 @@ const styles = StyleSheet.create({
         gap: 2,
     },
     coachLabel: {
-        color: Colors.textMuted,
         fontSize: FontSize.sm,
         fontWeight: FontWeight.semibold,
     },
     coachName: {
-        color: Colors.textPrimary,
         fontSize: FontSize.xl,
         fontWeight: FontWeight.bold,
     },
     coachMeta: {
-        color: Colors.textSecondary,
         fontSize: FontSize.sm,
     },
     coachBio: {
-        color: Colors.textSecondary,
         fontSize: FontSize.sm,
         lineHeight: 18,
         marginTop: Spacing.sm,
@@ -466,21 +498,18 @@ const styles = StyleSheet.create({
         marginTop: Spacing.sm,
     },
     trophyChip: {
-        backgroundColor: Colors.white08,
         borderRadius: Radius.full,
         paddingHorizontal: Spacing.sm,
         paddingVertical: 4,
         maxWidth: '100%',
     },
     trophyChipText: {
-        color: Colors.textSecondary,
         fontSize: FontSize.xs,
     },
     section: {
         gap: Spacing.sm,
     },
     blockTitle: {
-        color: Colors.textPrimary,
         fontSize: FontSize['3xl'],
         fontWeight: FontWeight.bold,
         marginBottom: Spacing.xs,
@@ -500,7 +529,6 @@ const styles = StyleSheet.create({
         marginRight: Spacing.sm,
     },
     featuredLeagueText: {
-        color: Colors.textSecondary,
         fontSize: FontSize.md,
         flex: 1,
     },
@@ -514,7 +542,6 @@ const styles = StyleSheet.create({
         gap: Spacing.sm,
     },
     featuredTeamName: {
-        color: Colors.textPrimary,
         fontSize: FontSize.md,
         fontWeight: FontWeight.semibold,
         textAlign: 'center',
@@ -526,7 +553,6 @@ const styles = StyleSheet.create({
         minWidth: 72,
     },
     featuredScore: {
-        color: Colors.textPrimary,
         fontSize: FontSize['7xl'],
         fontWeight: FontWeight.extrabold,
     },
@@ -534,12 +560,10 @@ const styles = StyleSheet.create({
         color: Colors.live,
     },
     featuredTime: {
-        color: Colors.textPrimary,
         fontSize: FontSize['4xl'],
         fontWeight: FontWeight.bold,
     },
     featuredDate: {
-        color: Colors.textSecondary,
         fontSize: FontSize.md,
         marginTop: 2,
     },
@@ -551,7 +575,6 @@ const styles = StyleSheet.create({
         marginTop: Spacing.base,
     },
     featuredVenueText: {
-        color: Colors.textMuted,
         fontSize: FontSize.md,
     },
     // Season stats
@@ -566,7 +589,6 @@ const styles = StyleSheet.create({
         gap: Spacing.sm,
     },
     winRateLabel: {
-        color: Colors.textSecondary,
         fontSize: FontSize.md,
     },
     wdlRow: {
@@ -581,7 +603,6 @@ const styles = StyleSheet.create({
         gap: Spacing.xs,
     },
     formLabel: {
-        color: Colors.textSecondary,
         fontSize: FontSize.sm,
     },
     statsGrid: {
@@ -596,10 +617,8 @@ const styles = StyleSheet.create({
         gap: Spacing.md,
         paddingVertical: Spacing.sm,
         borderBottomWidth: 1,
-        borderBottomColor: Colors.borderSubtle,
     },
     scorerRank: {
-        color: Colors.textMuted,
         fontSize: FontSize.lg,
         fontWeight: FontWeight.bold,
         width: 20,
@@ -615,17 +634,14 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scorerName: {
-        color: Colors.textPrimary,
         fontSize: FontSize.lg,
         fontWeight: FontWeight.semibold,
     },
     scorerLeft: {
-        color: Colors.textMuted,
         fontSize: FontSize.sm,
         marginTop: 2,
     },
     scorerValue: {
-        color: Colors.purpleSoft,
         fontSize: FontSize['2xl'],
         fontWeight: FontWeight.extrabold,
         minWidth: 28,

@@ -10,6 +10,7 @@ import type { TranslationKeys } from '../../src/i18n/utils';
 import type { Competitor365Squad, Squad365Player, SquadPositionGroup } from '../../services/apiFootball';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { Card, EmptyState, SectionTitle } from './shared';
+import { useProfileSurface } from './profileSurface';
 
 interface SquadTabProps {
   squad: Competitor365Squad | null | undefined;
@@ -50,24 +51,32 @@ function PlayerCard({
   player: Squad365Player;
   onPress: () => void;
 }) {
+  const surface = useProfileSurface();
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[
+        styles.card,
+        { backgroundColor: surface.card, borderColor: surface.border },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       <CachedAthletePhoto uri={player.photo} size={56} recyclingKey={player.athleteId} />
       {player.jerseyNumber != null ? (
         <View style={styles.numberBadge}>
           <Text style={styles.numberText}>{player.jerseyNumber}</Text>
         </View>
       ) : null}
-      <Text style={styles.name} numberOfLines={2}>
+      <Text style={[styles.name, { color: surface.textStrong }]} numberOfLines={2}>
         {player.shortName || player.name}
       </Text>
       {player.position ? (
-        <Text style={styles.position} numberOfLines={1}>
+        <Text style={[styles.position, { color: surface.muted }]} numberOfLines={1}>
           {player.position}
         </Text>
       ) : null}
       {player.age || player.nationality || player.height ? (
-        <Text style={styles.meta} numberOfLines={2}>
+        <Text style={[styles.meta, { color: surface.secondary }]} numberOfLines={2}>
           {[
             player.age != null ? `${player.age}` : null,
             player.height,
@@ -89,10 +98,11 @@ export default function SquadTab({
   t,
   onOpenPlayer,
 }: SquadTabProps) {
+  const surface = useProfileSurface();
   if (loading && !squad) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color={Colors.purpleSoft} />
+        <ActivityIndicator color={surface.accent} />
       </View>
     );
   }
@@ -185,10 +195,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xs,
-    backgroundColor: Colors.white04,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.borderSubtle,
     gap: Spacing.xs,
   },
   numberBadge: {
@@ -207,18 +215,15 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
   },
   name: {
-    color: Colors.textPrimary,
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     textAlign: 'center',
   },
   position: {
-    color: Colors.textMuted,
     fontSize: FontSize.sm,
     textAlign: 'center',
   },
   meta: {
-    color: Colors.textSecondary,
     fontSize: FontSize.sm,
     textAlign: 'center',
   },

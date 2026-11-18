@@ -23,11 +23,31 @@ import LeagueIcon from '../common/LeagueIcon';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { getMatchPhase, MatchPhase, formatMatchCardDate } from './utils';
+import { useProfileSurface } from './profileSurface';
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-    return <View style={[styles.card, style]}>{children}</View>;
+    const surface = useProfileSurface();
+    return (
+        <View
+            style={[
+                styles.card,
+                {
+                    backgroundColor: surface.card,
+                    borderColor: surface.border,
+                    shadowColor: '#2A1060',
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: surface.isDark ? 0 : 0.08,
+                    shadowRadius: 10,
+                    elevation: surface.isDark ? 0 : 3,
+                },
+                style,
+            ]}
+        >
+            {children}
+        </View>
+    );
 }
 
 // ─── Section title ─────────────────────────────────────────────────────────────
@@ -41,12 +61,13 @@ export function SectionTitle({
     actionLabel?: string;
     onAction?: () => void;
 }) {
+    const surface = useProfileSurface();
     return (
         <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>{title}</Text>
+            <Text style={[styles.sectionTitle, { color: surface.textStrong }]}>{title}</Text>
             {actionLabel && onAction ? (
                 <TouchableOpacity onPress={onAction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.sectionAction}>{actionLabel}</Text>
+                    <Text style={[styles.sectionAction, { color: surface.accent }]}>{actionLabel}</Text>
                 </TouchableOpacity>
             ) : null}
         </View>
@@ -56,10 +77,11 @@ export function SectionTitle({
 // ─── Empty state ───────────────────────────────────────────────────────────────
 
 export function EmptyState({ text, icon = 'ellipse-outline' }: { text: string; icon?: any }) {
+    const surface = useProfileSurface();
     return (
         <View style={styles.empty}>
-            <Ionicons name={icon} size={22} color={Colors.textMuted} />
-            <Text style={styles.emptyText}>{text}</Text>
+            <Ionicons name={icon} size={22} color={surface.muted} />
+            <Text style={[styles.emptyText, { color: surface.muted }]}>{text}</Text>
         </View>
     );
 }
@@ -67,10 +89,11 @@ export function EmptyState({ text, icon = 'ellipse-outline' }: { text: string; i
 // ─── Info row (label / value) ──────────────────────────────────────────────────
 
 export function InfoRow({ label, value }: { label: string; value: string | number }) {
+    const surface = useProfileSurface();
     return (
-        <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{label}</Text>
-            <Text style={styles.infoValue} numberOfLines={2}>
+        <View style={[styles.infoRow, { borderBottomColor: surface.border }]}>
+            <Text style={[styles.infoLabel, { color: surface.secondary }]}>{label}</Text>
+            <Text style={[styles.infoValue, { color: surface.textStrong }]} numberOfLines={2}>
                 {value}
             </Text>
         </View>
@@ -82,16 +105,22 @@ export function InfoRow({ label, value }: { label: string; value: string | numbe
 export function StatBox({
     value,
     label,
-    tint = Colors.textPrimary,
+    tint,
 }: {
     value: string | number;
     label: string;
     tint?: string;
 }) {
+    const surface = useProfileSurface();
     return (
-        <View style={styles.statBox}>
-            <Text style={[styles.statValue, { color: tint }]}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
+        <View
+            style={[
+                styles.statBox,
+                { backgroundColor: surface.cardAlt, borderColor: surface.border },
+            ]}
+        >
+            <Text style={[styles.statValue, { color: tint ?? surface.textStrong }]}>{value}</Text>
+            <Text style={[styles.statLabel, { color: surface.secondary }]}>{label}</Text>
         </View>
     );
 }
@@ -123,6 +152,7 @@ export function FormBadges({ form }: { form: string[] }) {
 // ─── Win-rate ring ──────────────────────────────────────────────────────────────
 
 export function WinRateRing({ percent, size = 92 }: { percent: number; size?: number }) {
+    const surface = useProfileSurface();
     const stroke = 8;
     const radius = (size - stroke) / 2;
     const circumference = 2 * Math.PI * radius;
@@ -136,7 +166,7 @@ export function WinRateRing({ percent, size = 92 }: { percent: number; size?: nu
                     cx={size / 2}
                     cy={size / 2}
                     r={radius}
-                    stroke={Colors.white10}
+                    stroke={surface.border}
                     strokeWidth={stroke}
                     fill="none"
                 />
@@ -154,7 +184,7 @@ export function WinRateRing({ percent, size = 92 }: { percent: number; size?: nu
                 />
             </Svg>
             <View style={styles.ringCenter}>
-                <Text style={styles.ringValue}>{clamped}%</Text>
+                <Text style={[styles.ringValue, { color: surface.textStrong }]}>{clamped}%</Text>
             </View>
         </View>
     );
@@ -169,14 +199,19 @@ export function StatusPill({
     phase: MatchPhase;
     label: string;
 }) {
+    const surface = useProfileSurface();
     const color =
-        phase === 'live' ? Colors.live : phase === 'finished' ? Colors.textSecondary : Colors.purpleSoft;
+        phase === 'live'
+            ? Colors.live
+            : phase === 'finished'
+              ? surface.secondary
+              : surface.accent;
     const bg =
         phase === 'live'
             ? 'rgba(239,68,68,0.15)'
             : phase === 'finished'
-              ? Colors.white08
-              : Colors.purpleMuted;
+              ? surface.cardAlt
+              : surface.accentSoft;
     return (
         <View style={[styles.pill, { backgroundColor: bg }]}>
             {phase === 'live' ? <View style={styles.liveDot} /> : null}
@@ -261,34 +296,60 @@ export function MatchRow({
               : getLocalizedMatchStatus(merged.statusShort, language);
 
     const showScore = merged.phase !== 'upcoming';
+    const surface = useProfileSurface();
 
     return (
-        <TouchableOpacity style={styles.matchRow} onPress={onPress} activeOpacity={0.8}>
+        <TouchableOpacity
+            style={[
+                styles.matchRow,
+                {
+                    backgroundColor: surface.rowBg,
+                    borderColor: surface.border,
+                    shadowColor: '#2A1060',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: surface.isDark ? 0 : 0.06,
+                    shadowRadius: 6,
+                    elevation: surface.isDark ? 0 : 2,
+                },
+            ]}
+            onPress={onPress}
+            activeOpacity={0.8}
+        >
             {showCompetition && league ? (
                 <View style={styles.matchLeague}>
                     <LeagueIcon name={league.name} logo={league.logo} leagueId={league.id} size={18} />
-                    <Text style={styles.matchLeagueName} numberOfLines={1}>
+                    <Text style={[styles.matchLeagueName, { color: surface.secondary }]} numberOfLines={1}>
                         {getLeagueDisplayName(league.name, language, league.id, league.country)}
                     </Text>
-                    <Text style={styles.matchDate}>{formatMatchCardDate(kickoff, weekdayShort)}</Text>
+                    <Text style={[styles.matchDate, { color: surface.muted }]}>
+                        {formatMatchCardDate(kickoff, weekdayShort)}
+                    </Text>
                 </View>
             ) : null}
 
             <View style={styles.matchBody}>
                 <View style={styles.matchTeam}>
                     <TeamBadge name={home?.name ?? ''} logo={home?.logo} size={34} color="transparent" />
-                    <Text style={styles.matchTeamName} numberOfLines={1}>
+                    <Text style={[styles.matchTeamName, { color: surface.textStrong }]} numberOfLines={1}>
                         {getTeamDisplayName(home?.name, language)}
                     </Text>
                 </View>
 
                 <View style={styles.matchCenter}>
                     {showScore ? (
-                        <Text style={[styles.matchScore, merged.phase === 'live' && styles.matchScoreLive]}>
+                        <Text
+                            style={[
+                                styles.matchScore,
+                                { color: surface.textStrong },
+                                merged.phase === 'live' && styles.matchScoreLive,
+                            ]}
+                        >
                             {merged.homeGoals ?? 0} - {merged.awayGoals ?? 0}
                         </Text>
                     ) : (
-                        <Text style={styles.matchVs}>{formatTime(kickoff)}</Text>
+                        <Text style={[styles.matchVs, { color: surface.textStrong }]}>
+                            {formatTime(kickoff)}
+                        </Text>
                     )}
                     <View style={styles.matchStatusWrap}>
                         <StatusPill phase={merged.phase} label={statusLabel} />
@@ -297,7 +358,7 @@ export function MatchRow({
 
                 <View style={styles.matchTeam}>
                     <TeamBadge name={away?.name ?? ''} logo={away?.logo} size={34} color="transparent" />
-                    <Text style={styles.matchTeamName} numberOfLines={1}>
+                    <Text style={[styles.matchTeamName, { color: surface.textStrong }]} numberOfLines={1}>
                         {getTeamDisplayName(away?.name, language)}
                     </Text>
                 </View>
@@ -305,8 +366,8 @@ export function MatchRow({
 
             {showVenue && fixture.fixture?.venue?.name ? (
                 <View style={styles.matchVenue}>
-                    <Ionicons name="location-outline" size={12} color={Colors.textMuted} />
-                    <Text style={styles.matchVenueText} numberOfLines={1}>
+                    <Ionicons name="location-outline" size={12} color={surface.muted} />
+                    <Text style={[styles.matchVenueText, { color: surface.muted }]} numberOfLines={1}>
                         {fixture.fixture.venue.name}
                         {fixture.fixture.venue.city ? ` • ${fixture.fixture.venue.city}` : ''}
                     </Text>

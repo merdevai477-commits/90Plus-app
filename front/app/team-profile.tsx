@@ -26,7 +26,7 @@ import { useHaptic } from '../hooks/useHaptic';
 import { ErrorDisplay } from '../components/common/ErrorDisplay';
 import ApiFootballService from '../services/apiFootball';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
-import { getProfileSurface } from '../components/TeamProfile/profileSurface';
+import { getProfileSurface, ProfileSurfaceProvider } from '../components/TeamProfile/profileSurface';
 
 import {
     useCompetitorInfo,
@@ -265,42 +265,48 @@ export default function TeamProfileScreen() {
 
     if (!validId && !resolving) {
         return (
-            <View style={[styles.container, { backgroundColor: surface.screen }]}>
-                <StatusBar barStyle={statusBarStyle} />
-                <ErrorDisplay
-                    type="generic"
-                    title={t.teamProfile.invalidTeamId}
-                    message={t.teamProfile.loadFailed}
-                    showRetry
-                    retryText={t.teamProfile.retry}
-                    onRetry={handleBack}
-                />
-        </View>
-    );
+            <ProfileSurfaceProvider value={surface}>
+                <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                    <StatusBar barStyle={statusBarStyle} />
+                    <ErrorDisplay
+                        type="generic"
+                        title={t.teamProfile.invalidTeamId}
+                        message={t.teamProfile.loadFailed}
+                        showRetry
+                        retryText={t.teamProfile.retry}
+                        onRetry={handleBack}
+                    />
+                </View>
+            </ProfileSurfaceProvider>
+        );
     }
 
     if (resolving || infoQ.isLoading) {
         return (
-            <View style={[styles.container, { backgroundColor: surface.screen }]}>
-                <StatusBar barStyle={statusBarStyle} />
-                <TeamProfileSkeleton />
-            </View>
+            <ProfileSurfaceProvider value={surface}>
+                <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                    <StatusBar barStyle={statusBarStyle} />
+                    <TeamProfileSkeleton />
+                </View>
+            </ProfileSurfaceProvider>
         );
     }
 
     if (infoQ.isError || !info) {
         return (
-            <View style={[styles.container, { backgroundColor: surface.screen }]}>
-                <StatusBar barStyle={statusBarStyle} />
-                <ErrorDisplay
-                    type="server"
-                    title={t.teamProfile.loadFailed}
-                    message={t.teamProfile.loadFailed}
-                    showRetry
-                    retryText={t.teamProfile.retry}
-                    onRetry={() => infoQ.refetch()}
-                />
-            </View>
+            <ProfileSurfaceProvider value={surface}>
+                <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                    <StatusBar barStyle={statusBarStyle} />
+                    <ErrorDisplay
+                        type="server"
+                        title={t.teamProfile.loadFailed}
+                        message={t.teamProfile.loadFailed}
+                        showRetry
+                        retryText={t.teamProfile.retry}
+                        onRetry={() => infoQ.refetch()}
+                    />
+                </View>
+            </ProfileSurfaceProvider>
         );
     }
 
@@ -313,117 +319,128 @@ export default function TeamProfileScreen() {
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: surface.screen }]}>
-            <StatusBar barStyle={statusBarStyle} />
+        <ProfileSurfaceProvider value={surface}>
+            <View style={[styles.container, { backgroundColor: surface.screen }]}>
+                <StatusBar barStyle={statusBarStyle} />
 
-            <TeamHeader
-                t={t}
-                language={language}
-                name={teamName}
-                competitorId={competitorId}
-                logo={info.logo}
-                country={country}
-                founded={info.founded ?? null}
-                stadium={info.stadium ?? null}
-                isFollowing={isFollowing(competitorId)}
-                followPending={followPending}
-                onToggleFollow={handleToggleFollow}
-                onBack={handleBack}
-                topInset={insets.top}
-                coachName={coachQ.data?.name ?? null}
-            />
+                <TeamHeader
+                    t={t}
+                    language={language}
+                    name={teamName}
+                    competitorId={competitorId}
+                    logo={info.logo}
+                    country={country}
+                    founded={info.founded ?? null}
+                    stadium={info.stadium ?? null}
+                    isFollowing={isFollowing(competitorId)}
+                    followPending={followPending}
+                    onToggleFollow={handleToggleFollow}
+                    onBack={handleBack}
+                    topInset={insets.top}
+                    coachName={coachQ.data?.name ?? null}
+                />
 
-            {quickStats.length > 0 ? (
-                <View style={styles.quickStats}>
-                    <TeamQuickStats stats={quickStats} />
-                </View>
-            ) : null}
-
-            <TeamTabs active={activeTab} onChange={setActiveTab} labels={tabLabels} tabs={tabs} />
-
-            <ScrollView
-                style={styles.content}
-                contentContainerStyle={[
-                    styles.contentInner,
-                    { paddingBottom: insets.bottom + Spacing['4xl'] },
-                ]}
-                showsVerticalScrollIndicator={false}
-            >
-                {activeTab === 'overview' ? (
-                    <OverviewTab
-                        competitorId={competitorId}
-                        matches={matchesQ.data}
-                        stats={statsQ.data}
-                        coach={coachQ.data}
-                        language={language}
-                        t={t}
-                        onOpenMatches={() => setActiveTab('matches')}
-                        onOpenMatch={handleOpenMatch}
-                        onOpenPlayer={handleOpenPlayer}
-                        onOpenCoach={handleOpenCoach}
-                    />
+                {quickStats.length > 0 ? (
+                    <View style={styles.quickStats}>
+                        <TeamQuickStats stats={quickStats} />
+                    </View>
                 ) : null}
 
-                {activeTab === 'matches' ? (
-                    <MatchesTab
-                        matches={matchesQ.data}
-                        language={language}
-                        t={t}
-                        onOpenMatch={handleOpenMatch}
-                    />
-                ) : null}
+                <TeamTabs active={activeTab} onChange={setActiveTab} labels={tabLabels} tabs={tabs} />
 
-                {activeTab === 'squad' ? (
-                    <SquadTab
-                        squad={squadQ.data}
-                        loading={squadQ.isLoading}
-                        error={squadQ.isError}
-                        onRetry={() => squadQ.refetch()}
-                        t={t}
-                        onOpenPlayer={(player) =>
-                            handleOpenPlayer(player.athleteId, player.name, player.photo)
-                        }
-                    />
-                ) : null}
+                <ScrollView
+                    style={styles.content}
+                    contentContainerStyle={[
+                        styles.contentInner,
+                        { paddingBottom: insets.bottom + Spacing['4xl'] },
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {activeTab === 'overview' ? (
+                        <OverviewTab
+                            competitorId={competitorId}
+                            matches={matchesQ.data}
+                            stats={statsQ.data}
+                            coach={coachQ.data}
+                            language={language}
+                            t={t}
+                            onOpenMatches={() => setActiveTab('matches')}
+                            onOpenMatch={handleOpenMatch}
+                            onOpenPlayer={handleOpenPlayer}
+                            onOpenCoach={handleOpenCoach}
+                        />
+                    ) : null}
 
-                {activeTab === 'transfers' ? (
-                    <TransfersTab
-                        transfers={transfersQ.data}
-                        t={t}
-                        onOpenPlayer={(item) =>
-                            handleOpenPlayer(item.athleteId, item.athleteName, item.athletePhoto)
-                        }
-                    />
-                ) : null}
+                    {activeTab === 'matches' ? (
+                        <MatchesTab
+                            matches={matchesQ.data}
+                            language={language}
+                            t={t}
+                            onOpenMatch={handleOpenMatch}
+                        />
+                    ) : null}
 
-                {activeTab === 'table' ? (
-                    <TableTab
-                        competitorId={competitorId}
-                        competitions={standingsComps}
-                        language={language}
-                        t={t}
-                        onOpenTeam={handleOpenTeam}
-                    />
-                ) : null}
+                    {activeTab === 'squad' ? (
+                        <SquadTab
+                            squad={squadQ.data}
+                            loading={squadQ.isLoading}
+                            error={squadQ.isError}
+                            onRetry={() => squadQ.refetch()}
+                            t={t}
+                            onOpenPlayer={(player) =>
+                                handleOpenPlayer(player.athleteId, player.name, player.photo)
+                            }
+                        />
+                    ) : null}
+
+                    {activeTab === 'transfers' ? (
+                        <TransfersTab
+                            transfers={transfersQ.data}
+                            t={t}
+                            onOpenPlayer={(item) =>
+                                handleOpenPlayer(item.athleteId, item.athleteName, item.athletePhoto)
+                            }
+                        />
+                    ) : null}
+
+                    {activeTab === 'table' ? (
+                        <TableTab
+                            competitorId={competitorId}
+                            competitions={standingsComps}
+                            language={language}
+                            t={t}
+                            onOpenTeam={handleOpenTeam}
+                        />
+                    ) : null}
                 </ScrollView>
 
-            <Modal visible={compsOpen} transparent animationType="fade" onRequestClose={() => setCompsOpen(false)}>
-                <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setCompsOpen(false)}>
-                    <View style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>{t.teamProfile.currentCompetitions}</Text>
-                        {(info?.competitions ?? []).map((c) => (
-                            <TouchableOpacity
-                                key={c.id}
-                                style={styles.modalRow}
-                                onPress={() => handleOpenCompetition(c.id, c.name, c.logo)}
-                            >
-                                <Text style={styles.modalRowText}>{c.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                </View>
-                </TouchableOpacity>
-            </Modal>
-        </View>
+                <Modal visible={compsOpen} transparent animationType="fade" onRequestClose={() => setCompsOpen(false)}>
+                    <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setCompsOpen(false)}>
+                        <View
+                            style={[
+                                styles.modalCard,
+                                { backgroundColor: surface.card, borderColor: surface.border },
+                            ]}
+                        >
+                            <Text style={[styles.modalTitle, { color: surface.textStrong }]}>
+                                {t.teamProfile.currentCompetitions}
+                            </Text>
+                            {(info?.competitions ?? []).map((c) => (
+                                <TouchableOpacity
+                                    key={c.id}
+                                    style={[styles.modalRow, { borderBottomColor: surface.border }]}
+                                    onPress={() => handleOpenCompetition(c.id, c.name, c.logo)}
+                                >
+                                    <Text style={[styles.modalRowText, { color: surface.textStrong }]}>
+                                        {c.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+            </View>
+        </ProfileSurfaceProvider>
     );
 }
 

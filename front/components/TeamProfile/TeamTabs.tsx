@@ -7,6 +7,7 @@
 import React from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, Text, View } from 'react-native';
 import { Colors, Spacing, FontSize, FontWeight } from '../../constants/theme';
+import { useProfileSurface } from './profileSurface';
 
 export type TeamTabKey = 'overview' | 'matches' | 'transfers' | 'table' | 'squad';
 
@@ -18,8 +19,18 @@ interface TeamTabsProps {
 }
 
 export default function TeamTabs({ active, onChange, labels, tabs }: TeamTabsProps) {
+    const surface = useProfileSurface();
+
     return (
-        <View style={styles.wrapper}>
+        <View
+            style={[
+                styles.wrapper,
+                {
+                    backgroundColor: surface.tabBar,
+                    borderBottomColor: surface.border,
+                },
+            ]}
+        >
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -34,10 +45,24 @@ export default function TeamTabs({ active, onChange, labels, tabs }: TeamTabsPro
                             onPress={() => onChange(key)}
                             activeOpacity={0.7}
                         >
-                            <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                            <Text
+                                style={[
+                                    styles.tabText,
+                                    { color: surface.secondary },
+                                    isActive && {
+                                        color: surface.textStrong,
+                                        fontWeight: FontWeight.bold,
+                                    },
+                                ]}
+                            >
                                 {labels[key]}
                             </Text>
-                            <View style={[styles.underline, isActive && styles.underlineActive]} />
+                            <View
+                                style={[
+                                    styles.underline,
+                                    isActive && { backgroundColor: Colors.purplePrimary },
+                                ]}
+                            />
                         </TouchableOpacity>
                     );
                 })}
@@ -49,8 +74,6 @@ export default function TeamTabs({ active, onChange, labels, tabs }: TeamTabsPro
 const styles = StyleSheet.create({
     wrapper: {
         borderBottomWidth: 1,
-        borderBottomColor: Colors.borderSubtle,
-        backgroundColor: Colors.bgBase,
     },
     scroll: {
         paddingHorizontal: Spacing.base,
@@ -61,22 +84,14 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.md,
     },
     tabText: {
-        color: Colors.textSecondary,
         fontSize: FontSize.xl,
         fontWeight: FontWeight.semibold,
         paddingBottom: Spacing.sm,
-    },
-    tabTextActive: {
-        color: Colors.textPrimary,
-        fontWeight: FontWeight.bold,
     },
     underline: {
         height: 3,
         width: '100%',
         borderRadius: 2,
         backgroundColor: 'transparent',
-    },
-    underlineActive: {
-        backgroundColor: Colors.purplePrimary,
     },
 });

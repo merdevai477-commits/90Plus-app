@@ -89,7 +89,7 @@ export default function TeamHeader({
             end={{ x: 0.5, y: 1 }}
             style={[styles.wrapper, topInset != null ? { paddingTop: topInset + Spacing.sm } : null]}
         >
-            {/* Top bar */}
+            {/* Top bar — professional back island */}
             <View style={styles.topBar}>
                 <TouchableOpacity
                     style={[
@@ -97,12 +97,21 @@ export default function TeamHeader({
                         {
                             backgroundColor: surface.backBg,
                             borderColor: surface.border,
+                            shadowColor: surface.isDark ? '#000' : '#7C4DFF',
+                            shadowOpacity: surface.isDark ? 0.35 : 0.22,
+                            elevation: surface.isDark ? 4 : 6,
                         },
                     ]}
                     onPress={onBack}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back"
                 >
-                    <Ionicons name="chevron-back" size={24} color={surface.text} />
+                    <Ionicons
+                        name="chevron-back"
+                        size={22}
+                        color={surface.isDark ? surface.text : surface.accent}
+                    />
                 </TouchableOpacity>
             </View>
 
@@ -113,7 +122,7 @@ export default function TeamHeader({
                         <TeamBadge name={displayName} logo={crest || undefined} size={64} color="transparent" />
                     </View>
                     <View style={styles.nameBlock}>
-                        <Text style={[styles.name, { color: surface.text }]} numberOfLines={2}>
+                        <Text style={[styles.name, { color: surface.textStrong }]} numberOfLines={2}>
                             {displayName}
                         </Text>
                         {countryLabel ? (
@@ -188,14 +197,16 @@ const styles = StyleSheet.create({
         marginBottom: Spacing.md,
     },
     backButton: {
-        width: 40,
-        height: 40,
+        width: 42,
+        height: 42,
         borderRadius: Radius.full,
         backgroundColor: Colors.white08,
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: Colors.borderSubtle,
         alignItems: 'center',
         justifyContent: 'center',
+        shadowOffset: { width: 0, height: 4 },
+        shadowRadius: 12,
     },
     identityRow: {
         flexDirection: 'row',

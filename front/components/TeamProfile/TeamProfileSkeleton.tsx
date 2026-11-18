@@ -6,11 +6,14 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Skeleton } from '../ui/Skeleton';
-import { Colors, Spacing, Radius } from '../../constants/theme';
+import { Spacing, Radius } from '../../constants/theme';
+import { useProfileSurface } from './profileSurface';
 
 export default function TeamProfileSkeleton() {
+    const surface = useProfileSurface();
+
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: surface.screen }]}>
             {/* Header */}
             <View style={styles.header}>
                 <Skeleton width={40} height={40} borderRadius={Radius.full} />
@@ -38,7 +41,7 @@ export default function TeamProfileSkeleton() {
             </View>
 
             {/* Tabs */}
-            <View style={styles.tabsRow}>
+            <View style={[styles.tabsRow, { borderBottomColor: surface.border }]}>
                 {[0, 1, 2, 3].map((i) => (
                     <Skeleton key={i} width={72} height={18} borderRadius={Radius.sm} />
                 ))}
@@ -58,7 +61,6 @@ export default function TeamProfileSkeleton() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.bgBase,
     },
     header: {
         paddingTop: Spacing['5xl'],
@@ -95,7 +97,6 @@ const styles = StyleSheet.create({
         marginTop: Spacing.xl,
         paddingBottom: Spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: Colors.borderSubtle,
     },
     content: {
         paddingHorizontal: Spacing.base,
