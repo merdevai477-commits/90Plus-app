@@ -269,8 +269,8 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
               {
                 fontSize: numeralSize,
                 lineHeight: numeralSize * 1.1,
-                color: isDark ? '#FFFFFF' : colors.textPrimary,
-                textShadowColor: isDark ? 'rgba(196,181,253,0.7)' : 'rgba(106,43,217,0.28)',
+                color: '#FFFFFF',
+                textShadowColor: isDark ? 'rgba(196,181,253,0.7)' : 'rgba(75,31,163,0.55)',
               },
             ]}
           >
