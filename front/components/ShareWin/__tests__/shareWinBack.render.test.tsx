@@ -175,7 +175,7 @@ describe('the back control', () => {
     expect(source).toMatch(/<Image\s+source=\{SW_ASSET\.backV2\}/);
   });
 
-  it('keeps the back control on the left with a centered title island', () => {
+  it('keeps a professional back island on the left with a centered title', () => {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
     const header = fs.readFileSync(
@@ -183,8 +183,11 @@ describe('the back control', () => {
       'utf8',
     );
     expect(header).toMatch(/ChevronLeft/);
-    expect(header).toMatch(/titleIsland/);
+    expect(header).toMatch(/backIsland/);
+    expect(header).toMatch(/GlassSheen/);
+    expect(header).toMatch(/GlassRim/);
     expect(header).toMatch(/titleCenter/);
+    expect(header).not.toMatch(/titleIsland/);
     expect(header).not.toMatch(/row-reverse/);
   });
 });
