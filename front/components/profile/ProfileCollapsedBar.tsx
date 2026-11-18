@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     borderRadius: ISLAND_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     shadowColor: '#111111',
     shadowOpacity: 0.08,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: ProfileTheme.colors.surfaceElevated,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   avatarFallback: {
