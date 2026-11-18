@@ -4,8 +4,8 @@
  * =============================================================================
  *
  * Destination of "عرض الترتيب الكامل" on the Share & Win screen
- * (Figma node 147:295). Row styling is node 147:294's, reused verbatim through
- * <LeaderboardRow/> so the two surfaces cannot drift apart.
+ * (Figma Frame123 list 2022:6332 / row 2021:151). Rows match the preview card
+ * via <LeaderboardRow/> and surface elite titles (لقب) when the API sends them.
  *
  * ── STRUCTURE ────────────────────────────────────────────────────────────────
  *   header      title, cycle week + total competitor count, close button
@@ -49,14 +49,15 @@ import { displayNameOf, formatNumber } from './data';
 import LeaderboardRow from './components/LeaderboardRow';
 import { useShareWinStyles } from './styles';
 
-/** Row height (58) + gap (8) in Figma units — drives getItemLayout. */
-const ROW_STRIDE = 66;
+/** Row height (~68) + gap (8) in Figma units — drives getItemLayout. */
+const ROW_STRIDE = 76;
 
 interface Row {
   key: string;
   entry: ShareWinLeaderboardEntry;
   name: string;
   scoreLabel: string;
+  pointsLine: string;
   isMe: boolean;
 }
 
@@ -103,9 +104,10 @@ export default function ShareWinLeaderboardScreen() {
         entry,
         name: displayNameOf(entry),
         scoreLabel: formatNumber(entry.participants, language),
+        pointsLine: `${formatNumber(entry.score, language)} ${copy.pointsLabel}`,
         isMe: entry.userId === me?.userId,
       })),
-    [entries, language, me?.userId],
+    [copy.pointsLabel, entries, language, me?.userId],
   );
 
   const handleOpenProfile = useCallback(
@@ -116,7 +118,7 @@ export default function ShareWinLeaderboardScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item, index }: ListRenderItemInfo<Row>) => (
+    ({ item }: ListRenderItemInfo<Row>) => (
       <LeaderboardRow
         rank={item.entry.rank}
         userId={item.entry.userId}
@@ -130,7 +132,7 @@ export default function ShareWinLeaderboardScreen() {
         badgeAccent={item.entry.identity?.badge?.accent}
         scoreLabel={item.scoreLabel}
         scoreUnit={copy.boardUnit}
-        tierIndex={index}
+        pointsLine={item.pointsLine}
         isCurrentUser={item.isMe}
         onPress={handleOpenProfile}
       />
@@ -290,11 +292,15 @@ export default function ShareWinLeaderboardScreen() {
             username={me.username}
             name={displayNameOf(me)}
             avatar={me.avatar}
+            isVerified={me.isVerified || me.identity?.isVerified}
+            isDeveloper={me.isDeveloper || me.identity?.isDeveloper}
+            badgeKey={me.identity?.badge?.key}
+            badgeTitle={me.identity?.badge?.title}
+            badgeAccent={me.identity?.badge?.accent}
             scoreLabel={formatNumber(me.participants, language)}
             scoreUnit={copy.boardUnit}
-            tierIndex={me.rank - 1}
+            pointsLine={`${formatNumber(me.score, language)} ${copy.pointsLabel}`}
             isCurrentUser
-            solid
           />
         </View>
       ) : null}

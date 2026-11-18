@@ -193,9 +193,11 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
         },
         row: {
           width: '100%',
-          height: s(62),
+          minHeight: s(62),
           borderRadius: s(16),
           backgroundColor: theme.rowBg,
+          borderWidth: theme.isDark ? 1 : 0,
+          borderColor: theme.border,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -230,9 +232,15 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
           color: theme.ink,
           textAlign: 'right',
         },
+        userTitle: {
+          fontSize: f(9),
+          fontWeight: '600',
+          color: theme.accent,
+          textAlign: 'right',
+        },
         userScore: {
           fontSize: f(9),
-          color: theme.dark,
+          color: theme.isDark ? theme.secondary : theme.dark,
           textAlign: 'right',
         },
         avatar: {
@@ -363,6 +371,8 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
             rest.map((entry) => {
               const name = displayNameOf(entry);
               const letter = (name || '?').charAt(0).toUpperCase();
+              const badgeTitle = entry.identity?.badge?.title;
+              const badgeAccent = entry.identity?.badge?.accent || theme.accent;
               return (
                 <View key={entry.userId} style={styles.row}>
                   <View style={styles.pointsCol}>
@@ -375,6 +385,14 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
                     <Text style={styles.userName} numberOfLines={1}>
                       {name}
                     </Text>
+                    {badgeTitle ? (
+                      <Text
+                        style={[styles.userTitle, { color: badgeAccent }]}
+                        numberOfLines={1}
+                      >
+                        {badgeTitle}
+                      </Text>
+                    ) : null}
                     <Text style={styles.userScore}>
                       {`${formatNumber(entry.score, language)} ${copy.pointsLabel}`}
                     </Text>
