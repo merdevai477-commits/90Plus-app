@@ -1188,7 +1188,11 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
 
             if (!isResume) await decrementLimit(userId, tz);
-            sendError('AI service error. Please try again.');
+            sendError(
+                messageLanguage === 'en'
+                    ? 'AI service error. Please try again.'
+                    : 'الخدمة مش متاحة دلوقتي. جرّب تاني بعد لحظات.',
+            );
             return;
         }
 

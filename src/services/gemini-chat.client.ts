@@ -111,6 +111,27 @@ export function isGeminiChatConfigured(): boolean {
     return (provider === 'gemini' || provider === 'google') && !!resolveGeminiApiKey();
 }
 
+const GEMINI_STREAM_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+
+/** Gemini 503 is a brief overload. One failed attempt was turning a working chat into "AI service error". */
+async function fetchGeminiStream(url: string, init: RequestInit): Promise<Response> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+        }
+        const res = await fetch(url, {
+            ...init,
+            signal: AbortSignal.timeout(120_000),
+        });
+        if (res.ok) return res;
+        const errText = await res.text().catch(() => '');
+        lastError = new Error(`Gemini stream HTTP ${res.status}: ${errText.slice(0, 300)}`);
+        if (!GEMINI_STREAM_RETRY_STATUSES.has(res.status) || attempt === 2) throw lastError;
+    }
+    throw lastError ?? new Error('Gemini stream failed');
+}
+
 function extractTextFromGeminiChunk(payload: unknown): string {
     if (!payload || typeof payload !== 'object') return '';
     const candidates = (payload as { candidates?: unknown[] }).candidates;
@@ -179,7 +200,7 @@ export function buildGeminiChatClient(): GeminiChatStreamClient | null {
                     const url = `${baseUrl}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
                     const { systemInstruction, contents } = toGeminiPayload(params.messages);
 
-                    const res = await fetch(url, {
+                    const res = await fetchGeminiStream(url, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -193,15 +214,7 @@ export function buildGeminiChatClient(): GeminiChatStreamClient | null {
                                 temperature: params.temperature,
                             },
                         }),
-                        signal: AbortSignal.timeout(120_000),
                     });
-
-                    if (!res.ok) {
-                        const errText = await res.text().catch(() => '');
-                        throw new Error(
-                            `Gemini stream HTTP ${res.status}: ${errText.slice(0, 300)}`,
-                        );
-                    }
 
                     if (!res.body) {
                         throw new Error('Gemini stream returned empty body');

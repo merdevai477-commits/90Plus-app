@@ -1,4 +1,9 @@
-import { buildAgentVoicePrompt, formatEntityBrief } from '../services/chat-agent.service';
+import {
+  buildAgentVoicePrompt,
+  formatEntityBrief,
+  formatPlayerLastMatchReply,
+  planAgentPrefetch,
+} from '../services/chat-agent.service';
 
 describe('buildAgentVoicePrompt', () => {
   it('stays short enough to keep the first token fast', () => {
@@ -62,5 +67,42 @@ describe('formatEntityBrief', () => {
     expect(text).toContain('المباراة الجاية');
     expect(text).toContain('آخر مباراة');
     expect(text).toContain('2-1');
+  });
+});
+
+describe('player last-match follow-up', () => {
+  const history = [
+    { role: 'user', content: 'مبابي' },
+    {
+      role: 'assistant',
+      content: '**كيليان مبابي** بيلعب دلوقتي في **ريال مدريد**.',
+    },
+  ];
+
+  it('searches the player from the thread, not the follow-up sentence', () => {
+    expect(planAgentPrefetch('اخر مباراه لعبها؟', history)).toEqual({
+      tool: 'search_football',
+      query: 'كيليان مبابي',
+    });
+  });
+
+  it('answers the last match from the profile payload', () => {
+    const text = formatPlayerLastMatchReply(
+      {
+        name: 'كيليان مبابي',
+        lastMatch: {
+          opponent: 'برشلونة',
+          competition: 'الليجا',
+          kickoff: '2026-03-01T20:00:00Z',
+          rating: 8.2,
+        },
+      },
+      'ar',
+    );
+    expect(text).toContain('**كيليان مبابي**');
+    expect(text).toContain('**برشلونة**');
+    expect(text).toContain('الليجا');
+    expect(text).toContain('2026-03-01');
+    expect(text).toContain('8.2');
   });
 });

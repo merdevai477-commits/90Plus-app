@@ -599,7 +599,10 @@ function MarkdownTable({
           }}
           onContentSizeChange={(w) => setContentW(w)}
           style={s.tableScroll}
-          contentContainerStyle={s.tableScrollContent}
+          contentContainerStyle={[
+            s.tableScrollContent,
+            needsPager ? { paddingHorizontal: 44 } : null,
+          ]}
         >
           {tableGrid}
         </ScrollView>

@@ -189,20 +189,28 @@ function isTeamFollowUp(message: string): boolean {
   );
 }
 
-/** Last finished / match details about the conversation's focus club — not today's slate. */
+/** Collapse hamza / taa marbuta so "اخر مباراه" matches "آخر مباراة". */
+function looseArabic(message: string): string {
+  return message.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+}
+
+/** Last finished / match details — not today's slate. */
 function isLastMatchFollowUp(message: string): boolean {
   if (/(?:مباريات|ماتشات|matches)\s*(?:النهاردة|اليوم|today)/i.test(message)) return false;
+  const m = looseArabic(message);
+  if (/(?:مباريات|ماتشات)\s*(?:النهارده|اليوم)/i.test(m)) return false;
   return (
-    /آخر\s*(?:مباراة|ماتش)|المباراة الأخيرة|last\s+match/i.test(message) ||
-    /(?:الماتش|المباراة).{0,24}(?:خلص|انتهى|انتهت)/i.test(message) ||
-    /(?:اللي|اللى)\s+(?:خلص|انتهى|انتهت)/i.test(message) ||
-    /تفاصيل\s*(?:ال)?(?:مباراة|ماتش|match)/i.test(message) ||
-    /مباراة\s+انتهت/i.test(message) ||
-    /أحداث\s*(?:ال)?(?:مباراة|ماتش)/i.test(message) ||
-    /مين\s+سجل/i.test(message) ||
-    /تشكيل(?:ة)?\s*(?:ال)?(?:مباراة|ماتش)/i.test(message) ||
-    /finished\s+match|match\s+details/i.test(message) ||
-    /(?:نتيجة|تفاصيل).{0,16}(?:الماتش|المباراة|مباراة)/i.test(message)
+    /اخر\s*(?:مباراه|ماتش)|المباراه الاخيره|last\s+match/i.test(m) ||
+    /(?:الماتش|المباراه).{0,24}(?:خلص|انتهي|انته)/i.test(m) ||
+    /(?:اللي|اللى)\s+(?:خلص|انتهي|انته)/i.test(m) ||
+    /تفاصيل\s*(?:ال)?(?:مباراه|ماتش|match)/i.test(m) ||
+    /مباراه\s+انته/i.test(m) ||
+    /احداث\s*(?:ال)?(?:مباراه|ماتش)/i.test(m) ||
+    /مين\s+سجل/i.test(m) ||
+    /تشكيل(?:ه)?\s*(?:ال)?(?:مباراه|ماتش)/i.test(m) ||
+    /finished\s+match|match\s+details/i.test(m) ||
+    /(?:نتيجه|تفاصيل).{0,16}(?:الماتش|المباراه)/i.test(m) ||
+    (/لعب(?:ها|ه)/i.test(m) && /مبار|ماتش/.test(m))
   );
 }
 
@@ -214,6 +222,73 @@ function looksLikeClubName(message: string): boolean {
 
 function isClubFollowUp(message: string): boolean {
   return isTeamFollowUp(message) || isLastMatchFollowUp(message);
+}
+
+function extractFocusPlayerFromHistory(
+  history: Array<{ role: string; content: string }>,
+  currentMessage: string,
+): string | null {
+  if (
+    looksLikeNameLookup(currentMessage) &&
+    !isLastMatchFollowUp(currentMessage) &&
+    !isClubFollowUp(currentMessage)
+  ) {
+    return extractSearchQuery(currentMessage);
+  }
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (
+      msg.role === 'user' &&
+      looksLikeNameLookup(msg.content) &&
+      !isLastMatchFollowUp(msg.content) &&
+      !isClubFollowUp(msg.content)
+    ) {
+      return extractSearchQuery(msg.content) ?? msg.content.trim();
+    }
+    if (msg.role === 'assistant') {
+      const bold = msg.content.match(/\*\*([^*]{2,40})\*\*/);
+      const name = bold?.[1]?.trim();
+      if (name && !looksLikeClubName(name)) return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * What to fetch before the model runs.
+ * Follow-ups like "اخر مباراه لعبها" must reuse the player from the thread.
+ * Searching the sentence itself finds nobody, then a dead model returns an error.
+ */
+export function planAgentPrefetch(
+  userMessage: string,
+  history: Array<{ role: string; content: string }>,
+): { tool: 'search_football' | 'get_team_match' | 'get_team_scorers' | 'get_team_info' | 'get_team_squad'; query: string } | null {
+  const focusTeam = extractFocusTeamFromHistory(history, userMessage);
+  const focusPlayer = extractFocusPlayerFromHistory(history, userMessage);
+  const matchFollowUp = isLastMatchFollowUp(userMessage);
+  const teamFollowUp = isTeamFollowUp(userMessage);
+
+  if (matchFollowUp && looksLikeClubName(userMessage)) {
+    const named = extractSearchQuery(userMessage);
+    if (named) return { tool: 'get_team_match', query: named };
+  }
+  if (matchFollowUp && focusPlayer && !looksLikeClubName(focusPlayer)) {
+    return { tool: 'search_football', query: focusPlayer };
+  }
+  if ((matchFollowUp || teamFollowUp) && focusTeam) {
+    if (!matchFollowUp && /هداف|scorer|goals?|assist|صناع/i.test(userMessage)) {
+      return { tool: 'get_team_scorers', query: focusTeam };
+    }
+    if (!matchFollowUp && /مدرب|coach|مدير فني/i.test(userMessage)) {
+      return { tool: 'get_team_info', query: focusTeam };
+    }
+    if (matchFollowUp) return { tool: 'get_team_match', query: focusTeam };
+    return { tool: 'get_team_squad', query: focusTeam };
+  }
+  if (skipEntityPrefetch(userMessage) || matchFollowUp || teamFollowUp) return null;
+  if (!(shouldRequireTools(userMessage) || looksLikeNameLookup(userMessage))) return null;
+  const query = extractSearchQuery(userMessage);
+  return query ? { tool: 'search_football', query } : null;
 }
 
 function extractFocusTeamFromHistory(
@@ -340,6 +415,29 @@ function formatTeamMatchReply(parsed: any, language: MessageLanguage): string | 
       : '';
 
   return [header, goalLine && `- ${goalLine}`, xiLine && `- ${xiLine}`].filter(Boolean).join('\n');
+}
+
+/** Last game the player actually played — answered from 365, not the model. */
+export function formatPlayerLastMatchReply(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
+  const name = parsed.name || parsed.resolvedAs || parsed.best?.name;
+  const last = parsed.lastMatch;
+  const opponent = String(last?.opponent ?? '').trim();
+  if (!name || !opponent) return null;
+  const en = language === 'en';
+  const competition = last.competition ? (en ? ` in ${last.competition}` : ` في ${last.competition}`) : '';
+  const when = typeof last.kickoff === 'string' && last.kickoff.length >= 10
+    ? (en ? ` on ${last.kickoff.slice(0, 10)}` : ` يوم ${last.kickoff.slice(0, 10)}`)
+    : '';
+  const rating =
+    last.rating != null && Number.isFinite(Number(last.rating))
+      ? en
+        ? ` Rating **${last.rating}**.`
+        : ` تقييمه **${last.rating}**.`
+      : '';
+  return en
+    ? `**${name}**'s last match was against **${opponent}**${competition}${when}.${rating}`
+    : `آخر مباراة لـ **${name}** كانت قدام **${opponent}**${competition}${when}.${rating}`;
 }
 
 async function streamFinalAnswer(
@@ -669,25 +767,9 @@ export async function runFootballAgent(
   }
 
   const matchFollowUp = isLastMatchFollowUp(userMessage);
-  const followUp = isTeamFollowUp(userMessage) || matchFollowUp;
-  const prefetchQuery =
-    followUp
-      ? focusTeam
-      : !skipEntityPrefetch(userMessage) &&
-          (shouldRequireTools(userMessage) || looksLikeNameLookup(userMessage))
-        ? extractSearchQuery(userMessage)
-        : null;
-  const prefetchTool = followUp
-    ? matchFollowUp
-      ? 'get_team_match'
-      : /هداف|scorer|goals?|assist|صناع/i.test(userMessage)
-        ? 'get_team_scorers'
-        : /مدرب|coach|مدير فني/i.test(userMessage)
-          ? 'get_team_info'
-          : 'get_team_squad'
-    : prefetchQuery
-      ? 'search_football'
-      : null;
+  const planned = planAgentPrefetch(userMessage, params.history);
+  const prefetchQuery = planned?.query ?? null;
+  const prefetchTool = planned?.tool ?? null;
 
   if (prefetchQuery && prefetchTool) {
     const tPrefetch = Date.now();
@@ -718,7 +800,18 @@ export async function runFootballAgent(
         logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
         return finish(fullText);
       }
-      if (looksLikeNameLookup(userMessage)) {
+      if (matchFollowUp && prefetchTool === 'search_football') {
+        const playerLast =
+          formatPlayerLastMatchReply(parsed, params.language) ||
+          formatEntityBrief(parsed, params.language);
+        if (playerLast) {
+          fullText = playerLast;
+          params.onToken(playerLast);
+          logger.info(`[chat-agent] prefetch player-last-match ${Date.now() - startedAt}ms`);
+          return finish(fullText);
+        }
+      }
+      if (looksLikeNameLookup(userMessage) && !matchFollowUp) {
         const brief = formatEntityBrief(parsed, params.language);
         if (brief) {
           fullText = brief;

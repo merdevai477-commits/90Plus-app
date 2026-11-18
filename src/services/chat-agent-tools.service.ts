@@ -503,6 +503,29 @@ function aggregateWorldCup365(seasons: any[]): {
   };
 }
 
+function compactPlayerLastMatch(matches: unknown): {
+  opponent: string;
+  competition: string | null;
+  kickoff: string | null;
+  rating: number | null;
+  gameId: number | null;
+} | null {
+  if (!Array.isArray(matches)) return null;
+  const played = matches.find((row) => {
+    const match = row as { played?: boolean; opponentName?: string };
+    return match?.played !== false && typeof match?.opponentName === 'string' && match.opponentName.trim();
+  }) as { opponentName?: string; competitionName?: string | null; startTime?: string | null; rating?: number | null; gameId?: number | null } | undefined;
+  const opponent = played?.opponentName?.trim();
+  if (!opponent) return null;
+  return {
+    opponent,
+    competition: played?.competitionName ?? null,
+    kickoff: played?.startTime ?? null,
+    rating: played?.rating ?? null,
+    gameId: played?.gameId ?? null,
+  };
+}
+
 /**
  * Same 365 profile/career bundle the in-app player profile uses.
  * Profile-first payload so the agent answers from live data, not memory.
@@ -627,6 +650,7 @@ function build365ProfilePayload(
       : null,
     worldCupGoals,
     nextGame,
+    lastMatch: compactPlayerLastMatch(career?.lastMatches),
     answerHint: seasonStats
       ? `Latest season ${seasonStats.label}: ${seasonStats.goals} goals, ${seasonStats.assists} assists, ${seasonStats.appearances} apps at ${club ?? '—'}.`
       : `Current club: ${club ?? 'unknown'}.`,
