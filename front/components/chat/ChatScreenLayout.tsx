@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurTargetView } from 'expo-blur';
 
 import { ChatScreenBackground } from './ChatScreenBackground';
-import { chatScreenStyles as styles } from './chatScreen.styles';
+import { useChatScreenStyles } from './chatScreen.styles';
 
 export type ChatScreenLayoutProps = {
   header: React.ReactNode;
@@ -30,6 +30,8 @@ export function ChatScreenLayout({
   useKeyboardAvoiding = false,
   blurTargetRef,
 }: ChatScreenLayoutProps) {
+  const { styles } = useChatScreenStyles();
+
   const mainColumn = (
     <>
       {connToast}

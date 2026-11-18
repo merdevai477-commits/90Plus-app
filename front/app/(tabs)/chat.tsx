@@ -10,7 +10,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 
-import { Alert, Linking, View } from 'react-native';
+import { Alert, Linking, StatusBar, View } from 'react-native';
 
 import * as ExpoClipboard from 'expo-clipboard';
 
@@ -25,6 +25,8 @@ import { useChatScreenState } from '../../hooks/useChatScreenState';
 import { useChatKeyboard } from '../../hooks/useChatKeyboard';
 
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+
+import { ChatThemeProvider, useChatTheme } from '../../hooks/useChatTheme';
 
 import { useScreenFont } from '../../utils/fontSetup';
 
@@ -54,9 +56,11 @@ import type { VoiceInputError } from '../../hooks/useVoiceInput';
 
 
 
-export default function ChatScreen() {
+function ChatScreenInner() {
 
   useScreenFont();
+
+  const { colors } = useChatTheme();
 
   const { t, language } = useTranslation();
 
@@ -416,6 +420,10 @@ export default function ChatScreen() {
 
   return (
 
+    <>
+
+    <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
+
     <ChatScreenLayout
 
       useKeyboardAvoiding={keyboard.useKeyboardAvoiding}
@@ -578,6 +586,24 @@ export default function ChatScreen() {
       }
 
     />
+
+    </>
+
+  );
+
+}
+
+
+
+export default function ChatScreen() {
+
+  return (
+
+    <ChatThemeProvider>
+
+      <ChatScreenInner />
+
+    </ChatThemeProvider>
 
   );
 

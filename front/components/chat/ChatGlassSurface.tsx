@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurIntensity } from '../../constants/theme';
+import { useChatTheme } from '../../hooks/useChatTheme';
 
 export type ChatGlassSurfaceProps = {
   style?: object;
@@ -15,16 +16,19 @@ export type ChatGlassSurfaceProps = {
 export function ChatGlassSurface({
   style,
   children,
-  tint = 'rgba(14,10,22,0.72)',
+  tint,
   effect = 'regular',
   interactive = false,
 }: ChatGlassSurfaceProps) {
+  const { colors, blurTint } = useChatTheme();
+  const resolvedTint = tint ?? colors.glassTint;
+
   if (isLiquidGlassSupported) {
     return (
       <LiquidGlassView
         {...({
           style: [{ overflow: 'hidden' }, style],
-          tint,
+          tint: resolvedTint,
           effect,
           interactive,
         } as object)}
@@ -35,10 +39,10 @@ export function ChatGlassSurface({
   }
   return (
     <View style={[{ overflow: 'hidden' }, style]}>
-      <BlurView intensity={BlurIntensity.header} tint="dark" style={StyleSheet.absoluteFill} />
+      <BlurView intensity={BlurIntensity.header} tint={blurTint} style={StyleSheet.absoluteFill} />
       <View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, { backgroundColor: tint }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: resolvedTint }]}
       />
       {children}
     </View>

@@ -22,7 +22,9 @@ import {
   resolveChatNavPlayerPhotos,
   type ChatNavLink,
 } from '../../utils/chatNavLinks';
-import { chatColors, chatRadii } from './chatTheme';
+import { useChatTheme } from '../../hooks/useChatTheme';
+import type { ChatColors } from './chatTheme';
+import { chatRadii } from './chatTheme';
 
 type Props = {
   links: ChatNavLink[];
@@ -31,12 +33,206 @@ type Props = {
 
 const PHOTO = 64;
 const BADGE = 24;
-const CARD_BG = '#080410';
-const FALLBACK_BG = '#2A2438';
-const CTA_TEXT = '#FFFFFF';
 
-function iconFor(type: ChatNavLink['type']) {
-  const color = '#F5F3FF';
+function createChatNavStyles(colors: ChatColors) {
+  return StyleSheet.create({
+    wrap: {
+      marginTop: 2,
+      gap: 8,
+      alignSelf: 'stretch',
+    },
+    chooseHint: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+      paddingHorizontal: 2,
+      marginBottom: 4,
+      lineHeight: 20,
+    },
+    chooseHintRtl: {
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    choiceGrid: {
+      flexDirection: 'row',
+      gap: 10,
+      alignSelf: 'stretch',
+    },
+    choiceTile: {
+      flex: 1,
+      minHeight: 128,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: 16,
+      backgroundColor: colors.tableRowAlt,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.tableBorder,
+    },
+    choiceTilePlayer: {
+      minHeight: 148,
+      gap: 10,
+      paddingVertical: 14,
+      backgroundColor: colors.tableHeadBg,
+      borderColor: colors.aiBubbleBorder,
+    },
+    choiceCrest: {
+      width: 72,
+      height: 72,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.historySearchBg,
+    },
+    choiceName: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    choiceSub: {
+      color: colors.accentSoft,
+      fontSize: 11,
+      fontWeight: '600',
+      textAlign: 'center',
+      marginTop: -4,
+      opacity: 0.95,
+    },
+    profileCard: {
+      flexWrap: 'nowrap',
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      gap: 13,
+      minHeight: 88,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      backgroundColor: colors.bgElevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.tableBorder,
+    },
+    followLabel: {
+      flex: 1,
+      minWidth: 0,
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    ctaHit: {
+      flexShrink: 0,
+      borderRadius: chatRadii.lg,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accentDeep,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.45,
+          shadowRadius: 8,
+        },
+        android: { elevation: 5 },
+        default: {},
+      }),
+    },
+    ctaFill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      minHeight: 42,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: chatRadii.lg,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.divider,
+    },
+    ctaFillLtr: {
+      flexDirection: 'row',
+    },
+    ctaFillRtl: {
+      flexDirection: 'row-reverse',
+    },
+    ctaPressed: {
+      transform: [{ scale: 0.97 }],
+      opacity: 0.92,
+    },
+    ctaBtnText: {
+      color: colors.textInverse,
+      fontSize: 13,
+      fontWeight: '800',
+      includeFontPadding: false,
+    },
+    avatarWrap: {
+      width: PHOTO,
+      height: PHOTO,
+      flexShrink: 0,
+    },
+    avatarRing: {
+      width: PHOTO,
+      height: PHOTO,
+      borderRadius: PHOTO / 2,
+      borderWidth: 2,
+      borderColor: colors.accentDeep,
+      backgroundColor: colors.aiBubbleBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarFallback: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.aiBubbleBg,
+    },
+    pulseFill: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.tableHeadBg,
+    },
+    imageHidden: {
+      opacity: 0,
+    },
+    clubBadge: {
+      position: 'absolute',
+      bottom: -2,
+      width: BADGE + 4,
+      height: BADGE + 4,
+      borderRadius: (BADGE + 4) / 2,
+      backgroundColor: colors.bgElevated,
+      borderWidth: 2,
+      borderColor: colors.bgElevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    clubBadgeRtl: {
+      left: -2,
+    },
+    clubBadgeLtr: {
+      right: -2,
+    },
+    clubBadgeInner: {
+      width: BADGE,
+      height: BADGE,
+      borderRadius: BADGE / 2,
+      borderWidth: 1,
+      borderColor: colors.accentDeep,
+      backgroundColor: colors.aiBubbleBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    choiceLogo: {
+      width: 56,
+      height: 56,
+    },
+    pressed: {
+      opacity: 0.88,
+    },
+  });
+}
+
+function iconFor(type: ChatNavLink['type'], accentSoft: string) {
+  const color = accentSoft;
   if (type === 'player') return <User size={17} color={color} strokeWidth={2.2} />;
   if (type === 'club' || type === 'competition') {
     return <Trophy size={17} color={color} strokeWidth={2.2} />;
@@ -45,7 +241,7 @@ function iconFor(type: ChatNavLink['type']) {
   return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
 }
 
-function PulseFill() {
+function PulseFill({ styles }: { styles: ReturnType<typeof createChatNavStyles> }) {
   const opacity = useRef(new Animated.Value(0.32)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -64,10 +260,12 @@ function CandidateMedia({
   uris,
   contentFit,
   fallback,
+  styles,
 }: {
   uris: string[];
   contentFit: 'cover' | 'contain';
   fallback: React.ReactNode;
+  styles: ReturnType<typeof createChatNavStyles>;
 }) {
   const key = uris.join('|');
   const [idx, setIdx] = useState(0);
@@ -85,7 +283,7 @@ function CandidateMedia({
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {!loaded ? <PulseFill /> : null}
+      {!loaded ? <PulseFill styles={styles} /> : null}
       <Image
         source={{ uri }}
         style={[StyleSheet.absoluteFill, !loaded && styles.imageHidden]}
@@ -106,7 +304,16 @@ function CandidateMedia({
   );
 }
 
-function ClubBadge({ uris, rtl }: { uris: string[]; rtl: boolean }) {
+function ClubBadge({
+  uris,
+  rtl,
+  styles,
+}: {
+  uris: string[];
+  rtl: boolean;
+  styles: ReturnType<typeof createChatNavStyles>;
+}) {
+  const { colors } = useChatTheme();
   return (
     <View
       style={[styles.clubBadge, rtl ? styles.clubBadgeRtl : styles.clubBadgeLtr]}
@@ -119,7 +326,8 @@ function ClubBadge({ uris, rtl }: { uris: string[]; rtl: boolean }) {
         <CandidateMedia
           uris={uris}
           contentFit="contain"
-          fallback={<Shield size={11} color="#C4B5FD" strokeWidth={2.2} />}
+          styles={styles}
+          fallback={<Shield size={11} color={colors.accentSoft} strokeWidth={2.2} />}
         />
       </View>
     </View>
@@ -131,17 +339,20 @@ function FollowAvatar({
   photoKind,
   badgeUris,
   rtl,
+  styles,
 }: {
   photoUris: string[];
   photoKind: 'player' | 'club';
   badgeUris: string[];
   rtl: boolean;
+  styles: ReturnType<typeof createChatNavStyles>;
 }) {
+  const { colors } = useChatTheme();
   const fallbackIcon =
     photoKind === 'club' ? (
-      <Trophy size={22} color="#C4B5FD" strokeWidth={2.1} />
+      <Trophy size={22} color={colors.accentSoft} strokeWidth={2.1} />
     ) : (
-      <User size={22} color="#C4B5FD" strokeWidth={2.1} />
+      <User size={22} color={colors.accentSoft} strokeWidth={2.1} />
     );
   return (
     <View style={styles.avatarWrap} pointerEvents="none" accessible={false}>
@@ -149,15 +360,22 @@ function FollowAvatar({
         <CandidateMedia
           uris={photoUris}
           contentFit={photoKind === 'club' ? 'contain' : 'cover'}
+          styles={styles}
           fallback={<View style={styles.avatarFallback}>{fallbackIcon}</View>}
         />
       </View>
-      {photoKind === 'player' ? <ClubBadge uris={badgeUris} rtl={rtl} /> : null}
+      {photoKind === 'player' ? <ClubBadge uris={badgeUris} rtl={rtl} styles={styles} /> : null}
     </View>
   );
 }
 
-function IconAvatar({ children }: { children: React.ReactNode }) {
+function IconAvatar({
+  children,
+  styles,
+}: {
+  children: React.ReactNode;
+  styles: ReturnType<typeof createChatNavStyles>;
+}) {
   return (
     <View style={styles.avatarWrap} pointerEvents="none" accessible={false}>
       <View style={styles.avatarRing}>
@@ -174,6 +392,8 @@ function NavLinkCard({
   a11yLabel,
   rtl,
   onPress,
+  styles,
+  userBubble,
 }: {
   link: ChatNavLink;
   followLabel: string;
@@ -181,7 +401,10 @@ function NavLinkCard({
   a11yLabel: string;
   rtl: boolean;
   onPress: () => void;
+  styles: ReturnType<typeof createChatNavStyles>;
+  userBubble: readonly [string, string];
 }) {
+  const { colors } = useChatTheme();
   const isProfile =
     link.type === 'player' || link.type === 'club' || link.type === 'competition';
   const photoUris = useMemo(
@@ -204,13 +427,14 @@ function NavLinkCard({
       photoKind={link.type === 'player' ? 'player' : 'club'}
       badgeUris={badgeUris}
       rtl={rtl}
+      styles={styles}
     />
   ) : (
-    <IconAvatar>
+    <IconAvatar styles={styles}>
       {link.type === 'match' ? (
-        <CircleDot size={22} color="#C4B5FD" strokeWidth={2.1} />
+        <CircleDot size={22} color={colors.accentSoft} strokeWidth={2.1} />
       ) : (
-        <CalendarDays size={22} color="#C4B5FD" strokeWidth={2.1} />
+        <CalendarDays size={22} color={colors.accentSoft} strokeWidth={2.1} />
       )}
     </IconAvatar>
   );
@@ -232,7 +456,7 @@ function NavLinkCard({
         accessibilityLabel={a11yLabel}
       >
         <LinearGradient
-          colors={chatColors.userBubble}
+          colors={[...userBubble]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.ctaFill, rtl ? styles.ctaFillRtl : styles.ctaFillLtr]}
@@ -240,7 +464,7 @@ function NavLinkCard({
           <Text style={styles.ctaBtnText} numberOfLines={1}>
             {buttonLabel}
           </Text>
-          <Chevron size={14} color={CTA_TEXT} strokeWidth={2.8} />
+          <Chevron size={14} color={colors.textInverse} strokeWidth={2.8} />
         </LinearGradient>
       </Pressable>
     </View>
@@ -314,6 +538,8 @@ function copyForNavLink(
 export function ChatNavLinks({ links, onChoose }: Props) {
   const router = useRouter();
   const { t, language } = useTranslation();
+  const { colors } = useChatTheme();
+  const styles = useMemo(() => createChatNavStyles(colors), [colors]);
   const rtl = language === 'ar';
 
   const openLink = useCallback(
@@ -430,6 +656,7 @@ export function ChatNavLinks({ links, onChoose }: Props) {
                     photoKind="player"
                     badgeUris={badgeUris}
                     rtl={rtl}
+                    styles={styles}
                   />
                   <Text style={styles.choiceName} numberOfLines={2}>
                     {link.label}
@@ -461,7 +688,7 @@ export function ChatNavLinks({ links, onChoose }: Props) {
                   {logo ? (
                     <Image source={{ uri: logo }} style={styles.choiceLogo} contentFit="contain" />
                   ) : (
-                    iconFor(link.type)
+                    iconFor(link.type, colors.accentSoft)
                   )}
                 </View>
                 <Text style={styles.choiceName} numberOfLines={2}>
@@ -493,204 +720,11 @@ export function ChatNavLinks({ links, onChoose }: Props) {
             a11yLabel={copy.a11yLabel}
             rtl={rtl}
             onPress={() => onPress(link)}
+            styles={styles}
+            userBubble={colors.userBubble}
           />
         );
       })}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    marginTop: 2,
-    gap: 8,
-    alignSelf: 'stretch',
-  },
-  chooseHint: {
-    color: '#F5F3FF',
-    fontSize: 14,
-    fontWeight: '700',
-    paddingHorizontal: 2,
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  chooseHintRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  choiceGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    alignSelf: 'stretch',
-  },
-  choiceTile: {
-    flex: 1,
-    minHeight: 128,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(124,58,237,0.16)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.35)',
-  },
-  choiceTilePlayer: {
-    minHeight: 148,
-    gap: 10,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    borderColor: 'rgba(196,181,253,0.45)',
-  },
-  choiceCrest: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  choiceName: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  choiceSub: {
-    color: '#C4B5FD',
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: -4,
-    opacity: 0.95,
-  },
-  profileCard: {
-    flexWrap: 'nowrap',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    gap: 13,
-    minHeight: 88,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: CARD_BG,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(124, 58, 237, 0.35)',
-  },
-  followLabel: {
-    flex: 1,
-    minWidth: 0,
-    color: '#C4B5FD',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  ctaHit: {
-    flexShrink: 0,
-    borderRadius: chatRadii.lg,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.45,
-        shadowRadius: 8,
-      },
-      android: { elevation: 5 },
-      default: {},
-    }),
-  },
-  ctaFill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    minHeight: 42,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: chatRadii.lg,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  ctaFillLtr: {
-    flexDirection: 'row',
-  },
-  ctaFillRtl: {
-    flexDirection: 'row-reverse',
-  },
-  ctaPressed: {
-    transform: [{ scale: 0.97 }],
-    opacity: 0.92,
-  },
-  ctaBtnText: {
-    color: CTA_TEXT,
-    fontSize: 13,
-    fontWeight: '800',
-    includeFontPadding: false,
-  },
-  avatarWrap: {
-    width: PHOTO,
-    height: PHOTO,
-    flexShrink: 0,
-  },
-  avatarRing: {
-    width: PHOTO,
-    height: PHOTO,
-    borderRadius: PHOTO / 2,
-    borderWidth: 2,
-    borderColor: '#7C3AED',
-    backgroundColor: FALLBACK_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarFallback: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: FALLBACK_BG,
-  },
-  pulseFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(124, 58, 237, 0.42)',
-  },
-  imageHidden: {
-    opacity: 0,
-  },
-  clubBadge: {
-    position: 'absolute',
-    bottom: -2,
-    width: BADGE + 4,
-    height: BADGE + 4,
-    borderRadius: (BADGE + 4) / 2,
-    backgroundColor: CARD_BG,
-    borderWidth: 2,
-    borderColor: CARD_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clubBadgeRtl: {
-    left: -2,
-  },
-  clubBadgeLtr: {
-    right: -2,
-  },
-  clubBadgeInner: {
-    width: BADGE,
-    height: BADGE,
-    borderRadius: BADGE / 2,
-    borderWidth: 1,
-    borderColor: '#7C3AED',
-    backgroundColor: FALLBACK_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  choiceLogo: {
-    width: 56,
-    height: 56,
-  },
-  pressed: {
-    opacity: 0.88,
-  },
-});

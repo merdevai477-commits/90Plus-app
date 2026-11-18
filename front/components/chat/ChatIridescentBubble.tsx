@@ -10,6 +10,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useChatTheme } from '../../hooks/useChatTheme';
 
 const BUBBLE_IMAGE = require('../../assets/images/chat/iridescent-bubble.png');
 
@@ -22,6 +23,7 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
   size,
 }: ChatIridescentBubbleProps) {
   const reduceMotion = useReducedMotion();
+  const { colors, isDark } = useChatTheme();
   const spin = useSharedValue(0);
   const float = useSharedValue(0);
   const shimmer = useSharedValue(0);
@@ -81,9 +83,9 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
         <Svg width={glowSize} height={glowSize} viewBox="0 0 100 100">
           <Defs>
             <RadialGradient id="bubbleGlow" cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.26" />
-              <Stop offset="0.45" stopColor="#5B1ED6" stopOpacity="0.1" />
-              <Stop offset="1" stopColor="#4C1D95" stopOpacity="0" />
+              <Stop offset="0" stopColor={colors.glowStop} stopOpacity={isDark ? '0.26' : '0.18'} />
+              <Stop offset="0.45" stopColor={colors.glowMid} stopOpacity={isDark ? '0.1' : '0.08'} />
+              <Stop offset="1" stopColor={colors.accentDeep} stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Circle cx="50" cy="50" r="50" fill="url(#bubbleGlow)" />
@@ -104,7 +106,17 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
 
       <View pointerEvents="none" style={[styles.layer, styles.fill, styles.wordmarkWrap]}>
         <View style={styles.wordmark}>
-          <Text style={[styles.numeral, { fontSize: numeralSize, lineHeight: numeralSize * 1.1 }]}>
+          <Text
+            style={[
+              styles.numeral,
+              {
+                fontSize: numeralSize,
+                lineHeight: numeralSize * 1.1,
+                color: isDark ? '#FFFFFF' : colors.textPrimary,
+                textShadowColor: isDark ? 'rgba(196,181,253,0.7)' : 'rgba(106,43,217,0.35)',
+              },
+            ]}
+          >
             90
           </Text>
           <LinearGradient
@@ -150,10 +162,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   numeral: {
-    color: '#FFFFFF',
     fontWeight: '900',
     letterSpacing: -1,
-    textShadowColor: 'rgba(196,181,253,0.7)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 16,
   },

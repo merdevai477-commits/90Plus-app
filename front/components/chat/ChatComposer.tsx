@@ -37,6 +37,7 @@ import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { useVoiceInput, type VoiceInputError, type VoiceQuotaUpdate } from '../../hooks/useVoiceInput';
 import { recordingCapMs } from '../../hooks/voiceRecordingCheck';
 import { formatVoiceTimeLeft, voiceExhaustedNotice } from './voiceQuotaNotice';
@@ -52,11 +53,6 @@ const INPUT_FONT_SIZE = 14;
 const BAR_RADIUS = BAR_HEIGHT / 1;
 const BAR_PAD = 5;
 const SLOT = BAR_HEIGHT - BAR_PAD * 2;
-const BAR_TINT = 'rgba(20,12,40,0.42)';
-/** Send button: the welcome bubble's black core; IridescentRim adds its film edge. */
-const FIELD_TINT = 'rgba(3,2,8,0.94)';
-/** Input capsule: dark frost so messages scrolling behind stay unreadable. */
-const INPUT_TINT = 'rgba(8,6,18,0.88)';
 /** Strong UIBlur behind the typing field (iOS); Android uses BlurTargetView. */
 const INPUT_BLUR = Platform.OS === 'ios' ? 82 : 64;
 const FIELD_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
@@ -89,6 +85,9 @@ function SendButton({
   a11yLabel,
   blurTarget,
   enterDelay = 0,
+  fieldTint,
+  blurTint,
+  elevate,
 }: {
   loading: boolean;
   isStop?: boolean;
@@ -96,6 +95,9 @@ function SendButton({
   a11yLabel: string;
   blurTarget?: React.RefObject<View | null>;
   enterDelay?: number;
+  fieldTint: string;
+  blurTint: 'light' | 'dark';
+  elevate: 'dark' | 'light' | 'none';
 }) {
   const press = usePressScale(0.94);
 
@@ -113,11 +115,13 @@ function SendButton({
     >
       <LiquidWaterSurface
         radius={BAR_RADIUS}
-        tint={FIELD_TINT}
+        tint={fieldTint}
         glow={FIELD_CAUSTIC}
         strength={0.14}
         sheen={0.12}
         blurTarget={blurTarget}
+        blurTint={blurTint}
+        elevate={elevate}
         style={styles.sendButton}
       >
         {loading && !isStop ? (
@@ -142,6 +146,8 @@ function RoundIconButton({
   badge,
   testID,
   children,
+  iconBtnBg,
+  iconBtnBorder,
 }: {
   onPress?: () => void;
   a11yLabel: string;
@@ -149,6 +155,8 @@ function RoundIconButton({
   badge?: string | null;
   testID?: string;
   children: React.ReactNode;
+  iconBtnBg: string;
+  iconBtnBorder: string;
 }) {
   const press = usePressScale(0.86);
 
@@ -159,7 +167,11 @@ function RoundIconButton({
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         hitSlop={6}
-        style={[styles.iconButton, styles.iconButtonGlass, press.style]}
+        style={[
+          styles.iconButton,
+          { backgroundColor: iconBtnBg, borderWidth: StyleSheet.hairlineWidth, borderColor: iconBtnBorder },
+          press.style,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={a11yLabel}
         accessibilityHint={a11yHint}
@@ -180,17 +192,24 @@ function RoundIconButton({
 
 /** Takes the mic's place once today's voice time is used up; typing is unaffected. */
 function VoiceQuotaNotice({ message, isAr, fontFamily }: { message: string; isAr: boolean; fontFamily?: string }) {
+  const { colors } = useChatTheme();
   return (
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(140)}
-      style={styles.voiceNotice}
+      style={[
+        styles.voiceNotice,
+        { backgroundColor: colors.nudgeTint, borderColor: colors.nudgeBorder },
+      ]}
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
       testID="voice-quota-notice"
     >
       <Text
-        style={[styles.voiceNoticeText, { fontFamily, writingDirection: isAr ? 'rtl' : 'ltr' }]}
+        style={[
+          styles.voiceNoticeText,
+          { fontFamily, writingDirection: isAr ? 'rtl' : 'ltr', color: colors.textSecondary },
+        ]}
         maxFontSizeMultiplier={1.2}
       >
         {message}
@@ -261,6 +280,7 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const { t, language } = useTranslation();
   const fontMedium = useAppFont(500);
+  const { colors, isDark, blurTint } = useChatTheme();
   const isAr = language === 'ar';
   const inputDirection = useMemo(() => {
     if (value.trim()) return getTextDirectionStyles(value);
@@ -337,25 +357,42 @@ export function ChatComposer({
   return (
     <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: bottomInset }]}>
       {limitReached && resetTime ? (
-        <LiquidWaterSurface radius={24} tint={BAR_TINT} blurTarget={blurTarget} style={styles.limitBanner}>
-          <Text style={styles.limitText}>{dailyLimitOverText}</Text>
-          <Text style={styles.limitSub}>{limitResetsAfterText}</Text>
-          <LimitReachedCountdown resetTime={resetTime} style={styles.limitCountdown} />
+        <LiquidWaterSurface
+          radius={24}
+          tint={colors.composerBarTint}
+          blurTarget={blurTarget}
+          blurTint={blurTint}
+          elevate={colors.elevate}
+          style={styles.limitBanner}
+        >
+          <Text style={[styles.limitText, { color: colors.textSecondary }]}>{dailyLimitOverText}</Text>
+          <Text style={[styles.limitSub, { color: colors.textMuted }]}>{limitResetsAfterText}</Text>
+          <LimitReachedCountdown
+            resetTime={resetTime}
+            style={[styles.limitCountdown, { color: colors.textMuted }]}
+          />
         </LiquidWaterSurface>
       ) : (
         <>
           {editingMessage ? (
             <Animated.View entering={FadeIn.duration(180)}>
-              <LiquidWaterSurface radius={16} tint="rgba(124,58,237,0.3)" blurTarget={blurTarget} style={styles.editHeader}>
+              <LiquidWaterSurface
+                radius={16}
+                tint={colors.nudgeTint}
+                blurTarget={blurTarget}
+                blurTint={blurTint}
+                elevate={colors.elevate}
+                style={styles.editHeader}
+              >
                 <View style={styles.editLabel}>
                   <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={Colors.purpleSoft} strokeWidth={2}>
                     <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </Svg>
-                  <Text style={styles.editText}>{editingLabel}</Text>
+                  <Text style={[styles.editText, { color: colors.textPrimary }]}>{editingLabel}</Text>
                 </View>
                 <Pressable onPress={onCancelEdit} hitSlop={8}>
-                  <Text style={styles.editCancel}>×</Text>
+                  <Text style={[styles.editCancel, { color: colors.textMuted }]}>×</Text>
                 </Pressable>
               </LiquidWaterSurface>
             </Animated.View>
@@ -378,7 +415,7 @@ export function ChatComposer({
             {voice.status === 'recording' ? (
               <Animated.View entering={FadeIn.delay(orbDelay).duration(220)} exiting={FadeOut.duration(120)}>
                 <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.cancel} accessibilityLabel={t.chat.a11yVoiceCancel}>
-                  <X size={18} color="#FFFFFF" strokeWidth={2.2} />
+                  <X size={18} color={isDark ? '#FFFFFF' : colors.icon} strokeWidth={2.2} />
                 </ChatRimButton>
               </Animated.View>
             ) : null}
@@ -390,12 +427,14 @@ export function ChatComposer({
               <Animated.View style={surfaceStyle}>
                 <LiquidWaterSurface
                   radius={BAR_RADIUS}
-                  tint={INPUT_TINT}
+                  tint={colors.composerInputTint}
                   glow={FIELD_CAUSTIC}
                   strength={0.14}
                   sheen={0.12}
                   blurIntensity={INPUT_BLUR}
                   blurTarget={blurTarget}
+                  blurTint={blurTint}
+                  elevate={colors.elevate}
                 >
                   {voiceActive ? (
                     <View style={styles.barCollapsed} />
@@ -409,16 +448,20 @@ export function ChatComposer({
                     >
                       <TextInput
                         ref={inputRef}
-                        style={[styles.textInput, { fontFamily: fontMedium }, inputDirection]}
+                        style={[
+                          styles.textInput,
+                          { fontFamily: fontMedium, color: colors.textPrimary },
+                          inputDirection,
+                        ]}
                         value={value}
                         onChangeText={onChangeText}
                         onFocus={handleFocus}
                         onBlur={handleBlur}
                         placeholder={editingMessage ? editPlaceholder : placeholder}
-                        placeholderTextColor="rgba(235,228,255,0.45)"
+                        placeholderTextColor={colors.composerPlaceholder}
                         multiline
                         textAlignVertical="center"
-                        keyboardAppearance="dark"
+                        keyboardAppearance={isDark ? 'dark' : 'light'}
                         returnKeyType="send"
                         onSubmitEditing={onSend}
                         submitBehavior="submit"
@@ -442,8 +485,10 @@ export function ChatComposer({
                           }
                           badge={voiceQuota ? formatVoiceTimeLeft(voiceQuota.remainingSeconds) : null}
                           testID="chat-mic"
+                          iconBtnBg={colors.composerIconBtnBg}
+                          iconBtnBorder={colors.composerIconBtnBorder}
                         >
-                          <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
+                          <Mic size={18} color={isDark ? GLASS_ICON_IDLE : colors.icon} strokeWidth={2} />
                         </RoundIconButton>
                       ) : null}
                     </View>
@@ -474,7 +519,7 @@ export function ChatComposer({
             {voice.status === 'recording' ? (
               <Animated.View entering={FadeIn.delay(orbDelay).duration(220)} exiting={FadeOut.duration(120)}>
                 <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.finish} accessibilityLabel={t.chat.a11yVoiceDone}>
-                  <Check size={19} color="#FFFFFF" strokeWidth={2.6} />
+                  <Check size={19} color={isDark ? '#FFFFFF' : colors.icon} strokeWidth={2.6} />
                 </ChatRimButton>
               </Animated.View>
             ) : null}
@@ -487,6 +532,9 @@ export function ChatComposer({
                 a11yLabel={isGenerating ? t.chat.a11yStop : t.chat.a11ySend}
                 blurTarget={blurTarget}
                 enterDelay={leavingVoice && welcomeShown ? FIELD_RETURN_DELAY : 0}
+                fieldTint={colors.composerFieldTint}
+                blurTint={blurTint}
+                elevate={colors.elevate}
               />
             ) : null}
           </View>
@@ -557,7 +605,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: SLOT,
     maxHeight: 140,
-    color: '#FFFFFF',
     fontSize: INPUT_FONT_SIZE,
     paddingTop: Platform.OS === 'ios' ? 8 : 6,
     paddingBottom: Platform.OS === 'ios' ? 8 : 6,
@@ -570,11 +617,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  iconButtonGlass: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(210,190,255,0.3)',
   },
   badge: {
     position: 'absolute',
@@ -603,12 +645,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
-    backgroundColor: 'rgba(111,36,251,0.16)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(210,190,255,0.3)',
   },
   voiceNoticeText: {
-    color: 'rgba(255,255,255,0.82)',
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',

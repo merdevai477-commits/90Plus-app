@@ -9,7 +9,7 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { chatScreenStyles as styles } from './chatScreen.styles';
+import { useChatScreenStyles } from './chatScreen.styles';
 import { ChatIridescentBubble } from './ChatIridescentBubble';
 import { chatSpacing } from './chatTheme';
 import { useVoiceModeStore, VOICE_PULL_MS, VOICE_SETTLE_MS } from './voiceModeStore';
@@ -50,6 +50,7 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
   bottomInset = 0,
 }: ChatWelcomeViewProps) {
   const { width } = useWindowDimensions();
+  const { styles } = useChatScreenStyles();
   const greeting = (tChat.welcomeGreeting as string).replace('{name}', greetingName);
   const bubbleSize = Math.min(width * 0.5, 200);
   const reduceMotion = useReducedMotion();

@@ -15,7 +15,8 @@ import {
   CHAT_OVERLAY_BOTTOM,
   chatSpacing,
 } from './chatTheme';
-import { chatScreenStyles as styles } from './chatScreen.styles';
+import { useChatScreenStyles } from './chatScreen.styles';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { safeFlashListScrollToEnd } from './safeFlashListScroll';
 import { peekChatStream } from './chatStreamText';
 import { useBubbleMaxWidth } from './chatTextUtils';
@@ -106,6 +107,8 @@ export function ChatMessageList({
     };
   }, []);
   const { width: screenWidth } = useWindowDimensions();
+  const { styles } = useChatScreenStyles();
+  const { colors } = useChatTheme();
   const { maxWidth: bubbleMaxWidth, minWidth: bubbleMinWidth } = useBubbleMaxWidth(screenWidth);
 
   const listContentStyle = useMemo(
@@ -253,7 +256,7 @@ export function ChatMessageList({
         >
           <ChatGlassSurface
             style={styles.nudgeCard}
-            tint="rgba(124,58,237,0.22)"
+            tint={colors.nudgeTint}
             effect="regular"
             interactive
           >

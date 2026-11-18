@@ -24,11 +24,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 
-import { Colors } from '../../constants/theme';
 import { MessageContextMenu } from '../chat/MessageContextMenu';
 import { Message } from '../../hooks/useAIChatNative';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 import { ChatNavLinks } from './ChatNavLinks';
+import type { ChatColors } from './chatTheme';
 import { decodeChatNavMarker } from '../../utils/chatNavLinks';
 import { peekChatStream, subscribeChatStream } from './chatStreamText';
 
@@ -47,6 +48,359 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onCopy?: () => void;
   onNavChoice?: (text: string) => void;
+}
+
+// ─── Themed styles ────────────────────────────────────────────────────────────
+
+export type MessageBubbleStyles = ReturnType<typeof createMessageBubbleStyles>;
+
+function tableFadeStops(tableFade: string, side: 'left' | 'right'): [string, string] {
+  const clear = tableFade.replace(/,\s*[\d.]+\)\s*$/, ',0)');
+  return side === 'left' ? [tableFade, clear] : [clear, tableFade];
+}
+
+function createMessageBubbleStyles(colors: ChatColors) {
+  return StyleSheet.create({
+    aiRow: {
+      width: '100%',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      justifyContent: 'flex-start',
+      marginVertical: 6,
+      paddingHorizontal: 0,
+    },
+    aiBubbleWrap: {},
+    aiBubbleShell: {
+      borderRadius: AI_BUBBLE_RADIUS,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accentDeep,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.18,
+          shadowRadius: 6,
+        },
+        default: {},
+      }),
+    },
+    aiBubble: {
+      borderRadius: AI_BUBBLE_RADIUS,
+      overflow: 'hidden',
+      backgroundColor: colors.aiBubbleBg,
+      borderWidth: 1,
+      borderColor: colors.aiBubbleBorder,
+    },
+    ctaFooter: {
+      paddingHorizontal: 10,
+      paddingTop: 2,
+      paddingBottom: 10,
+    },
+    aiBubbleInner: {
+      width: '100%',
+      alignSelf: 'stretch',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 2,
+      zIndex: 1,
+    },
+    aiTs: {
+      fontSize: 10,
+      color: colors.textFaint,
+      marginTop: 4,
+      textAlign: 'left',
+      paddingLeft: 4,
+    },
+    userRow: {
+      width: '100%',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginVertical: 6,
+      paddingHorizontal: 0,
+    },
+    userBubbleWrap: {},
+    userBubble: {
+      borderRadius: 18,
+      borderTopRightRadius: 4,
+      borderBottomRightRadius: 4,
+      overflow: 'hidden',
+      borderWidth: 0.5,
+      borderColor: colors.aiBubbleBorder,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accentDeep,
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.22,
+          shadowRadius: 5,
+        },
+        android: { elevation: 0 },
+      }),
+    },
+    userBubbleInnerBorder: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 18,
+      borderTopRightRadius: 4,
+      borderBottomRightRadius: 4,
+      borderWidth: 0.5,
+      borderColor: colors.aiBubbleBorder,
+      zIndex: 2,
+    },
+    userText: {
+      fontSize: 15,
+      color: colors.textInverse,
+      lineHeight: 22,
+      flexShrink: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      zIndex: 3,
+    },
+    userTs: {
+      fontSize: 10,
+      color: colors.textFaint,
+      marginTop: 4,
+      textAlign: 'right',
+      paddingRight: 4,
+    },
+    typingDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    waveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.accentSoft,
+    },
+    cursor: {
+      color: colors.accentSoft,
+      fontSize: 14,
+    },
+    paragraph: {
+      fontSize: 14,
+      color: colors.textPrimary,
+      lineHeight: 21,
+      alignSelf: 'stretch',
+      width: '100%',
+    },
+    boldTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 6,
+      marginBottom: 2,
+    },
+    bold: { fontWeight: '700', color: colors.textPrimary },
+    italic: { fontStyle: 'italic', color: colors.textSecondary },
+    listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, width: '100%' },
+    bullet: { color: colors.accentSoft, fontSize: 15, marginTop: 2, flexShrink: 0 },
+    listText: {
+      flex: 1,
+      flexShrink: 1,
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 21,
+    },
+    numBadge: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: colors.tableHeadBg,
+      borderWidth: 0.5,
+      borderColor: colors.tableBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      marginTop: 2,
+    },
+    numText: { fontSize: 10, fontWeight: '700', color: colors.accentSoft },
+    spacer: { height: 4 },
+    divider: { height: 0.5, backgroundColor: colors.divider, marginVertical: 10 },
+    h1: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      marginTop: 10,
+      marginBottom: 6,
+      borderBottomWidth: 0.5,
+      borderBottomColor: colors.divider,
+      paddingBottom: 4,
+    },
+    h2: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    h3: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.accentSoft,
+      marginTop: 6,
+      marginBottom: 4,
+    },
+    codeBlock: {
+      backgroundColor: colors.codeBlockBg,
+      borderRadius: 10,
+      borderWidth: 0.5,
+      borderColor: colors.codeBlockBorder,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.accentDeep,
+      padding: 12,
+      marginVertical: 6,
+      alignSelf: 'stretch',
+    },
+    codeText: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 12,
+      color: colors.accentSoft,
+      lineHeight: 19,
+      flexShrink: 1,
+    },
+    tableBlock: {
+      alignSelf: 'stretch',
+      width: '100%',
+      maxWidth: '100%',
+      marginVertical: 8,
+    },
+    tableHintRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginBottom: 8,
+      paddingHorizontal: 4,
+    },
+    tableHint: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.accentSoft,
+      textAlign: 'center',
+      flexShrink: 1,
+    },
+    tableScrollShell: {
+      position: 'relative',
+      alignSelf: 'stretch',
+      minHeight: 52,
+    },
+    tableFadeLeft: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 28,
+      zIndex: 3,
+      borderTopLeftRadius: 10,
+      borderBottomLeftRadius: 10,
+    },
+    tableFadeRight: {
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: 28,
+      zIndex: 3,
+      borderTopRightRadius: 10,
+      borderBottomRightRadius: 10,
+    },
+    tableArrowLeft: {
+      position: 'absolute',
+      left: 2,
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      zIndex: 4,
+    },
+    tableArrowRight: {
+      position: 'absolute',
+      right: 2,
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      zIndex: 4,
+    },
+    tableArrowBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.accentDeep,
+      borderWidth: 1,
+      borderColor: colors.divider,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accentDeep,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.45,
+          shadowRadius: 6,
+        },
+        android: { elevation: 6 },
+      }),
+    },
+    tableArrowBtnDisabled: {
+      opacity: 0.38,
+    },
+    tableScroll: {
+      flexGrow: 0,
+      borderRadius: 10,
+      borderWidth: 0.5,
+      borderColor: colors.tableBorder,
+    },
+    tableScrollContent: {
+      flexGrow: 0,
+    },
+    table: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.tableBorder,
+      backgroundColor: colors.tableBg,
+    },
+    tableHead: {
+      flexDirection: 'row',
+      backgroundColor: colors.tableHeadBg,
+    },
+    tableRow: {
+      flexDirection: 'row',
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.tableBorder,
+    },
+    tableRowAlt: {
+      backgroundColor: colors.tableRowAlt,
+    },
+    tableRowLast: {
+      borderBottomLeftRadius: 12,
+      borderBottomRightRadius: 12,
+    },
+    tableCell: {
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: colors.divider,
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    tableCellFirst: {
+      borderLeftWidth: 0,
+    },
+    tableCellLast: {},
+    tableHeadText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      letterSpacing: 0.2,
+      flexShrink: 0,
+    },
+    tableCellText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      lineHeight: 18,
+      flexShrink: 0,
+    },
+  });
 }
 
 // ─── Markdown helpers ─────────────────────────────────────────────────────────
@@ -76,7 +430,7 @@ function lineTextStyle(line: string, base: TextStyle): TextStyle {
   return { ...base, flexShrink: 1, ...getTextDirectionStyles(line) };
 }
 
-function renderInline(text: string): React.ReactNode {
+function renderInline(text: string, s: MessageBubbleStyles): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   if (parts.length === 1) return text;
   return parts.map((p, i) => {
@@ -100,13 +454,15 @@ function colMinWidth(text: string, isHeader: boolean): number {
 function TableCellText({
   text,
   style,
+  bubbleStyles: s,
 }: {
   text: string;
   style: TextStyle | TextStyle[];
+  bubbleStyles: MessageBubbleStyles;
 }) {
   return (
     <Text style={[style, getTextDirectionStyles(text)]}>
-      {renderInline(text)}
+      {renderInline(text, s)}
     </Text>
   );
 }
@@ -123,6 +479,8 @@ function MarkdownTable({
   bubbleMaxWidth: number;
 }) {
   const { t } = useTranslation();
+  const { colors } = useChatTheme();
+  const s = useMemo(() => createMessageBubbleStyles(colors), [colors]);
   const scrollRef = useRef<ScrollView>(null);
   const offsetX = useRef(0);
   const [offset, setOffset] = useState(0);
@@ -178,7 +536,7 @@ function MarkdownTable({
               hi === colCount - 1 && s.tableCellLast,
             ]}
           >
-            <TableCellText text={h} style={s.tableHeadText} />
+            <TableCellText text={h} style={s.tableHeadText} bubbleStyles={s} />
           </View>
         ))}
       </View>
@@ -203,7 +561,7 @@ function MarkdownTable({
                   ci === colCount - 1 && s.tableCellLast,
                 ]}
               >
-                <TableCellText text={cell} style={s.tableCellText} />
+                <TableCellText text={cell} style={s.tableCellText} bubbleStyles={s} />
               </View>
             );
           })}
@@ -250,7 +608,7 @@ function MarkdownTable({
             {canLeft ? (
               <LinearGradient
                 pointerEvents="none"
-                colors={['rgba(8,4,16,0.92)', 'rgba(8,4,16,0)']}
+                colors={tableFadeStops(colors.tableFade, 'left')}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
                 style={s.tableFadeLeft}
@@ -259,7 +617,7 @@ function MarkdownTable({
             {canRight ? (
               <LinearGradient
                 pointerEvents="none"
-                colors={['rgba(8,4,16,0)', 'rgba(8,4,16,0.92)']}
+                colors={tableFadeStops(colors.tableFade, 'right')}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
                 style={s.tableFadeRight}
@@ -275,7 +633,7 @@ function MarkdownTable({
                 accessibilityLabel={t.chat.tableScrollLeft}
                 accessibilityState={{ disabled: !canLeft }}
               >
-                <ChevronLeft size={20} color="#FFFFFF" strokeWidth={2.6} />
+                <ChevronLeft size={20} color={colors.icon} strokeWidth={2.6} />
               </Pressable>
             </View>
             <View style={s.tableArrowRight} pointerEvents="box-none">
@@ -288,7 +646,7 @@ function MarkdownTable({
                 accessibilityLabel={t.chat.tableScrollRight}
                 accessibilityState={{ disabled: !canRight }}
               >
-                <ChevronRight size={20} color="#FFFFFF" strokeWidth={2.6} />
+                <ChevronRight size={20} color={colors.icon} strokeWidth={2.6} />
               </Pressable>
             </View>
           </>
@@ -302,6 +660,7 @@ function renderMarkdown(
   text: string,
   tableScrollHint: string | undefined,
   bubbleMaxWidth: number,
+  s: MessageBubbleStyles,
   lite = false,
 ): React.ReactNode[] {
   const lines = text.split('\n');
@@ -317,7 +676,7 @@ function renderMarkdown(
       if (cells.length) {
         out.push(
           <Text key={`row-${i}`} style={lineTextStyle(cells.join(' · '), s.paragraph)}>
-            {renderInline(cells.join(' · '))}
+            {renderInline(cells.join(' · '), s)}
           </Text>,
         );
       }
@@ -380,7 +739,7 @@ function renderMarkdown(
       out.push(
         <View key={`num-${i}`} style={s.listRow}>
           <View style={s.numBadge}><Text style={s.numText}>{numMatch[1]}</Text></View>
-          <Text style={lineTextStyle(numMatch[2], s.listText)}>{renderInline(numMatch[2])}</Text>
+          <Text style={lineTextStyle(numMatch[2], s.listText)}>{renderInline(numMatch[2], s)}</Text>
         </View>,
       );
       continue;
@@ -391,7 +750,7 @@ function renderMarkdown(
       out.push(
         <View key={`bul-${i}`} style={s.listRow}>
           <Text style={s.bullet}>•</Text>
-          <Text style={lineTextStyle(body, s.listText)}>{renderInline(body)}</Text>
+          <Text style={lineTextStyle(body, s.listText)}>{renderInline(body, s)}</Text>
         </View>,
       );
       continue;
@@ -401,7 +760,7 @@ function renderMarkdown(
 
     out.push(
       <Text key={`p-${i}`} style={lineTextStyle(line, s.paragraph)}>
-        {renderInline(line)}
+        {renderInline(line, s)}
       </Text>,
     );
   }
@@ -410,7 +769,7 @@ function renderMarkdown(
 
 // ─── Streaming cursor ─────────────────────────────────────────────────────────
 
-const StreamCursor = React.memo(() => {
+const StreamCursor = React.memo(({ bubbleStyles: s }: { bubbleStyles: MessageBubbleStyles }) => {
   const op = useSharedValue(1);
   useEffect(() => {
     op.value = withRepeat(withTiming(0.2, { duration: 600, easing: Easing.inOut(Easing.ease) }), -1, true);
@@ -421,7 +780,7 @@ const StreamCursor = React.memo(() => {
 
 // ─── Wave dot ─────────────────────────────────────────────────────────────────
 
-const WaveDot = React.memo(({ delay }: { delay: number }) => {
+const WaveDot = React.memo(({ delay, bubbleStyles: s }: { delay: number; bubbleStyles: MessageBubbleStyles }) => {
   const ty = useSharedValue(0);
   useEffect(() => {
     let iv: ReturnType<typeof setInterval>;
@@ -441,14 +800,16 @@ const WaveDot = React.memo(({ delay }: { delay: number }) => {
 
 export const TypingIndicator = React.memo(() => {
   const { width } = useWindowDimensions();
-  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
+  const { maxWidth } = useBubbleMaxWidth(width);
+  const { colors } = useChatTheme();
+  const s = useMemo(() => createMessageBubbleStyles(colors), [colors]);
 
   return (
     <Animated.View entering={FadeIn.duration(300)} style={s.aiRow}>
       <View style={[s.aiBubbleWrap, { width: maxWidth, maxWidth, alignSelf: 'flex-start' }]}>
         <View style={s.aiBubble}>
           <View style={s.typingDots}>
-            {[0, 150, 300].map((d, i) => <WaveDot key={i} delay={d} />)}
+            {[0, 150, 300].map((d, i) => <WaveDot key={i} delay={d} bubbleStyles={s} />)}
           </View>
         </View>
       </View>
@@ -460,10 +821,12 @@ function StreamingMessageBody({
   messageId,
   tableScrollHint,
   maxWidth,
+  bubbleStyles: s,
 }: {
   messageId: string;
   tableScrollHint: string | undefined;
   maxWidth: number;
+  bubbleStyles: MessageBubbleStyles;
 }) {
   const text = useSyncExternalStore(
     subscribeChatStream,
@@ -472,13 +835,13 @@ function StreamingMessageBody({
   );
   const parsed = useMemo(() => decodeChatNavMarker(text), [text]);
   const content = useMemo(
-    () => renderMarkdown(parsed.text, tableScrollHint, maxWidth, true),
-    [parsed.text, tableScrollHint, maxWidth],
+    () => renderMarkdown(parsed.text, tableScrollHint, maxWidth, s, true),
+    [parsed.text, tableScrollHint, maxWidth, s],
   );
   return (
     <View collapsable={false}>
       {content}
-      <StreamCursor />
+      <StreamCursor bubbleStyles={s} />
     </View>
   );
 }
@@ -487,6 +850,8 @@ function StreamingMessageBody({
 
 export const AIMessageBubble = React.memo(function AIMessageBubble({ message, isHistory = false, onNavChoice, bubbleMaxWidth }: MessageBubbleProps) {
   const { t } = useTranslation();
+  const { colors } = useChatTheme();
+  const s = useMemo(() => createMessageBubbleStyles(colors), [colors]);
   const maxWidth = bubbleMaxWidth ?? 320;
 
   const tsOp = useSharedValue(0);
@@ -504,8 +869,8 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, is
   const sourceText = parsed.text;
   const navLinks = message.navLinks?.length ? message.navLinks : parsed.navLinks;
   const content = useMemo(
-    () => (streaming ? null : renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth)),
-    [streaming, sourceText, t.chat.tableScrollHint, maxWidth],
+    () => (streaming ? null : renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth, s)),
+    [streaming, sourceText, t.chat.tableScrollHint, maxWidth, s],
   );
 
   return (
@@ -514,7 +879,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, is
         <View style={s.aiBubbleShell}>
           <View style={s.aiBubble} collapsable={false}>
             <LinearGradient
-              colors={['rgba(150,120,255,0.10)', 'rgba(150,120,255,0)']}
+              colors={[colors.aiGlow, 'transparent']}
               start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.35 }}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
@@ -526,6 +891,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, is
                     messageId={message.id}
                     tableScrollHint={t.chat.tableScrollHint}
                     maxWidth={maxWidth}
+                    bubbleStyles={s}
                   />
                 ) : (
                   content
@@ -552,11 +918,13 @@ const AnimPressable = Animated.createAnimatedComponent(Pressable);
 export const UserMessageBubble = React.memo(function UserMessageBubble({
   message, onResend, onEdit, onDelete, onCopy, bubbleMaxWidth, bubbleMinWidth,
 }: MessageBubbleProps) {
+  const { colors } = useChatTheme();
+  const s = useMemo(() => createMessageBubbleStyles(colors), [colors]);
   const maxWidth = bubbleMaxWidth ?? 320;
   const minWidth = bubbleMinWidth ?? 72;
   const userTextStyle = useMemo(
     () => [s.userText, getTextDirectionStyles(message.text ?? '')],
-    [message.text],
+    [message.text, s],
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const scale = useSharedValue(1);
@@ -594,7 +962,7 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
           >
             <View style={s.userBubble}>
               <LinearGradient
-                colors={['#7C3AED', '#5B21B6']}
+                colors={[...colors.userBubble]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
@@ -616,338 +984,4 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
       )}
     </>
   );
-});
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const s = StyleSheet.create({
-  aiRow: {
-    width: '100%',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginVertical: 6,
-    paddingHorizontal: 0,
-  },
-  aiBubbleWrap: {},
-  aiBubbleShell: {
-    borderRadius: AI_BUBBLE_RADIUS,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C4DFF',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.18,
-        shadowRadius: 6,
-      },
-      default: {},
-    }),
-  },
-  aiBubble: {
-    borderRadius: AI_BUBBLE_RADIUS,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(3,2,8,0.94)',
-    // Holds the edge while the bubble is still growing and the Skia rim hasn't redrawn yet.
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.28)',
-  },
-  ctaFooter: {
-    paddingHorizontal: 10,
-    paddingTop: 2,
-    paddingBottom: 10,
-  },
-  aiBubbleInner: {
-    width: '100%',
-    alignSelf: 'stretch',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 2,
-    zIndex: 1,
-  },
-  aiTs: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.35)',
-    marginTop: 4,
-    textAlign: 'left',
-    paddingLeft: 4,
-  },
-
-  userRow: {
-    width: '100%',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginVertical: 6,
-    paddingHorizontal: 0,
-  },
-  userBubbleWrap: {},
-  userBubble: {
-    borderRadius: 18,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(167,139,250,0.4)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.22,
-        shadowRadius: 5,
-      },
-      android: { elevation: 0 },
-    }),
-  },
-  userBubbleInnerBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 18,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
-    borderWidth: 0.5,
-    borderColor: 'rgba(196,181,253,0.15)',
-    zIndex: 2,
-  },
-  userText: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    lineHeight: 22,
-    flexShrink: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    zIndex: 3,
-  },
-  userTs: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.35)',
-    marginTop: 4,
-    textAlign: 'right',
-    paddingRight: 4,
-  },
-
-  typingDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  waveDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: 'rgba(167,139,250,0.8)',
-  },
-
-  cursor: {
-    color: 'rgba(196,181,253,0.75)',
-    fontSize: 14,
-  },
-
-  paragraph: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.88)',
-    lineHeight: 21,
-    alignSelf: 'stretch',
-    width: '100%',
-  },
-  boldTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginTop: 6,
-    marginBottom: 2,
-  },
-  bold:   { fontWeight: '700', color: '#FFFFFF' },
-  italic: { fontStyle: 'italic', color: 'rgba(255,255,255,0.8)' },
-
-  listRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, width: '100%' },
-  bullet:  { color: '#A78BFA', fontSize: 15, marginTop: 2, flexShrink: 0 },
-  listText: {
-    flex: 1,
-    flexShrink: 1,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 21,
-  },
-  numBadge: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: 'rgba(124,58,237,0.35)',
-    borderWidth: 0.5, borderColor: 'rgba(167,139,250,0.4)',
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0, marginTop: 2,
-  },
-  numText: { fontSize: 10, fontWeight: '700', color: '#A78BFA' },
-
-  spacer:  { height: 4 },
-  divider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 10 },
-
-  h1: {
-    fontSize: 20, fontWeight: '800', color: '#FFFFFF',
-    marginTop: 10, marginBottom: 6,
-    borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)',
-    paddingBottom: 4,
-  },
-  h2: {
-    fontSize: 17, fontWeight: '700', color: 'rgba(255,255,255,0.95)',
-    marginTop: 8, marginBottom: 4,
-  },
-  h3: {
-    fontSize: 15, fontWeight: '600', color: '#A78BFA',
-    marginTop: 6, marginBottom: 4,
-  },
-
-  codeBlock: {
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 10,
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)',
-    borderLeftWidth: 3, borderLeftColor: '#7C3AED',
-    padding: 12, marginVertical: 6,
-    alignSelf: 'stretch',
-  },
-  codeText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
-    color: '#a78bfa',
-    lineHeight: 19,
-    flexShrink: 1,
-  },
-
-  tableBlock: {
-    alignSelf: 'stretch',
-    width: '100%',
-    maxWidth: '100%',
-    marginVertical: 8,
-  },
-  tableHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  tableHint: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(196,181,253,0.95)',
-    textAlign: 'center',
-    flexShrink: 1,
-  },
-  tableScrollShell: {
-    position: 'relative',
-    alignSelf: 'stretch',
-    minHeight: 52,
-  },
-  tableFadeLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 28,
-    zIndex: 3,
-    borderTopLeftRadius: 10,
-    borderBottomLeftRadius: 10,
-  },
-  tableFadeRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 28,
-    zIndex: 3,
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-  },
-  tableArrowLeft: {
-    position: 'absolute',
-    left: 2,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 4,
-  },
-  tableArrowRight: {
-    position: 'absolute',
-    right: 2,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 4,
-  },
-  tableArrowBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(124,58,237,0.75)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.45,
-        shadowRadius: 6,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  tableArrowBtnDisabled: {
-    opacity: 0.38,
-  },
-  tableScroll: {
-    flexGrow: 0,
-    borderRadius: 10,
-    borderWidth: 0.5,
-    borderColor: 'rgba(167,139,250,0.3)',
-  },
-  tableScrollContent: {
-    flexGrow: 0,
-  },
-  table: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.35)',
-    backgroundColor: 'rgba(10,6,20,0.9)',
-  },
-  tableHead: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(124,58,237,0.38)',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(167,139,250,0.12)',
-  },
-  tableRowAlt: {
-    backgroundColor: 'rgba(124,58,237,0.10)',
-  },
-  tableRowLast: {
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-  },
-  tableCell: {
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  tableCellFirst: {
-    borderLeftWidth: 0,
-  },
-  tableCellLast: {},
-  tableHeadText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-    flexShrink: 0,
-  },
-  tableCellText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.88)',
-    lineHeight: 18,
-    flexShrink: 0,
-  },
 });

@@ -27,6 +27,7 @@ import { IridescentRim } from './IridescentRim';
 import { hasWelcomeOrbOrigin, takeWelcomeOrbOrigin } from './welcomeOrbOrigin';
 import { holdTypingUntil } from '../../utils/chatTypingHold';
 import { useTranslation } from '../../src/i18n';
+import { useChatTheme } from '../../hooks/useChatTheme';
 
 const ORB = 40;
 /** Rendered large and scaled down, so the orb stays crisp while it is still big mid-flight. */
@@ -68,6 +69,7 @@ function TypingDot({ delay, reduceMotion }: { delay: number; reduceMotion: boole
 
 export function ChatTypingOrb() {
   const { t } = useTranslation();
+  const { colors, blurTint } = useChatTheme();
   const reduceMotion = useReducedMotion();
   const [pulled] = useState(() => hasWelcomeOrbOrigin() && !reduceMotion);
   const anchorRef = useRef<View>(null);
@@ -167,10 +169,12 @@ export function ChatTypingOrb() {
       <Animated.View entering={FadeIn.delay(pulled ? PULL_MS + 120 : 120).duration(260)}>
         <LiquidWaterSurface
           radius={PILL_RADIUS}
-          tint="rgba(3,2,8,0.92)"
+          tint={colors.typingPillTint}
           glow={[0.6, 0.75, 1]}
           strength={0.12}
           sheen={0.1}
+          blurTint={blurTint}
+          elevate={colors.elevate}
           style={styles.pill}
         >
           {[0, 160, 320].map((d) => (

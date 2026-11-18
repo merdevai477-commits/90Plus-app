@@ -22,5 +22,5 @@ export { ErrorBanner } from './ErrorBanner';
 export { MessageContextMenu } from './MessageContextMenu';
 export { ConversationContextMenu } from './ConversationContextMenu';
 export { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
-export { chatColors, chatSpacing, chatRadii, chatTypography } from './chatTheme';
+export { CHAT_THEME, chatColors, chatSpacing, chatRadii, chatTypography, type ChatColors } from './chatTheme';
 export { chatScreenStyles } from './chatScreen.styles';

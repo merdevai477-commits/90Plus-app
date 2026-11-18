@@ -24,7 +24,7 @@ import {
 } from 'lucide-react-native';
 import { LiquidWaterSurface } from './LiquidWaterSurface';
 import { IridescentRim } from './IridescentRim';
-import { chatColors } from './chatTheme';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { useAppFont } from '../../utils/fontSetup';
 
 const CHIP_WIDTH = 226;
@@ -34,7 +34,6 @@ const CHIP_GAP = 10;
 const ROW_INSET = 20;
 /** IridescentRim draws its glow this far outside the chip; the row pads for it so nothing clips. */
 const RIM_GLOW = 10;
-const CHIP_TINT = 'rgba(3,2,8,0.9)';
 const CHIP_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
 
 const FIRST_CHIP_DELAY = 520;
@@ -74,6 +73,7 @@ function SuggestionChip({
 }) {
   const titleFont = useAppFont(600);
   const subtitleFont = useAppFont(400);
+  const { colors, blurTint } = useChatTheme();
   const press = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   const Icon = item.icon;
@@ -99,21 +99,29 @@ function SuggestionChip({
       >
         <LiquidWaterSurface
           radius={CHIP_RADIUS}
-          tint={CHIP_TINT}
+          tint={colors.chipTint}
           glow={CHIP_CAUSTIC}
           strength={0.12}
           sheen={0.12}
           blurTarget={blurTarget}
+          blurTint={blurTint}
+          elevate={colors.elevate}
           style={[styles.chip, isAr && styles.chipRtl]}
         >
           <View style={[styles.iconWrap, { backgroundColor: `${item.tint}24`, borderColor: `${item.tint}55` }]}>
             <Icon size={16} color={item.tint} strokeWidth={2.1} />
           </View>
           <View style={styles.texts}>
-            <Text style={[styles.title, { fontFamily: titleFont, textAlign }]} numberOfLines={1}>
+            <Text
+              style={[styles.title, { fontFamily: titleFont, textAlign, color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
               {item.title}
             </Text>
-            <Text style={[styles.subtitle, { fontFamily: subtitleFont, textAlign }]} numberOfLines={1}>
+            <Text
+              style={[styles.subtitle, { fontFamily: subtitleFont, textAlign, color: colors.textMuted }]}
+              numberOfLines={1}
+            >
               {item.subtitle}
             </Text>
           </View>
@@ -243,12 +251,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: chatColors.textPrimary,
     fontSize: 13,
     letterSpacing: -0.1,
   },
   subtitle: {
-    color: chatColors.textMuted,
     fontSize: 11,
     marginTop: 1,
   },

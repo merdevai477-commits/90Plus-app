@@ -28,12 +28,13 @@ import { MessageCircle, Pin, Search, X } from 'lucide-react-native';
 import { Conversation } from '../../hooks/useAIChatNative';
 import { ChatRimButton } from './ChatRimButton';
 import { IridescentRim } from './IridescentRim';
-import { chatColors } from './chatTheme';
+import type { ChatColors } from './chatTheme';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { MessageCounter } from './MessageCounter';
 import { Toast } from './Toast';
 import { ConversationContextMenu } from './ConversationContextMenu';
 import { ConversationSkeleton, UserProfileSkeleton } from './SkeletonLoader';
-import { Colors, Gradients } from '../../constants/theme';
+import { Gradients } from '../../constants/theme';
 import { useTranslation } from '../../src/i18n';
 import {
   handleConversationLongPress,
@@ -107,21 +108,23 @@ export function RenameModal({
   cancelLabel,
   confirmLabel,
 }: RenameModalProps) {
+  const { colors, blurTint } = useChatTheme();
+  const styles = useMemo(() => createHistoryPanelStyles(colors), [colors]);
   const [value, setValue] = useState(initialValue);
   useEffect(() => { if (visible) setValue(initialValue); }, [visible, initialValue]);
   return (
     <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={[
         styles.renameOverlay,
-        Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }
+        Platform.OS === 'android' && { backgroundColor: colors.sheetOverlay }
       ]}>
         <BlurView 
           intensity={Platform.OS === 'ios' ? 30 : 100} 
-          tint="dark" 
+          tint={blurTint} 
           style={StyleSheet.absoluteFill} 
         />
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
-        <View style={[styles.renameCard, { backgroundColor: '#1A1525' }]}>
+        <View style={styles.renameCard}>
           <View style={styles.renameContent}>
             <Text style={styles.renameTitle}>{title}</Text>
             <Text style={styles.renameSubtitle}>{subtitle}</Text>
@@ -130,7 +133,7 @@ export function RenameModal({
               value={value}
               onChangeText={setValue}
               placeholder={placeholder}
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={colors.composerPlaceholder}
               textAlign="right"
               autoFocus
               maxLength={60}
@@ -168,6 +171,8 @@ export function HistoryItem({
   isActive: boolean; isPinned: boolean;
   onPress: () => void; onLongPress: () => void;
 }) {
+  const { colors } = useChatTheme();
+  const styles = useMemo(() => createHistoryPanelStyles(colors), [colors]);
   const [pressed, setPressed] = useState(false);
   return (
     <Pressable
@@ -183,7 +188,7 @@ export function HistoryItem({
     >
       {isActive ? <IridescentRim radius={16} filmDepth={8} /> : null}
       <View style={styles.historyItemIcon}>
-        <MessageCircle size={16} color={isActive ? '#FFFFFF' : FILM_ACCENT} strokeWidth={2} />
+        <MessageCircle size={16} color={isActive ? colors.icon : FILM_ACCENT} strokeWidth={2} />
       </View>
       <View style={styles.historyItemContent}>
         <View style={styles.historyItemTitleRow}>
@@ -226,6 +231,8 @@ export function ChatHistoryPanel({
   displayName, avatar,
 }: ChatHistoryPanelProps) {
   const { t } = useTranslation();
+  const { colors } = useChatTheme();
+  const styles = useMemo(() => createHistoryPanelStyles(colors), [colors]);
   const p = t.chat.panel;
   const fallbackName = t.chat.welcomeGreetingFallback;
   const insets = useSafeAreaInsets();
@@ -352,15 +359,15 @@ export function ChatHistoryPanel({
         ]}
       >
         <LinearGradient
-          colors={['#0D0A1A', '#08070F', '#060509']}
+          colors={[...colors.bgGradient]}
           locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
         <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
           <Defs>
             <RadialGradient id="panelGlow" cx="85%" cy="0%" r="75%">
-              <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.22" />
-              <Stop offset="1" stopColor="#6F24FB" stopOpacity="0" />
+              <Stop offset="0" stopColor={colors.glowStop} stopOpacity={colors.glowOpacity} />
+              <Stop offset="1" stopColor={colors.glowStop} stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Rect x="0" y="0" width="100" height="100" fill="url(#panelGlow)" />
@@ -373,7 +380,7 @@ export function ChatHistoryPanel({
           {/* Header */}
           <View style={styles.panelHeader}>
             <ChatRimButton size={36} onPress={onClose} accessibilityLabel={t.common.close}>
-              <X size={18} color="#FFFFFF" strokeWidth={2.2} />
+              <X size={18} color={colors.icon} strokeWidth={2.2} />
             </ChatRimButton>
             <View>
               <Text style={styles.panelTitle}>{p.title}</Text>
@@ -415,7 +422,7 @@ export function ChatHistoryPanel({
                             colors={['#7B35FF', '#6420F0']}
                             style={StyleSheet.absoluteFill}
                           />
-                          <Text style={styles.avatarText}>
+                          <Text style={[styles.avatarText, { color: colors.textInverse }]}>
                             {(displayName?.trim()?.[0] ?? 'ك').toUpperCase()}
                           </Text>
                         </>
@@ -445,13 +452,13 @@ export function ChatHistoryPanel({
 
               {/* Search bar */}
               <View style={styles.searchBar}>
-                <Search size={16} color="rgba(255,255,255,0.4)" strokeWidth={2} />
+                <Search size={16} color={colors.iconMuted} strokeWidth={2} />
                 <TextInput
                   style={styles.searchInput}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   placeholder={p.searchPlaceholder}
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholderTextColor={colors.composerPlaceholder}
                   textAlign="right"
                   returnKeyType="search"
                   clearButtonMode="never"
@@ -669,7 +676,8 @@ export function ChatHistoryPanel({
   );
 }
 
-const styles = StyleSheet.create({
+function createHistoryPanelStyles(colors: ChatColors) {
+  return StyleSheet.create({
   // ── History Panel ──
   panel: {
     position: 'absolute', top: 0, bottom: 0, right: 0,
@@ -677,7 +685,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderTopLeftRadius: 28,
     borderBottomLeftRadius: 28,
-    backgroundColor: '#08070F',
+    backgroundColor: colors.sheetBg,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -698,7 +706,7 @@ const styles = StyleSheet.create({
     width: 1.5,
   },
   panelBackdrop: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.sheetOverlay,
     zIndex: 99,
   },
   panelContent: {
@@ -717,13 +725,13 @@ const styles = StyleSheet.create({
   panelTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: 'white',
+    color: colors.textPrimary,
     textAlign: 'right',
     letterSpacing: -0.3,
   },
   panelSubtitle: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    color: colors.textMuted,
     textAlign: 'right',
     marginTop: 2,
   },
@@ -733,9 +741,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.historyRowBg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(163,221,249,0.14)',
+    borderColor: colors.historySearchBorder,
     borderRadius: 20,
     padding: 14,
     marginBottom: 14,
@@ -745,7 +753,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0, left: 20, right: 20,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.divider,
   },
   profileLeft: {
         flexDirection: 'row',
@@ -756,7 +764,7 @@ const styles = StyleSheet.create({
   avatarRing: {
     width: 50, height: 50, borderRadius: 25,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: chatColors.rimButtonCore,
+    backgroundColor: colors.rimButtonCore,
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
@@ -764,14 +772,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarText: {
-    color: 'white',
     fontWeight: '800',
     fontSize: 18,
     zIndex: 1,
   },
   profileName: {
     flexShrink: 1,
-    color: 'white',
+    color: colors.textPrimary,
     fontWeight: '700',
     fontSize: 15,
     textAlign: 'right',
@@ -787,7 +794,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.35)',
+    color: colors.textMuted,
     fontWeight: '700',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -800,16 +807,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.025)',
+    backgroundColor: colors.historyRowBg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: colors.historyRowBorder,
   },
   historyItemActive: {
-    backgroundColor: chatColors.rimButtonCore,
-    borderColor: 'transparent',
+    backgroundColor: colors.historyRowActiveBg,
+    borderColor: colors.historyRowActiveBorder,
   },
   historyItemPressed: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.bgSurfaceHover,
   },
   historyItemIcon: {
     width: 34, height: 34, borderRadius: 17,
@@ -826,14 +833,14 @@ const styles = StyleSheet.create({
   },
   historyItemTitle: {
     fontSize: 14,
-    color: 'white',
+    color: colors.textPrimary,
     fontWeight: '500',
     textAlign: 'right',
     flex: 1,
   },
   historyItemDate: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
+    color: colors.textMuted,
     textAlign: 'right',
   },
 
@@ -847,12 +854,12 @@ const styles = StyleSheet.create({
   emptyBubble: { width: 72, height: 72, marginBottom: 8 },
   emptyTitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.textSecondary,
     fontWeight: '700',
   },
   emptySub: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
+    color: colors.textMuted,
     textAlign: 'center',
   },
 
@@ -863,13 +870,13 @@ const styles = StyleSheet.create({
     borderRadius: NEW_CHAT_HEIGHT / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: chatColors.rimButtonCore,
+    backgroundColor: colors.rimButtonCore,
   },
   newChatButtonPressed: {
     transform: [{ scale: 0.98 }],
   },
   newChatText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontWeight: '700',
     fontSize: 14,
     letterSpacing: 0.3,
@@ -880,9 +887,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: colors.historySearchBg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(163,221,249,0.14)',
+    borderColor: colors.historySearchBorder,
     borderRadius: 22,
     paddingHorizontal: 14,
     marginTop: 12,
@@ -891,7 +898,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 13,
     paddingVertical: 8,
     includeFontPadding: false,
@@ -904,22 +911,40 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   searchClearText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: colors.iconMuted,
     fontSize: 18,
     lineHeight: 20,
   },
 
   // ── Rename Modal ──
-  renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  renameCard: { width: '100%', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
+  renameOverlay: { flex: 1, backgroundColor: colors.sheetOverlay, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  renameCard: {
+    width: '100%',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    backgroundColor: colors.bgElevated,
+    overflow: 'hidden',
+  },
   renameContent: { padding: 24, alignItems: 'center' },
-  renameTitle: { fontSize: 20, fontWeight: '700', color: 'white', marginBottom: 8 },
-  renameSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 24 },
-  renameInput: { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16, color: 'white', fontSize: 16, marginBottom: 24 },
+  renameTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
+  renameSubtitle: { fontSize: 14, color: colors.textMuted, marginBottom: 24 },
+  renameInput: {
+    width: '100%',
+    backgroundColor: colors.historySearchBg,
+    borderWidth: 1,
+    borderColor: colors.historySearchBorder,
+    borderRadius: 12,
+    padding: 16,
+    color: colors.textPrimary,
+    fontSize: 16,
+    marginBottom: 24,
+  },
   renameActions: { flexDirection: 'row', gap: 12, width: '100%' },
-  renameCancelBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
-  renameCancelText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  renameCancelBtn: { flex: 1, height: 48, borderRadius: 12, backgroundColor: colors.nudgeDismissBg, alignItems: 'center', justifyContent: 'center' },
+  renameCancelText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
   renameConfirmBtn: { flex: 1, height: 48, borderRadius: 12, overflow: 'hidden' },
   renameConfirmGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  renameConfirmText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  renameConfirmText: { color: colors.textInverse, fontSize: 16, fontWeight: '600' },
 });
+}

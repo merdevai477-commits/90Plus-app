@@ -9,6 +9,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { Colors, Radius, FontSize, Spacing } from '../../constants/theme';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import { ChatRimButton } from './ChatRimButton';
 
 const BADGE_MAX = 99;
@@ -23,6 +24,7 @@ export function ScrollToBottomButton({
   onPress,
   newMessagesCount = 0,
 }: ScrollToBottomButtonProps) {
+  const { colors, isDark } = useChatTheme();
   const badgeLabel = useMemo(() => {
     if (newMessagesCount <= 0) return null;
     return newMessagesCount > BADGE_MAX
@@ -40,7 +42,14 @@ export function ScrollToBottomButton({
       style={styles.container}
     >
       <ChatRimButton onPress={onPress} accessibilityLabel={a11yLabel} size={SIZE}>
-        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
+        <Svg
+          width={20}
+          height={20}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={isDark ? '#FFFFFF' : colors.icon}
+          strokeWidth={2.2}
+        >
           <Path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </ChatRimButton>
