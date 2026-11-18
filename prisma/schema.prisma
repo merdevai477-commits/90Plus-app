@@ -3389,6 +3389,8 @@ model TopScorersFiveSquadMember {
   playerId      String
   selectedAt    DateTime
   removedAt     DateTime?
+  /// This slot cannot be replaced or cleared until this instant. Other slots are unaffected.
+  lockedUntil   DateTime?
   legacyThrough DateTime?
   createdAt     DateTime               @default(now())
   squad         TopScorersFiveSquad    @relation(fields: [squadId], references: [id], onDelete: Cascade)

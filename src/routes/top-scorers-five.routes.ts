@@ -12,6 +12,7 @@ import {
   TopScorersFiveError,
   clearTsfSelection,
   getTsfLeaderboard,
+  getTsfLineup,
   getTsfMyFixtures,
   getTsfSelection,
   getTsfUserScore,
@@ -28,6 +29,7 @@ import { resolveTopScorersFivePool, seedTopScorersFivePool } from '../services/t
 import {
   getTsfLeagueConfig,
   parseTsfTournament,
+  tsfCompetitionKey,
   TSF_EGYPT_POOL_KEY,
   type TsfLeagueKey,
 } from '../services/top-scorers-five-scoring';
@@ -77,6 +79,14 @@ function clerkId(req: Request, res: Response): string | null {
 /** A. GET /leagues/:leagueKey/players — the league's eligible players. */
 router.get('/leagues/:leagueKey/players', handle('players', async (req, res) => {
   const data = await listTsfEligiblePlayers(String(req.params.leagueKey), language(req));
+  res.json({ success: true, data });
+}));
+
+/** GET /leagues/:leagueKey/lineup — the five slots of one competition. */
+router.get('/leagues/:leagueKey/lineup', requireAuth, handle('lineup', async (req, res) => {
+  const id = clerkId(req, res);
+  if (!id) return;
+  const data = await getTsfLineup(id, String(req.params.leagueKey), language(req));
   res.json({ success: true, data });
 }));
 
@@ -132,7 +142,8 @@ router.get('/me/fixtures', requireAuth, handle('my fixtures', async (req, res) =
   const id = clerkId(req, res);
   if (!id) return;
   const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
-  res.json({ success: true, data: await getTsfMyFixtures(id, language(req), undefined, tournament) });
+  const leagueKey = typeof req.query.leagueKey === 'string' ? req.query.leagueKey : undefined;
+  res.json({ success: true, data: await getTsfMyFixtures(id, language(req), undefined, tournament, leagueKey) });
 }));
 
 /** DELETE /leagues/:leagueKey/selection — drop an unconfirmed pick while open. */
@@ -148,7 +159,8 @@ router.get('/me/score', requireAuth, handle('score', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
   const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
-  res.json({ success: true, data: await getTsfUserScore(id, tournament) });
+  const leagueKey = typeof req.query.leagueKey === 'string' ? req.query.leagueKey : undefined;
+  res.json({ success: true, data: await getTsfUserScore(id, tournament, leagueKey) });
 }));
 
 /** GET /leaderboard?period=week|all&limit=50&tournament=europe|egypt */
@@ -158,7 +170,12 @@ router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) =
   const period = req.query.period === 'all' ? 'all' : 'week';
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '50'), 10) || 50, 1), 100);
   const tournament = parseTsfTournament(req.query.tournament) ?? 'europe';
-  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit, tournament }) });
+  const leagueKey = typeof req.query.leagueKey === 'string' ? req.query.leagueKey : undefined;
+  if (leagueKey && !tsfCompetitionKey(leagueKey)) {
+    sendError(req, res, ErrorCode.VALIDATION, 'Unsupported leagueKey');
+    return;
+  }
+  res.json({ success: true, data: await getTsfLeaderboard({ clerkUserId: id, period, limit, tournament, leagueKey }) });
 }));
 
 /** GET /players/:playerId/fixtures — the player's club's next league fixtures. */
@@ -172,11 +189,12 @@ function adminLeague(req: Request, res: Response): TsfLeagueKey | typeof TSF_EGY
   const key = String(req.body?.leagueKey ?? req.query.leagueKey ?? '');
   if (key === TSF_EGYPT_POOL_KEY) return TSF_EGYPT_POOL_KEY;
   const cfg = getTsfLeagueConfig(key);
-  if (!cfg) {
+  const competition = tsfCompetitionKey(key) ?? (cfg ? tsfCompetitionKey(cfg.key) : null);
+  if (!cfg || !competition) {
     sendError(req, res, ErrorCode.VALIDATION, 'Unsupported leagueKey');
     return null;
   }
-  return cfg.key;
+  return competition === 'egypt' ? TSF_EGYPT_POOL_KEY : competition;
 }
 
 /** F. POST /admin/process { leagueKey? } — run the scoring pass now. */

@@ -12,8 +12,8 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import {
   combineTsfPickStates,
+  enabledTsfCompetitions,
   enabledTsfGameweekConfigs,
-  enabledTsfLeagues,
   getTsfLeagueConfig,
   isTsfFinishedStatus,
   isTsfFixtureNotStarted,
@@ -21,12 +21,15 @@ import {
   isTsfSelectionLocked,
   isTsfVoidStatus,
   sumTsfPerformances,
+  tsfCompetitionKey,
   tsfGameweekLeagueKey,
   tsfGameweekWindow,
+  tsfIsSlotKey,
+  tsfLegacySlotAlias,
   tsfPickState,
   tsfPoolKey,
   tsfPortraitUrl,
-  tsfSiblingSlotKeys,
+  tsfSlotKeys,
   tsfUpcomingWindow,
   type TsfLeagueConfig,
   type TsfPickState,
@@ -35,11 +38,11 @@ import {
 import { threeSixFiveScoresService } from './threeSixFiveScores.service';
 import {
   fixtureAvailabilityLabel,
+  isMemberEditLocked,
   isSquadEditLocked,
-  lineupsDiffer,
+  memberLockedUntil,
   membershipCoversKickoff,
   nearestFixture,
-  nextConfirmedLock,
   type FixtureAvailabilityLabel,
 } from './squad-lock';
 
@@ -591,7 +594,22 @@ async function selectionDto(
 }
 
 function tsfScopeKey(cfg: TsfLeagueConfig): string {
-  return cfg.tournament === 'egypt' ? 'egypt' : cfg.key;
+  return tsfPoolKey(cfg);
+}
+
+/** `laliga` still means the first slot, so older clients keep a place to save. */
+function resolveSlotKey(raw: string): string {
+  if (tsfIsSlotKey(raw)) return raw;
+  const competition = tsfCompetitionKey(raw);
+  return competition ? `${competition}1` : raw;
+}
+
+function memberForSlot(members: TsfMemberRow[], slotKey: string): TsfMemberRow | null {
+  const direct = members.find((row) => row.slotKey === slotKey) ?? null;
+  if (direct) return direct;
+  const legacy = tsfLegacySlotAlias(slotKey);
+  if (!legacy) return null;
+  return members.find((row) => row.slotKey === legacy) ?? null;
 }
 
 type TsfSquadRow = {
@@ -609,6 +627,7 @@ type TsfMemberRow = {
   playerId: string;
   selectedAt: Date;
   removedAt: Date | null;
+  lockedUntil: Date | null;
   legacyThrough: Date | null;
 };
 
@@ -643,7 +662,7 @@ async function ensureTsfSquad(userId: string, scopeKey: string): Promise<TsfSqua
 async function openMembers(squadId: string): Promise<TsfMemberRow[]> {
   return prisma.topScorersFiveSquadMember.findMany({
     where: { squadId, removedAt: null },
-    select: { id: true, slotKey: true, playerId: true, selectedAt: true, removedAt: true, legacyThrough: true },
+    select: { id: true, slotKey: true, playerId: true, selectedAt: true, removedAt: true, lockedUntil: true, legacyThrough: true },
   });
 }
 
@@ -669,7 +688,19 @@ function desiredLineup(members: TsfMemberRow[], drafts: TsfDraftRow[]): Array<{ 
   return [...lineup.entries()].map(([slotKey, playerId]) => ({ slotKey, playerId }));
 }
 
-/** B + D. The signed-in user's pick. The squad lock is per user, not per week. */
+function slotLockDto(squad: TsfSquadRow, member: TsfMemberRow | null, now: Date): TsfSquadLockDto {
+  const locked = member != null && isMemberEditLocked(member.lockedUntil, now);
+  return {
+    scopeKey: squad.scopeKey,
+    locked,
+    unlocksAt: member?.lockedUntil?.toISOString() ?? null,
+    confirmedAt: squad.confirmedAt?.toISOString() ?? null,
+    dirty: false,
+    readyToEdit: !locked,
+  };
+}
+
+/** B + D. One pitch slot. Its 7-day lock does not close the other four. */
 export async function getTsfSelection(
   clerkUserId: string,
   leagueKey: string,
@@ -677,24 +708,20 @@ export async function getTsfSelection(
   now: Date = new Date(),
 ): Promise<TsfSelectionDto> {
   const userId = await requireUserId(clerkUserId);
-  const cfg = requireLeague(leagueKey);
+  const slotKey = resolveSlotKey(leagueKey);
+  const cfg = requireLeague(slotKey);
   const gameweek = await ensureTsfGameweek(cfg.key, now);
   const squad = await ensureTsfSquad(userId, tsfScopeKey(cfg));
-  const [members, drafts] = await Promise.all([openMembers(squad.id), slotDrafts(squad.id)]);
-  const member = members.find((row) => row.slotKey === cfg.key) ?? null;
-  const draft = drafts.find((row) => row.slotKey === cfg.key);
-  const dirty = drafts.length > 0;
-  const shownId = draft ? draft.playerId : member?.playerId ?? null;
-  const lock = squadLockDto(squad, dirty, now);
+  const members = await openMembers(squad.id);
+  const member = memberForSlot(members, slotKey);
+  const lock = slotLockDto(squad, member, now);
   const base = {
-    leagueKey: cfg.key,
+    leagueKey: slotKey,
     gameweek: gameweekDto(gameweek, now, !lock.locked),
     squad: lock,
   };
-  if (!shownId) {
-    return { ...base, state: 'PICKING', selection: null };
-  }
-  const player = await prisma.topScorersFivePlayer.findUnique({ where: { id: shownId } });
+  if (!member) return { ...base, state: 'PICKING', selection: null };
+  const player = await prisma.topScorersFivePlayer.findUnique({ where: { id: member.playerId } });
   if (!player) return { ...base, state: 'PICKING', selection: null };
 
   const performances = await prisma.topScorersFivePerformance.findMany({
@@ -702,21 +729,17 @@ export async function getTsfSelection(
     orderBy: { fixtureDate: 'asc' },
     select: { fixtureId: true, fixtureDate: true, goals: true, assists: true, points: true, createdAt: true },
   });
-  const covered = member && member.playerId === player.id
-    ? performances.filter((row) => {
-        const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
-        return legacy || membershipCoversKickoff(member, row.fixtureDate);
-      })
-    : [];
+  const covered = performances.filter((row) => {
+    const legacy = member.legacyThrough != null && row.createdAt.getTime() <= member.legacyThrough.getTime();
+    return legacy || membershipCoversKickoff(member, row.fixtureDate);
+  });
   const [totals, season] = await Promise.all([
     playerTotals([player.id]),
     tsfSeasonStats(cfg, teamIdsOf([player])),
   ]);
-  const slotDirty = draft != null && draft.playerId !== (member?.playerId ?? null);
-  const confirmed = member != null && shownId === member.playerId && !slotDirty;
   return {
     ...base,
-    state: lock.locked && confirmed ? 'CONFIRMED' : 'PICKING',
+    state: lock.locked ? 'CONFIRMED' : 'PICKING',
     selection: {
       player: playerDto(player, language, totals.get(player.id), season),
       score: {
@@ -729,31 +752,31 @@ export async function getTsfSelection(
           points: row.points,
         })),
       },
-      confirmed,
-      confirmedAt: confirmed ? squad.confirmedAt?.toISOString() ?? null : null,
+      confirmed: true,
+      confirmedAt: squad.confirmedAt?.toISOString() ?? member.selectedAt.toISOString(),
       locked: lock.locked,
-      updatedAt: (member?.selectedAt ?? now).toISOString(),
+      updatedAt: member.selectedAt.toISOString(),
     },
   };
 }
 
+function isSameSlot(storedKey: string, slotKey: string): boolean {
+  return storedKey === slotKey || storedKey === tsfLegacySlotAlias(slotKey);
+}
+
 async function assertNotDuplicated(
-  squadId: string,
   slotKey: string,
   playerId: string,
   members: TsfMemberRow[],
-  drafts: TsfDraftRow[],
 ): Promise<void> {
-  const lineup = desiredLineup(members, drafts);
-  if (lineup.some((slot) => slot.slotKey !== slotKey && slot.playerId === playerId)) {
+  if (members.some((slot) => !isSameSlot(slot.slotKey, slotKey) && slot.playerId === playerId)) {
     throw new TopScorersFiveError('PLAYER_ALREADY_PICKED', 'Player is already picked in another slot');
   }
 }
 
 /**
- * Europe: this PUT confirms the one-player squad and starts the 7-day lock.
- * Egypt: this PUT only stores a draft. `confirmTsfSquad` commits all five slots.
- * Fixture status never rejects the player.
+ * Confirms one slot immediately and locks only that player for 7 days.
+ * Empty slots in the same league stay open. Fixture status never rejects the player.
  */
 export async function saveTsfSelection(
   clerkUserId: string,
@@ -763,7 +786,8 @@ export async function saveTsfSelection(
   now: Date = new Date(),
 ): Promise<TsfSelectionDto> {
   const userId = await requireUserId(clerkUserId);
-  const cfg = requireLeague(leagueKey);
+  const slotKey = resolveSlotKey(leagueKey);
+  const cfg = requireLeague(slotKey);
   const player = await prisma.topScorersFivePlayer.findUnique({ where: { id: playerId } });
   if (!player) throw new TopScorersFiveError('PLAYER_NOT_FOUND', 'Player not found');
   if (player.leagueKey !== tsfPoolKey(cfg) || !player.active) {
@@ -774,36 +798,25 @@ export async function saveTsfSelection(
   }
 
   const squad = await ensureTsfSquad(userId, tsfScopeKey(cfg));
-  const [members, drafts] = await Promise.all([openMembers(squad.id), slotDrafts(squad.id)]);
-  const current = members.find((member) => member.slotKey === cfg.key) ?? null;
-  if (cfg.tournament !== 'egypt' && current?.playerId === player.id) {
-    return getTsfSelection(clerkUserId, leagueKey, language, now);
+  const version = squad.version;
+  const confirmedAt = squad.confirmedAt;
+  const members = await openMembers(squad.id);
+  const current = memberForSlot(members, slotKey);
+  if (current?.playerId === player.id) {
+    return getTsfSelection(clerkUserId, slotKey, language, now);
   }
-  assertSquadEditable(squad, now);
-  await assertNotDuplicated(squad.id, cfg.key, player.id, members, drafts);
-
-  if (cfg.tournament === 'egypt') {
-    await prisma.topScorersFiveSquadDraft.upsert({
-      where: { squadId_slotKey: { squadId: squad.id, slotKey: cfg.key } },
-      create: { squadId: squad.id, slotKey: cfg.key, playerId: player.id },
-      update: { playerId: player.id },
-    });
-    return getTsfSelection(clerkUserId, leagueKey, language, now);
+  if (current && isMemberEditLocked(current.lockedUntil, now)) {
+    throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'This player is locked');
   }
+  await assertNotDuplicated(slotKey, player.id, members);
 
   await prisma.$transaction(async (tx) => {
-    const next = nextConfirmedLock(
-      { confirmedAt: squad.confirmedAt, unlocksAt: squad.unlocksAt, version: squad.version },
-      true,
-      now,
-    );
-    if (!next.ok) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
     const claimed = await tx.topScorersFiveSquad.updateMany({
-      where: { id: squad.id, version: squad.version },
-      data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt },
+      where: { id: squad.id, version },
+      data: { version: version + 1, confirmedAt: confirmedAt ?? now },
     });
     if (claimed.count === 0) {
-      logger.info(`[fantasy.confirm.conflict] mode=five league=${cfg.key}`);
+      logger.info(`[fantasy.confirm.conflict] mode=five league=${slotKey}`);
       throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
     }
     if (current) {
@@ -813,15 +826,21 @@ export async function saveTsfSelection(
       });
     }
     await tx.topScorersFiveSquadMember.create({
-      data: { squadId: squad.id, slotKey: cfg.key, playerId: player.id, selectedAt: now },
+      data: {
+        squadId: squad.id,
+        slotKey,
+        playerId: player.id,
+        selectedAt: now,
+        lockedUntil: memberLockedUntil(now),
+      },
     });
   });
-  return getTsfSelection(clerkUserId, leagueKey, language, now);
+  return getTsfSelection(clerkUserId, slotKey, language, now);
 }
 
 /**
- * Commit an Egypt draft. An identical lineup does not start a new 7-day lock.
- * Europe squads are confirmed by `saveTsfSelection`.
+ * Lineups confirm per slot. This remains so older clients get the current
+ * slot back instead of starting a squad-wide lock.
  */
 export async function confirmTsfSquad(
   clerkUserId: string,
@@ -829,87 +848,69 @@ export async function confirmTsfSquad(
   language: TsfLanguage,
   now: Date = new Date(),
 ): Promise<TsfSelectionDto> {
-  const userId = await requireUserId(clerkUserId);
-  const cfg = requireLeague(leagueKey);
-  if (cfg.tournament !== 'egypt') return getTsfSelection(clerkUserId, leagueKey, language, now);
-  const squad = await ensureTsfSquad(userId, 'egypt');
-  const [members, drafts] = await Promise.all([openMembers(squad.id), slotDrafts(squad.id)]);
-  const nextSlots = desiredLineup(members, drafts);
-  const ids = nextSlots.map((slot) => slot.playerId);
-  if (new Set(ids).size !== ids.length) {
-    throw new TopScorersFiveError('PLAYER_ALREADY_PICKED', 'Player is already picked in another slot');
-  }
-  const before = members.map((member) => ({ slotKey: member.slotKey, id: member.playerId }));
-  const after = nextSlots.map((slot) => ({ slotKey: slot.slotKey, id: slot.playerId }));
-  const changed = lineupsDiffer(before, after);
-  if (!changed) {
-    await prisma.topScorersFiveSquadDraft.deleteMany({ where: { squadId: squad.id } });
-    return getTsfSelection(clerkUserId, leagueKey, language, now);
-  }
-  assertSquadEditable(squad, now);
-  const next = nextConfirmedLock(
-    { confirmedAt: squad.confirmedAt, unlocksAt: squad.unlocksAt, version: squad.version },
-    changed,
-    now,
-  );
-  if (!next.ok) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
-
-  await prisma.$transaction(async (tx) => {
-    const claimed = await tx.topScorersFiveSquad.updateMany({
-      where: { id: squad.id, version: squad.version },
-      data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt },
-    });
-    if (claimed.count === 0) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
-    const keep = new Map(nextSlots.map((slot) => [slot.slotKey, slot.playerId]));
-    for (const member of members) {
-      if (keep.get(member.slotKey) === member.playerId) {
-        keep.delete(member.slotKey);
-        continue;
-      }
-      await tx.topScorersFiveSquadMember.updateMany({
-        where: { id: member.id, removedAt: null },
-        data: { removedAt: now },
-      });
-    }
-    for (const [slotKey, playerId] of keep) {
-      await tx.topScorersFiveSquadMember.create({
-        data: { squadId: squad.id, slotKey, playerId, selectedAt: now },
-      });
-    }
-    await tx.topScorersFiveSquadDraft.deleteMany({ where: { squadId: squad.id } });
-  });
   return getTsfSelection(clerkUserId, leagueKey, language, now);
 }
 
-/** Drop a slot. Europe confirms the removal and starts a new lock. Egypt only drafts it. */
+export type TsfLineupDto = {
+  leagueKey: string;
+  gameweek: TsfGameweekDto;
+  points: number;
+  slots: Array<{
+    slotKey: string;
+    locked: boolean;
+    lockedUntil: string | null;
+    player: TsfPlayerDto | null;
+    score: { goals: number; assists: number; points: number };
+  }>;
+};
+
+/** The five slots of one competition, each with its own lock. */
+export async function getTsfLineup(
+  clerkUserId: string,
+  leagueKey: string,
+  language: TsfLanguage,
+  now: Date = new Date(),
+): Promise<TsfLineupDto> {
+  const competition = tsfCompetitionKey(leagueKey);
+  if (!competition) throw new TopScorersFiveError('LEAGUE_NOT_SUPPORTED', `League ${leagueKey} is not available yet`);
+  const slots = await Promise.all(
+    tsfSlotKeys(competition).map((slotKey) => getTsfSelection(clerkUserId, slotKey, language, now)),
+  );
+  return {
+    leagueKey: competition,
+    gameweek: slots[0]?.gameweek ?? gameweekDto(await ensureTsfGameweek(competition, now), now, true),
+    points: slots.reduce((sum, slot) => sum + (slot.selection?.score.points ?? 0), 0),
+    slots: slots.map((slot) => ({
+      slotKey: slot.leagueKey,
+      locked: slot.squad.locked,
+      lockedUntil: slot.squad.unlocksAt,
+      player: slot.selection?.player ?? null,
+      score: {
+        goals: slot.selection?.score.goals ?? 0,
+        assists: slot.selection?.score.assists ?? 0,
+        points: slot.selection?.score.points ?? 0,
+      },
+    })),
+  };
+}
+
+/** Drop one slot once its own 7 days are over. The other four stay as they are. */
 export async function clearTsfSelection(clerkUserId: string, leagueKey: string, now: Date = new Date()): Promise<void> {
   const userId = await requireUserId(clerkUserId);
-  const cfg = requireLeague(leagueKey);
+  const slotKey = resolveSlotKey(leagueKey);
+  const cfg = requireLeague(slotKey);
   const squad = await ensureTsfSquad(userId, tsfScopeKey(cfg));
-  assertSquadEditable(squad, now);
+  const version = squad.version;
   const members = await openMembers(squad.id);
-  const current = members.find((member) => member.slotKey === cfg.key) ?? null;
-
-  if (cfg.tournament === 'egypt') {
-    await prisma.topScorersFiveSquadDraft.upsert({
-      where: { squadId_slotKey: { squadId: squad.id, slotKey: cfg.key } },
-      create: { squadId: squad.id, slotKey: cfg.key, playerId: null },
-      update: { playerId: null },
-    });
-    return;
-  }
-
+  const current = memberForSlot(members, slotKey);
   if (!current) return;
+  if (isMemberEditLocked(current.lockedUntil, now)) {
+    throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'This player is locked');
+  }
   await prisma.$transaction(async (tx) => {
-    const next = nextConfirmedLock(
-      { confirmedAt: squad.confirmedAt, unlocksAt: squad.unlocksAt, version: squad.version },
-      true,
-      now,
-    );
-    if (!next.ok) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
     const claimed = await tx.topScorersFiveSquad.updateMany({
-      where: { id: squad.id, version: squad.version },
-      data: { version: next.version, confirmedAt: next.confirmedAt, unlocksAt: next.unlocksAt },
+      where: { id: squad.id, version },
+      data: { version: version + 1 },
     });
     if (claimed.count === 0) throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your squad is locked');
     await tx.topScorersFiveSquadMember.updateMany({
@@ -970,11 +971,11 @@ export function invalidateTsfBoard(): void {
  * so an open week is not clawed back.
  */
 async function attributeTsfPoints(
-  slotKeys: string[],
+  scopes: string[],
   weekIds: Set<string>,
 ): Promise<Map<string, Map<string, AttributedScore>>> {
-  if (slotKeys.length === 0) return new Map();
-  const key = `${[...slotKeys].sort().join(',')}|${[...weekIds].sort().join(',')}`;
+  if (scopes.length === 0) return new Map();
+  const key = `${[...scopes].sort().join(',')}|${[...weekIds].sort().join(',')}`;
   if (tsfBoardCache && tsfBoardCache.key === key && Date.now() - tsfBoardCache.at < TSF_BOARD_TTL_MS) {
     return tsfBoardCache.value;
   }
@@ -989,7 +990,12 @@ async function attributeTsfPoints(
   }>>`
     WITH credited AS (
       SELECT s."userId" AS "userId",
-             s."leagueKey" AS "leagueKey",
+             CASE
+               WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt'
+               WHEN s."leagueKey" ~ '^(ligue1|laliga|bundesliga|seriea|pl)[1-5]$'
+                 THEN regexp_replace(s."leagueKey", '[1-5]$', '')
+               ELSE s."leagueKey"
+             END AS "leagueKey",
              p."gameweekId" AS "gameweekId",
              p."points" AS points,
              s."createdAt" AS "at"
@@ -999,10 +1005,17 @@ async function attributeTsfPoints(
        AND s."playerId" = p."playerId"
        AND s."legacyThrough" IS NOT NULL
        AND p."createdAt" <= s."legacyThrough"
-      WHERE s."leagueKey" IN (${Prisma.join(slotKeys)})
+      WHERE (
+        CASE
+          WHEN s."leagueKey" LIKE 'egypt%' THEN 'egypt'
+          WHEN s."leagueKey" ~ '^(ligue1|laliga|bundesliga|seriea|pl)[1-5]$'
+            THEN regexp_replace(s."leagueKey", '[1-5]$', '')
+          ELSE s."leagueKey"
+        END
+      ) IN (${Prisma.join(scopes)})
       UNION ALL
       SELECT sq."userId",
-             m."slotKey",
+             sq."scopeKey",
              p."gameweekId",
              p."points",
              m."selectedAt"
@@ -1010,7 +1023,7 @@ async function attributeTsfPoints(
       JOIN "top_scorers_five_squad_members" m ON m."playerId" = p."playerId"
       JOIN "top_scorers_five_squads" sq ON sq."id" = m."squadId"
       WHERE sq."confirmedAt" IS NOT NULL
-        AND m."slotKey" IN (${Prisma.join(slotKeys)})
+        AND sq."scopeKey" IN (${Prisma.join(scopes)})
         AND p."fixtureDate" >= m."selectedAt"
         AND (m."removedAt" IS NULL OR p."fixtureDate" < m."removedAt")
         AND NOT EXISTS (
@@ -1049,13 +1062,17 @@ async function attributeTsfPoints(
 export async function getTsfUserScore(
   clerkUserId: string,
   tournament: TsfTournament = 'europe',
+  leagueKey?: string,
 ): Promise<TsfUserScoreDto> {
   const userId = await requireUserId(clerkUserId);
-  const leaguePicks = await tsfLeaguePicks(userId, undefined, tournament);
+  const competition = leagueKey ? tsfCompetitionKey(leagueKey) ?? undefined : undefined;
+  const leaguePicks = await tsfLeaguePicks(userId, undefined, tournament, competition);
   const weekIds = new Set(leaguePicks.map((pick) => pick.gameweek.id));
-  const stateByLeague = new Map(leaguePicks.map((pick) => [pick.cfg.key as string, pick.state]));
-  const slotKeys = enabledTsfLeagues(tournament).map((cfg) => cfg.key);
-  const scores = await attributeTsfPoints(slotKeys, weekIds);
+  const stateByLeague = new Map(leaguePicks.map((pick) => [tsfScopeKey(pick.cfg), pick.state]));
+  const scopes = competition
+    ? [competition]
+    : enabledTsfCompetitions(tournament).map((cfg) => tsfScopeKey(cfg));
+  const scores = await attributeTsfPoints(scopes, weekIds);
   const mine = scores.get(userId) ?? new Map<string, AttributedScore>();
   const list = [...mine.entries()].map(([leagueKey, value]) => ({
     leagueKey,
@@ -1096,19 +1113,22 @@ export async function getTsfLeaderboard(params: {
   period: TsfPeriod;
   limit: number;
   tournament?: TsfTournament;
+  leagueKey?: string;
 }): Promise<TsfLeaderboardDto> {
   const tournament = params.tournament ?? 'europe';
+  const competition = params.leagueKey ? tsfCompetitionKey(params.leagueKey) ?? undefined : undefined;
   const me = await prisma.user.findFirst({ where: { clerkUserId: params.clerkUserId }, select: { id: true } });
-  const slotKeys = enabledTsfLeagues(tournament).map((cfg) => cfg.key);
+  const configs = competition
+    ? [getTsfLeagueConfig(competition)!]
+    : enabledTsfCompetitions(tournament);
+  const scopes = configs.map((cfg) => tsfScopeKey(cfg));
   const gameweekIds =
     params.period === 'week'
-      ? (await Promise.all(enabledTsfGameweekConfigs(tournament).map((cfg) => ensureTsfGameweek(cfg.key)))).map(
-          (gw) => gw.id,
-        )
+      ? (await Promise.all(configs.map((cfg) => ensureTsfGameweek(cfg.key)))).map((gw) => gw.id)
       : null;
 
   const weekIds = new Set(gameweekIds ?? []);
-  const scores = await attributeTsfPoints(slotKeys, weekIds);
+  const scores = await attributeTsfPoints(scopes, weekIds);
   const byUser = new Map<string, number>();
   const firstPick = new Map<string, number>();
   for (const [userId, leagues] of scores) {
@@ -1342,21 +1362,25 @@ type LeaguePick = {
   pickingOpen: boolean;
 };
 
-/** Every enabled league's current gameweek with the user's pick, its fixtures and state. */
+/** Every slot of the requested competitions, with the user's player and that slot's fixtures. */
 async function tsfLeaguePicks(
   userId: string,
   now: Date = new Date(),
   tournament: TsfTournament = 'europe',
+  competition?: string,
 ): Promise<LeaguePick[]> {
-  return Promise.all(
-    enabledTsfLeagues(tournament).map(async (cfg) => {
-      const gameweek = await ensureTsfGameweek(cfg.key, now);
-      const squad = await prisma.topScorersFiveSquad.findUnique({
-        where: { userId_scopeKey: { userId, scopeKey: tsfScopeKey(cfg) } },
-      });
-      const member = squad
-        ? (await openMembers(squad.id)).find((row) => row.slotKey === cfg.key) ?? null
-        : null;
+  const competitions = competition
+    ? [getTsfLeagueConfig(competition)].filter((cfg): cfg is TsfLeagueConfig => cfg != null)
+    : enabledTsfCompetitions(tournament);
+  const groups = await Promise.all(competitions.map(async (comp) => {
+    const gameweek = await ensureTsfGameweek(comp.key, now);
+    const squad = await prisma.topScorersFiveSquad.findUnique({
+      where: { userId_scopeKey: { userId, scopeKey: tsfScopeKey(comp) } },
+    });
+    const members = squad ? await openMembers(squad.id) : [];
+    return Promise.all(tsfSlotKeys(tsfScopeKey(comp)).map(async (slotKey) => {
+      const cfg = getTsfLeagueConfig(slotKey) ?? comp;
+      const member = memberForSlot(members, slotKey);
       const player = member
         ? await prisma.topScorersFivePlayer.findUnique({ where: { id: member.playerId } })
         : null;
@@ -1364,7 +1388,7 @@ async function tsfLeaguePicks(
         ? { id: member.id, playerId: member.playerId, confirmedAt: squad?.confirmedAt ?? null, updatedAt: member.selectedAt, player }
         : null;
       const fixtures = selection ? await tsfRelevantFixtures(cfg, gameweek, teamIdsOf([selection.player])) : [];
-      const locked = squad ? isSquadEditLocked(squad.unlocksAt, now) : false;
+      const locked = member != null && isMemberEditLocked(member.lockedUntil, now);
       const state = tsfPickState({
         picked: selection != null,
         locked,
@@ -1373,8 +1397,9 @@ async function tsfLeaguePicks(
         fixtures,
       });
       return { cfg, gameweek, selection, fixtures, state, pickingOpen: !locked };
-    }),
-  );
+    }));
+  }));
+  return groups.flat();
 }
 
 export type TsfMyFixtureDto = TsfUpcomingFixtureDto & {
@@ -1413,9 +1438,11 @@ export async function getTsfMyFixtures(
   language: TsfLanguage,
   now: Date = new Date(),
   tournament: TsfTournament = 'europe',
+  leagueKey?: string,
 ): Promise<TsfMyFixturesDto> {
   const userId = await requireUserId(clerkUserId);
-  const picks = await tsfLeaguePicks(userId, now, tournament);
+  const competition = leagueKey ? tsfCompetitionKey(leagueKey) ?? undefined : undefined;
+  const picks = await tsfLeaguePicks(userId, now, tournament, competition);
 
   const withPick = picks.filter((p): p is LeaguePick & { selection: NonNullable<LeaguePick['selection']> } => p.selection != null);
   const performances = withPick.length
@@ -1446,7 +1473,7 @@ export async function getTsfMyFixtures(
       const final = fixture.processed;
       fixtures.push({
         fixtureId: fixture.fixtureId,
-        leagueKey: pick.cfg.key,
+        leagueKey: tsfScopeKey(pick.cfg),
         kickoff: fixture.kickoffAt.toISOString(),
         status: fixture.status,
         season: fixture.season,
@@ -1481,7 +1508,7 @@ export async function getTsfMyFixtures(
   return {
     state: combineTsfPickStates(withPick.map((p) => p.state)),
     leagues: picks.map((p) => ({
-      leagueKey: p.cfg.key,
+      leagueKey: tsfScopeKey(p.cfg),
       state: p.state,
       gameweek: gameweekDto(p.gameweek, now, p.pickingOpen),
       playerId: p.selection?.playerId ?? null,

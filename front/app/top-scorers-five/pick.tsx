@@ -1,5 +1,5 @@
-import TopScorersFivePickScreen from '../../components/TopScorersFive/PickScreen';
+import LeagueBoardScreen from '../../components/TopScorersFive/LeagueBoardScreen';
 
 export default function TopScorersFivePickRoute() {
-  return <TopScorersFivePickScreen />;
+  return <LeagueBoardScreen />;
 }

@@ -26,6 +26,8 @@ import {
   tsfGameweekLeagueKey,
   extractTsfStatsFrom365Game,
   getTsfLeagueConfig,
+  tsfCompetitionKey,
+  tsfSlotKeys,
   isTsfFinishedStatus,
   isTsfPostponedStatus,
   isTsfVoidStatus,
@@ -383,9 +385,8 @@ export async function processTsfGameweek(
     }
   }
 
-  const slotKey = current.leagueKey === 'egypt'
-    ? { in: ['egypt1', 'egypt2', 'egypt3', 'egypt4', 'egypt5'] }
-    : current.leagueKey;
+  const competition = tsfCompetitionKey(current.leagueKey) ?? current.leagueKey;
+  const slotKey = { in: [...tsfSlotKeys(competition), competition] };
   const [selected, members] = await Promise.all([
     prisma.topScorersFiveSelection.findMany({
       where: { gameweekId: current.id },

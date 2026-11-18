@@ -28,6 +28,15 @@ export function isSquadEditLocked(unlocksAt: Date | null | undefined, now: Date)
   return unlocksAt != null && now.getTime() < unlocksAt.getTime();
 }
 
+/** One pitch slot locks for 7 days from the moment that player is chosen. */
+export function memberLockedUntil(selectedAt: Date): Date {
+  return squadUnlocksAt(selectedAt);
+}
+
+export function isMemberEditLocked(lockedUntil: Date | null | undefined, now: Date): boolean {
+  return isSquadEditLocked(lockedUntil, now);
+}
+
 /**
  * A confirmed player scores a match only when the kickoff falls inside the
  * membership. Drafts are not memberships. The job's run time is not used.

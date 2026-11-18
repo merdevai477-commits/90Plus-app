@@ -11,6 +11,20 @@ export type TsfApiTournament = 'europe' | 'egypt';
 export type TsfApiEuropeLeague = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 export type TsfApiEgyptSlot = 'egypt1' | 'egypt2' | 'egypt3' | 'egypt4' | 'egypt5';
 export type TsfApiLeague = TsfApiEuropeLeague | TsfApiEgyptSlot;
+export type TsfCompetitionKey = 'egypt' | TsfApiEuropeLeague;
+
+export const TSF_COMPETITIONS: readonly TsfCompetitionKey[] = [
+  'egypt',
+  'pl',
+  'laliga',
+  'seriea',
+  'bundesliga',
+  'ligue1',
+];
+
+export function tsfSlotKey(competition: TsfCompetitionKey, index: number): string {
+  return `${competition}${index}`;
+}
 
 /** Europe: one pick per big-five league. */
 export const TSF_EUROPE_LIVE_LEAGUES: readonly TsfApiEuropeLeague[] = [
@@ -78,6 +92,19 @@ export interface TsfApiSquadLock {
   confirmedAt: string | null;
   dirty: boolean;
   readyToEdit: boolean;
+}
+
+export interface TsfApiLineup {
+  leagueKey: TsfCompetitionKey;
+  gameweek: TsfApiGameweek;
+  points: number;
+  slots: {
+    slotKey: string;
+    locked: boolean;
+    lockedUntil: string | null;
+    player: TsfApiPlayer | null;
+    score: { goals: number; assists: number; points: number };
+  }[];
 }
 
 export interface TsfApiSelection {
@@ -189,22 +216,28 @@ async function request<T>(path: string, init: RequestInit & { token?: string | n
 }
 
 export const topScorersFiveService = {
-  getPlayers: (league: TsfApiLeague, lang: string) =>
+  getPlayers: (league: string, lang: string) =>
     request<TsfApiPlayer[]>(`/leagues/${league}/players?lang=${lang}`),
 
-  getSelection: (token: string, league: TsfApiLeague, lang: string) =>
+  getLineup: (token: string, league: string, lang: string) =>
+    request<TsfApiLineup>(`/leagues/${league}/lineup?lang=${lang}`, { token }),
+
+  getSelection: (token: string, league: string, lang: string) =>
     request<TsfApiSelection>(`/leagues/${league}/selection?lang=${lang}`, { token }),
 
   /** Confirms the pick — final for the gameweek (GAMEWEEK_PICK_LOCKED afterwards). */
-  saveSelection: (token: string, league: TsfApiLeague, playerId: string, lang: string) =>
+  saveSelection: (token: string, league: string, playerId: string, lang: string) =>
     request<TsfApiSelection>(`/leagues/${league}/selection?lang=${lang}`, {
       token,
       method: 'PUT',
       body: JSON.stringify({ playerId }),
     }),
 
-  clearSelection: (token: string, league: TsfApiLeague) =>
+  clearSelection: (token: string, league: string) =>
     request<null>(`/leagues/${league}/selection`, { token, method: 'DELETE' }),
+
+  getUpcoming: (league: string, lang: string) =>
+    request<{ fixtures: TsfApiFixture[] }>(`/leagues/${league}/fixtures/upcoming?lang=${lang}`),
 
   /** Egypt: commit the draft and start the 7-day lock. Europe confirms on save. */
   confirmSquad: (token: string, leagueKey: string, lang: string) =>
@@ -218,17 +251,26 @@ export const topScorersFiveService = {
     request<TsfApiFixture[]>(`/players/${encodeURIComponent(playerId)}/fixtures?lang=${lang}`),
 
   /** Only the fixtures of my picked players this gameweek, with results once stored. */
-  getMyFixtures: (token: string, lang: string, tournament: TsfApiTournament = 'europe') =>
-    request<TsfApiMyFixtures>(`/me/fixtures?lang=${lang}&tournament=${tournament}`, { token }),
+  getMyFixtures: (
+    token: string,
+    lang: string,
+    tournament: TsfApiTournament = 'europe',
+    leagueKey?: string,
+  ) =>
+    request<TsfApiMyFixtures>(
+      `/me/fixtures?lang=${lang}&tournament=${tournament}${leagueKey ? `&leagueKey=${leagueKey}` : ''}`,
+      { token },
+    ),
 
   getLeaderboard: (
     token: string,
     period: 'week' | 'all',
     limit = 50,
     tournament: TsfApiTournament = 'europe',
+    leagueKey?: string,
   ) =>
     request<TsfApiLeaderboard>(
-      `/leaderboard?period=${period}&limit=${limit}&tournament=${tournament}`,
+      `/leaderboard?period=${period}&limit=${limit}&tournament=${tournament}${leagueKey ? `&leagueKey=${leagueKey}` : ''}`,
       { token },
     ),
 };

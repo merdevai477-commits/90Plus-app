@@ -13,6 +13,8 @@ export type TsfTournament = 'europe' | 'egypt';
 export type TsfEuropeLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 export type TsfEgyptSlotKey = 'egypt1' | 'egypt2' | 'egypt3' | 'egypt4' | 'egypt5';
 export type TsfLeagueKey = TsfEuropeLeagueKey | TsfEgyptSlotKey;
+/** One independent five-a-side competition. Europe is no longer a single combined board. */
+export type TsfCompetitionKey = 'egypt' | TsfEuropeLeagueKey;
 
 /** DB key for Egyptian Premier attackers (shared by the five pitch slots). */
 export const TSF_EGYPT_POOL_KEY = 'egypt';
@@ -33,8 +35,21 @@ export const TSF_EGYPT_SLOT_KEYS: readonly TsfEgyptSlotKey[] = [
   'egypt5',
 ];
 
+/** Carousel order: Egyptian league, then the big five. */
+export const TSF_COMPETITION_ORDER: readonly TsfCompetitionKey[] = [
+  'egypt',
+  'pl',
+  'laliga',
+  'seriea',
+  'bundesliga',
+  'ligue1',
+];
+
+export const TSF_SLOTS_PER_COMPETITION = 5;
+
 export type TsfLeagueConfig = {
-  key: TsfLeagueKey;
+  /** Slot key (`pl1`) or competition key (`pl`, `egypt`). */
+  key: string;
   /** `CachedFixture.leagueId` of the competition (365Scores competition id + 7,000,000). */
   competitionLeagueId: number;
   /** 365Scores competition id, for its season leaderboards. */
@@ -55,8 +70,8 @@ const EGYPT_COMP = {
 };
 
 /**
- * Leagues whose pool and scoring are live. Europe = one pick per big-five
- * league; Egypt = five picks from the Egyptian Premier attackers pool.
+ * Competition pools that are live. Each competition is its own five-player
+ * squad (`pl1`..`pl5`, `egypt1`..`egypt5`). Europe is not one combined board.
  */
 export const TSF_LEAGUES: Partial<Record<TsfLeagueKey, TsfLeagueConfig>> = {
   laliga: { key: 'laliga', competitionLeagueId: 7000011, scores365CompetitionId: 11, tournament: 'europe' },
@@ -80,7 +95,51 @@ export function tsfPortraitUrl(athleteId: number): string {
 }
 
 export function tsfPoolKey(cfg: TsfLeagueConfig): string {
-  return cfg.poolKey ?? cfg.key;
+  return cfg.poolKey ?? tsfCompetitionKey(cfg.key) ?? cfg.key;
+}
+
+const SLOT_KEY = /^(egypt|ligue1|laliga|bundesliga|seriea|pl)([1-5])$/;
+
+/** `pl1` and `pl` both belong to the Premier League competition. */
+export function tsfCompetitionKey(raw: string): TsfCompetitionKey | null {
+  if (raw === 'egypt' || (TSF_EUROPE_LEAGUE_KEYS as readonly string[]).includes(raw)) {
+    return raw as TsfCompetitionKey;
+  }
+  const match = SLOT_KEY.exec(raw);
+  return match ? (match[1] as TsfCompetitionKey) : null;
+}
+
+export function tsfIsSlotKey(raw: string): boolean {
+  return SLOT_KEY.test(raw);
+}
+
+export function tsfSlotKeys(competition: string): string[] {
+  return [1, 2, 3, 4, 5].map((index) => `${competition}${index}`);
+}
+
+/** Bare Europe keys (`pl`) were the only slot before each league had five. */
+export function tsfLegacySlotAlias(slotKey: string): string | null {
+  if (!slotKey.endsWith('1')) return null;
+  const competition = tsfCompetitionKey(slotKey);
+  if (!competition || competition === 'egypt') return null;
+  return competition;
+}
+
+/**
+ * Add a slot's points into its competition. Five Premier League slots become
+ * one `pl` total; La Liga stays a different board.
+ */
+export function foldTsfLeaguePoints(
+  rows: ReadonlyArray<{ userId: string; leagueKey: string; points: number }>,
+): Map<string, Map<string, number>> {
+  const byUser = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const league = tsfCompetitionKey(row.leagueKey) ?? row.leagueKey;
+    const leagues = byUser.get(row.userId) ?? new Map<string, number>();
+    leagues.set(league, (leagues.get(league) ?? 0) + row.points);
+    byUser.set(row.userId, leagues);
+  }
+  return byUser;
 }
 
 /** Gameweek row key — Egypt slots share one week under `egypt`. */
@@ -88,15 +147,29 @@ export function tsfGameweekLeagueKey(cfg: TsfLeagueConfig): string {
   return cfg.poolKey ?? cfg.key;
 }
 
+const EGYPT_COMPETITION: TsfLeagueConfig = { key: 'egypt', ...EGYPT_COMP };
+
 export function getTsfLeagueConfig(leagueKey: string): TsfLeagueConfig | null {
-  if (leagueKey === TSF_EGYPT_POOL_KEY) return TSF_LEAGUES.egypt1 ?? null;
-  return (TSF_LEAGUES as Record<string, TsfLeagueConfig | undefined>)[leagueKey] ?? null;
+  if (leagueKey === TSF_EGYPT_POOL_KEY) return EGYPT_COMPETITION;
+  const direct = (TSF_LEAGUES as Record<string, TsfLeagueConfig | undefined>)[leagueKey];
+  if (direct && !tsfIsSlotKey(leagueKey)) return direct;
+  if (direct) return direct;
+  const competition = tsfCompetitionKey(leagueKey);
+  if (!competition || !tsfIsSlotKey(leagueKey)) return null;
+  const base = competition === 'egypt' ? EGYPT_COMPETITION : TSF_LEAGUES[competition];
+  if (!base) return null;
+  return { ...base, key: leagueKey, poolKey: tsfPoolKey(base) };
+}
+
+/** One config per competition, not per pitch slot. */
+export function enabledTsfCompetitions(tournament?: TsfTournament): TsfLeagueConfig[] {
+  return TSF_COMPETITION_ORDER.filter(
+    (key) => tournament == null || (key === 'egypt') === (tournament === 'egypt'),
+  ).map((key) => getTsfLeagueConfig(key)!);
 }
 
 export function enabledTsfLeagues(tournament?: TsfTournament): TsfLeagueConfig[] {
-  return Object.values(TSF_LEAGUES).filter(
-    (cfg): cfg is TsfLeagueConfig => cfg != null && (tournament == null || cfg.tournament === tournament),
-  );
+  return enabledTsfCompetitions(tournament);
 }
 
 /** One config per shared gameweek (Egypt collapses to a single entry). */
@@ -112,9 +185,9 @@ export function enabledTsfGameweekConfigs(tournament?: TsfTournament): TsfLeague
   return out;
 }
 
-export function tsfSiblingSlotKeys(cfg: TsfLeagueConfig): readonly TsfLeagueKey[] {
-  if (cfg.tournament === 'egypt') return TSF_EGYPT_SLOT_KEYS;
-  return [cfg.key];
+export function tsfSiblingSlotKeys(cfg: TsfLeagueConfig): readonly string[] {
+  const competition = tsfCompetitionKey(cfg.key) ?? tsfPoolKey(cfg);
+  return tsfSlotKeys(competition);
 }
 
 export function parseTsfTournament(raw: unknown): TsfTournament | undefined {

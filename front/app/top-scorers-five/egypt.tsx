@@ -1,9 +1,9 @@
 /**
- * Top Scorers Five — Egyptian League intro — /top-scorers-five/egypt
+ * Older Egypt entry — opens the league cards on the Egyptian league.
  */
 
-import TopScorersFiveEgyptScreen from '../../components/TopScorersFive/TopScorersFiveEgyptScreen';
+import { Redirect } from 'expo-router';
 
 export default function TopScorersFiveEgyptRoute() {
-  return <TopScorersFiveEgyptScreen />;
+  return <Redirect href={{ pathname: '/top-scorers-five', params: { league: 'egypt' } }} />;
 }

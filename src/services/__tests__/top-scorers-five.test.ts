@@ -46,6 +46,7 @@ type MemberRow = {
   playerId: string;
   selectedAt: Date;
   removedAt: Date | null;
+  lockedUntil: Date | null;
   legacyThrough: Date | null;
 };
 
@@ -236,8 +237,8 @@ const prismaMock = {
     findMany: jest.fn(async ({ where }: { where: { squadId: string; removedAt: null } }) =>
       db.members.filter((member) => member.squadId === where.squadId && member.removedAt == null),
     ),
-    create: jest.fn(async ({ data }: { data: Omit<MemberRow, 'id' | 'removedAt' | 'legacyThrough'> & { removedAt?: Date | null } }) => {
-      const row: MemberRow = { id: `mem-${db.members.length + 1}`, removedAt: null, legacyThrough: null, ...data };
+    create: jest.fn(async ({ data }: { data: Omit<MemberRow, 'id' | 'removedAt' | 'legacyThrough' | 'lockedUntil'> & { removedAt?: Date | null; lockedUntil?: Date | null } }) => {
+      const row: MemberRow = { id: `mem-${db.members.length + 1}`, removedAt: null, legacyThrough: null, lockedUntil: null, ...data };
       db.members.push(row);
       return row;
     }),
@@ -298,6 +299,7 @@ import {
   isTsfSelectionLocked,
   nextTsfGameweekStatus,
   sumTsfPerformances,
+  foldTsfLeaguePoints,
   tsfGameweekWindow,
   tsfParticipationFrom365Game,
   tsfParticipationOf,
@@ -306,7 +308,6 @@ import {
 } from '../top-scorers-five-scoring';
 import {
   clearTsfSelection,
-  confirmTsfSquad,
   ensureTsfGameweek,
   getTsfSelection,
   listTsfEligiblePlayers,
@@ -623,7 +624,7 @@ describe('selection — per-user 7-day lock', () => {
   it('confirms the pick and locks that squad for exactly 7 days', async () => {
     db.gameweek = openWeek();
     const saved = await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
-    expect(db.members).toEqual([expect.objectContaining({ playerId: 'p-mbappe', slotKey: 'laliga', selectedAt: NOW })]);
+    expect(db.members).toEqual([expect.objectContaining({ playerId: 'p-mbappe', slotKey: 'laliga1', selectedAt: NOW, lockedUntil: new Date(NOW.getTime() + WEEK) })]);
     expect(saved.selection).toMatchObject({ confirmed: true, locked: true });
     expect(saved.squad.unlocksAt).toBe(new Date(NOW.getTime() + WEEK).toISOString());
     expect(saved.state).toBe('CONFIRMED');
@@ -982,23 +983,66 @@ describe('catalog and egypt squad', () => {
     expect(players.find((player) => player.id === 'p-lewa')?.fixtureStatus).toBe('FINISHED');
   });
 
-  it('keeps an Egypt draft editable until the squad is confirmed, and refuses a duplicate', async () => {
+  it('locks only the chosen Egypt slot and refuses a duplicate in another slot', async () => {
     db.gameweek = gameweek({ leagueKey: 'egypt', status: 'OPEN', lockAt: new Date(NOW.getTime() + 3_600_000) });
-    for (const id of ['p-mbappe', 'p-lewa', 'p-vini']) {
+    for (const id of ['p-mbappe', 'p-lewa', 'p-vini', 'p-yamal']) {
       db.players.set(id, { ...db.players.get(id), leagueKey: 'egypt' });
     }
-    const draft = await saveTsfSelection('clerk-1', 'egypt1', 'p-mbappe', 'en', NOW);
-    expect(draft.squad.locked).toBe(false);
-    expect(draft.squad.dirty).toBe(true);
+    const first = await saveTsfSelection('clerk-1', 'egypt1', 'p-mbappe', 'en', NOW);
+    expect(first.squad.locked).toBe(true);
+    expect(first.selection?.confirmed).toBe(true);
     await expect(saveTsfSelection('clerk-1', 'egypt2', 'p-mbappe', 'en', NOW)).rejects.toMatchObject({
       code: 'PLAYER_ALREADY_PICKED',
     });
-    await saveTsfSelection('clerk-1', 'egypt2', 'p-lewa', 'en', NOW);
-    const confirmed = await confirmTsfSquad('clerk-1', 'egypt1', 'en', NOW);
-    expect(confirmed.squad.locked).toBe(true);
-    expect(confirmed.squad.unlocksAt).toBe(squadUnlocksAt(NOW).toISOString());
-    const same = await confirmTsfSquad('clerk-1', 'egypt1', 'en', new Date(NOW.getTime() + 5_000));
-    expect(same.squad.unlocksAt).toBe(confirmed.squad.unlocksAt);
+    const second = await saveTsfSelection('clerk-1', 'egypt2', 'p-lewa', 'en', NOW);
+    expect(second.squad.locked).toBe(true);
+    expect(second.squad.scopeKey).toBe(first.squad.scopeKey);
+    const open = await getTsfSelection('clerk-1', 'egypt3', 'en', NOW);
+    expect(open.selection).toBeNull();
+    expect(open.squad.locked).toBe(false);
+    expect(db.members.filter((member) => member.removedAt == null)).toHaveLength(2);
+  });
+});
+
+describe('per-league slots', () => {
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  const openWeek = () => gameweek({ status: 'OPEN', lockAt: new Date(NOW.getTime() + 3_600_000) });
+
+  it('keeps the other four slots open when one player locks', async () => {
+    db.gameweek = openWeek();
+    await saveTsfSelection('clerk-1', 'laliga1', 'p-mbappe', 'en', NOW);
+    const second = await saveTsfSelection('clerk-1', 'laliga2', 'p-lewa', 'en', NOW);
+    expect(second.selection?.player.id).toBe('p-lewa');
+    expect(db.members.filter((member) => member.removedAt == null).map((member) => member.slotKey).sort()).toEqual(['laliga1', 'laliga2']);
+    const empty = await getTsfSelection('clerk-1', 'laliga3', 'en', NOW);
+    expect(empty.squad.locked).toBe(false);
+    expect(empty.selection).toBeNull();
+  });
+
+  it('renews only the slot that changes after 7 days', async () => {
+    db.gameweek = openWeek();
+    await saveTsfSelection('clerk-1', 'laliga1', 'p-mbappe', 'en', NOW);
+    await saveTsfSelection('clerk-1', 'laliga2', 'p-lewa', 'en', NOW);
+    const after = new Date(NOW.getTime() + WEEK + 1000);
+    await saveTsfSelection('clerk-1', 'laliga1', 'p-vini', 'en', after);
+    const kept = db.members.find((member) => member.slotKey === 'laliga2' && member.removedAt == null);
+    const replaced = db.members.find((member) => member.slotKey === 'laliga1' && member.removedAt == null);
+    expect(kept?.lockedUntil).toEqual(new Date(NOW.getTime() + WEEK));
+    expect(replaced?.lockedUntil).toEqual(new Date(after.getTime() + WEEK));
+    expect(replaced?.playerId).toBe('p-vini');
+  });
+
+  it('folds five slots of one league and keeps another league separate', () => {
+    const folded = foldTsfLeaguePoints([
+      { userId: 'u', leagueKey: 'pl1', points: 3 },
+      { userId: 'u', leagueKey: 'pl2', points: 1 },
+      { userId: 'u', leagueKey: 'pl5', points: 6 },
+      { userId: 'u', leagueKey: 'laliga1', points: 9 },
+      { userId: 'u', leagueKey: 'egypt3', points: 2 },
+    ]);
+    expect(folded.get('u')?.get('pl')).toBe(10);
+    expect(folded.get('u')?.get('laliga')).toBe(9);
+    expect(folded.get('u')?.get('egypt')).toBe(2);
   });
 });
 
