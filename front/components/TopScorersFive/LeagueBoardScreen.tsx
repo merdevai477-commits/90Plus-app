@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,7 +44,7 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
 import UserIdentity from '../identity/UserIdentity';
-import { TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
+import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
 import { TsfNav, tsfNavBottom, type TsfTabKey } from './TsfNav';
 import { TSF_THEME, type TsfColors } from './tsfTheme';
 
@@ -86,6 +87,24 @@ function formatWhen(iso: string | null, language: string): string {
   });
 }
 
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return Math.max(1, Math.ceil(ms / 86_400_000));
+}
+
+/** 2-2-1 on the far goal: striker, two mids, two at the back. Percents of the pitch. */
+const PITCH_SPOTS = [
+  { top: 0.16, left: 0.5 },
+  { top: 0.4, left: 0.24 },
+  { top: 0.4, left: 0.76 },
+  { top: 0.66, left: 0.3 },
+  { top: 0.66, left: 0.7 },
+] as const;
+
+const PITCH_CARD = { width: 118, height: 156 };
+
 export default function LeagueBoardScreen() {
   useScreenFont();
   const router = useRouter();
@@ -123,6 +142,7 @@ export default function LeagueBoardScreen() {
   const [detail, setDetail] = useState<TsfApiPlayer | null>(null);
   const [lockText, setLockText] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [pitchBox, setPitchBox] = useState({ width: 0, height: 0 });
   const listRef = useRef<FlatList<TsfCompetitionKey>>(null);
 
   const competition = TSF_COMPETITIONS[index] ?? 'egypt';
@@ -252,20 +272,17 @@ export default function LeagueBoardScreen() {
       return (
         <ScrollView
           style={{ width }}
-          contentContainerStyle={{ paddingBottom: tsfNavBottom(insets.bottom) + 88, paddingHorizontal: 16 }}
+          contentContainerStyle={{ paddingBottom: tsfNavBottom(insets.bottom) + 16, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.pitchBody}>
-            <Text style={[styles.leagueName, { color: '#FFFFFF', fontFamily: fontBold }]}>{leagueName(item)}</Text>
-            <Text style={[styles.pointsLine, { color: '#F3EDFF', fontFamily: fontMedium }]}>
-              {pickCopy.yourPoints} {lineup?.points ?? 0}
-            </Text>
-            <Formation
+          <View style={{ width, height: pitchBox.height || undefined, flex: pitchBox.height ? undefined : 1 }}>
+            <PitchFormation
               slots={slots}
-              colors={colors}
+              box={pitchBox}
               fontSemi={fontSemi}
               fontMedium={fontMedium}
-              emptyLabel={pickCopy.chooseFormation}
+              lockLabel={pickCopy.lockBanner}
+              onHelp={() => setHelpOpen(true)}
               onOpen={openSlot}
               onRemove={removeSlot}
             />
@@ -273,7 +290,7 @@ export default function LeagueBoardScreen() {
         </ScrollView>
       );
     },
-    [colors, fontBold, fontMedium, fontSemi, insets.bottom, leagueName, lineups, openSlot, pickCopy, removeSlot, width],
+    [fontMedium, fontSemi, insets.bottom, lineups, openSlot, pickCopy.lockBanner, pitchBox, removeSlot, width],
   );
 
   const filtered = useMemo(() => {
@@ -293,16 +310,6 @@ export default function LeagueBoardScreen() {
         <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>
           {tab === 'pitch' ? pickCopy.formationTitle : copy.title}
         </Text>
-        {tab === 'pitch' ? (
-          <TouchableOpacity
-            onPress={() => setHelpOpen(true)}
-            accessibilityRole="button"
-            hitSlop={12}
-            style={styles.help}
-          >
-            <Ionicons name="help-circle-outline" size={26} color={colors.text} />
-          </TouchableOpacity>
-        ) : null}
         <TouchableOpacity
           onPress={() => router.back()}
           accessibilityRole="button"
@@ -316,7 +323,15 @@ export default function LeagueBoardScreen() {
       </View>
 
       {tab === 'pitch' ? (
-        <View style={styles.flex}>
+        <View
+          style={styles.flex}
+          onLayout={(event) => {
+            const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
+            setPitchBox((prev) =>
+              prev.width === nextWidth && prev.height === nextHeight ? prev : { width: nextWidth, height: nextHeight },
+            );
+          }}
+        >
           <Image source={PITCH} style={StyleSheet.absoluteFill} contentFit="cover" />
           <FlatList
             ref={listRef}
@@ -420,16 +435,39 @@ export default function LeagueBoardScreen() {
 
       <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}>
         <Pressable style={styles.scrim} onPress={() => setHelpOpen(false)}>
-          <Pressable style={[styles.sheet, { backgroundColor: colors.sheet }]} onPress={() => undefined}>
-            <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: fontBold }]}>{pickCopy.helpTitle}</Text>
-            {pickCopy.helpRules.map((rule) => (
-              <Text key={rule} style={{ color: colors.text, fontFamily: fontMedium, textAlign: 'right', lineHeight: 22 }}>
-                {'• '}{rule}
-              </Text>
-            ))}
-            <TouchableOpacity onPress={() => setHelpOpen(false)} style={[styles.confirmBtn, { backgroundColor: colors.purple }]}>
-              <Text style={[styles.confirmText, { fontFamily: fontSemi }]}>{pickCopy.helpGotIt}</Text>
-            </TouchableOpacity>
+          <Pressable style={styles.helpCard} onPress={() => undefined}>
+            <View style={styles.helpHead}>
+              <TouchableOpacity onPress={() => setHelpOpen(false)} style={styles.helpIconBtn} accessibilityRole="button">
+                <Ionicons name="close" size={16} color="#6A2BD9" />
+              </TouchableOpacity>
+              <View style={styles.helpChip}>
+                <Text style={[styles.helpChipText, { fontFamily: fontSemi }]}>{pickCopy.helpRulesChip}</Text>
+              </View>
+              <View style={styles.helpIconBtn}>
+                <Ionicons name="trophy" size={16} color="#6A2BD9" />
+              </View>
+            </View>
+            <Text style={[styles.helpTitle, { fontFamily: fontBold }]}>{pickCopy.helpWinTitle}</Text>
+            <Text style={[styles.helpSub, { fontFamily: fontMedium }]}>{pickCopy.helpWinSub}</Text>
+            <Text style={[styles.helpScoring, { fontFamily: fontBold }]}>{pickCopy.helpScoring}</Text>
+            <View style={styles.helpScoreRow}>
+              <View style={styles.helpScoreCard}>
+                <Ionicons name="footsteps" size={28} color="#4B1FA3" />
+                <Text style={[styles.helpScoreValue, { fontFamily: fontBold }]}>+1</Text>
+                <Text style={[styles.helpScoreLabel, { fontFamily: fontBold }]}>{pickCopy.helpAssist}</Text>
+                <Text style={[styles.helpScoreHint, { fontFamily: fontMedium }]}>{pickCopy.helpAssistSub}</Text>
+              </View>
+              <View style={styles.helpScoreCard}>
+                <Ionicons name="radio-button-on" size={28} color="#4B1FA3" />
+                <Text style={[styles.helpScoreValue, { fontFamily: fontBold }]}>+3</Text>
+                <Text style={[styles.helpScoreLabel, { fontFamily: fontBold }]}>{pickCopy.helpGoal}</Text>
+                <Text style={[styles.helpScoreHint, { fontFamily: fontMedium }]}>{pickCopy.helpGoalSub}</Text>
+              </View>
+            </View>
+            <View style={styles.helpWinner}>
+              <Text style={[styles.helpWinnerText, { fontFamily: fontSemi }]}>{pickCopy.helpWinner}</Text>
+              <Ionicons name="ribbon" size={18} color="#6A2BD9" />
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -452,59 +490,87 @@ export default function LeagueBoardScreen() {
   );
 }
 
-function Formation({
+function PitchFormation({
   slots,
-  colors,
+  box,
   fontSemi,
   fontMedium,
-  emptyLabel,
+  lockLabel,
+  onHelp,
   onOpen,
   onRemove,
 }: {
   slots: TsfApiLineup['slots'];
-  colors: TsfColors;
+  box: { width: number; height: number };
   fontSemi: string | undefined;
   fontMedium: string | undefined;
-  emptyLabel: string;
+  lockLabel: string;
+  onHelp: () => void;
   onOpen: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
   onRemove: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
 }) {
-  const rows = [slots.slice(0, 1), slots.slice(1, 3), slots.slice(3, 5)];
-  const allEmpty = slots.every((slot) => slot.player == null);
+  const days = slots.reduce<number | null>((soonest, slot) => {
+    const next = daysUntil(slot.lockedUntil);
+    if (next == null) return soonest;
+    return soonest == null ? next : Math.min(soonest, next);
+  }, null);
+
   return (
-    <View style={styles.formation}>
-      {rows.map((row, rowIndex) => (
-        <View key={rowIndex} style={styles.formationRow}>
-          {row.map((slot) => (
-            <SlotCard
-              key={slot.slotKey}
-              slot={slot}
-              colors={colors}
-              fontSemi={fontSemi}
-              fontMedium={fontMedium}
-              onOpen={() => onOpen(slot.slotKey, slot.locked, slot.lockedUntil)}
-              onRemove={() => onRemove(slot.slotKey, slot.locked, slot.lockedUntil)}
-            />
-          ))}
-        </View>
-      ))}
-      {allEmpty ? (
-        <Text style={[styles.emptyFormation, { color: colors.muted, fontFamily: fontMedium }]}>{emptyLabel}</Text>
-      ) : null}
+    <View style={styles.pitchStage}>
+      <View style={styles.lockRow}>
+        {days != null ? (
+          <View style={styles.lockPill}>
+            <Ionicons name="time" size={16} color="#FFFFFF" />
+            <Text style={[styles.lockPillText, { fontFamily: fontSemi }]}>
+              {lockLabel.replace('{days}', String(days))}
+            </Text>
+          </View>
+        ) : <View />}
+        <TouchableOpacity
+          onPress={onHelp}
+          accessibilityRole="button"
+          style={styles.infoOrb}
+          hitSlop={8}
+        >
+          <Ionicons name="information" size={18} color="#6A2BD9" />
+        </TouchableOpacity>
+      </View>
+      {box.width > 0
+        ? slots.slice(0, 5).map((slot, index) => {
+            const spot = PITCH_SPOTS[index] ?? PITCH_SPOTS[0];
+            return (
+              <View
+                key={slot.slotKey}
+                style={{
+                  position: 'absolute',
+                  top: box.height * spot.top,
+                  left: box.width * spot.left - PITCH_CARD.width / 2,
+                  width: PITCH_CARD.width,
+                }}
+              >
+                <PitchSlot
+                  slot={slot}
+                  fontSemi={fontSemi}
+                  fontMedium={fontMedium}
+                  onOpen={() => onOpen(slot.slotKey, slot.locked, slot.lockedUntil)}
+                  onRemove={() => onRemove(slot.slotKey, slot.locked, slot.lockedUntil)}
+                />
+              </View>
+            );
+          })
+        : null}
     </View>
   );
 }
 
-function SlotCard({
+function PitchSlot({
   slot,
-  colors,
   fontSemi,
   fontMedium,
   onOpen,
   onRemove,
 }: {
   slot: TsfApiLineup['slots'][number];
-  colors: TsfColors;
   fontSemi: string | undefined;
   fontMedium: string | undefined;
   onOpen: () => void;
@@ -516,43 +582,37 @@ function SlotCard({
       <TouchableOpacity
         onPress={onOpen}
         accessibilityRole="button"
-        style={[styles.slot, styles.slotEmpty, { borderColor: colors.purple, backgroundColor: colors.field }]}
+        style={styles.pitchEmpty}
         testID={`tsf-slot-${slot.slotKey}`}
       >
-        <Ionicons name="add" size={28} color={colors.purple} />
+        <Ionicons name="add" size={36} color="#6A2BD9" />
       </TouchableOpacity>
     );
   }
-  const points = slot.score.points;
   return (
     <TouchableOpacity
       onPress={onOpen}
       accessibilityRole="button"
-      style={[styles.slot, { backgroundColor: colors.field, borderColor: colors.border }]}
+      style={styles.pitchCard}
       testID={`tsf-slot-${slot.slotKey}`}
     >
-      <TouchableOpacity
-        onPress={onRemove}
-        hitSlop={8}
-        style={styles.remove}
-        accessibilityRole="button"
-      >
-        <Ionicons name="close" size={14} color={colors.muted} />
+      <TouchableOpacity onPress={onRemove} hitSlop={8} style={styles.remove} accessibilityRole="button">
+        <Ionicons name="close" size={14} color="#6B7280" />
       </TouchableOpacity>
+      <Ionicons name="ribbon" size={16} color="#F5B301" style={styles.crown} />
       {player.photo ? (
-        <Image source={{ uri: player.photo }} style={styles.photo} contentFit="contain" />
+        <Image source={{ uri: player.photo }} style={styles.pitchPhoto} contentFit="contain" />
       ) : (
-        <View style={[styles.photo, { backgroundColor: colors.purple }]} />
+        <View style={[styles.pitchPhoto, { backgroundColor: '#EDE4FF' }]} />
       )}
-      <Text numberOfLines={1} style={[styles.playerName, { color: colors.text, fontFamily: fontSemi }]}>
+      <Text numberOfLines={1} style={[styles.pitchName, { fontFamily: fontSemi }]}>
         {player.name}
       </Text>
       <View style={styles.statRow}>
-        <View style={[styles.pill, { backgroundColor: points > 0 ? colors.positive : colors.zero }]}>
-          <Text style={[styles.pillText, { fontFamily: fontMedium }]}>{points}</Text>
-        </View>
         <Image source={TSF_PITCH_CARD_ART.football} style={styles.ball} contentFit="contain" />
-        <Text style={[styles.goalCount, { color: colors.muted, fontFamily: fontMedium }]}>{slot.score.goals}</Text>
+        <Text style={[styles.goalCount, { fontFamily: fontMedium }]}>{slot.score.goals}</Text>
+        <Ionicons name="walk" size={12} color="#6A2BD9" />
+        <Text style={[styles.goalCount, { fontFamily: fontMedium }]}>{slot.score.assists}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -666,7 +726,7 @@ function LeagueRanking({
   onPick: () => void;
   leagueName: (key: string) => string;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const copy = t.topScorersFive;
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
@@ -707,34 +767,54 @@ function LeagueRanking({
     setLeagueSplit(rows.map((row) => ({ leagueKey: row.leagueKey, total: row.total })));
   };
 
-  const podium = [board?.entries[1], board?.entries[0], board?.entries[2]].filter((row) => row != null);
+  const [showAll, setShowAll] = useState(false);
+  const ordered = [board?.entries[1], board?.entries[0], board?.entries[2]].filter((row) => row != null);
   const rest = board?.entries.slice(3) ?? [];
+  const visibleRest = showAll ? rest : rest.slice(0, 6);
+  const total = board?.me?.xp ?? 0;
+  const splitSum = (leagueSplit ?? []).reduce((sum, row) => sum + row.total, 0);
+  const splitOrder = ['pl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'egypt', 'egypt1'];
 
   return (
     <>
       <ScrollView
-        style={styles.flex}
-        contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 10 }}
+        style={[styles.flex, { backgroundColor: colors.bg }]}
+        contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 14 }}
       >
-        <Text style={{ color: colors.text, textAlign: 'center', fontFamily: fontBold, fontSize: 18 }}>{copy.ranking.title}</Text>
-        <TouchableOpacity onPress={() => void loadSplit()} accessibilityRole="button">
-          <Text style={{ color: colors.purple, textAlign: 'center', fontFamily: fontSemi }}>{copy.pick.viewAllLeagues}</Text>
+        <LinearGradient
+          colors={['#7C3AED', '#5B21B6']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.pointsHero, language === 'ar' && { flexDirection: 'row-reverse' }]}
+        >
+          <View style={styles.pointsHeroMain}>
+            <Text style={[styles.pointsHeroLabel, { fontFamily: fontMedium }]}>{copy.ranking.totalPoints}</Text>
+            <View style={styles.pointsHeroValueRow}>
+              <Text style={[styles.pointsHeroUnit, { fontFamily: fontMedium }]}>{copy.pick.pointUnit}</Text>
+              <Text style={[styles.pointsHeroValue, { fontFamily: fontBold }]}>
+                {total.toLocaleString('en-US')}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.pointsHeroSide}>
+            <View style={styles.leagueCountPill}>
+              <Text style={[styles.leagueCountText, { fontFamily: fontSemi }]}>
+                {copy.ranking.leagueCount.replace('{count}', '6')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => void loadSplit()} accessibilityRole="button" style={styles.detailsLink}>
+              <Ionicons name="chevron-back" size={14} color="#FFFFFF" />
+              <Text style={[styles.detailsLinkText, { fontFamily: fontMedium }]}>{copy.ranking.viewDetails}</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        <TouchableOpacity onPress={() => setPeriod(period === 'week' ? 'all' : 'week')} accessibilityRole="button">
+          <Text style={[styles.leadTitle, { color: colors.text, fontFamily: fontBold }]}>
+            {period === 'week' ? copy.ranking.leadWeek : copy.ranking.leadAll}
+          </Text>
         </TouchableOpacity>
-        <View style={styles.periodRow}>
-          {(['week', 'all'] as const).map((key) => {
-            const active = period === key;
-            const label = key === 'week' ? copy.ranking.filterWeek : copy.ranking.filterAll;
-            return (
-              <TouchableOpacity
-                key={key}
-                onPress={() => setPeriod(key)}
-                style={[styles.periodChip, { backgroundColor: active ? colors.purple : colors.card, borderColor: colors.border }]}
-              >
-                <Text style={{ color: active ? colors.onPurple : colors.text, fontFamily: fontMedium }}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+
         {(board?.entries.length ?? 0) === 0 ? (
           <TouchableOpacity onPress={onPick}>
             <Text style={{ color: colors.muted, textAlign: 'center', fontFamily: fontMedium }}>{copy.ranking.emptyTitle}</Text>
@@ -742,49 +822,126 @@ function LeagueRanking({
         ) : (
           <>
             <View style={styles.podium}>
-              {podium.map((entry) => (
-                <View key={entry.userId} style={[styles.podiumCard, entry.rank === 1 && styles.podiumFirst, { backgroundColor: colors.card }]}>
-                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.rank}</Text>
-                  {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.avatar} /> : <View style={[styles.avatar, { backgroundColor: colors.field }]} />}
-                  <UserIdentity
-                    name={entry.displayName || entry.username || '—'}
-                    user={entry}
-                    variant="leaderboard"
-                    nameStyle={{ color: colors.text, fontFamily: fontSemi, fontSize: 12, maxWidth: 88 }}
-                  />
-                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.xp}</Text>
-                </View>
-              ))}
+              {ordered.map((entry) => {
+                const first = entry.rank === 1;
+                return (
+                  <View key={entry.userId} style={[styles.podiumCol, first && styles.podiumColFirst]}>
+                    {entry.avatar ? (
+                      <Image source={{ uri: entry.avatar }} style={[styles.podiumAvatar, first && styles.podiumAvatarFirst]} />
+                    ) : (
+                      <View style={[styles.podiumAvatar, first && styles.podiumAvatarFirst, { backgroundColor: colors.field }]} />
+                    )}
+                    <Text numberOfLines={1} style={[styles.podiumName, { color: colors.text, fontFamily: fontSemi }]}>
+                      {entry.displayName || entry.username || '—'}
+                    </Text>
+                    <Text style={[styles.podiumPts, { color: colors.muted, fontFamily: fontMedium }]}>
+                      {entry.xp} {copy.pick.pointUnit}
+                    </Text>
+                    <View style={[styles.podiumBlock, first ? styles.podiumBlockFirst : entry.rank === 2 ? styles.podiumBlockSecond : styles.podiumBlockThird]}>
+                      <Text style={[styles.podiumRank, first && styles.podiumRankFirst, { fontFamily: fontBold }]}>{entry.rank}</Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
-            {rest.map((entry) => (
-              <View key={entry.userId} style={[styles.rankRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.rankNum, { color: colors.purple, fontFamily: fontBold }]}>{entry.rank}</Text>
-                {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.avatar} /> : <View style={[styles.avatar, { backgroundColor: colors.field }]} />}
-                <View style={styles.rankName}>
-                  <UserIdentity
-                    name={entry.displayName || entry.username || '—'}
-                    user={entry}
-                    variant="leaderboard"
-                    nameStyle={{ color: colors.text, fontFamily: fontSemi, fontSize: 14 }}
-                  />
+
+            <View style={styles.restHead}>
+              {rest.length > 6 ? (
+                <TouchableOpacity onPress={() => setShowAll((value) => !value)}>
+                  <Text style={{ color: colors.purple, fontFamily: fontSemi }}>
+                    {showAll ? copy.ranking.filterAll : copy.ranking.viewAll}
+                  </Text>
+                </TouchableOpacity>
+              ) : <View />}
+              <Text style={[styles.restTitle, { color: colors.text, fontFamily: fontBold }]}>{copy.ranking.restTitle}</Text>
+            </View>
+
+            {visibleRest.map((entry) => {
+              const mine = entry.userId === board?.me?.userId;
+              return (
+                <View
+                  key={entry.userId}
+                  style={[
+                    styles.rankRow,
+                    mine
+                      ? { backgroundColor: '#6A2BD9', borderColor: '#6A2BD9' }
+                      : { backgroundColor: '#FFFFFF', borderColor: 'rgba(75,31,163,0.12)' },
+                  ]}
+                >
+                  <View style={[styles.pointsPill, mine && styles.pointsPillMine]}>
+                    <Text style={[styles.pointsPillUnit, { fontFamily: fontMedium, color: mine ? '#E9D5FF' : '#6A2BD9' }]}>
+                      {copy.pick.pointUnit}
+                    </Text>
+                    <Text style={[styles.pointsPillValue, { fontFamily: fontBold, color: mine ? '#FFFFFF' : '#4B1FA3' }]}>
+                      {entry.xp}
+                    </Text>
+                  </View>
+                  <View style={styles.rankName}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: mine ? '#FFFFFF' : colors.text, fontFamily: fontSemi, textAlign: 'right' }}
+                    >
+                      {mine ? copy.ranking.you : entry.displayName || entry.username || '—'}
+                    </Text>
+                    {!mine && entry.username ? (
+                      <Text numberOfLines={1} style={{ color: colors.muted, fontFamily: fontMedium, textAlign: 'right', fontSize: 11 }}>
+                        @{entry.username}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {entry.avatar ? (
+                    <Image source={{ uri: entry.avatar }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarLetter, { backgroundColor: mine ? '#4B1FA3' : '#F3EDFF' }]}>
+                      <Text style={{ color: mine ? '#FFFFFF' : '#6A2BD9', fontFamily: fontBold }}>
+                        {(entry.displayName || entry.username || '?').slice(0, 1)}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.rankNum, { color: mine ? '#FFFFFF' : colors.text, fontFamily: fontBold }]}>{entry.rank}</Text>
                 </View>
-                <Text style={{ color: colors.purple, fontFamily: fontBold }}>{entry.xp}</Text>
-              </View>
-            ))}
+              );
+            })}
           </>
         )}
       </ScrollView>
-      <Modal visible={leagueSplit != null} transparent animationType="slide" onRequestClose={() => setLeagueSplit(null)}>
+      <Modal visible={leagueSplit != null} transparent animationType="fade" onRequestClose={() => setLeagueSplit(null)}>
         <Pressable style={styles.scrim} onPress={() => setLeagueSplit(null)}>
-          <Pressable style={[styles.sheet, { backgroundColor: colors.sheet }]} onPress={() => undefined}>
-            <Text style={[styles.sheetTitle, { color: colors.text, fontFamily: fontBold }]}>{copy.pick.viewAllLeagues}</Text>
-            <ScrollView>
-              {(leagueSplit ?? []).map((row) => (
-                <View key={row.leagueKey} style={[styles.rankRow, { borderColor: colors.border }]}>
-                  <Text style={{ flex: 1, color: colors.text, fontFamily: fontSemi }}>{leagueName(row.leagueKey)}</Text>
-                  <Text style={{ color: colors.purple, fontFamily: fontBold }}>{row.total}</Text>
-                </View>
-              ))}
+          <Pressable style={styles.pointsSheet} onPress={() => undefined}>
+            <View style={styles.helpHead}>
+              <TouchableOpacity onPress={() => setLeagueSplit(null)} style={styles.helpIconBtn} accessibilityRole="button">
+                <Ionicons name="close" size={16} color="#6A2BD9" />
+              </TouchableOpacity>
+              <View style={styles.helpChip}>
+                <Text style={[styles.helpChipText, { fontFamily: fontSemi }]}>{copy.pick.pointsDetails}</Text>
+              </View>
+              <View style={styles.helpIconBtn}>
+                <Ionicons name="star" size={16} color="#6A2BD9" />
+              </View>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
+              {[...(leagueSplit ?? [])]
+                .sort((a, b) => splitOrder.indexOf(a.leagueKey) - splitOrder.indexOf(b.leagueKey))
+                .map((row) => {
+                  const pct = splitSum > 0 ? ((row.total / splitSum) * 100).toFixed(1) : '0';
+                  const crestKey = row.leagueKey === 'egypt' ? 'egypt1' : row.leagueKey;
+                  const crest = CREST[crestKey as TsfCompetitionKey];
+                  return (
+                    <View key={row.leagueKey} style={styles.splitRow}>
+                      <View style={styles.pointsPill}>
+                        <Text style={[styles.pointsPillUnit, { fontFamily: fontMedium, color: '#6A2BD9' }]}>{copy.pick.pointUnit}</Text>
+                        <Text style={[styles.pointsPillValue, { fontFamily: fontBold, color: '#4B1FA3' }]}>{row.total}</Text>
+                      </View>
+                      <View style={styles.rankName}>
+                        <Text style={{ color: '#24104E', fontFamily: fontBold, textAlign: 'right' }}>{leagueName(row.leagueKey)}</Text>
+                        <Text style={{ color: '#6B7280', fontFamily: fontMedium, textAlign: 'right', fontSize: 11 }}>
+                          {copy.pick.pointsShare.replace('{pct}', pct)}
+                        </Text>
+                      </View>
+                      {crest ? <Image source={crest} style={styles.splitCrest} contentFit="contain" /> : null}
+                    </View>
+                  );
+                })}
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -832,6 +989,61 @@ function TeamSide({
         {name}
       </Text>
     </View>
+  );
+}
+
+function FifaPickCard({
+  player,
+  selected,
+  fontBold,
+  onPress,
+  onLongPress,
+}: {
+  player: TsfApiPlayer;
+  selected: boolean;
+  fontBold: string | undefined;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const scale = 0.78;
+  const s = (value: number) => value * scale;
+  const card = { width: 112.48, height: 176.7 };
+  const photoWindow = { left: 6, top: 8, width: 100, height: 108 };
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      style={{
+        width: s(card.width),
+        height: s(card.height),
+        borderRadius: 12,
+        borderWidth: selected ? 2 : 0,
+        borderColor: '#6A2BD9',
+      }}
+    >
+      <Image
+        source={TSF_CARD_ART.under}
+        style={{ position: 'absolute', left: s(TSF_CARD_ART_BOX.left), top: s(TSF_CARD_ART_BOX.top), width: s(TSF_CARD_ART_BOX.width), height: s(TSF_CARD_ART_BOX.height) }}
+        contentFit="fill"
+      />
+      <View style={{ position: 'absolute', left: s(photoWindow.left), top: s(photoWindow.top), width: s(photoWindow.width), height: s(photoWindow.height), overflow: 'hidden' }}>
+        {player.photo ? (
+          <Image source={{ uri: player.photo }} style={{ width: '100%', height: '130%' }} contentFit="contain" contentPosition="top" />
+        ) : null}
+      </View>
+      <Image
+        source={TSF_CARD_ART.over}
+        style={{ position: 'absolute', left: s(TSF_CARD_ART_BOX.left), top: s(TSF_CARD_ART_BOX.top), width: s(TSF_CARD_ART_BOX.width), height: s(TSF_CARD_ART_BOX.height) }}
+        contentFit="fill"
+      />
+      <Text
+        numberOfLines={1}
+        style={{ position: 'absolute', left: 6, right: 6, bottom: s(28), textAlign: 'center', color: '#FFFFFF', fontFamily: fontBold, fontSize: 12 }}
+      >
+        {player.name}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -887,40 +1099,20 @@ function PlayerSheet({
               style={[styles.searchInput, { color: colors.text, fontFamily: fontMedium }]}
             />
           </View>
-          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.sheetList} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.fifaGrid}>
             {players.length === 0 ? (
-              <Text style={{ color: colors.muted, textAlign: 'center', padding: 24, fontFamily: fontMedium }}>{emptyLabel}</Text>
+              <Text style={{ color: colors.muted, textAlign: 'center', padding: 24, fontFamily: fontMedium, width: '100%' }}>{emptyLabel}</Text>
             ) : (
-              players.map((player) => {
-                const selected = player.id === chosenId;
-                return (
-                  <TouchableOpacity
-                    key={player.id}
-                    onPress={() => onChoose(player.id)}
-                    style={[styles.playerRow, { borderColor: colors.border }]}
-                  >
-                    <Ionicons
-                      name={selected ? 'radio-button-on' : 'radio-button-off'}
-                      size={22}
-                      color={selected ? colors.purple : colors.muted}
-                    />
-                    <TouchableOpacity onPress={() => onDetail(player)}>
-                      {player.photo ? (
-                        <Image source={{ uri: player.photo }} style={styles.rowPhoto} contentFit="cover" />
-                      ) : (
-                        <View style={[styles.rowPhoto, { backgroundColor: colors.field }]} />
-                      )}
-                    </TouchableOpacity>
-                    <View style={styles.playerCopy}>
-                      <Text numberOfLines={1} style={{ color: colors.text, fontFamily: fontSemi }}>{player.name}</Text>
-                      <Text numberOfLines={1} style={{ color: colors.muted, fontFamily: fontMedium }}>{player.club}</Text>
-                    </View>
-                    <Text style={{ color: colors.muted, fontFamily: fontMedium }}>{player.seasonGoals}</Text>
-                    <Ionicons name="football" size={14} color={colors.muted} />
-                    <Text style={{ color: colors.muted, fontFamily: fontMedium }}>{player.seasonAssists}</Text>
-                  </TouchableOpacity>
-                );
-              })
+              players.map((player) => (
+                <FifaPickCard
+                  key={player.id}
+                  player={player}
+                  selected={player.id === chosenId}
+                  fontBold={fontSemi}
+                  onPress={() => onChoose(player.id)}
+                  onLongPress={() => onDetail(player)}
+                />
+              ))
             )}
           </ScrollView>
           <TouchableOpacity
@@ -989,7 +1181,180 @@ const styles = StyleSheet.create({
   title: { fontSize: 18 },
   back: { position: 'absolute', left: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   help: { position: 'absolute', right: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  pitchBody: { alignItems: 'center', paddingTop: 12, gap: 6 },
+  pitchStage: { flex: 1, minHeight: 520 },
+  lockRow: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 3,
+  },
+  lockPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#6A2BD9',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    maxWidth: '82%',
+  },
+  lockPillText: { color: '#FFFFFF', fontSize: 13 },
+  infoOrb: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pitchCard: {
+    width: PITCH_CARD.width,
+    height: PITCH_CARD.height,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.18)',
+  },
+  pitchEmpty: {
+    width: PITCH_CARD.width,
+    height: PITCH_CARD.height,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1.5,
+    borderColor: '#6A2BD9',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pitchPhoto: { width: 92, height: 92 },
+  pitchName: { color: '#24104E', fontSize: 13, marginTop: 2, textAlign: 'center', paddingHorizontal: 6 },
+  crown: { position: 'absolute', top: 6, left: 8 },
+  helpCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 20,
+    gap: 10,
+  },
+  helpHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  helpIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8F7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpChip: {
+    height: 26,
+    borderRadius: 52,
+    backgroundColor: '#F8F7FF',
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpChipText: { color: '#6A2BD9', fontSize: 12 },
+  helpTitle: { color: '#24104E', fontSize: 17, textAlign: 'center' },
+  helpSub: { color: '#6B7280', fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  helpScoring: { color: '#24104E', fontSize: 11, textAlign: 'right' },
+  helpScoreRow: { flexDirection: 'row', gap: 8 },
+  helpScoreCard: {
+    flex: 1,
+    backgroundColor: '#F8F5FF',
+    borderRadius: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  helpScoreValue: { color: '#4B1FA3', fontSize: 36 },
+  helpScoreLabel: { color: '#24104E', fontSize: 16 },
+  helpScoreHint: { color: '#6B7280', fontSize: 12, textAlign: 'center' },
+  helpWinner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F3EDFF',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  helpWinnerText: { flex: 1, color: '#6A2BD9', fontSize: 12, textAlign: 'right' },
+  pointsHero: {
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pointsHeroMain: { alignItems: 'flex-end', gap: 2 },
+  pointsHeroLabel: { color: '#F3EDFF', fontSize: 13 },
+  pointsHeroValueRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  pointsHeroUnit: { color: '#E9D5FF', fontSize: 13, marginBottom: 6 },
+  pointsHeroValue: { color: '#FFFFFF', fontSize: 32 },
+  pointsHeroSide: { alignItems: 'flex-start', gap: 10 },
+  leagueCountPill: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  leagueCountText: { color: '#FFFFFF', fontSize: 12 },
+  detailsLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  detailsLinkText: { color: '#FFFFFF', fontSize: 12 },
+  leadTitle: { textAlign: 'center', fontSize: 16 },
+  podiumCol: { width: 104, alignItems: 'center' },
+  podiumColFirst: { marginBottom: 0 },
+  podiumAvatar: { width: 48, height: 48, borderRadius: 24, marginBottom: 6 },
+  podiumAvatarFirst: { width: 58, height: 58, borderRadius: 29 },
+  podiumName: { fontSize: 12, maxWidth: 100, textAlign: 'center' },
+  podiumPts: { fontSize: 11, marginBottom: 6 },
+  podiumBlock: { width: '100%', borderTopLeftRadius: 12, borderTopRightRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  podiumBlockFirst: { height: 118, backgroundColor: '#6A2BD9' },
+  podiumBlockSecond: { height: 86, backgroundColor: '#8B5CF6' },
+  podiumBlockThird: { height: 68, backgroundColor: '#A78BFA' },
+  podiumRank: { color: '#FFFFFF', fontSize: 28 },
+  podiumRankFirst: { color: '#F5C451', fontSize: 36 },
+  restHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  restTitle: { fontSize: 16 },
+  pointsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3EDFF',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pointsPillMine: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  pointsPillUnit: { fontSize: 11 },
+  pointsPillValue: { fontSize: 16 },
+  avatarLetter: { alignItems: 'center', justifyContent: 'center' },
+  pointsSheet: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '80%',
+    backgroundColor: '#F9F6FE',
+    borderRadius: 24,
+    padding: 16,
+    gap: 12,
+  },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  splitCrest: { width: 40, height: 40 },
+  fifaGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, paddingBottom: 12 },
   podium: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 },
   podiumCard: { width: 104, borderRadius: 16, alignItems: 'center', padding: 8, gap: 4 },
   podiumFirst: { marginBottom: 16 },
