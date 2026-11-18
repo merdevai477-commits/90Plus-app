@@ -58,11 +58,12 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   blurTarget,
 }) => {
   const router = useRouter();
-  const { t, isRTL } = useTranslation();
+  const { t, language } = useTranslation();
   const { isDark } = useResolvedAppScheme();
   const theme = useMemo(() => getRankTheme(isDark), [isDark]);
   const xpCtx = useXp();
   const { data: profile, refetch: refetchProfile } = useMyProfileBasics();
+  const isAr = language === 'ar';
 
   useFocusEffect(
     useCallback(() => {
@@ -97,9 +98,9 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     router.push('/(tabs)/profile' as never);
   };
 
-  const row = isRTL ? ('row' as const) : ('row-reverse' as const);
-  const alignEnd = isRTL ? ('flex-end' as const) : ('flex-start' as const);
-  const textAlign = isRTL ? ('right' as const) : ('left' as const);
+  const row = isAr ? ('row' as const) : ('row-reverse' as const);
+  const alignEnd = isAr ? ('flex-end' as const) : ('flex-start' as const);
+  const textAlign = isAr ? ('right' as const) : ('left' as const);
 
   return (
     <Pressable
