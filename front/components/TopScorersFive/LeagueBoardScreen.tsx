@@ -122,6 +122,8 @@ export default function LeagueBoardScreen() {
   const listRef = useRef<FlatList<TsfCompetitionKey>>(null);
 
   const competition = TSF_COMPETITIONS[index] ?? 'egypt';
+  const focusedLeague = isCompetition(firstParam(params.league)) || firstParam(params.mode) === 'egypt' || firstParam(params.mode) === 'europe';
+  const pages = focusedLeague ? [competition] : TSF_COMPETITIONS;
 
   const leagueName = useCallback(
     (key: TsfCompetitionKey) => (key === 'egypt' ? pickCopy.leagues.egypt1 : pickCopy.leagues[key]),
@@ -303,29 +305,34 @@ export default function LeagueBoardScreen() {
         <>
           <FlatList
             ref={listRef}
-            data={TSF_COMPETITIONS}
+            data={pages}
             keyExtractor={(item) => item}
             renderItem={renderCard}
             horizontal
             pagingEnabled
+            scrollEnabled={!focusedLeague}
             showsHorizontalScrollIndicator={false}
-            initialScrollIndex={initialIndex}
+            initialScrollIndex={focusedLeague ? 0 : initialIndex}
             getItemLayout={(_, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
-            onMomentumScrollEnd={(event) => onSwipe(event.nativeEvent.contentOffset.x)}
+            onMomentumScrollEnd={(event) => {
+              if (!focusedLeague) onSwipe(event.nativeEvent.contentOffset.x);
+            }}
             extraData={lineups}
             style={styles.flex}
           />
-          <View style={[styles.dots, { bottom: tsfNavBottom(insets.bottom) + 72 }]}>
-            {TSF_COMPETITIONS.map((key, dot) => (
-              <View
-                key={key}
-                style={[
-                  styles.dot,
-                  { backgroundColor: dot === index ? colors.dotActive : colors.dot, width: dot === index ? 16 : 6 },
-                ]}
-              />
-            ))}
-          </View>
+          {focusedLeague ? null : (
+            <View style={[styles.dots, { bottom: tsfNavBottom(insets.bottom) + 72 }]}>
+              {TSF_COMPETITIONS.map((key, dot) => (
+                <View
+                  key={key}
+                  style={[
+                    styles.dot,
+                    { backgroundColor: dot === index ? colors.dotActive : colors.dot, width: dot === index ? 16 : 6 },
+                  ]}
+                />
+              ))}
+            </View>
+          )}
         </>
       ) : null}
 

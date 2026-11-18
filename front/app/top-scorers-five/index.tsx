@@ -4,8 +4,8 @@
  * Rank opens this hub: Europe Top Five and Egyptian Top Five.
  */
 
-import LeagueBoardScreen from '../../components/TopScorersFive/LeagueBoardScreen';
+import LeagueShowcaseScreen from '../../components/TopScorersFive/LeagueShowcaseScreen';
 
 export default function TopScorersFiveRoute() {
-  return <LeagueBoardScreen />;
+  return <LeagueShowcaseScreen />;
 }

@@ -262,6 +262,9 @@ export const topScorersFiveService = {
       { token },
     ),
 
+  getScore: (token: string, tournament: TsfApiTournament = 'europe') =>
+    request<{ total: number; week: number }>(`/me/score?tournament=${tournament}`, { token }),
+
   getLeaderboard: (
     token: string,
     period: 'week' | 'all',
