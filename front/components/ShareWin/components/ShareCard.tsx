@@ -34,7 +34,6 @@ const ShareCard = memo(function ShareCard({
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s, f } = metrics;
-
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -49,11 +48,16 @@ const ShareCard = memo(function ShareCard({
           padding: s(10),
           gap: s(13),
           alignItems: 'center',
+          overflow: 'hidden',
           shadowColor: '#6A2BD9',
           shadowOffset: { width: 0, height: 5 },
           shadowOpacity: theme.isDark ? 0.2 : 0.12,
           shadowRadius: 7,
           elevation: 4,
+        },
+        cardTexture: {
+          ...StyleSheet.absoluteFillObject,
+          opacity: 0.2,
         },
         title: {
           fontSize: f(14),
@@ -67,10 +71,12 @@ const ShareCard = memo(function ShareCard({
           height: s(44),
           borderRadius: s(14),
           backgroundColor: theme.card,
+          // Figma: link icon left, copy button right (URL stays LTR)
           flexDirection: 'row',
           alignItems: 'center',
           padding: s(6),
           gap: s(8),
+          zIndex: 1,
         },
         linkText: {
           flex: 1,
@@ -206,7 +212,13 @@ const ShareCard = memo(function ShareCard({
   return (
     <View style={styles.section}>
       <View style={styles.card}>
-        <Text style={styles.title}>{copy.shareCardSubtitle}</Text>
+        <Image
+          source={SW_ASSET.shareCardTexture}
+          style={styles.cardTexture}
+          contentFit="cover"
+          transition={0}
+        />
+        <Text style={[styles.title, { zIndex: 1 }]}>{copy.shareCardSubtitle}</Text>
 
         <Pressable
           style={styles.linkRow}
@@ -233,7 +245,7 @@ const ShareCard = memo(function ShareCard({
           </View>
         </Pressable>
 
-        <View style={styles.socials}>
+        <View style={[styles.socials, { zIndex: 1 }]}>
           {channels.map((channel) => (
             <Pressable
               key={channel.id}

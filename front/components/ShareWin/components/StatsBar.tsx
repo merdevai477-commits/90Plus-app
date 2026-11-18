@@ -34,6 +34,7 @@ const StatsBar = memo(function StatsBar({ score, shareCount, rank }: StatsBarPro
           height: s(88),
           borderRadius: s(20),
           backgroundColor: theme.card,
+          // Figma Frame566 LTR artboard: Rank | Shares | Points(pill on the right)
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -106,7 +107,7 @@ const StatsBar = memo(function StatsBar({ score, shareCount, rank }: StatsBarPro
         },
       }),
     [f, language, s, theme],
-  );
+  ); // language kept for getAppFont
 
   return (
     <View style={styles.wrap}>

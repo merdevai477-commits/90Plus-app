@@ -47,6 +47,7 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
   const copy = t.shareWin;
   const countdown = useCountdown(cycleEndAt);
   const { s, f } = metrics;
+  const mirrorRtl = language === 'ar';
 
   const top3 = entries.filter((e) => e.rank <= 3).slice(0, 3);
   const rest = entries.filter((e) => e.rank >= 4).slice(0, 4);
@@ -100,7 +101,7 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
         countdownHead: {
           width: '100%',
           height: s(22),
-          flexDirection: 'row',
+          flexDirection: mirrorRtl ? 'row' : 'row-reverse',
           alignItems: 'center',
           justifyContent: 'space-between',
         },
@@ -109,11 +110,12 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
           fontSize: f(13),
           fontWeight: '600',
           color: theme.white,
-          textAlign: 'right',
+          textAlign: mirrorRtl ? 'right' : 'left',
         },
         units: {
           width: '100%',
-          flexDirection: 'row',
+          // Figma visual: Days on the right → Seconds on the left
+          flexDirection: 'row-reverse',
           alignItems: 'center',
           justifyContent: 'space-between',
         },
@@ -286,9 +288,10 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
           paddingVertical: s(16),
         },
       }),
-    [f, s, theme],
+    [f, mirrorRtl, s, theme],
   );
 
+  // Logical order; `units` row-reverse places Days on the right (Figma).
   const units = [
     { value: countdown.days, label: copy.unitDays },
     { value: countdown.hours, label: copy.unitHours },

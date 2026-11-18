@@ -1260,12 +1260,14 @@ function buildStyles(scale: DesignScale, language: string, theme: ShareWinTheme)
     lbTitle: {
       fontFamily: font(700),
       fontSize: f(24),
-      color: SW_COLOR.white,
+      color: theme.ink,
+      textAlign: 'center',
     },
     lbSubtitle: {
       fontFamily: font(400),
       fontSize: f(13),
-      color: SW_COLOR.bodyGrey,
+      color: theme.muted,
+      textAlign: 'center',
     },
     lbCloseButton: {
       width: s(36),

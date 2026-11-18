@@ -38,14 +38,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import { useShareWinLeaderboard } from '../../hooks/useShareWinLeaderboard';
 import type { ShareWinLeaderboardEntry } from '../../services/shareWin.service';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
-import { SW_ASSET } from './assets';
 import { displayNameOf, formatNumber } from './data';
 import LeaderboardRow from './components/LeaderboardRow';
 import { useShareWinStyles } from './styles';
@@ -71,6 +70,7 @@ export default function ShareWinLeaderboardScreen() {
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s } = metrics;
+  const mirrorRtl = language === 'ar';
 
   const {
     entries,
@@ -158,15 +158,35 @@ export default function ShareWinLeaderboardScreen() {
         colors={[theme.refresh]}
       />
     ),
-    [isRefetching, refetch],
+    [isRefetching, refetch, theme.refresh],
   );
 
   if (!isLoaded || !isSignedIn) {
     return <View style={sw.root} />;
   }
 
+  const BackIcon = mirrorRtl ? ChevronRight : ChevronLeft;
+
   const header = (
-    <View style={[sw.lbHeader, { paddingTop: insets.top + s(12) }]}>
+    <View
+      style={[
+        sw.lbHeader,
+        {
+          paddingTop: insets.top + s(12),
+          flexDirection: mirrorRtl ? 'row-reverse' : 'row',
+        },
+      ]}
+    >
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={copy.close}
+        style={sw.lbCloseButton}
+      >
+        <BackIcon size={s(24)} color={theme.headerIcon} strokeWidth={2.4} />
+      </Pressable>
+
       <View style={sw.lbHeaderTitles}>
         <Text style={sw.lbTitle} accessibilityRole="header">
           {copy.weeklyTitle}
@@ -177,21 +197,6 @@ export default function ShareWinLeaderboardScreen() {
           </Text>
         ) : null}
       </View>
-
-      <Pressable
-        onPress={() => router.back()}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel={copy.close}
-        style={sw.lbCloseButton}
-      >
-        <Image
-          source={SW_ASSET.chevronRight}
-          style={{ width: s(24), height: s(24), transform: [{ scaleX: -1 }] }}
-          contentFit="contain"
-          transition={0}
-        />
-      </Pressable>
     </View>
   );
 

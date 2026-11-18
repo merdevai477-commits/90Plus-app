@@ -1,17 +1,17 @@
 /**
- * Monthly prizes — Figma Frame123 nodes 2010:5799 / 2003:5549 / 2003:5550.
- * Featured PS5 card + secondary jersey card.
+ * Monthly prizes — Figma 2010:5799.
+ * Featured + secondary cards use Figma raster backgrounds (compressed JPEG).
  */
 
 import React, { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTranslation } from '../../../src/i18n';
+import { getAppFont } from '../../../utils/fontSetup';
 import type { ShareWinPrize } from '../../../services/shareWin.service';
 import { SW_ASSET } from '../assets';
-import { prizeCopy, prizeImageSource } from '../data';
+import { prizeCopy } from '../data';
 import { useShareWinStyles } from '../styles';
 
 interface WeeklyPrizesProps {
@@ -23,6 +23,7 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
   const { t, language } = useTranslation();
   const copy = t.shareWin;
   const { s, f } = metrics;
+  const mirrorRtl = language === 'ar';
 
   const styles = useMemo(
     () =>
@@ -32,16 +33,17 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           gap: s(19),
         },
         header: {
-          flexDirection: 'row',
+          flexDirection: mirrorRtl ? 'row' : 'row-reverse',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: mirrorRtl ? 'flex-end' : 'flex-start',
           gap: s(8),
+          alignSelf: mirrorRtl ? 'flex-end' : 'flex-start',
         },
         title: {
+          fontFamily: getAppFont(700, language),
           fontSize: f(18),
-          fontWeight: '700',
           color: theme.ink,
-          textAlign: 'right',
+          textAlign: mirrorRtl ? 'right' : 'left',
         },
         gift: {
           width: s(25),
@@ -56,27 +58,30 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           height: s(341),
           borderRadius: s(28),
           overflow: 'hidden',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          paddingHorizontal: s(10),
-          paddingBottom: s(19),
-          paddingTop: s(10),
+        },
+        featuredBg: {
+          ...StyleSheet.absoluteFillObject,
+          width: '100%',
+          height: '100%',
         },
         featuredLabels: {
           position: 'absolute',
           top: s(24),
+          left: 0,
+          right: 0,
           alignItems: 'center',
           gap: s(6),
           zIndex: 2,
+          paddingHorizontal: s(12),
         },
         placeRow: {
-          flexDirection: 'row',
+          flexDirection: mirrorRtl ? 'row' : 'row-reverse',
           alignItems: 'center',
           gap: s(4),
         },
         placeLabel: {
+          fontFamily: getAppFont(600, language),
           fontSize: f(14),
-          fontWeight: '600',
           color: '#DEDEDE',
           textAlign: 'center',
         },
@@ -85,14 +90,10 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           height: s(17),
         },
         featuredTitle: {
+          fontFamily: getAppFont(700, language),
           fontSize: f(30),
-          fontWeight: '700',
           color: theme.accent,
           textAlign: 'center',
-        },
-        featuredImage: {
-          width: '92%',
-          height: s(220),
         },
         secondary: {
           width: '100%',
@@ -106,32 +107,37 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
           paddingBottom: s(10),
           gap: s(4),
         },
+        secondaryBg: {
+          ...StyleSheet.absoluteFillObject,
+          width: '100%',
+          height: '100%',
+        },
         secondaryPlace: {
+          fontFamily: getAppFont(600, language),
           fontSize: f(12),
-          fontWeight: '600',
           color: '#E9E9E9',
           textAlign: 'center',
         },
         secondaryTitle: {
+          fontFamily: getAppFont(700, language),
           fontSize: f(20),
-          fontWeight: '700',
           color: theme.white,
           textAlign: 'center',
+          zIndex: 2,
         },
         secondaryImage: {
           width: '100%',
-          height: s(160),
+          height: s(155),
+          zIndex: 2,
         },
       }),
-    [f, s, theme],
+    [f, language, mirrorRtl, s, theme],
   );
 
   if (prizes.length === 0) return null;
 
   const featured = prizes[0];
   const featuredCopy = prizeCopy(featured, language);
-  const secondary = prizes[1] ?? prizes[0];
-  const secondaryCopy = prizeCopy(secondary, language);
 
   return (
     <View style={styles.section}>
@@ -143,12 +149,16 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
       </View>
 
       <View style={styles.stack}>
-        <LinearGradient
-          colors={[...theme.prizeFeaturedGradient]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.featured}
-        >
+        {/* Featured — full Figma card art includes PS5 + rays */}
+        <View style={styles.featured}>
+          <Image
+            source={SW_ASSET.prizeFeaturedBg}
+            style={styles.featuredBg}
+            contentFit="cover"
+            contentPosition="center"
+            transition={150}
+            cachePolicy="memory-disk"
+          />
           <View style={styles.featuredLabels}>
             <View style={styles.placeRow}>
               <Text style={styles.placeLabel}>{copy.firstPlace}</Text>
@@ -163,22 +173,18 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
               {featuredCopy.title || 'PlayStation 5'}
             </Text>
           </View>
+        </View>
+
+        {/* Secondary — Figma bg + jerseys row */}
+        <View style={styles.secondary}>
           <Image
-            source={prizeImageSource(featured, 0)}
-            style={styles.featuredImage}
-            contentFit="contain"
+            source={SW_ASSET.prizeSecondaryBg}
+            style={styles.secondaryBg}
+            contentFit="cover"
             transition={150}
             cachePolicy="memory-disk"
           />
-        </LinearGradient>
-
-        <LinearGradient
-          colors={[...theme.prizeSecondaryGradient]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.secondary}
-        >
-          <View style={styles.placeRow}>
+          <View style={[styles.placeRow, { zIndex: 2 }]}>
             <Text style={styles.secondaryPlace}>{copy.secondThirdPlace}</Text>
             <Image
               source={SW_ASSET.rankingV2}
@@ -188,16 +194,16 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
             />
           </View>
           <Text style={styles.secondaryTitle} numberOfLines={1}>
-            {copy.favoriteKitTitle || secondaryCopy.title}
+            {copy.favoriteKitTitle}
           </Text>
           <Image
-            source={prizeImageSource(secondary, 1)}
+            source={SW_ASSET.prizeJerseysRow}
             style={styles.secondaryImage}
             contentFit="contain"
             transition={150}
             cachePolicy="memory-disk"
           />
-        </LinearGradient>
+        </View>
       </View>
     </View>
   );
