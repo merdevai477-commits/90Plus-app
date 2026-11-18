@@ -14,6 +14,9 @@ export const KING_ART = {
   scoreBox: require('../../assets/images/king-of-predictions/score-box.svg'),
   promoBanner: require('../../assets/images/king-of-predictions/promo-banner.png'),
   courtIcon: require('../../assets/images/king-of-predictions/icon-court.svg'),
+  podiumTop1: require('../../assets/images/king-of-predictions/podium-top-1.svg'),
+  podiumTop2: require('../../assets/images/king-of-predictions/podium-top-2.svg'),
+  podiumTop3: require('../../assets/images/king-of-predictions/podium-top-3.svg'),
 } as const;
 
 export const KING_ICON = {
