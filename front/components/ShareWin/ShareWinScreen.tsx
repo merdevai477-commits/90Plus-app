@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,7 @@ import { useShareWin, type ShareChannel } from '../../hooks/useShareWin';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 
+import { SW_ASSET } from './assets';
 import LuckyWheelCard from './components/LuckyWheelCard';
 import ShareCard from './components/ShareCard';
 import ShareWinSkeleton from './components/ShareWinSkeleton';
@@ -213,8 +215,14 @@ export default function ShareWinScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
-        {/* Fast Refresh keeps this binding; never mount. */}
+        {/*
+         * Fast Refresh / nativewind wrap-jsx still looks these bindings up after
+         * a hot reload. Keep them; never mount.
+         */}
         {false ? <LuckyWheelCard onSpinSettled={() => undefined} /> : null}
+        {false ? (
+          <Image source={SW_ASSET.backV2} style={{ width: 0, height: 0 }} />
+        ) : null}
 
         <StatsBar
           score={overview.score}

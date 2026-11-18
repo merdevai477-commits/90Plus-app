@@ -166,6 +166,14 @@ describe('the back control', () => {
     expect(source).toMatch(/const scrollTopPadding/);
     expect(source).toMatch(/paddingTop:\s*scrollTopPadding/);
   });
+
+  it('keeps an Image binding so Fast Refresh wrap-jsx does not crash', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'ShareWinScreen.tsx'), 'utf8');
+    expect(source).toMatch(/import\s+\{\s*Image\s*\}\s+from\s+['"]expo-image['"]/);
+    expect(source).toMatch(/<Image\s+source=\{SW_ASSET\.backV2\}/);
+  });
 });
 
 describe('the referral link the page hands out', () => {
