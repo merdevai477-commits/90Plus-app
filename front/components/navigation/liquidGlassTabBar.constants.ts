@@ -3,8 +3,8 @@ import type { LiquidTabItem } from './liquidGlassTabBar.types';
 export const TAB_BAR_HEIGHT = 58;
 /** Compact floating bar (2 tabs). */
 export const COMPACT_TAB_BAR_HEIGHT = 50;
-/** Wide enough for 2 Arabic labels (مجموعة / الترتيب) without clipping. */
-export const COMPACT_TAB_BAR_WIDTH = 216;
+/** Wide enough for 2 Arabic labels (مجموعة / المسابقات) without clipping. */
+export const COMPACT_TAB_BAR_WIDTH = 232;
 export const TAB_BAR_HORIZONTAL_MARGIN = 12;
 export const TAB_BAR_PADDING_H = 4;
 
@@ -17,7 +17,7 @@ export const TAB_BUBBLE_SIZE = TAB_BUBBLE_WIDTH;
 
 export const TAB_BUBBLE_WIDTHS: Record<LiquidTabItem['id'], number> = {
   matches: 94,
-  rank: 68,
+  rank: 92,
   community: 92,
   reels: 72,
   ai: 58,

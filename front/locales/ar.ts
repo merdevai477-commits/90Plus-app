@@ -3894,7 +3894,7 @@ export const ar = {
   },
   bottomNav: {
     matches: 'المباريات',
-    rank: 'الترتيب',
+    rank: 'المسابقات',
     community: 'المجتمع',
     reels: 'ريلز',
     ai: 'الذكاء',

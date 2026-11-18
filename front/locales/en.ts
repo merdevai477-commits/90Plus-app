@@ -3985,7 +3985,7 @@ export const en = {
   },
   bottomNav: {
     matches: 'Matches',
-    rank: 'Rank',
+    rank: 'Competitions',
     community: 'Community',
     reels: 'Reels',
     ai: 'AI',
