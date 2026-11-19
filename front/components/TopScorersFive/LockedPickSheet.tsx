@@ -80,7 +80,7 @@ export function LockedPickSheet({ notice, scale, onClose, onViewProfile }: Locke
 
   if (!notice) return null;
 
-  const { player, league: _league, reason, unlocksAt } = notice;
+  const { player, league, reason, unlocksAt } = notice;
   const canViewProfile = player?.athleteId != null;
   const confirmed = reason === 'confirmed' && player != null;
   const title = confirmed ? pickCopy.pickLockedTitle : pickCopy.lockedTitle;
