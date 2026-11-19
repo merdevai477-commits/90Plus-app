@@ -12,6 +12,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -21,7 +22,6 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +46,7 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import UserIdentity from '../identity/UserIdentity';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
 import { TsfNav, tsfNavBottom, type TsfTabKey } from './TsfNav';
+import { TsfIslandBack, TsfPointsHero } from './TsfPointsHero';
 import { TSF_THEME, type TsfColors } from './tsfTheme';
 
 const PITCH = require('../../assets/images/top-scorers-five/pitch.jpg');
@@ -278,6 +279,10 @@ export default function LeagueBoardScreen() {
           <View style={{ width, height: pitchBox.height || undefined, flex: pitchBox.height ? undefined : 1 }}>
             <PitchFormation
               slots={slots}
+              reopenAt={
+                slots.map((slot) => slot.lockedUntil).filter((value): value is string => !!value).sort()[0]
+                ?? (lineup?.gameweek.locked ? lineup.gameweek.endAt : null)
+              }
               box={pitchBox}
               fontSemi={fontSemi}
               fontMedium={fontMedium}
@@ -310,16 +315,12 @@ export default function LeagueBoardScreen() {
         <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>
           {tab === 'pitch' ? pickCopy.formationTitle : copy.title}
         </Text>
-        <TouchableOpacity
+        <TsfIslandBack
           onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={copy.back}
-          hitSlop={12}
-          style={styles.back}
-          testID="top-scorers-five-back"
-        >
-          <Ionicons name="arrow-back" size={26} color={colors.text} />
-        </TouchableOpacity>
+          label={copy.back}
+          rtl={language === 'ar'}
+          light={isDark}
+        />
       </View>
 
       {tab === 'pitch' ? (
@@ -492,6 +493,7 @@ export default function LeagueBoardScreen() {
 
 function PitchFormation({
   slots,
+  reopenAt,
   box,
   fontSemi,
   fontMedium,
@@ -501,6 +503,7 @@ function PitchFormation({
   onRemove,
 }: {
   slots: TsfApiLineup['slots'];
+  reopenAt: string | null;
   box: { width: number; height: number };
   fontSemi: string | undefined;
   fontMedium: string | undefined;
@@ -509,31 +512,27 @@ function PitchFormation({
   onOpen: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
   onRemove: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
 }) {
-  const days = slots.reduce<number | null>((soonest, slot) => {
-    const next = daysUntil(slot.lockedUntil);
-    if (next == null) return soonest;
-    return soonest == null ? next : Math.min(soonest, next);
-  }, null);
+  const days = daysUntil(reopenAt);
 
   return (
     <View style={styles.pitchStage}>
       <View style={styles.lockRow}>
-        {days != null ? (
-          <View style={styles.lockPill}>
-            <Ionicons name="time" size={16} color="#FFFFFF" />
-            <Text style={[styles.lockPillText, { fontFamily: fontSemi }]}>
-              {lockLabel.replace('{days}', String(days))}
-            </Text>
-          </View>
-        ) : <View />}
         <TouchableOpacity
           onPress={onHelp}
           accessibilityRole="button"
           style={styles.infoOrb}
           hitSlop={8}
         >
-          <Ionicons name="information" size={18} color="#6A2BD9" />
+          <Ionicons name="help" size={18} color="#6A2BD9" />
         </TouchableOpacity>
+        {days != null ? (
+          <View style={styles.lockPill}>
+            <Ionicons name="time" size={16} color="#FFFFFF" />
+            <Text style={[styles.lockPillText, { fontFamily: fontSemi }]} numberOfLines={1}>
+              {lockLabel.replace('{days}', String(days))}
+            </Text>
+          </View>
+        ) : null}
       </View>
       {box.width > 0
         ? slots.slice(0, 5).map((slot, index) => {
@@ -781,39 +780,36 @@ function LeagueRanking({
         style={[styles.flex, { backgroundColor: colors.bg }]}
         contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 14 }}
       >
-        <LinearGradient
-          colors={['#7C3AED', '#5B21B6']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.pointsHero, language === 'ar' && { flexDirection: 'row-reverse' }]}
-        >
-          <View style={styles.pointsHeroMain}>
-            <Text style={[styles.pointsHeroLabel, { fontFamily: fontMedium }]}>{copy.ranking.totalPoints}</Text>
-            <View style={styles.pointsHeroValueRow}>
-              <Text style={[styles.pointsHeroUnit, { fontFamily: fontMedium }]}>{copy.pick.pointUnit}</Text>
-              <Text style={[styles.pointsHeroValue, { fontFamily: fontBold }]}>
-                {total.toLocaleString('en-US')}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.pointsHeroSide}>
-            <View style={styles.leagueCountPill}>
-              <Text style={[styles.leagueCountText, { fontFamily: fontSemi }]}>
-                {copy.ranking.leagueCount.replace('{count}', '6')}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => void loadSplit()} accessibilityRole="button" style={styles.detailsLink}>
-              <Ionicons name="chevron-back" size={14} color="#FFFFFF" />
-              <Text style={[styles.detailsLinkText, { fontFamily: fontMedium }]}>{copy.ranking.viewDetails}</Text>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
+        <TsfPointsHero
+          title={copy.ranking.totalPoints}
+          points={total}
+          unit={copy.pick.pointUnit}
+          leagueCount={copy.ranking.leagueCount.replace('{count}', '6')}
+          detailsLabel={copy.ranking.viewDetails}
+          onDetails={() => void loadSplit()}
+          rtl={language === 'ar'}
+          titleFont={fontBold}
+          valueFont={fontBold}
+          bodyFont={fontSemi}
+        />
 
-        <TouchableOpacity onPress={() => setPeriod(period === 'week' ? 'all' : 'week')} accessibilityRole="button">
-          <Text style={[styles.leadTitle, { color: colors.text, fontFamily: fontBold }]}>
-            {period === 'week' ? copy.ranking.leadWeek : copy.ranking.leadAll}
+        <Text style={[styles.leadTitle, { color: colors.text, fontFamily: fontBold }]}>
+          {period === 'week' ? copy.ranking.leadWeek : copy.ranking.leadAll}
+        </Text>
+        <View style={styles.periodSwitch}>
+          <Text style={{ color: period === 'all' ? colors.text : colors.muted, fontFamily: fontSemi }}>
+            {copy.ranking.filterAll}
           </Text>
-        </TouchableOpacity>
+          <Switch
+            value={period === 'week'}
+            onValueChange={(on) => setPeriod(on ? 'week' : 'all')}
+            trackColor={{ false: '#E5E7EB', true: '#6A2BD9' }}
+            thumbColor="#FFFFFF"
+          />
+          <Text style={{ color: period === 'week' ? colors.text : colors.muted, fontFamily: fontSemi }}>
+            {copy.ranking.filterWeek}
+          </Text>
+        </View>
 
         {(board?.entries.length ?? 0) === 0 ? (
           <TouchableOpacity onPress={onPick}>
@@ -1183,12 +1179,20 @@ const styles = StyleSheet.create({
   help: { position: 'absolute', right: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   pitchStage: { flex: 1, minHeight: 520 },
   lockRow: {
-    marginTop: 8,
-    marginHorizontal: 16,
+    marginTop: 10,
+    marginLeft: 16,
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     zIndex: 3,
+    maxWidth: '92%',
+  },
+  periodSwitch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
   lockPill: {
     flexDirection: 'row',

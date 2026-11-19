@@ -6,6 +6,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -32,6 +35,7 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 
 import { TSF_LEAGUE_LOGO } from './assets';
 import { TSF_THEME } from './tsfTheme';
+import { TsfIslandBack, TsfPointsHero } from './TsfPointsHero';
 
 const SHOWCASE: readonly TsfCompetitionKey[] = [
   'bundesliga',
@@ -50,8 +54,6 @@ const PORTRAIT: Record<TsfCompetitionKey, number> = {
   egypt: require('../../assets/images/top-scorers-five/showcase/egypt.png'),
   ligue1: require('../../assets/images/top-scorers-five/showcase/ligue1.png'),
 };
-
-const BANNER = require('../../assets/images/top-scorers-five/showcase/points-banner.png');
 
 const CREST: Record<TsfCompetitionKey, number> = {
   egypt: TSF_LEAGUE_LOGO.egypt1,
@@ -107,8 +109,9 @@ export default function LeagueShowcaseScreen() {
 
   const [index, setIndex] = useState(initialIndex);
   const [points, setPoints] = useState(0);
+  const [split, setSplit] = useState<{ leagueKey: string; total: number }[] | null>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
   const listRef = useRef<FlatList<TsfCompetitionKey>>(null);
-  const current = SHOWCASE[index] ?? 'bundesliga';
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -121,7 +124,10 @@ export default function LeagueShowcaseScreen() {
           topScorersFiveService.getScore(token, 'europe'),
           topScorersFiveService.getScore(token, 'egypt'),
         ]);
-        if (!cancelled) setPoints((europe?.total ?? 0) + (egypt?.total ?? 0));
+        if (!cancelled) {
+          setPoints((europe?.total ?? 0) + (egypt?.total ?? 0));
+          setSplit([...(europe?.leagues ?? []), ...(egypt?.leagues ?? [])]);
+        }
       } catch (error) {
         logger.warn('[TopScorersFive] total score failed', error);
       }
@@ -151,14 +157,20 @@ export default function LeagueShowcaseScreen() {
       <View style={[styles.page, { width }]}>
         <Text style={[styles.arabicLeague, { color: colors.muted, fontFamily: fontRegular }]}>{arabicName(item)}</Text>
         <Text style={[styles.englishLeague, { color: colors.text, fontFamily: fontBold }]}>{ENGLISH[item]}</Text>
-        <Portrait league={item} width={cardWidth} height={cardHeight} />
+        <TouchableOpacity
+          onPress={() => openFormation(item)}
+          accessibilityRole="button"
+          activeOpacity={0.9}
+        >
+          <Portrait league={item} width={cardWidth} height={cardHeight} />
+        </TouchableOpacity>
         <View style={styles.hintRow}>
           <Ionicons name="swap-horizontal" size={18} color={colors.purple} />
           <Text style={[styles.hint, { color: colors.muted, fontFamily: fontRegular }]}>{pick.swipeHint}</Text>
         </View>
       </View>
     ),
-    [arabicName, cardHeight, cardWidth, colors.muted, colors.purple, colors.text, fontBold, fontRegular, pick.swipeHint, width],
+    [arabicName, cardHeight, cardWidth, colors.muted, colors.purple, colors.text, fontBold, fontRegular, openFormation, pick.swipeHint, width],
   );
 
   return (
@@ -166,31 +178,23 @@ export default function LeagueShowcaseScreen() {
       <StatusBar barStyle={colors.statusBar === 'light' ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>{copy.title}</Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={copy.back}
-          hitSlop={12}
-          style={[styles.back, isAr ? styles.backEnd : styles.backStart]}
-        >
-          <Ionicons name={isAr ? 'chevron-forward' : 'chevron-back'} size={26} color={colors.text} />
-        </TouchableOpacity>
+        <TsfIslandBack onPress={() => router.back()} label={copy.back} rtl={isAr} />
       </View>
       <Text style={[styles.subtitle, { color: colors.muted, fontFamily: fontRegular }]}>{pick.showcaseSubtitle}</Text>
 
-      <View style={styles.banner}>
-        <Image source={BANNER} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <View style={styles.bannerCopy}>
-          <Text style={[styles.bannerTitle, { fontFamily: fontBold }]}>{pick.pointsBannerTitle}</Text>
-          <Text style={[styles.bannerBody, { fontFamily: fontRegular }]}>{pick.pointsBannerBody}</Text>
-          <Text
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            style={[styles.bannerPoints, { fontFamily: fontBold }]}
-          >
-            {points.toLocaleString('en-US')}
-          </Text>
-        </View>
+      <View style={styles.heroWrap}>
+        <TsfPointsHero
+          title={copy.ranking.totalPoints}
+          points={points}
+          unit={pick.pointUnit}
+          leagueCount={copy.ranking.leagueCount.replace('{count}', '6')}
+          detailsLabel={copy.ranking.viewDetails}
+          onDetails={() => setSplitOpen(true)}
+          rtl={isAr}
+          titleFont={fontBold}
+          valueFont={fontBold}
+          bodyFont={fontSemi}
+        />
       </View>
 
       <FlatList
@@ -220,16 +224,24 @@ export default function LeagueShowcaseScreen() {
         ))}
       </View>
 
-      <TouchableOpacity
-        onPress={() => openFormation(current)}
-        style={[styles.cta, { marginBottom: Math.max(insets.bottom, 16) }]}
-        accessibilityRole="button"
-        testID="tsf-build-squad"
-      >
-        <LinearGradient colors={['#7A3BE8', '#6A2BD9']} style={styles.ctaFill}>
-          <Text style={[styles.ctaText, { fontFamily: fontBold }]}>{pick.buildSquad}</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      <View style={{ height: Math.max(insets.bottom, 12) }} />
+      <Modal visible={splitOpen} transparent animationType="fade" onRequestClose={() => setSplitOpen(false)}>
+        <Pressable style={styles.scrim} onPress={() => setSplitOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={[styles.sheetTitle, { fontFamily: fontBold }]}>{pick.pointsDetails}</Text>
+            <ScrollView contentContainerStyle={{ gap: 8 }}>
+              {(split ?? []).map((row) => (
+                <View key={row.leagueKey} style={styles.splitRow}>
+                  <Text style={[styles.splitName, { fontFamily: fontSemi }]}>
+                    {row.leagueKey === 'egypt' ? pick.leagues.egypt1 : pick.leagues[row.leagueKey as TsfCompetitionKey] ?? row.leagueKey}
+                  </Text>
+                  <Text style={[styles.splitPts, { fontFamily: fontBold }]}>{row.total}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -278,6 +290,21 @@ const styles = StyleSheet.create({
   hintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 16 },
   hint: { fontSize: 12 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 12 },
+  heroWrap: { marginHorizontal: 16 },
+  scrim: { flex: 1, backgroundColor: 'rgba(36,16,78,0.35)', justifyContent: 'center', padding: 20 },
+  sheet: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 16, maxHeight: '70%', gap: 10 },
+  sheetTitle: { color: '#24104E', fontSize: 16, textAlign: 'center' },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F5FF',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  splitName: { color: '#24104E', fontSize: 14 },
+  splitPts: { color: '#4B1FA3', fontSize: 16 },
   dot: { height: 6, borderRadius: 3 },
   cta: { marginHorizontal: 20, borderRadius: 16, overflow: 'hidden' },
   ctaFill: { height: 52, alignItems: 'center', justifyContent: 'center' },
