@@ -1,0 +1,19 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="19" height="18" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Timeline Node">
+<mask id="stroke0_0_25" fill="white">
+<path d="M19 9C19 13.9706 14.7467 18 9.5 18C4.25329 18 0 13.9706 0 9C0 4.02944 4.25329 0 9.5 0C14.7467 0 19 4.02944 19 9Z"/>
+</mask>
+<ellipse id="Ellipse 60" cx="9.5" cy="9" rx="9.5" ry="9" stroke-width="2" stroke="url(#paint0_linear_0_25)" mask="url(#stroke0_0_25)"/>
+<circle id="Ellipse 59" cx="9.5" cy="9" r="7" fill="url(#paint1_linear_0_25)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_25" x1="9.5" y1="0" x2="9.5" y2="18" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#513690"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_25" x1="9.5" y1="2" x2="9.5" y2="16" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#513690"/>
+</linearGradient>
+</defs>
+</svg>

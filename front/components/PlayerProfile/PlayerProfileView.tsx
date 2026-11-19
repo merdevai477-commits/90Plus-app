@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -16,9 +15,9 @@ import {
   type RefreshControlProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Line, Polygon } from 'react-native-svg';
 
-import { PURPLE_PRIMARY } from '../../constants/tokens';
-import type { Player365LastMatch } from '../../services/apiFootball';
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useTranslation } from '../../src/i18n';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
 import { useAppFont } from '../../utils/fontSetup';
@@ -26,11 +25,18 @@ import { toFullscreenPhotoUrl } from '../../utils/scores365AthletePhoto';
 import ImageViewerModal from '../common/ImageViewerModal';
 import TeamBadge from '../common/TeamBadge';
 import { PP_ICON, PP_STADIUM } from './assets';
-import { PP_COLORS as C, ratingTone } from './theme';
-import type { PlayerProfileTab, PlayerProfileViewModel, PlayerTransferRow } from './types';
+import { getPPColors, type PPColors } from './theme';
+import type {
+  PlayerDetailedStats,
+  PlayerPer90Stats,
+  PlayerProfileViewModel,
+  PlayerTransferRow,
+} from './types';
 
-const DESIGN_WIDTH = 448;
-const STRIP_OVERLAP = 41;
+const DESIGN_WIDTH = 430;
+const HERO_BODY = 398;
+const STRIP_OVERLAP = 10;
+const HEADER_BAR_HEIGHT = 44;
 
 function useRtl() {
   const { language } = useTranslation();
@@ -42,32 +48,60 @@ function fmtNum(n: number | null | undefined): string {
   return n.toLocaleString('en-US');
 }
 
-function fmtMatchDate(iso: string | null, rtl: boolean): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = String(d.getFullYear());
-  return rtl ? `${yyyy} - ${mm} - ${dd}` : `${dd} - ${mm} - ${yyyy}`;
+function fmtPct(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return `${Math.round(n)}%`;
 }
 
-const HEADER_BAR_HEIGHT = 56;
+function fmtPer90(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return n >= 10 ? n.toFixed(1) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: name.trim(), last: '' };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
+function handleFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const path = new URL(url).pathname.replace(/\/+$/, '');
+    const last = path.split('/').filter(Boolean).pop();
+    if (!last) return null;
+    return last.startsWith('@') ? last : `@${last}`;
+  } catch {
+    return null;
+  }
+}
 
 export function usePlayerHeaderHeight(): number {
   const insets = useSafeAreaInsets();
   return Math.max(insets.top, 10) + HEADER_BAR_HEIGHT;
 }
 
-/**
- * Transparent header. With `scrollY` it floats over the hero and a solid bar fades in
- * once the content scrolls underneath it.
- */
-export function PlayerProfileHeader({ onBack, scrollY }: { onBack: () => void; scrollY?: Animated.Value }) {
+export function PlayerProfileHeader({
+  onBack,
+  scrollY,
+  title,
+  colors,
+}: {
+  onBack: () => void;
+  scrollY?: Animated.Value;
+  title?: string;
+  colors?: PPColors;
+}) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const { isDark } = useResolvedAppScheme();
+  const C = colors ?? getPPColors(isDark);
+  const rtl = useRtl();
+  const fontBold = useAppFont(700);
+  const pageTitle = title ?? t.playerCareer.pageTitle;
+
   const barOpacity = scrollY
-    ? scrollY.interpolate({ inputRange: [0, 140], outputRange: [0, 1], extrapolate: 'clamp' })
+    ? scrollY.interpolate({ inputRange: [0, 120], outputRange: [0, 1], extrapolate: 'clamp' })
     : 0;
 
   return (
@@ -76,49 +110,38 @@ export function PlayerProfileHeader({ onBack, scrollY }: { onBack: () => void; s
         styles.header,
         { paddingTop: Math.max(insets.top, 10), height: Math.max(insets.top, 10) + HEADER_BAR_HEIGHT },
         scrollY ? styles.headerOverlay : null,
+        { flexDirection: rtl ? 'row' : 'row-reverse' },
       ]}
     >
       {scrollY ? (
-        <>
-          <LinearGradient
-            pointerEvents="none"
-            colors={['rgba(3,3,3,0.55)', 'rgba(3,3,3,0)']}
-            style={StyleSheet.absoluteFill}
-          />
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.headerBar, { opacity: barOpacity }]} />
-        </>
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: C.hero, opacity: barOpacity }]}
+        />
       ) : null}
 
-      <Pressable
-        onPress={onBack}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel={t.playerCareer.goBack}
-        style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
-      >
-        <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <Ionicons name="chevron-back" size={22} color="#fff" style={styles.backIcon} />
-      </Pressable>
-
-      <View style={styles.brandPill}>
-        <Text style={styles.brand90} allowFontScaling={false}>
-          90
+      <View style={[styles.headerTrailing, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+        <Text
+          style={[styles.headerTitle, { fontFamily: fontBold, color: C.softLilac }]}
+          numberOfLines={1}
+          allowFontScaling={false}
+        >
+          {pageTitle}
         </Text>
-        <View style={styles.brandPlusChip}>
-          <Text style={styles.brandPlus} allowFontScaling={false}>
-            PLUS
-          </Text>
-        </View>
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t.playerCareer.goBack}
+          style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+        >
+          <Image
+            source={PP_ICON.arrowBack}
+            style={[styles.backIcon, !rtl && { transform: [{ scaleX: -1 }] }]}
+            contentFit="contain"
+          />
+        </Pressable>
       </View>
-
-      <View style={styles.headerSpacer} />
     </View>
   );
 }
@@ -134,20 +157,26 @@ export function PlayerProfileStatus({
   actionLabel?: string;
   onBack: () => void;
 }) {
+  const { isDark } = useResolvedAppScheme();
+  const C = getPPColors(isDark);
+  const fontSemi = useAppFont(600);
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
-      <PlayerProfileHeader onBack={onBack} />
+    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <PlayerProfileHeader onBack={onBack} colors={C} />
       <View style={styles.statusBody}>
         {loading ? (
           <ActivityIndicator size="large" color={C.primary} />
         ) : (
           <Ionicons name="cloud-offline-outline" size={48} color={C.muted} />
         )}
-        <Text style={styles.statusText}>{message}</Text>
+        <Text style={[styles.statusText, { color: C.statusText, fontFamily: fontSemi }]}>{message}</Text>
         {!loading && actionLabel ? (
-          <Pressable style={styles.statusBtn} onPress={onBack}>
-            <Text style={styles.statusBtnText}>{actionLabel}</Text>
+          <Pressable
+            style={[styles.statusBtn, { backgroundColor: C.primary }]}
+            onPress={onBack}
+          >
+            <Text style={[styles.statusBtnText, { fontFamily: fontSemi }]}>{actionLabel}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -158,31 +187,17 @@ export function PlayerProfileStatus({
 interface PlayerProfileViewProps {
   vm: PlayerProfileViewModel;
   statsContent?: ReactNode;
-  initialTab?: PlayerProfileTab;
+  /** @deprecated Tabs removed; kept for call-site compat. */
+  initialTab?: 'stats' | 'overview';
   refreshControl?: ReactElement<RefreshControlProps>;
   onBack: () => void;
   onSelectSeason?: (seasonKey: string) => void;
-  /** Admin-curated pages; a button is enabled only when its link is set. */
   socials?: { facebookUrl: string | null; instagramUrl: string | null } | null;
 }
-
-const SOCIAL_BUTTONS = [
-  {
-    key: 'instagram',
-    icon: 'logo-instagram' as const,
-    colors: ['#F58529', '#DD2A7B', '#8134AF'] as const,
-  },
-  {
-    key: 'facebook',
-    icon: 'logo-facebook' as const,
-    colors: ['#1877F2', '#0B4FB3'] as const,
-  },
-];
 
 export default function PlayerProfileView({
   vm,
   statsContent,
-  initialTab = 'overview',
   refreshControl,
   onBack,
   onSelectSeason,
@@ -195,63 +210,72 @@ export default function PlayerProfileView({
   const rtl = useRtl();
   const { t } = useTranslation();
   const pc = t.playerCareer;
+  const { isDark } = useResolvedAppScheme();
+  const C = useMemo(() => getPPColors(isDark), [isDark]);
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
+  const fontReg = useAppFont(400);
 
-  const [tab, setTab] = useState<PlayerProfileTab>(initialTab);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     setPhotoIndex(0);
   }, [vm.photoKey]);
 
-  const scale = Math.min(width / DESIGN_WIDTH, 1.1);
-  const heroHeight = Math.round(306 * scale);
-  const pad = width < 400 ? 16 : 22;
-  const row = rtl ? 'row-reverse' : 'row';
-  const textStart = rtl ? 'right' : 'left';
-  const alignStart = rtl ? 'flex-end' : 'flex-start';
-
+  const scale = Math.min(width / DESIGN_WIDTH, 1.08);
+  const heroHeight = Math.round(HERO_BODY * scale);
+  const pad = 20;
+  const contentW = width - pad * 2;
+  const { first, last } = splitName(vm.name);
   const photoUri = vm.photoCandidates[photoIndex];
   const photoFailed = photoIndex >= vm.photoCandidates.length;
   const flagUri = vm.nationality ? getCountryFlagUri(vm.nationality, null, 80) : null;
+  const subline = [vm.position, vm.clubName, vm.nationality].filter(Boolean).join(' · ');
 
-  const tabs: { key: PlayerProfileTab; label: string }[] = [
-    { key: 'stats', label: pc.tabStats },
-    { key: 'overview', label: pc.tabOverview },
-  ];
+  const cardShadow = {
+    shadowColor: C.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: isDark ? 0.35 : 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  };
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: C.bg }]}>
       <StatusBar barStyle="light-content" />
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
-          refreshControl ? React.cloneElement(refreshControl, { progressViewOffset: headerHeight }) : undefined
+          refreshControl
+            ? React.cloneElement(refreshControl, { progressViewOffset: headerHeight })
+            : undefined
         }
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
         {/* Hero */}
-        <View style={[styles.hero, { height: heroHeight + headerHeight }]}>
-          <Image source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
-          <View style={[StyleSheet.absoluteFill, styles.heroTint]} />
-          {vm.jerseyNumber != null ? (
-            <Text
-              style={[
-                styles.heroJersey,
-                { fontFamily: fontBold, fontSize: 150 * scale, top: headerHeight - 12 },
-                rtl ? { left: pad } : { right: pad },
-              ]}
-              allowFontScaling={false}
-            >
-              {`#${vm.jerseyNumber}`}
-            </Text>
-          ) : null}
+        <View style={[styles.hero, { height: heroHeight }]}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
+          <Image source={PP_STADIUM} style={[StyleSheet.absoluteFill, { opacity: 0.2 }]} contentFit="cover" />
+          <View
+            style={[
+              styles.heroSide,
+              { backgroundColor: C.heroSide, width: Math.round(160 * scale) },
+              rtl ? { right: 0 } : { left: 0 },
+            ]}
+          />
+
           <Pressable
-            style={[styles.heroPhotoWrap, rtl ? { left: 0 } : { right: 0 }]}
+            style={[
+              styles.heroPhotoWrap,
+              { width: Math.round(308 * scale * 0.72), height: Math.round(287 * scale) },
+              rtl ? { left: -18 } : { right: -18 },
+            ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
           >
@@ -277,163 +301,264 @@ export default function PlayerProfileView({
               </View>
             )}
           </Pressable>
-          <LinearGradient
-            pointerEvents="none"
-            colors={['rgba(3,3,3,0.92)', 'rgba(3,3,3,0.7)', 'rgba(3,3,3,0)']}
-            locations={[0, 0.5, 0.78]}
-            start={{ x: rtl ? 1 : 0, y: 0.5 }}
-            end={{ x: rtl ? 0 : 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            pointerEvents="none"
-            colors={['rgba(3,3,3,0)', C.bg]}
-            style={styles.heroBottomFade}
-          />
 
           <View
             style={[
-              styles.heroText,
-              { paddingHorizontal: pad, alignItems: alignStart, paddingBottom: STRIP_OVERLAP + 18 },
-              rtl ? { right: 0 } : { left: 0 },
+              styles.heroIdentity,
+              {
+                width: Math.round(124 * scale),
+                top: headerHeight + 8,
+                alignItems: rtl ? 'flex-end' : 'flex-start',
+              },
+              rtl ? { right: 22 } : { left: 22 },
             ]}
           >
-            {vm.nationality ? (
-              <View style={[styles.inlineRow, { flexDirection: row }]}>
-                <Text style={[styles.heroNationality, { fontFamily: fontSemi }]} numberOfLines={1}>
-                  {vm.nationality}
-                </Text>
-                {flagUri ? (
-                  <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" />
-                ) : null}
-              </View>
-            ) : null}
-            <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4 }]}>
+            {vm.jerseyNumber != null ? (
               <Text
-                style={[styles.heroName, { fontFamily: fontBold, fontSize: 28 * Math.min(scale, 1), textAlign: textStart }]}
+                style={[
+                  styles.jersey,
+                  {
+                    fontFamily: fontBold,
+                    fontSize: Math.round(72 * scale),
+                    color: C.jersey,
+                    textAlign: rtl ? 'right' : 'left',
+                  },
+                ]}
+                allowFontScaling={false}
+              >
+                {vm.jerseyNumber}
+              </Text>
+            ) : null}
+            <Text
+              style={[
+                styles.nameFirst,
+                { fontFamily: fontBold, fontSize: Math.round(22 * scale), textAlign: rtl ? 'right' : 'left' },
+              ]}
+              numberOfLines={1}
+            >
+              {first.toUpperCase()}
+            </Text>
+            {last ? (
+              <Text
+                style={[
+                  styles.nameLast,
+                  { fontFamily: fontBold, fontSize: Math.round(25 * scale), textAlign: rtl ? 'right' : 'left' },
+                ]}
                 numberOfLines={2}
               >
-                {vm.name}
+                {last.toUpperCase()}
               </Text>
-              <Image source={PP_ICON.verified} style={styles.verified} contentFit="contain" />
-            </View>
-            {vm.clubName ? (
-              <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
-                <Text style={[styles.heroClub, { fontFamily: fontSemi }]} numberOfLines={1}>
-                  {vm.clubName}
-                </Text>
-                <TeamBadge name={vm.clubName} logo={vm.clubLogo || undefined} size={22} color="transparent" />
-              </View>
             ) : null}
-            <View style={[styles.socialRow, { flexDirection: row }]}>
-              {SOCIAL_BUTTONS.map((s) => {
-                const url = s.key === 'instagram' ? socials?.instagramUrl : socials?.facebookUrl;
-                return (
-                  <Pressable
-                    key={s.key}
-                    disabled={!url}
-                    onPress={() => url && Linking.openURL(url).catch(() => undefined)}
-                    accessibilityRole="link"
-                    accessibilityState={{ disabled: !url }}
-                    style={({ pressed }) => [
-                      styles.socialBtnWrap,
-                      !url && styles.socialBtnUnavailable,
-                      pressed && styles.socialBtnPressed,
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={s.colors}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[styles.socialBtn, { flexDirection: row }]}
-                    >
-                      <Ionicons name={s.icon} size={18} color="#fff" />
-                      <Text style={[styles.socialBtnText, { fontFamily: fontBold }]} numberOfLines={1}>
-                        {s.key === 'instagram' ? pc.instagram : pc.facebook}
-                      </Text>
-                    </LinearGradient>
-                  </Pressable>
-                );
-              })}
+            {subline ? (
+              <Text
+                style={[
+                  styles.heroSub,
+                  { fontFamily: fontReg, color: C.softLilac, textAlign: rtl ? 'right' : 'left' },
+                ]}
+                numberOfLines={2}
+              >
+                {subline}
+              </Text>
+            ) : null}
+            <View style={[styles.heroSocials, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+              {socials?.instagramUrl ? (
+                <Pressable onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}>
+                  <Image source={PP_ICON.instagram} style={styles.socialIcon} contentFit="contain" />
+                </Pressable>
+              ) : null}
+              {socials?.facebookUrl ? (
+                <Pressable onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}>
+                  <Image source={PP_ICON.facebook} style={styles.socialIcon} contentFit="contain" />
+                </Pressable>
+              ) : null}
             </View>
           </View>
         </View>
 
-        {/* Info strip */}
-        <View style={[styles.strip, { marginHorizontal: pad, flexDirection: row }]}>
-          <InfoCell
-            label={pc.nationality}
-            value={vm.nationality || '—'}
-            leading={flagUri ? <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" /> : null}
-            rtl={rtl}
-          />
-          <View style={styles.stripDivider} />
-          <InfoCell
-            label={pc.age}
-            value={vm.age != null ? `${vm.age} ${pc.years}` : '—'}
-            leading={<Image source={PP_ICON.cake} style={styles.infoIcon} contentFit="contain" />}
-            rtl={rtl}
-          />
-          <View style={styles.stripDivider} />
-          <InfoCell
-            label={pc.height}
-            value={vm.height || '—'}
-            leading={<Image source={PP_ICON.height} style={styles.infoIcon} contentFit="contain" />}
-            rtl={rtl}
-          />
-          <View style={styles.stripDivider} />
-          <InfoCell
+        {/* Attributes strip */}
+        <View
+          style={[
+            styles.strip,
+            cardShadow,
+            {
+              marginHorizontal: pad,
+              marginTop: -66 + STRIP_OVERLAP,
+              backgroundColor: C.card,
+              flexDirection: rtl ? 'row' : 'row-reverse',
+            },
+          ]}
+        >
+          <AttrCell
             label={pc.position}
             value={vm.position || '—'}
-            leading={<Image source={PP_ICON.position} style={styles.infoIcon} contentFit="contain" />}
+            icon={PP_ICON.position}
+            iconSize={21}
+            C={C}
+            rtl={rtl}
+          />
+          <AttrCell
+            label={pc.height}
+            value={vm.height || '—'}
+            icon={PP_ICON.height}
+            iconSize={16}
+            C={C}
+            rtl={rtl}
+          />
+          <AttrCell
+            label={pc.age}
+            value={vm.age != null ? String(vm.age) : '—'}
+            icon={PP_ICON.cake}
+            iconSize={16}
+            C={C}
+            rtl={rtl}
+          />
+          <AttrCell
+            label={pc.nationality}
+            value={vm.nationality || '—'}
+            leading={
+              flagUri ? <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" /> : null
+            }
+            C={C}
             rtl={rtl}
           />
         </View>
 
-        {/* Tabs */}
-        <View style={[styles.tabs, { marginHorizontal: pad, flexDirection: row }]}>
-          {tabs.map((tb) => {
-            const active = tb.key === tab;
-            return (
-              <Pressable
-                key={tb.key}
-                style={styles.tab}
-                onPress={() => setTab(tb.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { fontFamily: active ? fontBold : fontSemi },
-                    active && styles.tabTextActive,
-                  ]}
-                >
-                  {tb.label}
+        <View style={{ paddingHorizontal: pad, marginTop: 24, gap: 24 }}>
+          {/* Season statistics */}
+          {vm.season ? (
+            <View style={{ gap: 16 }}>
+              <View style={[styles.sectionRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
+                  {pc.seasonStatsTitle}
                 </Text>
-                {active ? (
-                  <LinearGradient
-                    colors={['rgba(139,92,246,0)', C.primary, 'rgba(139,92,246,0)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.tabUnderline}
+                <Pressable
+                  onPress={() => setPickerOpen((o) => !o)}
+                  hitSlop={8}
+                  style={[styles.seasonTap, { flexDirection: rtl ? 'row' : 'row-reverse' }]}
+                >
+                  <Text style={[styles.seasonLabel, { fontFamily: fontSemi, color: C.primary }]}>
+                    {vm.seasonLabel ?? '—'}
+                  </Text>
+                  <Ionicons
+                    name={pickerOpen ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={C.primary}
                   />
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
+                </Pressable>
+              </View>
+              {pickerOpen ? (
+                <View style={[styles.seasonDropdown, { backgroundColor: C.card, borderColor: C.border }]}>
+                  {vm.seasons.map((season) => {
+                    const active = season.key === vm.selectedSeasonKey;
+                    return (
+                      <Pressable
+                        key={season.key}
+                        onPress={() => {
+                          onSelectSeason?.(season.key);
+                          setPickerOpen(false);
+                        }}
+                        style={[styles.seasonOption, active && { backgroundColor: C.pale }]}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: active ? fontBold : fontSemi,
+                            color: active ? C.primary : C.ink,
+                            fontSize: 14,
+                          }}
+                        >
+                          {season.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+              <View style={[styles.keyStatsRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+                {[
+                  { value: fmtNum(vm.season.goals), label: pc.statGoals },
+                  { value: fmtNum(vm.season.assists), label: pc.statAssists },
+                  { value: fmtNum(vm.season.matches), label: pc.statMatches },
+                  { value: fmtNum(vm.season.minutes), label: pc.minutes },
+                ].map((s) => (
+                  <View
+                    key={s.label}
+                    style={[styles.keyStatCard, cardShadow, { backgroundColor: C.card }]}
+                  >
+                    <Text style={[styles.keyStatValue, { fontFamily: fontBold, color: C.ink }]}>
+                      {s.value}
+                    </Text>
+                    <Text style={[styles.keyStatLabel, { fontFamily: fontReg, color: C.muted }]}>
+                      {s.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
-        <View style={{ paddingHorizontal: pad }}>
-          {tab === 'overview' ? (
-            <OverviewTab vm={vm} rtl={rtl} onSelectSeason={onSelectSeason} />
-          ) : (
-            statsContent ?? null
-          )}
+          {/* Detailed statistics */}
+          <DetailedStatsSection detailed={vm.detailed} C={C} rtl={rtl} cardShadow={cardShadow} />
+
+          {/* Average rating */}
+          {vm.averageRating != null ? (
+            <LinearGradient
+              colors={['#5422ae', '#230e48']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={[styles.ratingCard, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}
+            >
+              <Text style={[styles.ratingLabel, { fontFamily: fontSemi, color: C.ratingLabel }]}>
+                {pc.averageRating}
+              </Text>
+              <View style={[styles.ratingValueRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+                <Image source={PP_ICON.star} style={styles.starIcon} contentFit="contain" />
+                <Text style={[styles.ratingValue, { fontFamily: fontBold }]}>
+                  {vm.averageRating.toFixed(1)}
+                </Text>
+              </View>
+            </LinearGradient>
+          ) : null}
+
+          {/* Performance radar */}
+          <RadarSection per90={vm.per90} C={C} rtl={rtl} cardShadow={cardShadow} width={contentW} />
+
+          {/* Transfers */}
+          {vm.transfers.length > 0 ? (
+            <View style={{ gap: 16 }}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
+                ]}
+              >
+                {pc.transferHistory}
+              </Text>
+              <View style={[styles.transferCard, cardShadow, { backgroundColor: C.card }]}>
+                {vm.transfers.slice(0, 8).map((tr, idx, arr) => (
+                  <TransferRow
+                    key={tr.key}
+                    row={tr}
+                    rtl={rtl}
+                    last={idx === arr.length - 1}
+                    first={idx === 0}
+                    feeLabel={pc.transferFee}
+                    C={C}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Social media */}
+          {(socials?.instagramUrl || socials?.facebookUrl) ? (
+            <SocialSection socials={socials} C={C} rtl={rtl} cardShadow={cardShadow} />
+          ) : null}
+
+          {statsContent ? <View style={{ marginTop: 8 }}>{statsContent}</View> : null}
         </View>
       </Animated.ScrollView>
 
-      <PlayerProfileHeader onBack={onBack} scrollY={scrollY} />
+      <PlayerProfileHeader onBack={onBack} scrollY={scrollY} colors={C} />
 
       <ImageViewerModal
         visible={viewerOpen && !!photoUri && !photoFailed}
@@ -444,29 +569,38 @@ export default function PlayerProfileView({
   );
 }
 
-function InfoCell({
+function AttrCell({
   label,
   value,
+  icon,
+  iconSize = 16,
   leading,
+  C,
   rtl,
 }: {
   label: string;
   value: string;
-  leading: ReactNode;
+  icon?: number;
+  iconSize?: number;
+  leading?: ReactNode;
+  C: PPColors;
   rtl: boolean;
 }) {
   const fontBold = useAppFont(700);
-  const fontReg = useAppFont(400);
+  const fontSemi = useAppFont(600);
   return (
-    <View style={[styles.infoCell, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
-      <Text style={[styles.infoLabel, { fontFamily: fontReg }]} numberOfLines={1}>
+    <View style={styles.attrCell}>
+      <Text style={[styles.attrLabel, { fontFamily: fontSemi, color: C.muted }]} numberOfLines={1}>
         {label}
       </Text>
-      <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 5 }]}>
-        {leading}
-        <Text style={[styles.infoValue, { fontFamily: fontBold }]} numberOfLines={1}>
+      <View style={[styles.attrValueRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+        <Text style={[styles.attrValue, { fontFamily: fontBold, color: C.ink }]} numberOfLines={1}>
           {value}
         </Text>
+        {leading ??
+          (icon ? (
+            <Image source={icon} style={{ width: iconSize, height: iconSize }} contentFit="contain" />
+          ) : null)}
       </View>
     </View>
   );
@@ -485,365 +619,371 @@ export function SectionHeader({
   trailingNode?: ReactNode;
   rtl: boolean;
 }) {
+  const { isDark } = useResolvedAppScheme();
+  const C = getPPColors(isDark);
   const fontBold = useAppFont(700);
   return (
-    <View style={[styles.sectionHeader, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-      <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 8 }]}>
-        <Image source={icon} style={styles.sectionIcon} contentFit="contain" />
-        <Text style={[styles.sectionTitle, { fontFamily: fontBold }]}>{title}</Text>
+    <View style={[styles.legacySectionHeader, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+      <View style={[styles.attrValueRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 8 }]}>
+        <Image source={icon} style={{ width: 20, height: 20 }} contentFit="contain" />
+        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>{title}</Text>
       </View>
       {trailingNode ??
         (trailing ? (
-          <Text style={[styles.sectionTrailing, { fontFamily: fontBold }]}>{trailing}</Text>
+          <Text style={{ fontFamily: fontBold, color: C.primary, fontSize: 12 }}>{trailing}</Text>
         ) : null)}
     </View>
   );
 }
 
-function SeasonPicker({
-  vm,
+function DetailedStatsSection({
+  detailed,
+  C,
   rtl,
-  open,
-  onToggle,
+  cardShadow,
 }: {
-  vm: PlayerProfileViewModel;
+  detailed: PlayerDetailedStats | null;
+  C: PPColors;
   rtl: boolean;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const fontSemi = useAppFont(600);
-  return (
-    <Pressable
-      onPress={onToggle}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: open }}
-      style={[styles.seasonPill, { flexDirection: rtl ? 'row-reverse' : 'row' }, open && styles.seasonPillOpen]}
-    >
-      <Text style={[styles.seasonPillText, { fontFamily: fontSemi }]}>{vm.seasonLabel ?? '—'}</Text>
-      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={C.seasonLabel} />
-    </Pressable>
-  );
-}
-
-function OverviewTab({
-  vm,
-  rtl,
-  onSelectSeason,
-}: {
-  vm: PlayerProfileViewModel;
-  rtl: boolean;
-  onSelectSeason?: (seasonKey: string) => void;
+  cardShadow: object;
 }) {
   const { t } = useTranslation();
   const pc = t.playerCareer;
-  const row = rtl ? 'row-reverse' : 'row';
   const fontBold = useAppFont(700);
   const fontReg = useAppFont(400);
-  const fontSemi = useAppFont(600);
-  const s = vm.season;
-  const [pickerOpen, setPickerOpen] = useState(false);
+  if (!detailed) return null;
 
-  const played = vm.lastMatches.filter((m) => m.played);
-  const recent = (played.length ? played : vm.lastMatches).slice(0, 3).reverse();
+  const items: {
+    key: string;
+    value: string;
+    label: string;
+    icon?: number;
+    chip?: 'yellow';
+  }[] = [];
+
+  if (detailed.passAccuracy != null) {
+    items.push({
+      key: 'pass',
+      value: fmtPct(detailed.passAccuracy),
+      label: pc.passAccuracy,
+      icon: PP_ICON.passChain,
+    });
+  }
+  if (detailed.shotsOnTarget != null) {
+    items.push({
+      key: 'sot',
+      value: fmtNum(detailed.shotsOnTarget),
+      label: pc.shotsOnTarget,
+      icon: PP_ICON.goalNet,
+    });
+  }
+  if (detailed.shots != null) {
+    items.push({
+      key: 'shots',
+      value: fmtNum(detailed.shots),
+      label: pc.shots,
+      icon: PP_ICON.shots,
+    });
+  }
+  if (detailed.yellowCards != null) {
+    items.push({
+      key: 'yc',
+      value: fmtNum(detailed.yellowCards),
+      label: pc.yellowCards,
+      chip: 'yellow',
+    });
+  }
+  if (detailed.chancesCreated != null) {
+    items.push({
+      key: 'cc',
+      value: fmtNum(detailed.chancesCreated),
+      label: pc.chancesCreated,
+      icon: PP_ICON.sparkle,
+    });
+  }
+  if (detailed.dribbles != null) {
+    items.push({
+      key: 'dr',
+      value: fmtNum(detailed.dribbles),
+      label: pc.successfulDribbles,
+      icon: PP_ICON.dribble,
+    });
+  }
+  if (!items.length) return null;
+
+  const rows: typeof items[] = [];
+  for (let i = 0; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
 
   return (
-    <>
-      {s ? (
-        <>
-          <SectionHeader
-            icon={PP_ICON.seasonStats}
-            title={pc.seasonStatsTitle}
-            trailingNode={
-              <SeasonPicker
-                vm={vm}
-                rtl={rtl}
-                open={pickerOpen}
-                onToggle={() => setPickerOpen((o) => !o)}
-              />
-            }
-            rtl={rtl}
-          />
-          {pickerOpen ? (
-            <View style={[styles.card, styles.seasonDropdown]}>
-              <Text style={[styles.seasonDropdownTitle, { fontFamily: fontReg, textAlign: rtl ? 'right' : 'left' }]}>
-                {pc.chooseSeason}
-              </Text>
-              <View style={[styles.seasonGrid, { flexDirection: row }]}>
-                {vm.seasons.map((season) => {
-                  const active = season.key === vm.selectedSeasonKey;
-                  return (
-                    <Pressable
-                      key={season.key}
-                      onPress={() => {
-                        onSelectSeason?.(season.key);
-                        setPickerOpen(false);
-                      }}
-                      style={[styles.seasonOption, active && styles.seasonOptionActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.seasonOptionText,
-                          { fontFamily: active ? fontBold : fontSemi },
-                          active && styles.seasonOptionTextActive,
-                        ]}
-                      >
-                        {season.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {vm.seasons.length <= 1 ? (
-                <Text style={[styles.seasonDropdownNote, { fontFamily: fontReg, textAlign: rtl ? 'right' : 'left' }]}>
-                  {pc.onlyOneSeason}
+    <View style={{ gap: 16 }}>
+      <Text
+        style={[
+          styles.sectionTitle,
+          { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
+        ]}
+      >
+        {pc.detailedStatsTitle}
+      </Text>
+      {rows.map((row, ri) => (
+        <View
+          key={`row-${ri}`}
+          style={[styles.detailRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}
+        >
+          {row.map((item) => (
+            <View
+              key={item.key}
+              style={[
+                styles.detailCard,
+                cardShadow,
+                {
+                  backgroundColor: C.card,
+                  flexDirection: rtl ? 'row' : 'row-reverse',
+                },
+              ]}
+            >
+              <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+                <Text style={[styles.detailValue, { fontFamily: fontBold, color: C.ink }]}>
+                  {item.value}
                 </Text>
+                <Text
+                  style={[styles.detailLabel, { fontFamily: fontReg, color: C.muted }]}
+                  numberOfLines={2}
+                >
+                  {item.label}
+                </Text>
+              </View>
+              {item.chip === 'yellow' ? (
+                <View style={[styles.yellowChip, { backgroundColor: C.cardYellow }]} />
+              ) : item.icon ? (
+                <Image source={item.icon} style={styles.detailIcon} contentFit="contain" />
               ) : null}
             </View>
-          ) : null}
-          <View style={[styles.card, styles.seasonCard]}>
-            <View style={[styles.bigStatsRow, { flexDirection: row }]}>
-              <BigStat icon={PP_ICON.court} label={pc.statMatches} value={fmtNum(s.matches)} rtl={rtl} />
-              <View style={styles.vDivider} />
-              <BigStat icon={PP_ICON.goals} label={pc.statGoals} value={fmtNum(s.goals)} rtl={rtl} />
-              <View style={styles.vDivider} />
-              <BigStat icon={PP_ICON.court} label={pc.statAssists} value={fmtNum(s.assists)} rtl={rtl} />
-            </View>
-            <View style={styles.hDivider} />
-            <View style={[styles.smallStatsRow, { flexDirection: row }]}>
-              <SmallStat
-                leading={<Image source={PP_ICON.time} style={styles.smallIcon} contentFit="contain" />}
-                label={pc.minutesPlayed}
-                value={fmtNum(s.minutes)}
-                rtl={rtl}
-              />
-              <SmallStat
-                leading={<Image source={PP_ICON.goalNet} style={styles.smallIcon} contentFit="contain" />}
-                label={pc.shotsOnTarget}
-                value={fmtNum(s.shotsOnTarget)}
-                rtl={rtl}
-              />
-              <SmallStat
-                leading={<Image source={PP_ICON.sneaker} style={styles.smallIcon} contentFit="contain" />}
-                label={pc.chancesCreated}
-                value={fmtNum(s.chancesCreated)}
-                rtl={rtl}
-              />
-              <SmallStat
-                leading={
-                  <View style={[styles.cardsIcon, { flexDirection: row }]}>
-                    <View style={[styles.cardChip, { backgroundColor: C.cardYellow }]} />
-                    <View style={[styles.cardChip, styles.cardChipRed]} />
-                  </View>
-                }
-                label={pc.cardsYellowRed}
-                value={`${fmtNum(s.yellowCards)} / ${fmtNum(s.redCards)}`}
-                rtl={rtl}
-              />
-            </View>
-          </View>
-        </>
-      ) : null}
-
-      {recent.length > 0 ? (
-        <>
-          <SectionHeader icon={PP_ICON.history} title={pc.lastMatches} rtl={rtl} />
-          <View style={[styles.card, styles.matchesCard, { flexDirection: row }]}>
-            {recent.map((m, idx) => (
-              <React.Fragment key={m.gameId}>
-                {idx > 0 ? <View style={styles.matchDivider} /> : null}
-                <LastMatchCell match={m} rtl={rtl} dnpLabel={pc.didNotPlay} />
-              </React.Fragment>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {vm.transfers.length > 0 ? (
-        <>
-          <SectionHeader icon={PP_ICON.transfers} title={pc.transferHistory} rtl={rtl} />
-          <View style={[styles.card, styles.transfersCard]}>
-            {vm.transfers.slice(0, 8).map((tr, idx, arr) => (
-              <TransferItem
-                key={tr.key}
-                row={tr}
-                rtl={rtl}
-                first={idx === 0}
-                last={idx === arr.length - 1}
-                feeLabel={pc.transferFee}
-                fontBold={fontBold}
-                fontReg={fontReg}
-                fontSemi={fontSemi}
-              />
-            ))}
-          </View>
-        </>
-      ) : null}
-    </>
-  );
-}
-
-function BigStat({ icon, label, value, rtl }: { icon: number; label: string; value: string; rtl: boolean }) {
-  const fontBold = useAppFont(700);
-  const fontSemi = useAppFont(600);
-  return (
-    <View style={styles.bigStat}>
-      <Text style={[styles.bigStatValue, { fontFamily: fontBold }]} allowFontScaling={false}>
-        {value}
-      </Text>
-      <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 6 }]}>
-        <Image source={icon} style={styles.bigStatIcon} contentFit="contain" />
-        <Text style={[styles.bigStatLabel, { fontFamily: fontSemi }]} numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
+          ))}
+          {row.length < 3
+            ? Array.from({ length: 3 - row.length }).map((_, i) => (
+                <View key={`pad-${i}`} style={{ flex: 1 }} />
+              ))
+            : null}
+        </View>
+      ))}
     </View>
   );
 }
 
-function SmallStat({
-  leading,
-  label,
-  value,
+function RadarSection({
+  per90,
+  C,
   rtl,
+  cardShadow,
+  width,
 }: {
-  leading: ReactNode;
-  label: string;
-  value: string;
+  per90: PlayerPer90Stats | null;
+  C: PPColors;
   rtl: boolean;
+  cardShadow: object;
+  width: number;
 }) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
   const fontBold = useAppFont(700);
   const fontReg = useAppFont(400);
+  if (!per90) return null;
+
+  const axes: { key: keyof PlayerPer90Stats; label: string; value: number | null }[] = [
+    { key: 'goals', label: pc.goals, value: per90.goals },
+    { key: 'assists', label: pc.assists, value: per90.assists },
+    { key: 'shots', label: pc.shots, value: per90.shots },
+    { key: 'keyPasses', label: pc.keyPasses, value: per90.keyPasses },
+    { key: 'dribbles', label: pc.successfulDribbles, value: per90.dribbles },
+    { key: 'xG', label: 'xG', value: per90.xG },
+  ];
+  if (axes.every((a) => a.value == null)) return null;
+
+  const size = Math.min(190, width - 80);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.38;
+  const maxes = [1.2, 0.8, 5, 3, 3, 1.2];
+  const points = axes.map((a, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / axes.length;
+    const raw = a.value ?? 0;
+    const norm = Math.min(1, Math.max(0, raw / maxes[i]));
+    return {
+      x: cx + Math.cos(angle) * r * norm,
+      y: cy + Math.sin(angle) * r * norm,
+      lx: cx + Math.cos(angle) * (r + 28),
+      ly: cy + Math.sin(angle) * (r + 28),
+      angle,
+    };
+  });
   return (
-    <View style={styles.smallStat}>
-      <Text style={[styles.smallStatValue, { fontFamily: fontBold }]} allowFontScaling={false}>
-        {value}
-      </Text>
-      <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 3 }]}>
-        {leading}
-        <Text
-          style={[styles.smallStatLabel, { fontFamily: fontReg }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-        >
-          {label}
+    <View style={{ gap: 16 }}>
+      <View style={{ gap: 3, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
+          {pc.performancePer90}
+        </Text>
+        <Text style={[styles.sectionDesc, { fontFamily: fontReg, color: C.muted }]}>
+          {pc.performanceDesc}
         </Text>
       </View>
-    </View>
-  );
-}
-
-function LastMatchCell({
-  match,
-  rtl,
-  dnpLabel,
-}: {
-  match: Player365LastMatch;
-  rtl: boolean;
-  dnpLabel: string;
-}) {
-  const fontBold = useAppFont(700);
-  const fontSemi = useAppFont(600);
-  const fontReg = useAppFont(400);
-  const hasRating = match.played && match.rating != null;
-  // Some leagues have no 365 ratings: a played game without one is "—", not DNP.
-  const pillText = hasRating ? (match.rating as number).toFixed(1) : match.played ? '—' : dnpLabel;
-  return (
-    <View style={styles.matchCell}>
-      <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 8 }]}>
-        <TeamBadge
-          name={match.opponentName || '—'}
-          logo={match.opponentLogo || undefined}
-          size={30}
-          color="transparent"
-        />
-        <View
-          style={[
-            styles.ratingPill,
-            { backgroundColor: hasRating ? ratingTone(match.rating as number) : 'rgba(255,255,255,0.1)' },
-          ]}
-        >
-          <Text
-            style={[
-              styles.ratingText,
-              { fontFamily: fontSemi, color: hasRating ? C.ratingText : C.muted },
-              !hasRating && !match.played && styles.ratingTextSmall,
-            ]}
-          >
-            {pillText}
+      <View style={[styles.radarCard, cardShadow, { backgroundColor: C.card }]}>
+        <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+          <Text style={[styles.radarTitle, { fontFamily: fontBold, color: C.ink }]}>
+            {pc.radarTitle}
+          </Text>
+          <Text style={[styles.sectionDesc, { fontFamily: fontReg, color: C.muted }]}>
+            {pc.radarDesc}
           </Text>
         </View>
+        <View style={styles.radarChartWrap}>
+          <Svg width={size + 70} height={size + 50}>
+            <Circle cx={cx + 35} cy={cy + 25} r={r} stroke={C.pale} strokeWidth={1} fill="none" />
+            <Circle cx={cx + 35} cy={cy + 25} r={r * 0.66} stroke={C.pale} strokeWidth={1} fill="none" />
+            <Circle cx={cx + 35} cy={cy + 25} r={r * 0.33} stroke={C.pale} strokeWidth={1} fill="none" />
+            {points.map((p, i) => (
+              <Line
+                key={`axis-${i}`}
+                x1={cx + 35}
+                y1={cy + 25}
+                x2={cx + 35 + Math.cos(p.angle) * r}
+                y2={cy + 25 + Math.sin(p.angle) * r}
+                stroke={C.pale}
+                strokeWidth={1}
+              />
+            ))}
+            <Polygon
+              points={points.map((p) => `${p.x + 35},${p.y + 25}`).join(' ')}
+              fill={C.radarFill}
+              stroke={C.radarStroke}
+              strokeWidth={2}
+            />
+          </Svg>
+          {axes.map((a, i) => {
+            const p = points[i];
+            return (
+              <View
+                key={a.key}
+                style={[
+                  styles.radarLabel,
+                  {
+                    left: p.lx + 35 - 42,
+                    top: p.ly + 25 - 10,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontFamily: fontBold,
+                    fontSize: 10,
+                    color: C.ink,
+                    textAlign: 'center',
+                  }}
+                >
+                  {a.label}
+                  {'\n'}
+                  {fmtPer90(a.value)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
-      <Text style={[styles.matchDate, { fontFamily: fontReg }]}>{fmtMatchDate(match.startTime, rtl)}</Text>
-      <Text
-        style={[styles.matchOpponent, { fontFamily: fontBold }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
-      >
-        {match.opponentName || '—'}
-      </Text>
     </View>
   );
 }
 
-function TransferItem({
+function TransferRow({
   row: tr,
   rtl,
   first,
   last,
   feeLabel,
-  fontBold,
-  fontReg,
-  fontSemi,
+  C,
 }: {
   row: PlayerTransferRow;
   rtl: boolean;
   first: boolean;
   last: boolean;
   feeLabel: string;
-  fontBold: string;
-  fontReg: string;
-  fontSemi: string;
+  C: PPColors;
 }) {
-  const row = rtl ? 'row-reverse' : 'row';
-  const textAlign = rtl ? 'right' : 'left';
-  const endAlign = rtl ? 'flex-start' : 'flex-end';
+  const fontSemi = useAppFont(600);
+  const fontReg = useAppFont(400);
   const euro = tr.price?.trim().startsWith('€') ?? false;
   const priceText = euro ? tr.price!.trim().replace(/^€\s*/, '') : tr.price;
+
   return (
-    <View style={[styles.transferRow, { flexDirection: row }]}>
+    <View
+      style={[
+        styles.transferRow,
+        { flexDirection: rtl ? 'row-reverse' : 'row' },
+        !last && { borderBottomWidth: 1, borderBottomColor: C.pale },
+      ]}
+    >
       <View style={styles.timelineCol}>
-        <View style={[styles.timelineLine, first && styles.timelineHidden]} />
+        <View
+          style={[
+            styles.timelineLine,
+            { backgroundColor: C.timelineInactive },
+            first && { opacity: 0 },
+          ]}
+        />
         <Image
           source={tr.active || first ? PP_ICON.timelineDotActive : PP_ICON.timelineDot}
           style={styles.timelineDot}
           contentFit="contain"
         />
-        <View style={[styles.timelineLine, last && styles.timelineHidden]} />
+        <View
+          style={[
+            styles.timelineLine,
+            { backgroundColor: C.timelineInactive },
+            last && { opacity: 0 },
+          ]}
+        />
       </View>
-      <View style={[styles.transferBody, { flexDirection: row }, !last && styles.transferDivider]}>
-        <TeamBadge name={tr.clubName} logo={tr.clubLogo || undefined} size={28} color="transparent" />
-        <View style={styles.transferText}>
-          <Text style={[styles.transferClub, { fontFamily: fontSemi, textAlign }]} numberOfLines={1}>
-            {tr.clubName}
-          </Text>
-          {tr.date ? (
-            <Text style={[styles.transferDate, { fontFamily: fontSemi, textAlign }]}>{tr.date}</Text>
-          ) : null}
+
+      <View style={[styles.transferBody, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+        <View
+          style={[
+            styles.transferClubBlock,
+            { flexDirection: rtl ? 'row-reverse' : 'row', flex: 1 },
+          ]}
+        >
+          <TeamBadge name={tr.clubName} logo={tr.clubLogo || undefined} size={25} color="transparent" />
+          <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start', flexShrink: 1 }}>
+            <Text
+              style={[styles.transferClub, { fontFamily: fontSemi, color: C.ink }]}
+              numberOfLines={1}
+            >
+              {tr.clubName}
+            </Text>
+            {tr.date ? (
+              <Text style={[styles.transferDate, { fontFamily: fontSemi, color: C.primary }]}>
+                {tr.date}
+              </Text>
+            ) : null}
+          </View>
         </View>
-        <View style={{ alignItems: endAlign, gap: 4 }}>
+
+        <View style={{ alignItems: rtl ? 'flex-start' : 'flex-end', minWidth: 56 }}>
           {priceText ? (
             <>
-              <View style={[styles.inlineRow, { flexDirection: 'row', gap: 3 }]}>
-                {euro ? <Image source={PP_ICON.euro} style={styles.euroIcon} contentFit="contain" /> : null}
-                <Text style={[styles.transferPrice, { fontFamily: fontSemi }]}>{priceText}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {euro ? (
+                  <Image source={PP_ICON.euro} style={styles.euroIcon} contentFit="contain" />
+                ) : null}
+                <Text style={[styles.transferPrice, { fontFamily: fontSemi, color: C.transferFee }]}>
+                  {priceText}
+                </Text>
               </View>
-              <Text style={[styles.transferFee, { fontFamily: fontReg }]}>{feeLabel}</Text>
+              <Text style={[styles.transferFee, { fontFamily: fontSemi, color: C.muted }]}>
+                {feeLabel}
+              </Text>
             </>
           ) : tr.title ? (
-            <Text style={[styles.transferTitle, { fontFamily: fontReg }]}>{tr.title}</Text>
+            <Text style={[styles.transferPrice, { fontFamily: fontSemi, color: C.transferFee }]}>
+              {tr.title}
+            </Text>
           ) : null}
         </View>
       </View>
@@ -851,226 +991,227 @@ function TransferItem({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
+function SocialSection({
+  socials,
+  C,
+  rtl,
+  cardShadow,
+}: {
+  socials: { facebookUrl: string | null; instagramUrl: string | null };
+  C: PPColors;
+  rtl: boolean;
+  cardShadow: object;
+}) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  const fontReg = useAppFont(400);
 
+  const rows = [
+    socials.instagramUrl
+      ? {
+          key: 'ig',
+          url: socials.instagramUrl,
+          icon: PP_ICON.instagram,
+          handle: handleFromUrl(socials.instagramUrl) ?? '@instagram',
+        }
+      : null,
+    socials.facebookUrl
+      ? {
+          key: 'fb',
+          url: socials.facebookUrl,
+          icon: PP_ICON.facebook,
+          handle: handleFromUrl(socials.facebookUrl) ?? '@facebook',
+        }
+      : null,
+  ].filter(Boolean) as { key: string; url: string; icon: number; handle: string }[];
+
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={[styles.sectionRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink, fontSize: 15 }]}>
+          {pc.socialMedia}
+        </Text>
+        <Text style={[styles.sectionDesc, { fontFamily: fontSemi, color: C.muted }]}>
+          {pc.officialAccounts}
+        </Text>
+      </View>
+      <View
+        style={[
+          styles.socialCard,
+          cardShadow,
+          { backgroundColor: C.card, borderColor: C.border },
+        ]}
+      >
+        {rows.map((row, idx) => (
+          <React.Fragment key={row.key}>
+            <Pressable
+              onPress={() => Linking.openURL(row.url).catch(() => undefined)}
+              style={[styles.socialRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
+            >
+              <View
+                style={[styles.socialAccount, { flexDirection: rtl ? 'row-reverse' : 'row', flex: 1 }]}
+              >
+                <Image source={row.icon} style={styles.socialIcon} contentFit="contain" />
+                <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+                  <View
+                    style={{
+                      flexDirection: rtl ? 'row-reverse' : 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Text style={{ fontFamily: fontSemi, color: C.ink, fontSize: 12.5 }}>
+                      {row.handle}
+                    </Text>
+                    <Image source={PP_ICON.verified} style={{ width: 14, height: 14 }} contentFit="contain" />
+                  </View>
+                  <Text style={{ fontFamily: fontReg, color: C.muted, fontSize: 10.5 }}>
+                    {pc.openProfile}
+                  </Text>
+                </View>
+              </View>
+              <Image source={PP_ICON.externalLink} style={{ width: 16, height: 16 }} contentFit="contain" />
+            </Pressable>
+            {idx < rows.length - 1 ? (
+              <View style={[styles.socialDivider, { backgroundColor: C.divider }]} />
+            ) : null}
+          </React.Fragment>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
   header: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
   },
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
-  headerBar: {
-    backgroundColor: 'rgba(12,5,26,0.96)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(139,92,246,0.25)',
-  },
-  backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(12,5,26,0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  backBtnPressed: { transform: [{ scale: 0.92 }], borderColor: 'rgba(167,139,250,0.6)' },
-  backIcon: { marginRight: 2 },
-  headerSpacer: { width: 42, height: 42 },
-  brandPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  brand90: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
-  brandPlusChip: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
-  brandPlus: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  headerTrailing: { alignItems: 'center', gap: 12 },
+  headerTitle: { fontSize: 28, textAlign: 'center' },
+  backBtn: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  backBtnPressed: { opacity: 0.7 },
+  backIcon: { width: 24, height: 24 },
 
   statusBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
-  statusText: { color: C.soft, fontSize: 14, textAlign: 'center' },
-  statusBtn: {
-    marginTop: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  statusBtnText: { color: '#fff', fontWeight: '700' },
+  statusText: { fontSize: 14, textAlign: 'center' },
+  statusBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
+  statusBtnText: { color: '#fff', fontSize: 14 },
 
-  hero: { width: '100%', overflow: 'hidden', backgroundColor: C.bar },
-  heroTint: { backgroundColor: 'rgba(12,5,26,0.45)' },
-  heroJersey: {
+  hero: { width: '100%', overflow: 'hidden' },
+  heroSide: {
     position: 'absolute',
     top: 0,
-    color: C.jersey,
-    opacity: 0.9,
-  },
-  heroPhotoWrap: { position: 'absolute', top: 0, bottom: STRIP_OVERLAP - 6, width: '62%' },
-  heroPhoto: { width: '100%', height: '100%' },
-  heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 24 },
-  heroBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
-  heroText: { position: 'absolute', top: 0, bottom: 0, width: '60%', justifyContent: 'flex-end' },
-  inlineRow: { alignItems: 'center', gap: 6 },
-  heroNationality: { color: C.soft, fontSize: 13 },
-  flag: { width: 18, height: 12, borderRadius: 2 },
-  heroName: { color: '#fff', flexShrink: 1 },
-  verified: { width: 22, height: 22 },
-  heroClub: { color: C.soft, fontSize: 14, flexShrink: 1 },
-  socialRow: { marginTop: 12, alignSelf: 'stretch', gap: 8 },
-  socialBtnWrap: { flex: 1, borderRadius: 12, overflow: 'hidden' },
-  socialBtnUnavailable: { opacity: 0.4 },
-  socialBtnPressed: { transform: [{ scale: 0.96 }] },
-  socialBtn: {
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  socialBtnText: { color: '#fff', fontSize: 13, flexShrink: 1 },
-
-  strip: {
-    marginTop: -STRIP_OVERLAP,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  stripDivider: { width: 1, backgroundColor: C.divider, marginVertical: 2 },
-  infoCell: { flex: 1, paddingHorizontal: 6, gap: 6 },
-  infoLabel: { color: C.muted, fontSize: 12 },
-  infoValue: { color: '#fff', fontSize: 14, flexShrink: 1 },
-  infoIcon: { width: 15, height: 15 },
-
-  tabs: {
-    marginTop: 18,
-    marginBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: C.divider,
-  },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  tabText: { color: C.soft, fontSize: 15 },
-  tabTextActive: {
-    color: C.primary,
-    textShadowColor: 'rgba(139,92,246,0.7)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  tabUnderline: { position: 'absolute', bottom: -1, left: '15%', right: '15%', height: 2, borderRadius: 1 },
-
-  sectionHeader: {
-    marginTop: 22,
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionIcon: { width: 20, height: 20 },
-  sectionTitle: { color: '#fff', fontSize: 17 },
-  sectionTrailing: { color: C.seasonLabel, fontSize: 16 },
-
-  seasonPill: {
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: 'rgba(139,92,246,0.08)',
-  },
-  seasonPillOpen: { borderColor: C.primary, backgroundColor: 'rgba(139,92,246,0.18)' },
-  seasonPillText: { color: C.seasonLabel, fontSize: 15 },
-  seasonDropdown: { padding: 14, marginBottom: 12 },
-  seasonDropdownTitle: { color: C.statLabel, fontSize: 12, marginBottom: 10 },
-  seasonGrid: { flexWrap: 'wrap', gap: 8 },
-  seasonOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: C.divider,
-    backgroundColor: C.bg,
-  },
-  seasonOptionActive: { borderColor: C.primary, backgroundColor: 'rgba(139,92,246,0.22)' },
-  seasonOptionText: { color: C.soft, fontSize: 13 },
-  seasonOptionTextActive: { color: '#fff' },
-  seasonDropdownNote: { color: C.muted, fontSize: 12, marginTop: 10 },
-
-  card: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 16,
-  },
-  seasonCard: { paddingVertical: 10 },
-  bigStatsRow: { paddingTop: 14, paddingBottom: 14 },
-  bigStat: { flex: 1, alignItems: 'center', gap: 4 },
-  bigStatValue: { color: '#fff', fontSize: 25 },
-  bigStatIcon: { width: 22, height: 22 },
-  bigStatLabel: { color: C.statLabel, fontSize: 16 },
-  vDivider: { width: 1, backgroundColor: C.divider, marginVertical: 6 },
-  hDivider: { height: 1, backgroundColor: C.divider, marginHorizontal: 14 },
-  smallStatsRow: { paddingVertical: 14, paddingHorizontal: 5 },
-  smallStat: { flex: 1, alignItems: 'center', gap: 8, paddingHorizontal: 2 },
-  smallStatValue: { color: '#fff', fontSize: 18 },
-  smallStatLabel: { color: C.statLabel, fontSize: 10, flexShrink: 1 },
-  smallIcon: { width: 16, height: 16 },
-  cardsIcon: { alignItems: 'center', gap: 1 },
-  cardChip: { width: 8, height: 11, borderRadius: 2, transform: [{ rotate: '-25deg' }] },
-  cardChipRed: {
-    backgroundColor: C.cardRed,
+    bottom: 0,
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: { width: -3, height: 0 },
   },
+  heroPhotoWrap: { position: 'absolute', bottom: 0 },
+  heroPhoto: { width: '100%', height: '100%' },
+  heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  heroIdentity: { position: 'absolute', gap: 4 },
+  jersey: { includeFontPadding: false },
+  nameFirst: { color: '#fff' },
+  nameLast: { color: '#fff', marginTop: -2 },
+  heroSub: { fontSize: 12, marginTop: 2 },
+  heroSocials: { gap: 8, marginTop: 12 },
+  socialIcon: { width: 36, height: 36 },
 
-  matchesCard: { paddingVertical: 20, paddingHorizontal: 10 },
-  matchCell: { flex: 1, alignItems: 'center', gap: 8 },
-  matchDivider: { width: 1, backgroundColor: C.divider, marginVertical: 4 },
-  ratingPill: {
-    minWidth: 54,
-    paddingHorizontal: 10,
-    height: 27,
-    borderRadius: 56,
+  strip: {
+    height: 66,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  attrCell: { alignItems: 'center', gap: 6, flex: 1 },
+  attrLabel: { fontSize: 9, textAlign: 'center' },
+  attrValueRow: { alignItems: 'center', gap: 4 },
+  attrValue: { fontSize: 15 },
+  flag: { width: 16, height: 16, borderRadius: 2 },
+
+  sectionRow: { alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  sectionTitle: { fontSize: 16 },
+  sectionDesc: { fontSize: 10 },
+  seasonTap: { alignItems: 'center', gap: 4 },
+  seasonLabel: { fontSize: 11 },
+  seasonDropdown: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+  seasonOption: { paddingHorizontal: 14, paddingVertical: 12 },
+
+  keyStatsRow: { gap: 10 },
+  keyStatCard: {
+    flex: 1,
+    height: 76,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
   },
-  ratingText: { fontSize: 18 },
-  ratingTextSmall: { fontSize: 12 },
-  matchDate: { color: C.dateLilac, fontSize: 11, marginTop: 4 },
-  matchOpponent: { color: '#fff', fontSize: 16, maxWidth: '95%' },
+  keyStatValue: { fontSize: 19 },
+  keyStatLabel: { fontSize: 10 },
 
-  transfersCard: { paddingHorizontal: 14, paddingVertical: 4 },
-  transferRow: { alignItems: 'stretch' },
-  timelineCol: { width: 20, alignItems: 'center' },
-  timelineLine: { flex: 1, width: 2, backgroundColor: C.timeline },
-  timelineHidden: { backgroundColor: 'transparent' },
-  timelineDot: { width: 19, height: 19 },
-  transferBody: { flex: 1, alignItems: 'center', gap: 6, minHeight: 57, paddingVertical: 12, marginHorizontal: 8 },
-  transferDivider: { borderBottomWidth: 1, borderBottomColor: C.divider },
-  transferText: { flex: 1, minWidth: 0, gap: 6 },
-  transferClub: { color: '#fff', fontSize: 15 },
-  transferDate: { color: C.transferLilac, fontSize: 11 },
-  transferPrice: { color: '#fff', fontSize: 15 },
-  transferFee: { color: C.transferLilac, fontSize: 10 },
-  transferTitle: { color: C.transferLilac, fontSize: 12 },
+  detailRow: { gap: 10 },
+  detailCard: {
+    flex: 1,
+    height: 68,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  detailValue: { fontSize: 16, height: 24 },
+  detailLabel: { fontSize: 10, minHeight: 20 },
+  detailIcon: { width: 21, height: 21 },
+  yellowChip: { width: 16, height: 21, borderRadius: 3 },
+
+  ratingCard: {
+    height: 82,
+    borderRadius: 16,
+    paddingHorizontal: 33,
+    justifyContent: 'center',
+    gap: 7,
+  },
+  ratingLabel: { fontSize: 11 },
+  ratingValueRow: { alignItems: 'center', gap: 8 },
+  ratingValue: { color: '#fff', fontSize: 26 },
+  starIcon: { width: 21, height: 21 },
+
+  radarCard: { borderRadius: 18, padding: 15, paddingBottom: 20 },
+  radarTitle: { fontSize: 14 },
+  radarChartWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 240 },
+  radarLabel: { position: 'absolute', width: 85, alignItems: 'center' },
+
+  transferCard: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
+  transferRow: { minHeight: 57, alignItems: 'stretch', gap: 10 },
+  timelineCol: { width: 19, alignItems: 'center' },
+  timelineLine: { flex: 1, width: 1 },
+  timelineDot: { width: 19, height: 18 },
+  transferBody: { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  transferClubBlock: { alignItems: 'center', gap: 6, flexShrink: 1 },
+  transferClub: { fontSize: 15 },
+  transferDate: { fontSize: 11, marginTop: 4 },
+  transferPrice: { fontSize: 15 },
+  transferFee: { fontSize: 8, marginTop: 4 },
   euroIcon: { width: 16, height: 16 },
 
+  socialCard: { borderRadius: 18, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
+  socialRow: { height: 56, alignItems: 'center', gap: 12 },
+  socialAccount: { alignItems: 'center', gap: 12 },
+  socialDivider: { height: 1, width: '100%' },
+
+  legacySectionHeader: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    marginTop: 8,
+  },
 });

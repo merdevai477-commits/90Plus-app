@@ -1,0 +1,16 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Platform Icon &#194;&#183; Instagram">
+<path id="Vector" d="M25 1H11C5.47715 1 1 5.47715 1 11V25C1 30.5228 5.47715 35 11 35H25C30.5228 35 35 30.5228 35 25V11C35 5.47715 30.5228 1 25 1Z" fill="url(#paint0_linear_0_76)"/>
+<path id="Vector_2" d="M14 9H22C24.7614 9 27 11.2386 27 14V22C27 24.7614 24.7614 27 22 27H14C11.2386 27 9 24.7614 9 22V14C9 11.2386 11.2386 9 14 9Z" stroke-width="2.2" stroke="white"/>
+<path id="Vector_3" d="M22.2 18C22.2 20.3196 20.3196 22.2 18 22.2C15.6804 22.2 13.8 20.3196 13.8 18C13.8 15.6804 15.6804 13.8 18 13.8C20.3196 13.8 22.2 15.6804 22.2 18Z" stroke-width="2.1" stroke="white"/>
+<path id="Vector_4" d="M24.7 12.8C25.4732 12.8 26.1 12.1732 26.1 11.4C26.1 10.6268 25.4732 10 24.7 10C23.9268 10 23.3 10.6268 23.3 11.4C23.3 12.1732 23.9268 12.8 24.7 12.8Z" fill="white"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_76" x1="1" y1="35" x2="35" y2="1" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEDA75"/>
+<stop offset="0.48" stop-color="#FA7E1E"/>
+<stop offset="0.76" stop-color="#D62976"/>
+<stop offset="1" stop-color="#4F5BD5"/>
+</linearGradient>
+</defs>
+</svg>

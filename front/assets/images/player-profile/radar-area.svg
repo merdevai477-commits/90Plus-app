@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="102.57" height="117.2" viewBox="0 0 102.57 117.2" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Performance Area">
+<path id="Radar &#194;&#183; performance area" d="M52.636 4L78.976 49.63L98.566 91.36L52.636 113.2L15.486 86.29L3.99597 36.76L52.636 4Z" fill="#AA55F7" fill-opacity="0.28" stroke-width="2" stroke="#4B1FA3"/>
+<circle id="Radar &#194;&#183; data point" cx="52.636" cy="4" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+<circle id="Radar &#194;&#183; data point_2" cx="78.9805" cy="49.63" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+<circle id="Radar &#194;&#183; data point_3" cx="98.5699" cy="91.36" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+<circle id="Radar &#194;&#183; data point_4" cx="52.636" cy="113.2" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+<circle id="Radar &#194;&#183; data point_5" cx="15.4835" cy="86.29" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+<circle id="Radar &#194;&#183; data point_6" cx="4" cy="36.76" r="3.25" fill="#4B1FA3" stroke-width="1.5" stroke="#F9F6FE"/>
+</g>
+</svg>

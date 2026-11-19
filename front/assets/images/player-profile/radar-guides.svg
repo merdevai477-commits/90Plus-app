@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="190" height="190" viewBox="0 0 190 190" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Radar Guides">
+<circle id="Ellipse" cx="95" cy="95" r="46.5" fill="white" stroke="#E8E0F5"/>
+<circle id="Ellipse_2" cx="95" cy="95" r="34.5" fill="white" stroke="#E8E0F5"/>
+<circle id="Ellipse_3" cx="95" cy="95" r="22.5" fill="white" stroke="#E8E0F5"/>
+<rect id="Rectangle" x="94" width="1" height="190" fill="#E8E0F5"/>
+<rect id="Rectangle_2" y="94" width="190" height="1" fill="#E8E0F5"/>
+<rect id="Rectangle_3" x="26" y="27" width="138" height="1" fill="#E8E0F5"/>
+<rect id="Rectangle_4" x="26" y="162" width="138" height="1" fill="#E8E0F5"/>
+<path id="Radar &#194;&#183; six axis guides" d="M94.282 95V15M94.282 95L163.564 55M94.282 95L163.564 135M94.282 95V175M94.282 95L25 135M94.282 95L25 55" stroke="#E8E0F5"/>
+</g>
+</svg>

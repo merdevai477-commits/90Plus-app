@@ -13,6 +13,24 @@ export interface PlayerSeasonSummary {
   redCards: number | null;
 }
 
+export interface PlayerDetailedStats {
+  passAccuracy: number | null;
+  shotsOnTarget: number | null;
+  shots: number | null;
+  yellowCards: number | null;
+  chancesCreated: number | null;
+  dribbles: number | null;
+}
+
+export interface PlayerPer90Stats {
+  goals: number | null;
+  assists: number | null;
+  shots: number | null;
+  keyPasses: number | null;
+  dribbles: number | null;
+  xG: number | null;
+}
+
 export interface PlayerTransferRow {
   key: string;
   clubName: string;
@@ -38,6 +56,9 @@ export interface PlayerProfileViewModel {
   seasons: { key: string; label: string }[];
   selectedSeasonKey: string | null;
   season: PlayerSeasonSummary | null;
+  detailed: PlayerDetailedStats | null;
+  averageRating: number | null;
+  per90: PlayerPer90Stats | null;
   lastMatches: Player365LastMatch[];
   transfers: PlayerTransferRow[];
 }

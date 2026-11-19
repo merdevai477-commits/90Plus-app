@@ -34,7 +34,10 @@ import PlayerProfileView, { PlayerProfileStatus } from '../components/PlayerProf
 import type { PlayerProfileViewModel } from '../components/PlayerProfile/types';
 import {
     ageFromDateOfBirth,
+    careerAverageRating,
     careerCurrentSeason,
+    careerDetailedStats,
+    careerPer90,
     careerSeasonSummary,
     careerTransferRows,
 } from '../components/PlayerProfile/viewModel';
@@ -217,6 +220,9 @@ export default function PlayerCareerScreen() {
             seasons: career.seasons.map((s) => ({ key: s.seasonKey, label: s.label })),
             selectedSeasonKey: shown?.seasonKey ?? null,
             season: careerSeasonSummary(career, shown?.seasonKey),
+            detailed: careerDetailedStats(career, shown?.seasonKey),
+            averageRating: careerAverageRating(career, shown?.seasonKey),
+            per90: careerPer90(career, shown?.seasonKey),
             lastMatches: (career.lastMatches ?? []).map((m) => ({
                 ...m,
                 opponentName: m.opponentName ? getTeamDisplayName(m.opponentName, language) : null,
