@@ -2308,6 +2308,7 @@ export const ar = {
       title: 'ترتيب خماسي الهدافيين',
       filterAll: 'الكل',
       filterWeek: 'هذا الأسبوع',
+      weekButton: 'أسبوع',
       emptyTitle: 'لا يوجد فائزين بعد',
       emptyCta: 'اختر الان',
       prizeLabel: 'جائزة هذا الأسبوع',

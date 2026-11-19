@@ -44,7 +44,6 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
 import UserIdentity from '../identity/UserIdentity';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
-import { GlassCapsuleNav, useGlassNavColors } from '../navigation/GlassCapsuleNav';
 import { TsfNav, tsfNavBottom, type TsfTabKey } from './TsfNav';
 import { TsfIslandBack, TsfPointsHero } from './TsfPointsHero';
 import { TSF_THEME, type TsfColors } from './tsfTheme';
@@ -114,7 +113,6 @@ export default function LeagueBoardScreen() {
   const { width } = useWindowDimensions();
   const { isDark } = useResolvedAppScheme();
   const colors = isDark ? TSF_THEME.dark : TSF_THEME.light;
-  const navColors = useGlassNavColors();
   const { t, language } = useTranslation();
   const copy = t.topScorersFive;
   const pickCopy = copy.pick;
@@ -388,46 +386,12 @@ export default function LeagueBoardScreen() {
           colors={colors}
           isDark={isDark}
           period={period}
+          onPeriod={setPeriod}
           isSignedIn={!!isSignedIn}
           getToken={() => getTokenRef.current()}
           onPick={() => setTab('pitch')}
           leagueName={(key) => (key === 'egypt' ? pickCopy.leagues.egypt1 : pickCopy.leagues[key as TsfCompetitionKey] ?? key)}
         />
-      ) : null}
-
-      {tab === 'ranking' ? (
-        <View pointerEvents="box-none" style={[styles.periodNav, { bottom: tsfNavBottom(insets.bottom) + 78 }]}>
-          <GlassCapsuleNav
-            items={[
-              {
-                key: 'all',
-                label: copy.ranking.filterAll,
-                renderIcon: (active, size) => (
-                  <Ionicons
-                    name={active ? 'layers' : 'layers-outline'}
-                    size={size}
-                    color={active ? navColors.iconActive : navColors.iconIdle}
-                  />
-                ),
-              },
-              {
-                key: 'week',
-                label: copy.ranking.filterWeek,
-                renderIcon: (active, size) => (
-                  <Ionicons
-                    name={active ? 'calendar' : 'calendar-outline'}
-                    size={size}
-                    color={active ? navColors.iconActive : navColors.iconIdle}
-                  />
-                ),
-              },
-            ]}
-            activeKey={period}
-            onChange={setPeriod}
-            scale={Math.min(width / 390, 1)}
-            maxWidth={width - 48}
-          />
-        </View>
       ) : null}
 
       <TsfNav activeTab={tab} onChange={setTab} scale={Math.min(width / 390, 1)} />
@@ -755,6 +719,7 @@ function LeagueRanking({
   colors,
   isDark,
   period,
+  onPeriod,
   isSignedIn,
   getToken,
   onPick,
@@ -763,6 +728,7 @@ function LeagueRanking({
   colors: TsfColors;
   isDark: boolean;
   period: 'week' | 'all';
+  onPeriod: (period: 'week' | 'all') => void;
   isSignedIn: boolean;
   getToken: () => Promise<string | null>;
   onPick: () => void;
@@ -820,7 +786,7 @@ function LeagueRanking({
     <>
       <ScrollView
         style={[styles.flex, { backgroundColor: colors.bg }]}
-        contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 156, gap: 14 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: tsfNavBottom(insets.bottom) + 88, gap: 14 }}
       >
         <TsfPointsHero
           title={copy.ranking.totalPoints}
@@ -835,6 +801,29 @@ function LeagueRanking({
           bodyFont={fontSemi}
         />
 
+        <View style={styles.periodButtons}>
+          {(['week', 'all'] as const).map((key) => {
+            const active = period === key;
+            const label = key === 'week' ? copy.ranking.weekButton : copy.ranking.filterAll;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => onPeriod(key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={[
+                  styles.periodButton,
+                  {
+                    backgroundColor: active ? colors.purple : colors.card,
+                    borderColor: active ? colors.purple : colors.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: active ? colors.onPurple : colors.text, fontFamily: fontSemi }}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
         <Text style={[styles.leadTitle, { color: colors.text, fontFamily: fontBold }]}>
           {period === 'week' ? copy.ranking.leadWeek : copy.ranking.leadAll}
         </Text>
@@ -1216,7 +1205,16 @@ const styles = StyleSheet.create({
     zIndex: 3,
     maxWidth: '92%',
   },
-  periodNav: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 20 },
+  periodButtons: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
+  periodButton: {
+    minWidth: 108,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
   lockPill: {
     flexDirection: 'row',
     alignItems: 'center',

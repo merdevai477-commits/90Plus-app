@@ -2354,6 +2354,7 @@ export const en = {
       title: 'Top Scorers Five ranking',
       filterAll: 'All',
       filterWeek: 'This week',
+      weekButton: 'Week',
       emptyTitle: 'No winners yet',
       emptyCta: 'Pick now',
       prizeLabel: "This week's prize",
