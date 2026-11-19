@@ -5,4 +5,8 @@ samples/*.mp4
 samples/*.png
 samples/raw_*
 samples/manifest.json
+phase2/downloads/
+phase2/frames/
+phase2/reports/partial-*.json
+phase2/usage/
 *.log

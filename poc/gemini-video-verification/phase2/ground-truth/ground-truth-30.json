@@ -1,0 +1,485 @@
+{
+  "createdAt": "2026-11-19T23:30:09.195Z",
+  "labels": [
+    {
+      "datasetId": "hl-1",
+      "highlightlyId": 713296,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "unavailable",
+      "gtPlayableHint": "no",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 404,
+      "notes": [
+        "CDN/direct URL failed HTTP; no frames for visual GT"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.193Z"
+    },
+    {
+      "datasetId": "hl-2",
+      "highlightlyId": 713297,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "unavailable",
+      "gtPlayableHint": "no",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 404,
+      "notes": [
+        "CDN/direct URL failed HTTP; no frames for visual GT"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-3",
+      "highlightlyId": 713298,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "unavailable",
+      "gtPlayableHint": "no",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 404,
+      "notes": [
+        "CDN/direct URL failed HTTP; no frames for visual GT"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-4",
+      "highlightlyId": 714049,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-5",
+      "highlightlyId": 714050,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-6",
+      "highlightlyId": 713991,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-7",
+      "highlightlyId": 713992,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-8",
+      "highlightlyId": 713993,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-9",
+      "highlightlyId": 714170,
+      "sourceClass": "direct_mp4",
+      "category": "match-highlights",
+      "gtVisual": "valid",
+      "gtPlayableHint": "likely_ffmpeg_ok_native_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of mid.jpg: football broadcast content"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-10",
+      "highlightlyId": 715301,
+      "sourceClass": "youtube",
+      "category": "goal-clip",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-11",
+      "highlightlyId": 714145,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-12",
+      "highlightlyId": 714157,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-13",
+      "highlightlyId": 714207,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-14",
+      "highlightlyId": 714211,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-15",
+      "highlightlyId": 714212,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-16",
+      "highlightlyId": 714400,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-17",
+      "highlightlyId": 714846,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-18",
+      "highlightlyId": 713295,
+      "sourceClass": "other",
+      "category": "goal-clip",
+      "gtVisual": "unsupported_direct",
+      "gtPlayableHint": "no_direct_file",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Host is watch page / social page, not a direct media file"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-19",
+      "highlightlyId": 714180,
+      "sourceClass": "other",
+      "category": "goal-clip",
+      "gtVisual": "unsupported_direct",
+      "gtPlayableHint": "no_direct_file",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Host is watch page / social page, not a direct media file"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-20",
+      "highlightlyId": 714999,
+      "sourceClass": "other",
+      "category": "match-highlights",
+      "gtVisual": "unsupported_direct",
+      "gtPlayableHint": "no_direct_file",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Host is watch page / social page, not a direct media file"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-21",
+      "highlightlyId": 715000,
+      "sourceClass": "other",
+      "category": "match-highlights",
+      "gtVisual": "unsupported_direct",
+      "gtPlayableHint": "no_direct_file",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Host is watch page / social page, not a direct media file"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-22",
+      "highlightlyId": 714847,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-23",
+      "highlightlyId": 714961,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-24",
+      "highlightlyId": 714962,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-25",
+      "highlightlyId": 714963,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-26",
+      "highlightlyId": 714154,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-27",
+      "highlightlyId": 714155,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-28",
+      "highlightlyId": 715298,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-29",
+      "highlightlyId": 714152,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    },
+    {
+      "datasetId": "hl-30",
+      "highlightlyId": 714162,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "gtVisual": "valid_thumbnail",
+      "gtPlayableHint": "youtube_embed_unverified",
+      "gtIsBlack": false,
+      "gtIsFrozen": false,
+      "httpStatus": 200,
+      "notes": [
+        "Human review of Highlightly thumbnail: football-related imagery; playback/embed not verified here"
+      ],
+      "reviewedBy": "agent+human-frame-inspection",
+      "reviewedAt": "2026-11-19T23:30:09.194Z"
+    }
+  ]
+}

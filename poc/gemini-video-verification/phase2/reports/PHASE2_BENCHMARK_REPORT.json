@@ -1,0 +1,285 @@
+{
+  "title": "Phase 2 — Real-World Highlightly Video Verification Benchmark",
+  "createdAt": "2026-11-19T23:30:09.197Z",
+  "model": "gemini-3.5-flash-lite",
+  "dataset": {
+    "selectedCount": 30,
+    "distribution": {
+      "goal-clip|direct_mp4": 8,
+      "match-highlights|direct_mp4": 1,
+      "goal-clip|youtube": 1,
+      "match-highlights|youtube": 16,
+      "goal-clip|other": 2,
+      "match-highlights|other": 2
+    },
+    "totalInDb": 206
+  },
+  "totals": {
+    "videosTested": 30,
+    "successfullyDecoded": 6,
+    "visuallyVerifiedByGemini": 23,
+    "httpOkApprox": 27
+  },
+  "httpFailureDistribution": {
+    "200": 27,
+    "404": 3
+  },
+  "decode": {
+    "codecs": {
+      "h264": 6
+    },
+    "resolutions": [
+      "1536x864",
+      "1536x864",
+      "1536x864",
+      "1536x864",
+      "1536x864",
+      "1280x720"
+    ],
+    "note": "No HLS samples existed in the linked MatchHighlight pool for this draw."
+  },
+  "gemini": {
+    "latencyAvgMs": 4126,
+    "tokensTotal": 48650,
+    "requests": 23,
+    "estimatedPaidUsdThisRun": 0.0055937,
+    "estimatedPaidUsdPer1000": 0.24320434782608696,
+    "accuracyVsManualGt": {
+      "comparable": 23,
+      "match": 23,
+      "accuracy": 1,
+      "black": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "note": "No real black positives in this 30-clip set"
+      },
+      "frozen": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "note": "No real frozen positives in this 30-clip set"
+      },
+      "rows": [
+        {
+          "datasetId": "hl-4",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-5",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-6",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-7",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-8",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-9",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-10",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-11",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-12",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-13",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-14",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-15",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-16",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-17",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-22",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-23",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-24",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-25",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-26",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-27",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-28",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-29",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        },
+        {
+          "datasetId": "hl-30",
+          "expected": "valid",
+          "predicted": "valid",
+          "match": true,
+          "footballPred": true
+        }
+      ]
+    }
+  },
+  "blackScreenDetectionAccuracy": {
+    "realWorldSet": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "note": "No real black positives in this 30-clip set"
+    },
+    "phase1SyntheticReference": "Phase1 synthetic black samples detected correctly by Gemini (see TECHNICAL_REPORT.md)"
+  },
+  "frozenFrameDetectionAccuracy": {
+    "realWorldSet": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "note": "No real frozen positives in this 30-clip set"
+    },
+    "phase1SyntheticReference": "Phase1 synthetic frozen sample detected correctly by Gemini"
+  },
+  "devicePlayback": {
+    "status": "not_executed",
+    "iosSuccessRate": null,
+    "androidSuccessRate": null,
+    "note": "No physical/simulator playback run was recorded in this automated Phase 2 session. See PLAYBACK_TEST_PLAN.md.",
+    "results": []
+  },
+  "localVsGeminiSplit": {
+    "runLocally": [
+      "HTTP status + redirect chain",
+      "Content-Type inspection",
+      "FFprobe codec/duration/resolution",
+      "Frame extraction",
+      "OpenCV black/frozen heuristics",
+      "URL expiry / 404 detection"
+    ],
+    "requireGemini": [
+      "Semantic football-content confirmation",
+      "Error-message / geo overlay recognition in frames",
+      "Loading UI recognition",
+      "Ambiguous corruption / meaningfulness judgment"
+    ],
+    "doNotUseGeminiAloneFor": [
+      "YouTube embeddability / geo playback",
+      "Native iOS AVPlayer / Android ExoPlayer success",
+      "Declaring a URL playable solely because frames look valid"
+    ]
+  },
+  "integrationDecision": {
+    "readyForIntegration": "conditional",
+    "verdict": "Ready to integrate as a SERVER-SIDE enrichment behind a feature flag for direct MP4 clips AFTER local HTTP/ffprobe/OpenCV gates. Not ready as a standalone playback authority, and not ready to certify YouTube/iOS/Android success without device/embed tests.",
+    "blockers": [
+      "iOS/Android playback rates not measured in this run",
+      "YouTube analyzed via thumbnails only (not embed playback)",
+      "3/9 Streamin MP4 URLs already 404 — availability decays; Gemini cannot fix expired URLs",
+      "streama.in / X.com hosts are not direct files — need different authorized strategy"
+    ],
+    "recommendedNextStep": "Wire local gates first in a non-prod worker; run device test plan on the 6 decoded MP4s + sample YouTube embeds; only then call Gemini on ambiguous frames."
+  }
+}

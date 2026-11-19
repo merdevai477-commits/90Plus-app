@@ -43,9 +43,21 @@ npm run poc          # full pipeline
 | Env example | `.env.example` |
 | Report | `output/reports/TECHNICAL_REPORT.md` |
 
+## Phase 2 — Real-World Highlightly benchmark
+
+```bash
+npm run phase2:dataset   # 30 real MatchHighlight URLs from DB
+npm run phase2:run       # HTTP + FFmpeg/ffprobe + OpenCV + Gemini
+npm run phase2:report    # ground truth + PHASE2_BENCHMARK_REPORT.md
+```
+
+Report: `phase2/PHASE2_BENCHMARK_REPORT.md`  
+Device plan: `phase2/device-tests/PLAYBACK_TEST_PLAN.md`
+
 ## Safety
 
 - Never hardcode API keys
 - Never import this into React Native
 - Never log the raw API key (fingerprint only)
 - Do not claim remaining quota unless AI Studio / billing exposes it
+- Do not modify production playback or Highlightly sync from this POC

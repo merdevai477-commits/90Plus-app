@@ -1,0 +1,5523 @@
+{
+  "createdAt": "2026-11-19T23:28:03.769Z",
+  "model": "gemini-3.5-flash-lite",
+  "ffmpeg": "C:\\Users\\Eltwaheed\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffmpeg.exe",
+  "ffprobe": "C:\\Users\\Eltwaheed\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffprobe.exe",
+  "dataset": {
+    "selectedCount": 30,
+    "distribution": {
+      "goal-clip|direct_mp4": 8,
+      "match-highlights|direct_mp4": 1,
+      "goal-clip|youtube": 1,
+      "match-highlights|youtube": 16,
+      "goal-clip|other": 2,
+      "match-highlights|other": 2
+    },
+    "totalInDb": 206
+  },
+  "usageSummary": {
+    "runId": "phase2-1795130481984",
+    "totalRequests": 23,
+    "successCount": 23,
+    "failureCount": 0,
+    "failureRate": 0,
+    "rateLimitedCount": 0,
+    "averageLatencyMs": 4125.608695652174,
+    "tokens": {
+      "prompt": 46221,
+      "candidates": 2429,
+      "total": 48650
+    },
+    "estimatedPaidCostUsd": 0.005593700000000001,
+    "note": "Remaining quota is NOT exposed by the API; see report for documented vs observed.",
+    "filePath": "C:\\Football-app\\poc\\gemini-video-verification\\output\\usage\\phase2-1795130481984.jsonl"
+  },
+  "results": [
+    {
+      "datasetId": "hl-1",
+      "highlightlyId": 713296,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/a6799dcd",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/a6799dcd",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/a6799dcd",
+              "status": 301,
+              "location": "https://streamin.me/v/a6799dcd"
+            },
+            {
+              "url": "https://streamin.me/v/a6799dcd",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 1767
+        },
+        "playback": {
+          "ok": false,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+          "status": 404,
+          "contentType": "text/html",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+              "status": 404,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 618
+        }
+      },
+      "download": null,
+      "probe": null,
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "http_404"
+      ],
+      "durationMs": 2385
+    },
+    {
+      "datasetId": "hl-2",
+      "highlightlyId": 713297,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/d56ba792",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/d56ba792",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/d56ba792",
+              "status": 301,
+              "location": "https://streamin.me/v/d56ba792"
+            },
+            {
+              "url": "https://streamin.me/v/d56ba792",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 661
+        },
+        "playback": {
+          "ok": false,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+          "status": 404,
+          "contentType": "text/html",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+              "status": 404,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 504
+        }
+      },
+      "download": null,
+      "probe": null,
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "http_404"
+      ],
+      "durationMs": 1165
+    },
+    {
+      "datasetId": "hl-3",
+      "highlightlyId": 713298,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/b16e3822",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/b16e3822",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/b16e3822",
+              "status": 301,
+              "location": "https://streamin.me/v/b16e3822"
+            },
+            {
+              "url": "https://streamin.me/v/b16e3822",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 515
+        },
+        "playback": {
+          "ok": false,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+          "status": 404,
+          "contentType": "text/html",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+              "status": 404,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 451
+        }
+      },
+      "download": null,
+      "probe": null,
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "http_404"
+      ],
+      "durationMs": 966
+    },
+    {
+      "datasetId": "hl-4",
+      "highlightlyId": 714049,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/562c68cb",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/562c68cb",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/562c68cb",
+              "status": 301,
+              "location": "https://streamin.me/v/562c68cb"
+            },
+            {
+              "url": "https://streamin.me/v/562c68cb",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 507
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "22276950",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 415
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-4.mp4",
+        "bytes": 22276950,
+        "truncated": false,
+        "totalBytes": 22276950
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 25.366667,
+        "sizeBytes": 22276950,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1536,
+        "height": 864,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-4.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "25.366667",
+            "size": "22276950",
+            "bit_rate": "7025582",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf59.27.100"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1536,
+            "height": 864,
+            "coded_width": 1536,
+            "coded_height": 864,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 389632,
+            "duration": "25.366667",
+            "bit_rate": "6824161",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "761",
+            "extradata_size": 49,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-4\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-4\\mid.jpg",
+            "t": 12.6833335
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-4\\last.jpg",
+            "t": 24.566667
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 25.366667,
+          "sizeBytes": 22276950,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1536,
+          "height": 864,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-4.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "25.366667",
+              "size": "22276950",
+              "bit_rate": "7025582",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf59.27.100"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640028",
+              "width": 1536,
+              "height": 864,
+              "coded_width": 1536,
+              "coded_height": 864,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 40,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 389632,
+              "duration": "25.366667",
+              "bit_rate": "6824161",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "761",
+              "extradata_size": 49,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 101.83661340784144,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 78.20512635030865,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 105.0779396339699,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.7686318790211397,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The frames show a live UEFA Nations League football match between Denmark and Norway with normal gameplay and players celebrating.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-4",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:21:55.535Z",
+          "durationMs": 18545,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3755,
+            "candidatesTokenCount": 102,
+            "totalTokenCount": 3857,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 455
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.00041630000000000004,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 101.83661340784144,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 78.20512635030865,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 105.0779396339699,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.7686318790211397,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The frames show a live UEFA Nations League football match between Denmark and Norway with normal gameplay and players celebrating.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 47570
+    },
+    {
+      "datasetId": "hl-5",
+      "highlightlyId": 714050,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/59e4a9b7",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/59e4a9b7",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/59e4a9b7",
+              "status": 301,
+              "location": "https://streamin.me/v/59e4a9b7"
+            },
+            {
+              "url": "https://streamin.me/v/59e4a9b7",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 5578
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "18786713",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 2686
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-5.mp4",
+        "bytes": 18786713,
+        "truncated": false,
+        "totalBytes": 18786713
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 28.1,
+        "sizeBytes": 18786713,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1536,
+        "height": 864,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-5.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "28.100000",
+            "size": "18786713",
+            "bit_rate": "5348530",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf59.27.100"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1536,
+            "height": 864,
+            "coded_width": 1536,
+            "coded_height": 864,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 431616,
+            "duration": "28.100000",
+            "bit_rate": "5146800",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "844",
+            "extradata_size": 49,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-5\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-5\\mid.jpg",
+            "t": 14.05
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-5\\last.jpg",
+            "t": 27.3
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 28.1,
+          "sizeBytes": 18786713,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1536,
+          "height": 864,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-5.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "28.100000",
+              "size": "18786713",
+              "bit_rate": "5348530",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf59.27.100"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640028",
+              "width": 1536,
+              "height": 864,
+              "coded_width": 1536,
+              "coded_height": 864,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 40,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 431616,
+              "duration": "28.100000",
+              "bit_rate": "5146800",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "844",
+              "extradata_size": 49,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 93.35243583019869,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 99.47178668740355,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 70.03305317443095,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.7443665806648663,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The frames show valid live football broadcast content including match footage, on-screen scoreboards, VAR reviews, and celebrations.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-5",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:23:21.926Z",
+          "durationMs": 14469,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3754,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 3860,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 454
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0004178,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 93.35243583019869,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 99.47178668740355,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 70.03305317443095,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.7443665806648663,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The frames show valid live football broadcast content including match footage, on-screen scoreboards, VAR reviews, and celebrations.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 82313
+    },
+    {
+      "datasetId": "hl-6",
+      "highlightlyId": 713991,
+      "fixtureId": 4672266,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Wales vs Portugal",
+      "url": "https://streamin.link/v/1450e4f3",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/1450e4f3",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/1450e4f3",
+              "status": 301,
+              "location": "https://streamin.me/v/1450e4f3"
+            },
+            {
+              "url": "https://streamin.me/v/1450e4f3",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 955
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "15944107",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 505
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-6.mp4",
+        "bytes": 15944107,
+        "truncated": false,
+        "totalBytes": 15944107
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 26.5,
+        "sizeBytes": 15944107,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1536,
+        "height": 864,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-6.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "26.500000",
+            "size": "15944107",
+            "bit_rate": "4813315",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf59.27.100"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1536,
+            "height": 864,
+            "coded_width": 1536,
+            "coded_height": 864,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 407040,
+            "duration": "26.500000",
+            "bit_rate": "4611603",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "795",
+            "extradata_size": 49,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-6\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-6\\mid.jpg",
+            "t": 13.25
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-6\\last.jpg",
+            "t": 25.7
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 26.5,
+          "sizeBytes": 15944107,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1536,
+          "height": 864,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-6.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "26.500000",
+              "size": "15944107",
+              "bit_rate": "4813315",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf59.27.100"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640028",
+              "width": 1536,
+              "height": 864,
+              "coded_width": 1536,
+              "coded_height": 864,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 40,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 407040,
+              "duration": "26.500000",
+              "bit_rate": "4611603",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "795",
+              "extradata_size": 49,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 95.998750663098,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 68.52536425178434,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 98.61056857638889,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.7826611517243858,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The frames show normal live football match broadcast footage with valid action, scores, and gameplay.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-6",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:23:58.523Z",
+          "durationMs": 6849,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3752,
+            "candidatesTokenCount": 99,
+            "totalTokenCount": 3851,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 452
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0004148,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 95.998750663098,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 68.52536425178434,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 98.61056857638889,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.7826611517243858,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The frames show normal live football match broadcast footage with valid action, scores, and gameplay.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 28976
+    },
+    {
+      "datasetId": "hl-7",
+      "highlightlyId": 713992,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/40a43e54",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/40a43e54",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/40a43e54",
+              "status": 301,
+              "location": "https://streamin.me/v/40a43e54"
+            },
+            {
+              "url": "https://streamin.me/v/40a43e54",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 1030
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "16972193",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 530
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-7.mp4",
+        "bytes": 16972193,
+        "truncated": false,
+        "totalBytes": 16972193
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 26.266667,
+        "sizeBytes": 16972193,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1536,
+        "height": 864,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-7.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "26.266667",
+            "size": "16972193",
+            "bit_rate": "5169195",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf59.27.100"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1536,
+            "height": 864,
+            "coded_width": 1536,
+            "coded_height": 864,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 403456,
+            "duration": "26.266667",
+            "bit_rate": "4967470",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "788",
+            "extradata_size": 49,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-7\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-7\\mid.jpg",
+            "t": 13.1333335
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-7\\last.jpg",
+            "t": 25.466667
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 26.266667,
+          "sizeBytes": 16972193,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1536,
+          "height": 864,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-7.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "26.266667",
+              "size": "16972193",
+              "bit_rate": "5169195",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf59.27.100"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640028",
+              "width": 1536,
+              "height": 864,
+              "coded_width": 1536,
+              "coded_height": 864,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 40,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 403456,
+              "duration": "26.266667",
+              "bit_rate": "4967470",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "788",
+              "extradata_size": 49,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 97.07711905020254,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 116.47716983748072,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 92.13521170910494,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.8541018358358485,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The video frames show standard UEFA Nations League football broadcast footage with changing timestamps, score updates, and active gameplay/players.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-7",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:24:27.518Z",
+          "durationMs": 8097,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3755,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 3861,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 455
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0004179,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 97.07711905020254,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 116.47716983748072,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 92.13521170910494,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.8541018358358485,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The video frames show standard UEFA Nations League football broadcast footage with changing timestamps, score updates, and active gameplay/players.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 30239
+    },
+    {
+      "datasetId": "hl-8",
+      "highlightlyId": 713993,
+      "fixtureId": 4672266,
+      "category": "goal-clip",
+      "sourceClass": "direct_mp4",
+      "title": "UEFA Nations League: Wales vs Portugal",
+      "url": "https://streamin.link/v/3196d63a",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/3196d63a",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/3196d63a",
+              "status": 301,
+              "location": "https://streamin.me/v/3196d63a"
+            },
+            {
+              "url": "https://streamin.me/v/3196d63a",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 842
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "15411074",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 584
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-8.mp4",
+        "bytes": 15411074,
+        "truncated": false,
+        "totalBytes": 15411074
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 25.333333,
+        "sizeBytes": 15411074,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1536,
+        "height": 864,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-8.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "25.333333",
+            "size": "15411074",
+            "bit_rate": "4866655",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf59.27.100"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1536,
+            "height": 864,
+            "coded_width": 1536,
+            "coded_height": 864,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 389120,
+            "duration": "25.333333",
+            "bit_rate": "4664973",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "760",
+            "extradata_size": 49,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-8\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-8\\mid.jpg",
+            "t": 12.6666665
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-8\\last.jpg",
+            "t": 24.533333
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 25.333333,
+          "sizeBytes": 15411074,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1536,
+          "height": 864,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-8.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "25.333333",
+              "size": "15411074",
+              "bit_rate": "4866655",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf59.27.100"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.640028",
+              "width": 1536,
+              "height": 864,
+              "coded_width": 1536,
+              "coded_height": 864,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 40,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 389120,
+              "duration": "25.333333",
+              "bit_rate": "4664973",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "760",
+              "extradata_size": 49,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 109.332627284674,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 92.87685215326003,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 105.69008683569638,
+            "opencvBlack": false,
+            "shape": [
+              864,
+              1536,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.7738347264301169,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The frames show standard live football broadcast footage with changing scenes and standard scoreboard overlays.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-8",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:24:57.885Z",
+          "durationMs": 7568,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3754,
+            "candidatesTokenCount": 97,
+            "totalTokenCount": 3851,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 454
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.00041420000000000004,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 109.332627284674,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 92.87685215326003,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 105.69008683569638,
+                "opencvBlack": false,
+                "shape": [
+                  864,
+                  1536,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.7738347264301169,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The frames show standard live football broadcast footage with changing scenes and standard scoreboard overlays.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 29837
+    },
+    {
+      "datasetId": "hl-9",
+      "highlightlyId": 714170,
+      "fixtureId": 4874691,
+      "category": "match-highlights",
+      "sourceClass": "direct_mp4",
+      "title": "CONCACAF Nations League: USA vs Haiti",
+      "url": "https://streamin.link/v/defe9a1c",
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamin.me/v/defe9a1c",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://streamin.link/v/defe9a1c",
+              "status": 301,
+              "location": "https://streamin.me/v/defe9a1c"
+            },
+            {
+              "url": "https://streamin.me/v/defe9a1c",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 837
+        },
+        "playback": {
+          "ok": true,
+          "finalUrl": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+          "status": 200,
+          "contentType": "video/mp4",
+          "contentLength": "16452490",
+          "redirectChain": [
+            {
+              "url": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 454
+        }
+      },
+      "download": {
+        "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-9.mp4",
+        "bytes": 16452490,
+        "truncated": false,
+        "totalBytes": 16452490
+      },
+      "probe": {
+        "available": true,
+        "ok": true,
+        "durationSec": 21.4,
+        "sizeBytes": 16452490,
+        "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+        "codec": "h264",
+        "profile": "High",
+        "width": 1280,
+        "height": 720,
+        "pixFmt": "yuv420p",
+        "avgFrameRate": "30/1",
+        "raw": {
+          "format": {
+            "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-9.mp4",
+            "nb_streams": 2,
+            "nb_programs": 0,
+            "nb_stream_groups": 0,
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "format_long_name": "QuickTime / MOV",
+            "start_time": "0.000000",
+            "duration": "21.400000",
+            "size": "16452490",
+            "bit_rate": "6150463",
+            "probe_score": 100,
+            "tags": {
+              "major_brand": "isom",
+              "minor_version": "512",
+              "compatible_brands": "isomiso2avc1mp41",
+              "encoder": "Lavf62.12.102"
+            }
+          },
+          "video": {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.64001f",
+            "width": 1280,
+            "height": 720,
+            "coded_width": 1280,
+            "coded_height": 720,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 31,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 328704,
+            "duration": "21.400000",
+            "bit_rate": "5981353",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "642",
+            "extradata_size": 47,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler"
+            }
+          }
+        }
+      },
+      "frames": {
+        "ok": true,
+        "tool": "ffmpeg",
+        "frames": [
+          {
+            "label": "first",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-9\\first.jpg",
+            "t": 0.5
+          },
+          {
+            "label": "mid",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-9\\mid.jpg",
+            "t": 10.7
+          },
+          {
+            "label": "last",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-9\\last.jpg",
+            "t": 20.599999999999998
+          }
+        ],
+        "probe": {
+          "available": true,
+          "ok": true,
+          "durationSec": 21.4,
+          "sizeBytes": 16452490,
+          "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+          "codec": "h264",
+          "profile": "High",
+          "width": 1280,
+          "height": 720,
+          "pixFmt": "yuv420p",
+          "avgFrameRate": "30/1",
+          "raw": {
+            "format": {
+              "filename": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\downloads\\hl-9.mp4",
+              "nb_streams": 2,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+              "format_long_name": "QuickTime / MOV",
+              "start_time": "0.000000",
+              "duration": "21.400000",
+              "size": "16452490",
+              "bit_rate": "6150463",
+              "probe_score": 100,
+              "tags": {
+                "major_brand": "isom",
+                "minor_version": "512",
+                "compatible_brands": "isomiso2avc1mp41",
+                "encoder": "Lavf62.12.102"
+              }
+            },
+            "video": {
+              "index": 0,
+              "codec_name": "h264",
+              "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+              "profile": "High",
+              "codec_type": "video",
+              "codec_tag_string": "avc1",
+              "codec_tag": "0x31637661",
+              "mime_codec_string": "avc1.64001f",
+              "width": 1280,
+              "height": 720,
+              "coded_width": 1280,
+              "coded_height": 720,
+              "has_b_frames": 2,
+              "sample_aspect_ratio": "1:1",
+              "display_aspect_ratio": "16:9",
+              "pix_fmt": "yuv420p",
+              "level": 31,
+              "color_range": "tv",
+              "color_space": "bt709",
+              "color_transfer": "bt709",
+              "color_primaries": "bt709",
+              "chroma_location": "left",
+              "field_order": "progressive",
+              "is_avc": "true",
+              "nal_length_size": "4",
+              "id": "0x1",
+              "r_frame_rate": "30/1",
+              "avg_frame_rate": "30/1",
+              "time_base": "1/15360",
+              "start_pts": 0,
+              "start_time": "0.000000",
+              "duration_ts": 328704,
+              "duration": "21.400000",
+              "bit_rate": "5981353",
+              "bits_per_raw_sample": "8",
+              "nb_frames": "642",
+              "extradata_size": 47,
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler"
+              }
+            }
+          }
+        },
+        "error": null
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 3,
+        "frames": [
+          {
+            "file": "first.jpg",
+            "meanLuma": 96.81882378472223,
+            "opencvBlack": false,
+            "shape": [
+              720,
+              1280,
+              3
+            ]
+          },
+          {
+            "file": "last.jpg",
+            "meanLuma": 56.22483832465278,
+            "opencvBlack": false,
+            "shape": [
+              720,
+              1280,
+              3
+            ]
+          },
+          {
+            "file": "mid.jpg",
+            "meanLuma": 90.36168511284723,
+            "opencvBlack": false,
+            "shape": [
+              720,
+              1280,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": 0.7910628340311818,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The video frames show clear, active football match footage including players on the field, a goal celebration, and scoreboard graphics.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-9",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:25:25.112Z",
+          "durationMs": 9153,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 3754,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 3860,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 454
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 3300
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0004178,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 3,
+          "frameNames": [
+            "first.jpg",
+            "mid.jpg",
+            "last.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 3,
+            "frames": [
+              {
+                "file": "first.jpg",
+                "meanLuma": 96.81882378472223,
+                "opencvBlack": false,
+                "shape": [
+                  720,
+                  1280,
+                  3
+                ]
+              },
+              {
+                "file": "last.jpg",
+                "meanLuma": 56.22483832465278,
+                "opencvBlack": false,
+                "shape": [
+                  720,
+                  1280,
+                  3
+                ]
+              },
+              {
+                "file": "mid.jpg",
+                "meanLuma": 90.36168511284723,
+                "opencvBlack": false,
+                "shape": [
+                  720,
+                  1280,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": 0.7910628340311818,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The video frames show clear, active football match footage including players on the field, a goal celebration, and scoreboard graphics.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": true,
+      "errors": [],
+      "durationMs": 28808
+    },
+    {
+      "datasetId": "hl-10",
+      "highlightlyId": 715301,
+      "fixtureId": 4632606,
+      "category": "goal-clip",
+      "sourceClass": "youtube",
+      "title": "A fantastic goal from midfield, a comeback victory, and Flamengo on their way to a second Brazili...",
+      "url": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+      "playbackUrl": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 401
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/V9qllhxVcG8/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "16953",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/V9qllhxVcG8/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 495
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-10\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 55.01916087962963,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image clearly shows a football player celebrating, along with match score overlays and league branding, indicating valid football media content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-10-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:25:41.175Z",
+          "durationMs": 1627,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 1500,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001818,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 55.01916087962963,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image clearly shows a football player celebrating, along with match score overlays and league branding, indicating valid football media content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8536
+    },
+    {
+      "datasetId": "hl-11",
+      "highlightlyId": 714145,
+      "fixtureId": 4874696,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "CONCACAF Nations League: Belize vs Sint Maarten",
+      "url": "https://www.youtube.com/watch?v=lmJAiAVi684",
+      "playbackUrl": "https://www.youtube.com/watch?v=lmJAiAVi684",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=lmJAiAVi684",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=lmJAiAVi684",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 327
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/lmJAiAVi684/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "18147",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/lmJAiAVi684/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 236
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-11\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 65.46362268518519,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.98,
+          "reason": "The image clearly shows football highlights graphics with a match score between Belize and Sint Maarten and players on a pitch.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-11-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:25:49.283Z",
+          "durationMs": 1838,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 104,
+            "totalTokenCount": 1498,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000181,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 65.46362268518519,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.98,\n  \"reason\": \"The image clearly shows football highlights graphics with a match score between Belize and Sint Maarten and players on a pitch.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8318
+    },
+    {
+      "datasetId": "hl-12",
+      "highlightlyId": 714157,
+      "fixtureId": 4716613,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Mauritania vs Burkina Faso",
+      "url": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+      "playbackUrl": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 286
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/t6zhOiC-9jU/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "10976",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/t6zhOiC-9jU/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 237
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-12\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 64.2327488425926,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image shows a match highlights graphic for an Africa Cup of Nations football match between Mauritania and Burkina Faso, featuring tournament branding, flags, and final scores.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-12-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:25:57.642Z",
+          "durationMs": 1749,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1393,
+            "candidatesTokenCount": 114,
+            "totalTokenCount": 1507,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 329
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001849,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 64.2327488425926,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image shows a match highlights graphic for an Africa Cup of Nations football match between Mauritania and Burkina Faso, featuring tournament branding, flags, and final scores.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8269
+    },
+    {
+      "datasetId": "hl-13",
+      "highlightlyId": 714207,
+      "fixtureId": 4883956,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Botswana vs Uganda",
+      "url": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+      "playbackUrl": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 686
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/pZHILnAF8BQ/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11230",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/pZHILnAF8BQ/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 527
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-13\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 64.68023726851852,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image displays a valid match highlights title screen for a football match between Botswana and Uganda, including tournament branding and flags.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-13-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:06.750Z",
+          "durationMs": 1619,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 1500,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001818,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 64.68023726851852,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image displays a valid match highlights title screen for a football match between Botswana and Uganda, including tournament branding and flags.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8976
+    },
+    {
+      "datasetId": "hl-14",
+      "highlightlyId": 714211,
+      "fixtureId": 4883958,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Liberia vs Cape Verde",
+      "url": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+      "playbackUrl": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 312
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/tKeNMjM4jtM/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11513",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/tKeNMjM4jtM/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 236
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-14\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 64.91700810185185,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image shows a valid match highlights title screen with football tournament branding, team flags, and score, which is meaningful and relevant content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-14-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:14.825Z",
+          "durationMs": 1508,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 109,
+            "totalTokenCount": 1503,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000183,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 64.91700810185185,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image shows a valid match highlights title screen with football tournament branding, team flags, and score, which is meaningful and relevant content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 7962
+    },
+    {
+      "datasetId": "hl-15",
+      "highlightlyId": 714212,
+      "fixtureId": 4883957,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Rwanda vs Mali",
+      "url": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+      "playbackUrl": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 602
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/jvtDnjRxk8E/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "10999",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/jvtDnjRxk8E/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 424
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-15\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 65.5653587962963,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image displays a valid match highlights title screen for the Africa Cup of Nations with team flags and score, indicating football-related content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-15-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:23.247Z",
+          "durationMs": 1875,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1393,
+            "candidatesTokenCount": 109,
+            "totalTokenCount": 1502,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 329
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001829,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 65.5653587962963,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image displays a valid match highlights title screen for the Africa Cup of Nations with team flags and score, indicating football-related content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8787
+    },
+    {
+      "datasetId": "hl-16",
+      "highlightlyId": 714400,
+      "fixtureId": 4672269,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Izrael vs. Austrija 1:1 // Golovi sa Utakmice // LIGA NACIJA - 6. kolo // SPORT KLUB",
+      "url": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+      "playbackUrl": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 357
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/tAMEjxuT46s/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11243",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/tAMEjxuT46s/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 368
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-16\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 79.37748842592593,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.98,
+          "reason": "The video frame clearly shows football footage with a player in a national team jersey, along with a match score bug and live broadcast graphics.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-16-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:31.679Z",
+          "durationMs": 1679,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 109,
+            "totalTokenCount": 1503,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000183,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 79.37748842592593,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.98,\n  \"reason\": \"The video frame clearly shows football footage with a player in a national team jersey, along with a match score bug and live broadcast graphics.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8234
+    },
+    {
+      "datasetId": "hl-17",
+      "highlightlyId": 714846,
+      "fixtureId": 4672270,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "UEFA Nations League: Ukraine vs Georgia",
+      "url": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+      "playbackUrl": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?si=JA-nYTySmsLX37d8&v=mlR_YmMWkx4&feature=youtu.be",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+              "status": 303,
+              "location": "https://www.youtube.com/watch?si=JA-nYTySmsLX37d8&v=mlR_YmMWkx4&feature=youtu.be"
+            },
+            {
+              "url": "https://www.youtube.com/watch?si=JA-nYTySmsLX37d8&v=mlR_YmMWkx4&feature=youtu.be",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 706
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/mlR_YmMWkx4/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "10341",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/mlR_YmMWkx4/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 220
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-17\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 65.88259837962963,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image shows a graphic containing the flags of Ukraine and Georgia, indicating pre-match, post-match, or review football content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-17-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:40.234Z",
+          "durationMs": 2021,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 109,
+            "totalTokenCount": 1503,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000183,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 65.88259837962963,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image shows a graphic containing the flags of Ukraine and Georgia, indicating pre-match, post-match, or review football content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8894
+    },
+    {
+      "datasetId": "hl-18",
+      "highlightlyId": 713295,
+      "fixtureId": 4874702,
+      "category": "goal-clip",
+      "sourceClass": "other",
+      "title": "CONCACAF Nations League: Cuba vs Grenada",
+      "url": "https://streama.in/xFF4KIuuQh47r64/watch",
+      "playbackUrl": "https://streama.in/xFF4KIuuQh47r64/watch",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamain.com/en/xFF4KIuuQh47r64/watch",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": "6441",
+          "redirectChain": [
+            {
+              "url": "https://streama.in/xFF4KIuuQh47r64/watch",
+              "status": 301,
+              "location": "https://streamain.com/xFF4KIuuQh47r64/watch"
+            },
+            {
+              "url": "https://streamain.com/xFF4KIuuQh47r64/watch",
+              "status": 302,
+              "location": "https://streamain.com/en/xFF4KIuuQh47r64/watch"
+            },
+            {
+              "url": "https://streamain.com/en/xFF4KIuuQh47r64/watch",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 1411
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "not_direct_media",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "non_video_content_type_or_unknown_host"
+      ],
+      "durationMs": 1411
+    },
+    {
+      "datasetId": "hl-19",
+      "highlightlyId": 714180,
+      "fixtureId": 4874690,
+      "category": "goal-clip",
+      "sourceClass": "other",
+      "title": "CONCACAF Nations League: El Salvador vs Saint Martin",
+      "url": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+      "playbackUrl": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://streamain.com/en/NizcYr7uWd5cqFQ/watch",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": "6558",
+          "redirectChain": [
+            {
+              "url": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+              "status": 301,
+              "location": "https://streamain.com/NizcYr7uWd5cqFQ/watch"
+            },
+            {
+              "url": "https://streamain.com/NizcYr7uWd5cqFQ/watch",
+              "status": 302,
+              "location": "https://streamain.com/en/NizcYr7uWd5cqFQ/watch"
+            },
+            {
+              "url": "https://streamain.com/en/NizcYr7uWd5cqFQ/watch",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 390
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "not_direct_media",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "non_video_content_type_or_unknown_host"
+      ],
+      "durationMs": 390
+    },
+    {
+      "datasetId": "hl-20",
+      "highlightlyId": 714999,
+      "fixtureId": 4632606,
+      "category": "match-highlights",
+      "sourceClass": "other",
+      "title": "Serie A: Flamengo vs Athletico Paranaense",
+      "url": "https://x.com/GVids12/status/2123200299087114387/video/1",
+      "playbackUrl": "https://x.com/GVids12/status/2123200299087114387/video/1",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://x.com/GVids12/status/2123200299087114387",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://x.com/GVids12/status/2123200299087114387/video/1",
+              "status": 307,
+              "location": "/GVids12/status/2123200299087114387"
+            },
+            {
+              "url": "https://x.com/GVids12/status/2123200299087114387",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 1029
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "not_direct_media",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "non_video_content_type_or_unknown_host"
+      ],
+      "durationMs": 1029
+    },
+    {
+      "datasetId": "hl-21",
+      "highlightlyId": 715000,
+      "fixtureId": 4632606,
+      "category": "match-highlights",
+      "sourceClass": "other",
+      "title": "Serie A: Flamengo vs Athletico Paranaense",
+      "url": "https://x.com/GVids12/status/2123201488763703308/video/1",
+      "playbackUrl": "https://x.com/GVids12/status/2123201488763703308/video/1",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://x.com/GVids12/status/2123201488763703308",
+          "status": 200,
+          "contentType": "text/html; charset=UTF-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://x.com/GVids12/status/2123201488763703308/video/1",
+              "status": 307,
+              "location": "/GVids12/status/2123201488763703308"
+            },
+            {
+              "url": "https://x.com/GVids12/status/2123201488763703308",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 563
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "not_direct_media",
+        "contentType": "text/html; charset=utf-8"
+      },
+      "frames": null,
+      "opencv": null,
+      "gemini": null,
+      "decodingOk": false,
+      "errors": [
+        "non_video_content_type_or_unknown_host"
+      ],
+      "durationMs": 563
+    },
+    {
+      "datasetId": "hl-22",
+      "highlightlyId": 714847,
+      "fixtureId": 4672270,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "UEFA Nations League: Ukraine vs Georgia",
+      "url": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+      "playbackUrl": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 855
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/LWO8D1AbOkA/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "20588",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/LWO8D1AbOkA/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 1811
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-22\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 68.42708912037037,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.98,
+          "reason": "The image shows a football match thumbnail with team flags, text overlays, and a player celebrating in a football kit.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-22-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:26:54.376Z",
+          "durationMs": 2124,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 105,
+            "totalTokenCount": 1499,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.00018140000000000002,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 68.42708912037037,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.98,\n  \"reason\": \"The image shows a football match thumbnail with team flags, text overlays, and a player celebrating in a football kit.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 10834
+    },
+    {
+      "datasetId": "hl-23",
+      "highlightlyId": 714961,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+      "playbackUrl": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 300
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/pwSPpWYhZ7I/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "13037",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/pwSPpWYhZ7I/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 233
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-23\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 84.80181712962963,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The frame shows players on a football pitch with a broadcast overlay, indicating valid football content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-23-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:02.868Z",
+          "durationMs": 1547,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 99,
+            "totalTokenCount": 1493,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.00017900000000000001,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 84.80181712962963,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The frame shows players on a football pitch with a broadcast overlay, indicating valid football content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 7914
+    },
+    {
+      "datasetId": "hl-24",
+      "highlightlyId": 714962,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+      "playbackUrl": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 423
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/QcmBcqwCiEQ/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "19415",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/QcmBcqwCiEQ/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 431
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-24\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 67.83612847222223,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 1,
+          "reason": "The image clearly shows two football players competing for a header with a football visible, indicating valid football footage.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-24-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:11.461Z",
+          "durationMs": 1627,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 102,
+            "totalTokenCount": 1496,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001802,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 67.83612847222223,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 1.0,\n  \"reason\": \"The image clearly shows two football players competing for a header with a football visible, indicating valid football footage.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8671
+    },
+    {
+      "datasetId": "hl-25",
+      "highlightlyId": 714963,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://youtu.be/048qqgfpgbs",
+      "playbackUrl": "https://youtu.be/048qqgfpgbs",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=048qqgfpgbs&feature=youtu.be",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://youtu.be/048qqgfpgbs",
+              "status": 303,
+              "location": "https://www.youtube.com/watch?v=048qqgfpgbs&feature=youtu.be"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=048qqgfpgbs&feature=youtu.be",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 719
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/048qqgfpgbs/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "18448",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/048qqgfpgbs/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 255
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-25\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 120.76115162037037,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.99,
+          "reason": "The image shows clear football-related graphics and live-action footage with team crests and match score overlay.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-25-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:19.986Z",
+          "durationMs": 2661,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1395,
+            "candidatesTokenCount": 104,
+            "totalTokenCount": 1499,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 331
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001811,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 120.76115162037037,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.99,\n  \"reason\": \"The image shows clear football-related graphics and live-action footage with team crests and match score overlay.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 9557
+    },
+    {
+      "datasetId": "hl-26",
+      "highlightlyId": 714154,
+      "fixtureId": 4883952,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Gambia vs Ivory Coast",
+      "url": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+      "playbackUrl": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 608
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/Gd8VUyzItW4/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11058",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/Gd8VUyzItW4/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 439
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-26\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 65.32081597222222,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image shows a match highlights graphic for an Africa Cup of Nations football match between Gambia and Ivory Coast with a score of 2-2.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-26-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:29.545Z",
+          "durationMs": 2387,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 111,
+            "totalTokenCount": 1505,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001838,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 65.32081597222222,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image shows a match highlights graphic for an Africa Cup of Nations football match between Gambia and Ivory Coast with a score of 2-2.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 9283
+    },
+    {
+      "datasetId": "hl-27",
+      "highlightlyId": 714155,
+      "fixtureId": 4883953,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Kenya vs South Africa",
+      "url": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+      "playbackUrl": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 333
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/pnwwsDj6FjU/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11569",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/pnwwsDj6FjU/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 240
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-27\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 63.39233796296296,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image clearly shows a football match highlights graphic featuring CAF branding, team flags, and scores, which is meaningful football-related content.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-27-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:38.407Z",
+          "durationMs": 1490,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 109,
+            "totalTokenCount": 1503,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000183,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 63.39233796296296,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image clearly shows a football match highlights graphic featuring CAF branding, team flags, and scores, which is meaningful football-related content.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 7963
+    },
+    {
+      "datasetId": "hl-28",
+      "highlightlyId": 715298,
+      "fixtureId": 4632601,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Cruzeiro vs. Palmeiras 2-1 I Game Highlights I Brasileirão 2026",
+      "url": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+      "playbackUrl": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 313
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/UpNjpZf46d0/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "17485",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/UpNjpZf46d0/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 287
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-28\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 52.83291087962963,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.98,
+          "reason": "The image clearly shows football highlights content featuring a player in a football kit and team crests indicating a match between Cruzeiro and Palmeiras.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-28-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:46.560Z",
+          "durationMs": 1755,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 110,
+            "totalTokenCount": 1504,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001834,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 52.83291087962963,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.98,\n  \"reason\": \"The image clearly shows football highlights content featuring a player in a football kit and team crests indicating a match between Cruzeiro and Palmeiras.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 8417
+    },
+    {
+      "datasetId": "hl-29",
+      "highlightlyId": 714152,
+      "fixtureId": 4716607,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Malawi vs Egypt",
+      "url": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+      "playbackUrl": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 310
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/BwQqSiZssNg/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11112",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/BwQqSiZssNg/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 244
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-29\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 64.29251157407407,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image clearly shows a football match highlights title screen featuring CAF branding, team flags, and score indicators.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-29-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:27:54.725Z",
+          "durationMs": 1434,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 103,
+            "totalTokenCount": 1497,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.0001806,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 64.29251157407407,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image clearly shows a football match highlights title screen featuring CAF branding, team flags, and score indicators.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 7843
+    },
+    {
+      "datasetId": "hl-30",
+      "highlightlyId": 714162,
+      "fixtureId": 4883951,
+      "category": "match-highlights",
+      "sourceClass": "youtube",
+      "title": "Africa Cup of Nations - Qualification: Tanzania vs Nigeria",
+      "url": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+      "playbackUrl": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+      "http": {
+        "primary": {
+          "ok": true,
+          "finalUrl": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+          "status": 200,
+          "contentType": "text/html; charset=utf-8",
+          "contentLength": null,
+          "redirectChain": [
+            {
+              "url": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 321
+        },
+        "thumbnail": {
+          "ok": true,
+          "finalUrl": "https://i.ytimg.com/vi/qc2QmxTFs-g/hqdefault.jpg",
+          "status": 200,
+          "contentType": "image/jpeg",
+          "contentLength": "11300",
+          "redirectChain": [
+            {
+              "url": "https://i.ytimg.com/vi/qc2QmxTFs-g/hqdefault.jpg",
+              "status": 200,
+              "location": null
+            }
+          ],
+          "error": null,
+          "durationMs": 237
+        }
+      },
+      "download": null,
+      "probe": {
+        "skipped": true,
+        "reason": "youtube_no_direct_download"
+      },
+      "frames": {
+        "ok": true,
+        "tool": "thumbnail",
+        "frames": [
+          {
+            "label": "thumbnail",
+            "path": "C:\\Football-app\\poc\\gemini-video-verification\\phase2\\frames\\hl-30\\thumbnail.jpg"
+          }
+        ]
+      },
+      "opencv": {
+        "ok": true,
+        "frameCount": 1,
+        "frames": [
+          {
+            "file": "thumbnail.jpg",
+            "meanLuma": 65.63591435185185,
+            "opencvBlack": false,
+            "shape": [
+              360,
+              480,
+              3
+            ]
+          }
+        ],
+        "blackFrameRatio": 0,
+        "likelyFullyBlack": false,
+        "avgSimilarity": null,
+        "likelyFrozen": false
+      },
+      "gemini": {
+        "ok": true,
+        "model": "gemini-3.5-flash-lite",
+        "analysis": {
+          "visual_status": "valid",
+          "contains_football_content": true,
+          "contains_error_message": false,
+          "is_black_screen": false,
+          "is_frozen": false,
+          "confidence": 0.95,
+          "reason": "The image displays a valid match highlights intro graphic for the Africa Cup of Nations with team flags and scoreboards.",
+          "recommended_action": "accept"
+        },
+        "usage": {
+          "runId": "phase2-1795130481984",
+          "label": "phase2-hl-30-yt-thumb",
+          "model": "gemini-3.5-flash-lite",
+          "startedAt": "2026-11-19T23:28:02.500Z",
+          "durationMs": 1267,
+          "httpStatus": 200,
+          "retryAttempts": 0,
+          "success": true,
+          "error": null,
+          "usageMetadata": {
+            "promptTokenCount": 1394,
+            "candidatesTokenCount": 104,
+            "totalTokenCount": 1498,
+            "thoughtsTokenCount": null,
+            "cachedContentTokenCount": null,
+            "promptTokensDetails": [
+              {
+                "modality": "IMAGE",
+                "tokenCount": 1064
+              },
+              {
+                "modality": "TEXT",
+                "tokenCount": 330
+              }
+            ]
+          },
+          "costEstimate": {
+            "estimatedUsd": 0.000181,
+            "pricingModel": "gemini-3.5-flash-lite",
+            "freeTierListed": true,
+            "note": "Estimate from documented paid rates; free-tier requests may cost $0"
+          },
+          "frameCount": 1,
+          "frameNames": [
+            "thumbnail.jpg"
+          ],
+          "opencvHints": {
+            "ok": true,
+            "frameCount": 1,
+            "frames": [
+              {
+                "file": "thumbnail.jpg",
+                "meanLuma": 65.63591435185185,
+                "opencvBlack": false,
+                "shape": [
+                  360,
+                  480,
+                  3
+                ]
+              }
+            ],
+            "blackFrameRatio": 0,
+            "likelyFullyBlack": false,
+            "avgSimilarity": null,
+            "likelyFrozen": false
+          }
+        },
+        "rawText": "{\n  \"visual_status\": \"valid\",\n  \"contains_football_content\": true,\n  \"contains_error_message\": false,\n  \"is_black_screen\": false,\n  \"is_frozen\": false,\n  \"confidence\": 0.95,\n  \"reason\": \"The image displays a valid match highlights intro graphic for the Africa Cup of Nations with team flags and scoreboards.\",\n  \"recommended_action\": \"accept\"\n}"
+      },
+      "decodingOk": false,
+      "errors": [],
+      "durationMs": 7607
+    }
+  ]
+}

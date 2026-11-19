@@ -1,0 +1,7 @@
+{
+  "status": "not_executed",
+  "iosSuccessRate": null,
+  "androidSuccessRate": null,
+  "note": "No physical/simulator playback run was recorded in this automated Phase 2 session. See PLAYBACK_TEST_PLAN.md.",
+  "results": []
+}
