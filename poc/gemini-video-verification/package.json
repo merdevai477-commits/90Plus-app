@@ -1,0 +1,24 @@
+{
+  "name": "gemini-video-verification-poc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated POC: Gemini visual verification for football highlight frames (not production playback).",
+  "type": "module",
+  "scripts": {
+    "discover": "node src/discoverModels.js",
+    "connect": "node src/connectivityTest.js",
+    "samples": "python scripts/generate_sample_assets.py",
+    "extract": "python scripts/extract_frames.py",
+    "analyze": "node src/runAnalyzer.js",
+    "benchmark": "node src/benchmark.js",
+    "report": "node src/generateReport.js",
+    "poc": "node src/runFullPoc.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "dotenv": "^16.4.7"
+  }
+}
