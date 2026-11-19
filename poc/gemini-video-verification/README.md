@@ -54,6 +54,17 @@ npm run phase2:report    # ground truth + PHASE2_BENCHMARK_REPORT.md
 Report: `phase2/PHASE2_BENCHMARK_REPORT.md`  
 Device plan: `phase2/device-tests/PLAYBACK_TEST_PLAN.md`
 
+## Phase 3 — Cross-platform playback compatibility
+
+```bash
+npm run phase3:prepare
+npm run phase3:probe    # mirrors HighlightVideoSheet routing + network probes
+npm run phase3:report
+```
+
+Report: `phase3/PHASE3_DEVICE_REPORT.md`  
+Harness notes: `phase3/DEVICE_HARNESS.md`
+
 ## Safety
 
 - Never hardcode API keys

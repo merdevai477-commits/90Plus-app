@@ -15,7 +15,10 @@
     "poc": "node src/runFullPoc.js",
     "phase2:dataset": "node scripts/fetch_highlight_dataset.js",
     "phase2:run": "node phase2/run_phase2.js",
-    "phase2:report": "node phase2/build_ground_truth_and_report.js"
+    "phase2:report": "node phase2/build_ground_truth_and_report.js",
+    "phase3:prepare": "node phase3/prepare_dataset.js",
+    "phase3:probe": "node phase3/run_player_path_probe.js",
+    "phase3:report": "node phase3/build_report.js"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,15 @@
+{
+  "platform": "ios",
+  "status": "blocked_by_auth",
+  "successRate": null,
+  "session": {
+    "simulatorSessionId": "01a1f629-db4a-7129-8856-78542e234443",
+    "buildId": "62ec1255-65f9-4270-b846-d22c514e58f8",
+    "buildProfile": "simulator",
+    "dashboardUrl": "https://expo.dev/accounts/90-plus-app/projects/90plus/simulator-sessions/01a1f629-db4a-7129-8856-78542e234443",
+    "openUrlAttempted": "ninetyplus:///(tabs)/match-details?fixtureId=4672267",
+    "observed": "App launched to Arabic Create Account screen; deep link did not reach match-details without authentication. No HighlightVideoSheet / AVPlayer session could be exercised."
+  },
+  "results": [],
+  "note": "Native AVPlayer first-frame rates remain unmeasured until an authenticated device/simulator session is available. Player-path probe covers production routing + network open checks for all 30 URLs."
+}

@@ -1,0 +1,1439 @@
+{
+  "createdAt": "2026-11-19T23:35:06.973Z",
+  "count": 30,
+  "results": [
+    {
+      "datasetId": "hl-1",
+      "highlightlyId": 713296,
+      "fixtureId": 4672275,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/a6799dcd",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+        "originalUrl": "https://streamin.link/v/a6799dcd",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 404,
+        "contentType": "text/html",
+        "acceptRanges": null,
+        "contentRange": null,
+        "finalUrl": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+        "okForNativePlayer": false,
+        "durationMs": 712,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_http_404",
+        "failureClass": "expired_or_missing_cdn",
+        "nativeErrorCode": null,
+        "httpStatus": 404,
+        "notes": [
+          "Range/GET probe failed — AVPlayer/ExoPlayer would fail to open source"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-2",
+      "highlightlyId": 713297,
+      "fixtureId": 4672275,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/d56ba792",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+        "originalUrl": "https://streamin.link/v/d56ba792",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/d56ba792.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 404,
+        "contentType": "text/html",
+        "acceptRanges": null,
+        "contentRange": null,
+        "finalUrl": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+        "okForNativePlayer": false,
+        "durationMs": 473,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_http_404",
+        "failureClass": "expired_or_missing_cdn",
+        "nativeErrorCode": null,
+        "httpStatus": 404,
+        "notes": [
+          "Range/GET probe failed — AVPlayer/ExoPlayer would fail to open source"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-3",
+      "highlightlyId": 713298,
+      "fixtureId": 4672275,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/b16e3822",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+        "originalUrl": "https://streamin.link/v/b16e3822",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/b16e3822.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 404,
+        "contentType": "text/html",
+        "acceptRanges": null,
+        "contentRange": null,
+        "finalUrl": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+        "okForNativePlayer": false,
+        "durationMs": 520,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_http_404",
+        "failureClass": "expired_or_missing_cdn",
+        "nativeErrorCode": null,
+        "httpStatus": 404,
+        "notes": [
+          "Range/GET probe failed — AVPlayer/ExoPlayer would fail to open source"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-4",
+      "highlightlyId": 714049,
+      "fixtureId": 4672267,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/562c68cb",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+        "originalUrl": "https://streamin.link/v/562c68cb",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/562c68cb.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/22276950",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 230,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-5",
+      "highlightlyId": 714050,
+      "fixtureId": 4672267,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/59e4a9b7",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+        "originalUrl": "https://streamin.link/v/59e4a9b7",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/18786713",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 226,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-6",
+      "highlightlyId": 713991,
+      "fixtureId": 4672266,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/1450e4f3",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+        "originalUrl": "https://streamin.link/v/1450e4f3",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/15944107",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 306,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-7",
+      "highlightlyId": 713992,
+      "fixtureId": 4672267,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/40a43e54",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+        "originalUrl": "https://streamin.link/v/40a43e54",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/40a43e54.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/16972193",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 227,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-8",
+      "highlightlyId": 713993,
+      "fixtureId": 4672266,
+      "sourceClass": "direct_mp4",
+      "category": "goal-clip",
+      "url": "https://streamin.link/v/3196d63a",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+        "originalUrl": "https://streamin.link/v/3196d63a",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/3196d63a.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/15411074",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 244,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-9",
+      "highlightlyId": 714170,
+      "fixtureId": 4874691,
+      "sourceClass": "direct_mp4",
+      "category": "match-highlights",
+      "url": "https://streamin.link/v/defe9a1c",
+      "pathInfo": {
+        "playerPath": "direct_expo_video",
+        "productionComponent": "HighlightVideoSheet/DirectClipPlayer",
+        "nativeEngine": {
+          "ios": "AVPlayer(expo-video)",
+          "android": "ExoPlayer(expo-video)"
+        },
+        "urlUsed": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+        "originalUrl": "https://streamin.link/v/defe9a1c",
+        "fileUrl": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4"
+      },
+      "probe": {
+        "kind": "direct_mp4",
+        "httpStatus": 206,
+        "contentType": "video/mp4",
+        "acceptRanges": null,
+        "contentRange": "bytes 0-1/16452490",
+        "finalUrl": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+        "okForNativePlayer": true,
+        "durationMs": 231,
+        "error": null
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "network_ok_native_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 206,
+        "notes": [
+          "Source is reachable with video content-type/range — native first-frame still requires device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": true
+    },
+    {
+      "datasetId": "hl-10",
+      "highlightlyId": 715301,
+      "fixtureId": 4632606,
+      "sourceClass": "youtube",
+      "category": "goal-clip",
+      "url": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/V9qllhxVcG8?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+        "fileUrl": "https://www.youtube.com/watch?v=V9qllhxVcG8"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 581,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-11",
+      "highlightlyId": 714145,
+      "fixtureId": 4874696,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=lmJAiAVi684",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/lmJAiAVi684?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=lmJAiAVi684",
+        "fileUrl": "https://www.youtube.com/watch?v=lmJAiAVi684"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 309,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-12",
+      "highlightlyId": 714157,
+      "fixtureId": 4716613,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/t6zhOiC-9jU?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+        "fileUrl": "https://www.youtube.com/watch?v=t6zhOiC-9jU"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 185,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-13",
+      "highlightlyId": 714207,
+      "fixtureId": 4883956,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/pZHILnAF8BQ?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+        "fileUrl": "https://www.youtube.com/watch?v=pZHILnAF8BQ"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 173,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-14",
+      "highlightlyId": 714211,
+      "fixtureId": 4883958,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/tKeNMjM4jtM?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+        "fileUrl": "https://www.youtube.com/watch?v=tKeNMjM4jtM"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 168,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-15",
+      "highlightlyId": 714212,
+      "fixtureId": 4883957,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/jvtDnjRxk8E?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+        "fileUrl": "https://www.youtube.com/watch?v=jvtDnjRxk8E"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 210,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-16",
+      "highlightlyId": 714400,
+      "fixtureId": 4672269,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/tAMEjxuT46s?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+        "fileUrl": "https://www.youtube.com/watch?v=tAMEjxuT46s"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 164,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-17",
+      "highlightlyId": 714846,
+      "fixtureId": 4672270,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/mlR_YmMWkx4?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+        "fileUrl": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 176,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-18",
+      "highlightlyId": 713295,
+      "fixtureId": 4874702,
+      "sourceClass": "other",
+      "category": "goal-clip",
+      "url": "https://streama.in/xFF4KIuuQh47r64/watch",
+      "pathInfo": {
+        "playerPath": "unsupported_error_ui",
+        "productionComponent": "HighlightVideoSheet/errorText",
+        "nativeEngine": {
+          "ios": "none",
+          "android": "none"
+        },
+        "urlUsed": "https://streama.in/xFF4KIuuQh47r64/watch",
+        "originalUrl": "https://streama.in/xFF4KIuuQh47r64/watch",
+        "fileUrl": "https://streama.in/xFF4KIuuQh47r64/watch",
+        "note": "Production shows hardcoded geo unavailable message without mounting a player"
+      },
+      "probe": {
+        "kind": "none",
+        "ok": false
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_unsupported",
+        "failureClass": "unsupported_source_no_player",
+        "nativeErrorCode": null,
+        "httpStatus": null,
+        "notes": [
+          "Production never mounts AVPlayer/ExoPlayer/WebView for this URL"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-19",
+      "highlightlyId": 714180,
+      "fixtureId": 4874690,
+      "sourceClass": "other",
+      "category": "goal-clip",
+      "url": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+      "pathInfo": {
+        "playerPath": "unsupported_error_ui",
+        "productionComponent": "HighlightVideoSheet/errorText",
+        "nativeEngine": {
+          "ios": "none",
+          "android": "none"
+        },
+        "urlUsed": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+        "originalUrl": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+        "fileUrl": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+        "note": "Production shows hardcoded geo unavailable message without mounting a player"
+      },
+      "probe": {
+        "kind": "none",
+        "ok": false
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_unsupported",
+        "failureClass": "unsupported_source_no_player",
+        "nativeErrorCode": null,
+        "httpStatus": null,
+        "notes": [
+          "Production never mounts AVPlayer/ExoPlayer/WebView for this URL"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-20",
+      "highlightlyId": 714999,
+      "fixtureId": 4632606,
+      "sourceClass": "other",
+      "category": "match-highlights",
+      "url": "https://x.com/GVids12/status/2123200299087114387/video/1",
+      "pathInfo": {
+        "playerPath": "unsupported_error_ui",
+        "productionComponent": "HighlightVideoSheet/errorText",
+        "nativeEngine": {
+          "ios": "none",
+          "android": "none"
+        },
+        "urlUsed": "https://x.com/GVids12/status/2123200299087114387/video/1",
+        "originalUrl": "https://x.com/GVids12/status/2123200299087114387/video/1",
+        "fileUrl": "https://x.com/GVids12/status/2123200299087114387/video/1",
+        "note": "Production shows hardcoded geo unavailable message without mounting a player"
+      },
+      "probe": {
+        "kind": "none",
+        "ok": false
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_unsupported",
+        "failureClass": "unsupported_source_no_player",
+        "nativeErrorCode": null,
+        "httpStatus": null,
+        "notes": [
+          "Production never mounts AVPlayer/ExoPlayer/WebView for this URL"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-21",
+      "highlightlyId": 715000,
+      "fixtureId": 4632606,
+      "sourceClass": "other",
+      "category": "match-highlights",
+      "url": "https://x.com/GVids12/status/2123201488763703308/video/1",
+      "pathInfo": {
+        "playerPath": "unsupported_error_ui",
+        "productionComponent": "HighlightVideoSheet/errorText",
+        "nativeEngine": {
+          "ios": "none",
+          "android": "none"
+        },
+        "urlUsed": "https://x.com/GVids12/status/2123201488763703308/video/1",
+        "originalUrl": "https://x.com/GVids12/status/2123201488763703308/video/1",
+        "fileUrl": "https://x.com/GVids12/status/2123201488763703308/video/1",
+        "note": "Production shows hardcoded geo unavailable message without mounting a player"
+      },
+      "probe": {
+        "kind": "none",
+        "ok": false
+      },
+      "playback": {
+        "initSuccess": false,
+        "playbackStarted": false,
+        "blackScreen": false,
+        "finalResult": "fail_unsupported",
+        "failureClass": "unsupported_source_no_player",
+        "nativeErrorCode": null,
+        "httpStatus": null,
+        "notes": [
+          "Production never mounts AVPlayer/ExoPlayer/WebView for this URL"
+        ]
+      },
+      "gemini": {
+        "status": null,
+        "football": null,
+        "ok": false
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-22",
+      "highlightlyId": 714847,
+      "fixtureId": 4672270,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/LWO8D1AbOkA?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+        "fileUrl": "https://www.youtube.com/watch?v=LWO8D1AbOkA"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 193,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-23",
+      "highlightlyId": 714961,
+      "fixtureId": 4672268,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/pwSPpWYhZ7I?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+        "fileUrl": "https://www.youtube.com/watch?v=pwSPpWYhZ7I"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 218,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-24",
+      "highlightlyId": 714962,
+      "fixtureId": 4672268,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/QcmBcqwCiEQ?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+        "fileUrl": "https://www.youtube.com/watch?v=QcmBcqwCiEQ"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 235,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-25",
+      "highlightlyId": 714963,
+      "fixtureId": 4672268,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://youtu.be/048qqgfpgbs",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/048qqgfpgbs?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://youtu.be/048qqgfpgbs",
+        "fileUrl": "https://youtu.be/048qqgfpgbs"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 240,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-26",
+      "highlightlyId": 714154,
+      "fixtureId": 4883952,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/Gd8VUyzItW4?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+        "fileUrl": "https://www.youtube.com/watch?v=Gd8VUyzItW4"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 210,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-27",
+      "highlightlyId": 714155,
+      "fixtureId": 4883953,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/pnwwsDj6FjU?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+        "fileUrl": "https://www.youtube.com/watch?v=pnwwsDj6FjU"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 237,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-28",
+      "highlightlyId": 715298,
+      "fixtureId": 4632601,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/UpNjpZf46d0?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+        "fileUrl": "https://www.youtube.com/watch?v=UpNjpZf46d0"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 210,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-29",
+      "highlightlyId": 714152,
+      "fixtureId": 4716607,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/BwQqSiZssNg?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+        "fileUrl": "https://www.youtube.com/watch?v=BwQqSiZssNg"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 214,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    },
+    {
+      "datasetId": "hl-30",
+      "highlightlyId": 714162,
+      "fixtureId": 4883951,
+      "sourceClass": "youtube",
+      "category": "match-highlights",
+      "url": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+      "pathInfo": {
+        "playerPath": "youtube_webview",
+        "productionComponent": "HighlightVideoSheet/WebView",
+        "nativeEngine": {
+          "ios": "WKWebView+YouTubeEmbed",
+          "android": "WebView+YouTubeEmbed"
+        },
+        "urlUsed": "https://www.youtube-nocookie.com/embed/qc2QmxTFs-g?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro",
+        "originalUrl": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+        "fileUrl": "https://www.youtube.com/watch?v=qc2QmxTFs-g"
+      },
+      "probe": {
+        "kind": "youtube_embed",
+        "httpStatus": 200,
+        "geoBlockedHint": false,
+        "embedDisabledHint": false,
+        "errorCodes": [],
+        "playerPresent": true,
+        "okForWebViewEmbed": true,
+        "durationMs": 170,
+        "error": null,
+        "note": "HTML probe approximates WebView embed; not identical to WKWebView/Android WebView runtime"
+      },
+      "playback": {
+        "initSuccess": true,
+        "playbackStarted": null,
+        "blackScreen": null,
+        "finalResult": "embed_html_ok_webview_unverified",
+        "failureClass": null,
+        "nativeErrorCode": null,
+        "httpStatus": 200,
+        "notes": [
+          "Embed HTML looks healthy — WKWebView/Android WebView still needs device confirmation"
+        ]
+      },
+      "gemini": {
+        "status": "valid",
+        "football": true,
+        "ok": true
+      },
+      "phase2DecodingOk": false
+    }
+  ]
+}

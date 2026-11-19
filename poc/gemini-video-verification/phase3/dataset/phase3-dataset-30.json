@@ -1,0 +1,861 @@
+{
+  "createdAt": "2026-11-19T23:34:59.770Z",
+  "note": "Exact Phase 2 set preserved. No replacement of failed videos.",
+  "selectedCount": 30,
+  "videos": [
+    {
+      "datasetId": "hl-1",
+      "highlightlyId": 713296,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/a6799dcd",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/a6799dcd.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 404,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "http_404"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unavailable",
+        "gtPlayableHint": "no"
+      }
+    },
+    {
+      "datasetId": "hl-2",
+      "highlightlyId": 713297,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/d56ba792",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/d56ba792.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 404,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "http_404"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unavailable",
+        "gtPlayableHint": "no"
+      }
+    },
+    {
+      "datasetId": "hl-3",
+      "highlightlyId": 713298,
+      "fixtureId": 4672275,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Germany vs Netherlands",
+      "url": "https://streamin.link/v/b16e3822",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/b16e3822.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 404,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "http_404"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unavailable",
+        "gtPlayableHint": "no"
+      }
+    },
+    {
+      "datasetId": "hl-4",
+      "highlightlyId": 714049,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/562c68cb",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/562c68cb.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1536,
+        "height": 864,
+        "durationSec": 25.366667,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-5",
+      "highlightlyId": 714050,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/59e4a9b7",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/59e4a9b7.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1536,
+        "height": 864,
+        "durationSec": 28.1,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-6",
+      "highlightlyId": 713991,
+      "fixtureId": 4672266,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Wales vs Portugal",
+      "url": "https://streamin.link/v/1450e4f3",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/1450e4f3.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1536,
+        "height": 864,
+        "durationSec": 26.5,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-7",
+      "highlightlyId": 713992,
+      "fixtureId": 4672267,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Denmark vs Norway",
+      "url": "https://streamin.link/v/40a43e54",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/40a43e54.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1536,
+        "height": 864,
+        "durationSec": 26.266667,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-8",
+      "highlightlyId": 713993,
+      "fixtureId": 4672266,
+      "category": "goal-clip",
+      "title": "UEFA Nations League: Wales vs Portugal",
+      "url": "https://streamin.link/v/3196d63a",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/3196d63a.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1536,
+        "height": 864,
+        "durationSec": 25.333333,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-9",
+      "highlightlyId": 714170,
+      "fixtureId": 4874691,
+      "category": "match-highlights",
+      "title": "CONCACAF Nations League: USA vs Haiti",
+      "url": "https://streamin.link/v/defe9a1c",
+      "embedUrl": null,
+      "playbackUrl": "https://c-cdn.streamin.top/uploads/defe9a1c.mp4",
+      "sourceClass": "direct_mp4",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": true,
+        "codec": "h264",
+        "width": 1280,
+        "height": 720,
+        "durationSec": 21.4,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid",
+        "gtPlayableHint": "likely_ffmpeg_ok_native_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-10",
+      "highlightlyId": 715301,
+      "fixtureId": 4632606,
+      "category": "goal-clip",
+      "title": "A fantastic goal from midfield, a comeback victory, and Flamengo on their way to a second Brazili...",
+      "url": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+      "embedUrl": "https://www.youtube.com/embed/V9qllhxVcG8",
+      "playbackUrl": "https://www.youtube.com/watch?v=V9qllhxVcG8",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-11",
+      "highlightlyId": 714145,
+      "fixtureId": 4874696,
+      "category": "match-highlights",
+      "title": "CONCACAF Nations League: Belize vs Sint Maarten",
+      "url": "https://www.youtube.com/watch?v=lmJAiAVi684",
+      "embedUrl": "https://www.youtube.com/embed/lmJAiAVi684",
+      "playbackUrl": "https://www.youtube.com/watch?v=lmJAiAVi684",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-12",
+      "highlightlyId": 714157,
+      "fixtureId": 4716613,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Mauritania vs Burkina Faso",
+      "url": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+      "embedUrl": "https://www.youtube.com/embed/t6zhOiC-9jU",
+      "playbackUrl": "https://www.youtube.com/watch?v=t6zhOiC-9jU",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-13",
+      "highlightlyId": 714207,
+      "fixtureId": 4883956,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Botswana vs Uganda",
+      "url": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+      "embedUrl": "https://www.youtube.com/embed/pZHILnAF8BQ",
+      "playbackUrl": "https://www.youtube.com/watch?v=pZHILnAF8BQ",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-14",
+      "highlightlyId": 714211,
+      "fixtureId": 4883958,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Liberia vs Cape Verde",
+      "url": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+      "embedUrl": "https://www.youtube.com/embed/tKeNMjM4jtM",
+      "playbackUrl": "https://www.youtube.com/watch?v=tKeNMjM4jtM",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-15",
+      "highlightlyId": 714212,
+      "fixtureId": 4883957,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Rwanda vs Mali",
+      "url": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+      "embedUrl": "https://www.youtube.com/embed/jvtDnjRxk8E",
+      "playbackUrl": "https://www.youtube.com/watch?v=jvtDnjRxk8E",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-16",
+      "highlightlyId": 714400,
+      "fixtureId": 4672269,
+      "category": "match-highlights",
+      "title": "Izrael vs. Austrija 1:1 // Golovi sa Utakmice // LIGA NACIJA - 6. kolo // SPORT KLUB",
+      "url": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+      "embedUrl": "https://www.youtube.com/embed/tAMEjxuT46s",
+      "playbackUrl": "https://www.youtube.com/watch?v=tAMEjxuT46s",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-17",
+      "highlightlyId": 714846,
+      "fixtureId": 4672270,
+      "category": "match-highlights",
+      "title": "UEFA Nations League: Ukraine vs Georgia",
+      "url": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+      "embedUrl": "https://www.youtube.com/embed/mlR_YmMWkx4",
+      "playbackUrl": "https://youtu.be/mlR_YmMWkx4?si=JA-nYTySmsLX37d8",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-18",
+      "highlightlyId": 713295,
+      "fixtureId": 4874702,
+      "category": "goal-clip",
+      "title": "CONCACAF Nations League: Cuba vs Grenada",
+      "url": "https://streama.in/xFF4KIuuQh47r64/watch",
+      "embedUrl": null,
+      "playbackUrl": "https://streama.in/xFF4KIuuQh47r64/watch",
+      "sourceClass": "other",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "non_video_content_type_or_unknown_host"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unsupported_direct",
+        "gtPlayableHint": "no_direct_file"
+      }
+    },
+    {
+      "datasetId": "hl-19",
+      "highlightlyId": 714180,
+      "fixtureId": 4874690,
+      "category": "goal-clip",
+      "title": "CONCACAF Nations League: El Salvador vs Saint Martin",
+      "url": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+      "embedUrl": null,
+      "playbackUrl": "https://streama.in/NizcYr7uWd5cqFQ/watch",
+      "sourceClass": "other",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "non_video_content_type_or_unknown_host"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unsupported_direct",
+        "gtPlayableHint": "no_direct_file"
+      }
+    },
+    {
+      "datasetId": "hl-20",
+      "highlightlyId": 714999,
+      "fixtureId": 4632606,
+      "category": "match-highlights",
+      "title": "Serie A: Flamengo vs Athletico Paranaense",
+      "url": "https://x.com/GVids12/status/2123200299087114387/video/1",
+      "embedUrl": null,
+      "playbackUrl": "https://x.com/GVids12/status/2123200299087114387/video/1",
+      "sourceClass": "other",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "non_video_content_type_or_unknown_host"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unsupported_direct",
+        "gtPlayableHint": "no_direct_file"
+      }
+    },
+    {
+      "datasetId": "hl-21",
+      "highlightlyId": 715000,
+      "fixtureId": 4632606,
+      "category": "match-highlights",
+      "title": "Serie A: Flamengo vs Athletico Paranaense",
+      "url": "https://x.com/GVids12/status/2123201488763703308/video/1",
+      "embedUrl": null,
+      "playbackUrl": "https://x.com/GVids12/status/2123201488763703308/video/1",
+      "sourceClass": "other",
+      "source": "other",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": null,
+        "geminiFootball": null,
+        "geminiOk": false,
+        "errors": [
+          "non_video_content_type_or_unknown_host"
+        ]
+      },
+      "groundTruth": {
+        "gtVisual": "unsupported_direct",
+        "gtPlayableHint": "no_direct_file"
+      }
+    },
+    {
+      "datasetId": "hl-22",
+      "highlightlyId": 714847,
+      "fixtureId": 4672270,
+      "category": "match-highlights",
+      "title": "UEFA Nations League: Ukraine vs Georgia",
+      "url": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+      "embedUrl": "https://www.youtube.com/embed/LWO8D1AbOkA",
+      "playbackUrl": "https://www.youtube.com/watch?v=LWO8D1AbOkA",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-23",
+      "highlightlyId": 714961,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+      "embedUrl": "https://www.youtube.com/embed/pwSPpWYhZ7I",
+      "playbackUrl": "https://www.youtube.com/watch?v=pwSPpWYhZ7I",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-24",
+      "highlightlyId": 714962,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+      "embedUrl": "https://www.youtube.com/embed/QcmBcqwCiEQ",
+      "playbackUrl": "https://www.youtube.com/watch?v=QcmBcqwCiEQ",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-25",
+      "highlightlyId": 714963,
+      "fixtureId": 4672268,
+      "category": "match-highlights",
+      "title": "UEFA Nations League: Bosnia & Herzegovina vs Romania",
+      "url": "https://youtu.be/048qqgfpgbs",
+      "embedUrl": "https://www.youtube.com/embed/048qqgfpgbs",
+      "playbackUrl": "https://youtu.be/048qqgfpgbs",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-26",
+      "highlightlyId": 714154,
+      "fixtureId": 4883952,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Gambia vs Ivory Coast",
+      "url": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+      "embedUrl": "https://www.youtube.com/embed/Gd8VUyzItW4",
+      "playbackUrl": "https://www.youtube.com/watch?v=Gd8VUyzItW4",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-27",
+      "highlightlyId": 714155,
+      "fixtureId": 4883953,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Kenya vs South Africa",
+      "url": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+      "embedUrl": "https://www.youtube.com/embed/pnwwsDj6FjU",
+      "playbackUrl": "https://www.youtube.com/watch?v=pnwwsDj6FjU",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-28",
+      "highlightlyId": 715298,
+      "fixtureId": 4632601,
+      "category": "match-highlights",
+      "title": "Cruzeiro vs. Palmeiras 2-1 I Game Highlights I Brasileirão 2026",
+      "url": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+      "embedUrl": "https://www.youtube.com/embed/UpNjpZf46d0",
+      "playbackUrl": "https://www.youtube.com/watch?v=UpNjpZf46d0",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-29",
+      "highlightlyId": 714152,
+      "fixtureId": 4716607,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Malawi vs Egypt",
+      "url": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+      "embedUrl": "https://www.youtube.com/embed/BwQqSiZssNg",
+      "playbackUrl": "https://www.youtube.com/watch?v=BwQqSiZssNg",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    },
+    {
+      "datasetId": "hl-30",
+      "highlightlyId": 714162,
+      "fixtureId": 4883951,
+      "category": "match-highlights",
+      "title": "Africa Cup of Nations - Qualification: Tanzania vs Nigeria",
+      "url": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+      "embedUrl": "https://www.youtube.com/embed/qc2QmxTFs-g",
+      "playbackUrl": "https://www.youtube.com/watch?v=qc2QmxTFs-g",
+      "sourceClass": "youtube",
+      "source": "youtube",
+      "phase2": {
+        "httpStatus": 200,
+        "decodingOk": false,
+        "codec": null,
+        "width": null,
+        "height": null,
+        "durationSec": null,
+        "geminiStatus": "valid",
+        "geminiFootball": true,
+        "geminiOk": true,
+        "errors": []
+      },
+      "groundTruth": {
+        "gtVisual": "valid_thumbnail",
+        "gtPlayableHint": "youtube_embed_unverified"
+      }
+    }
+  ]
+}

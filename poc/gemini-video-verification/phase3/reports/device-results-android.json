@@ -1,0 +1,15 @@
+{
+  "platform": "android",
+  "status": "session_started_auth_unverified",
+  "successRate": null,
+  "session": {
+    "simulatorSessionId": "01a1f62a-1712-719f-abbf-f88ecd3d0f1b",
+    "buildId": "c197649c-eae9-4c84-b563-96d0faef3c5f",
+    "buildProfile": "preview",
+    "dashboardUrl": "https://expo.dev/accounts/90-plus-app/projects/90plus/simulator-sessions/01a1f62a-1712-719f-abbf-f88ecd3d0f1b",
+    "openUrlAttempted": "ninetyplus:///(tabs)/match-details?fixtureId=4672267",
+    "observed": "Cloud Android session was started but stopped after iOS confirmed an auth wall. No ExoPlayer first-frame samples were collected in this run."
+  },
+  "results": [],
+  "note": "Native ExoPlayer first-frame rates remain unmeasured until an authenticated device/simulator session is available."
+}
