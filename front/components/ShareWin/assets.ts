@@ -75,25 +75,25 @@ export const SW_ASSET = {
  * `DEFAULT_PRIZES`. A cycle that supplies its own `imageUrl` overrides these.
  */
 export const PRIZE_FALLBACK_IMAGE: Record<string, number> = {
-  ps5: require('../../assets/images/share-win/prize-ps5.png'),
-  kit: require('../../assets/images/share-win/prize-kit.png'),
-  'kit-2': require('../../assets/images/share-win/prize-kit.png'),
-  jersey: require('../../assets/images/share-win/prize-jersey-sm.png'),
-  'jersey-2': require('../../assets/images/share-win/prize-jersey-sm.png'),
-  'jersey-3': require('../../assets/images/share-win/prize-jersey-sm.png'),
-  'jersey-4': require('../../assets/images/share-win/prize-jersey-sm.png'),
-  football: require('../../assets/images/share-win/prize-jersey-sm.png'),
-  boots: require('../../assets/images/share-win/prize-jersey-sm.png'),
-  'boots-pro': require('../../assets/images/share-win/prize-jersey-sm.png'),
+  ps5: require('../../assets/images/share-win/prize-ps5.jpg'),
+  kit: require('../../assets/images/share-win/prize-kit.jpg'),
+  'kit-2': require('../../assets/images/share-win/prize-kit.jpg'),
+  jersey: require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  'jersey-2': require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  'jersey-3': require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  'jersey-4': require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  football: require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  boots: require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  'boots-pro': require('../../assets/images/share-win/prize-jersey-sm.jpg'),
 };
 
 /** Ordered fallbacks: 1st PS5, 2nd/3rd kit, then jerseys only. */
 export const PRIZE_FALLBACK_ORDER = [
-  require('../../assets/images/share-win/prize-ps5.png'),
-  require('../../assets/images/share-win/prize-kit.png'),
-  require('../../assets/images/share-win/prize-kit.png'),
-  require('../../assets/images/share-win/prize-jersey-sm.png'),
-  require('../../assets/images/share-win/prize-jersey-sm.png'),
+  require('../../assets/images/share-win/prize-ps5.jpg'),
+  require('../../assets/images/share-win/prize-kit.jpg'),
+  require('../../assets/images/share-win/prize-kit.jpg'),
+  require('../../assets/images/share-win/prize-jersey-sm.jpg'),
+  require('../../assets/images/share-win/prize-jersey-sm.jpg'),
 ];
 
 /** Medal art for ranks 1-3; ranks 4+ render a plain number instead. */

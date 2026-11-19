@@ -7,7 +7,7 @@ import { CoachArrowIcon } from './CoachKingIcons';
 
 const PAGE_BG = '#030303';
 const PROMO = require('../../assets/images/coach-king/banner/promo.png');
-const WEEK_HERO = require('../../assets/images/coach-king/coach-week-hero.png');
+const WEEK_HERO = require('../../assets/images/coach-king/coach-week-hero.jpg');
 const WEEK_BADGE = require('../../assets/images/coach-king/coach-week-badge.png');
 /** Figma promo artboard 404×161. */
 const PROMO_RATIO = 404 / 161;

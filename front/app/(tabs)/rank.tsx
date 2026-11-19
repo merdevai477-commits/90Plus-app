@@ -106,11 +106,11 @@ export default function RankScreen() {
   /** Stack art from Figma — same cards in light and dark. */
   const stackArt = useMemo(
     () => ({
-      share: require('../../assets/images/rank/figma-light/comp-share.png') as ImageSourcePropType,
-      scorers: require('../../assets/images/rank/figma-light/comp-scorers.png') as ImageSourcePropType,
-      predictions: require('../../assets/images/rank/figma-light/comp-predictions.png') as ImageSourcePropType,
-      coach: require('../../assets/images/rank/figma-light/comp-coach.png') as ImageSourcePropType,
-      sponsors: require('../../assets/images/rank/figma-light/comp-sponsors.png') as ImageSourcePropType,
+      share: require('../../assets/images/rank/figma-light/comp-share.jpg') as ImageSourcePropType,
+      scorers: require('../../assets/images/rank/figma-light/comp-scorers.jpg') as ImageSourcePropType,
+      predictions: require('../../assets/images/rank/figma-light/comp-predictions.jpg') as ImageSourcePropType,
+      coach: require('../../assets/images/rank/figma-light/comp-coach.jpg') as ImageSourcePropType,
+      sponsors: require('../../assets/images/rank/figma-light/comp-sponsors.jpg') as ImageSourcePropType,
     }),
     [],
   );

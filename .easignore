@@ -123,25 +123,26 @@ front/assets/Quiz/
 front/assets/images/*.original.png
 front/assets/images/**/*.original.png
 front/assets/images/around-card.png
-front/assets/images/around-card.original.png
-front/assets/images/create contant.png
-front/assets/images/no videos yet.png
-front/assets/images/Treading highlights.png
-front/assets/images/team of the month.png
-front/assets/images/1st.png
-front/assets/images/2st.png
-front/assets/images/3st.png
-front/assets/images/4st.png
-front/assets/images/5st.png
-front/assets/images/6st.png
-front/assets/images/7st.png
-front/assets/images/90Plus world cup.png
-front/assets/images/arena.png
-front/assets/images/arena_profile.png
-front/assets/images/auth-hero.png
-front/assets/images/plear 90Plus.png
-front/assets/images/profile-card-back.png
-front/assets/images/store.png
+front/assets/images/around-card.png
+front/assets/images/around-card.original.jpg
+front/assets/images/create contant.jpg
+front/assets/images/no videos yet.jpg
+front/assets/images/Treading highlights.jpg
+front/assets/images/team of the month.jpg
+front/assets/images/1st.jpg
+front/assets/images/2st.jpg
+front/assets/images/3st.jpg
+front/assets/images/4st.jpg
+front/assets/images/5st.jpg
+front/assets/images/6st.jpg
+front/assets/images/7st.jpg
+front/assets/images/90Plus world cup.jpg
+front/assets/images/arena.jpg
+front/assets/images/arena_profile.jpg
+front/assets/images/auth-hero.jpg
+front/assets/images/plear 90Plus.jpg
+front/assets/images/profile-card-back.jpg
+front/assets/images/store.jpg
 front/assets/images/daily-quiz.png
 front/assets/images/football.png
 front/assets/images/football-quiz.png
@@ -151,8 +152,12 @@ front/assets/images/player-connection.png
 front/assets/images/questions-frame.png
 front/assets/images/share.png
 front/assets/images/top-challenge.png
-front/assets/images/auth-reference.png
-front/assets/images/rank/comp-engagement.png
+front/assets/images/auth-reference.jpg
+front/assets/images/rank/comp-engagement.jpg
+front/assets/images/share-win/prize-football.jpg
+front/assets/images/top-scorers-five/showcase/points-banner.jpg
+front/assets/90plus logo new.jpg
+front/assets/90plus-logo.jpg
 
 # 90plus.pro website (Vite), not part of the mobile app
 /web/

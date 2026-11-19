@@ -22,7 +22,7 @@ import {
 import { AuthThemeProvider, useAuthTheme } from '@/src/components/auth/useAuthTheme';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 
-const LANDING_HERO = require('../../assets/images/auth/figma/auth-landing-hero.png');
+const LANDING_HERO = require('../../assets/images/auth/figma/auth-landing-hero.jpg');
 
 /**
  * Auth landing — Figma 1620:5898 (light) + dark adaptation of the same layout.

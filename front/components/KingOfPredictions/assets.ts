@@ -12,7 +12,7 @@ export const KING_ART = {
   emptyBlob: require('../../assets/images/king-of-predictions/empty-blob.svg'),
   emptyGoal: require('../../assets/images/king-of-predictions/empty-goal.png'),
   scoreBox: require('../../assets/images/king-of-predictions/score-box.svg'),
-  promoBanner: require('../../assets/images/king-of-predictions/promo-banner.png'),
+  promoBanner: require('../../assets/images/king-of-predictions/promo-banner.jpg'),
   courtIcon: require('../../assets/images/king-of-predictions/icon-court.svg'),
   podiumTop1: require('../../assets/images/king-of-predictions/podium-top-1.svg'),
   podiumTop2: require('../../assets/images/king-of-predictions/podium-top-2.svg'),

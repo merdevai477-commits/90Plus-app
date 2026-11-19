@@ -47,12 +47,12 @@ const SHOWCASE: readonly TsfCompetitionKey[] = [
 ];
 
 const PORTRAIT: Record<TsfCompetitionKey, number> = {
-  bundesliga: require('../../assets/images/top-scorers-five/showcase/bundesliga.png'),
-  laliga: require('../../assets/images/top-scorers-five/showcase/laliga.png'),
-  pl: require('../../assets/images/top-scorers-five/showcase/pl.png'),
-  seriea: require('../../assets/images/top-scorers-five/showcase/seriea.png'),
-  egypt: require('../../assets/images/top-scorers-five/showcase/egypt.png'),
-  ligue1: require('../../assets/images/top-scorers-five/showcase/ligue1.png'),
+  bundesliga: require('../../assets/images/top-scorers-five/showcase/bundesliga.jpg'),
+  laliga: require('../../assets/images/top-scorers-five/showcase/laliga.jpg'),
+  pl: require('../../assets/images/top-scorers-five/showcase/pl.jpg'),
+  seriea: require('../../assets/images/top-scorers-five/showcase/seriea.jpg'),
+  egypt: require('../../assets/images/top-scorers-five/showcase/egypt.jpg'),
+  ligue1: require('../../assets/images/top-scorers-five/showcase/ligue1.jpg'),
 };
 
 const CREST: Record<TsfCompetitionKey, number> = {
