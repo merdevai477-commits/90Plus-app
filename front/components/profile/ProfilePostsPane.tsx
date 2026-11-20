@@ -50,29 +50,30 @@ export function ProfilePostsPane({ username }: { username: string }) {
   return (
     <View style={[styles.list, { paddingHorizontal: metrics.sidePad }]}>
       {feed.posts.map((post, index) => (
-        <PostCard
-          key={post.id}
-          post={post}
-          contentWidth={metrics.contentWidth}
-          isAr={isAr}
-          timeLabel={formatRelativeTime(post.createdAt, s)}
-          fonts={fonts}
-          seeMore={s.seeMore}
-          seeLess={s.seeLess}
-          labels={labels}
-          imagePriority={index < 2 ? 'high' : 'low'}
-          onLike={actions.toggleLike}
-          onDoubleTapLike={actions.likeOnce}
-          onComment={setSheetPost}
-          onShare={(item) => void actions.share(item)}
-          onMenu={() => undefined}
-          onOpenImage={(item) => item.image && setSheetPost(item)}
-          onProfile={actions.openProfile}
-          onHashtag={actions.openHashtag}
-          onMention={actions.openProfile}
-          onFollow={actions.toggleFollow}
-          onVote={actions.votePoll}
-        />
+        <View key={post.id} style={styles.elevatedCard}>
+          <PostCard
+            post={post}
+            contentWidth={metrics.contentWidth}
+            isAr={isAr}
+            timeLabel={formatRelativeTime(post.createdAt, s)}
+            fonts={fonts}
+            seeMore={s.seeMore}
+            seeLess={s.seeLess}
+            labels={labels}
+            imagePriority={index < 2 ? 'high' : 'low'}
+            onLike={actions.toggleLike}
+            onDoubleTapLike={actions.likeOnce}
+            onComment={setSheetPost}
+            onShare={(item) => void actions.share(item)}
+            onMenu={() => undefined}
+            onOpenImage={(item) => item.image && setSheetPost(item)}
+            onProfile={actions.openProfile}
+            onHashtag={actions.openHashtag}
+            onMention={actions.openProfile}
+            onFollow={actions.toggleFollow}
+            onVote={actions.votePoll}
+          />
+        </View>
       ))}
       {feed.hasNextPage ? (
         <Text
@@ -88,7 +89,19 @@ export function ProfilePostsPane({ username }: { username: string }) {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 16, paddingTop: 12, paddingBottom: 24 },
+  list: { gap: 14, paddingTop: 12, paddingBottom: 24 },
+  elevatedCard: {
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.12)',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    overflow: 'hidden',
+  },
   pad: { marginVertical: 28 },
   empty: { textAlign: 'center', marginVertical: 28, paddingHorizontal: 24 },
   more: { textAlign: 'center', fontWeight: '700', paddingVertical: 12 },

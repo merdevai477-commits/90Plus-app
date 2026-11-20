@@ -103,8 +103,8 @@ export default ProfileMetricStrip;
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 20,
-    borderRadius: 20,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingVertical: 8,
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -112,8 +112,15 @@ const styles = StyleSheet.create({
     backgroundColor: ProfileTheme.colors.profileCard,
   },
   socialCard: {
-    marginTop: 14,
-    height: 90,
+    marginTop: 10,
+    height: 72,
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.12)',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   performanceCard: {
     marginTop: 12,
@@ -134,7 +141,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     width: 1,
-    height: 44,
+    height: 34,
     backgroundColor: ProfileTheme.colors.divider,
   },
   perfDivider: {
@@ -148,8 +155,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   socialCell: {
-    width: 116,
-    gap: 1,
+    width: 110,
+    gap: 0,
   },
   perfCell: {
     width: '100%',
@@ -166,22 +173,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   socialIconBox: {
-    width: 23,
-    height: 22,
+    width: 18,
+    height: 18,
   },
   icon: {
     width: 28,
     height: 28,
   },
   socialIcon: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     tintColor: ProfileTheme.colors.profilePrimary,
   },
   copy: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 1,
     width: '100%',
   },
   value: {
@@ -191,7 +198,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   socialValue: {
-    fontSize: 23,
+    fontSize: 18,
   },
   label: {
     color: ProfileTheme.colors.profileMuted,
@@ -201,7 +208,7 @@ const styles = StyleSheet.create({
   },
   socialLabel: {
     color: ProfileTheme.colors.textPrimary,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '400',
   },
   perfLabel: {

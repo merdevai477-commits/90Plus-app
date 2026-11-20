@@ -135,7 +135,7 @@ export default ProfileAffiliationBar;
 const styles = StyleSheet.create({
   wrap: {
     marginHorizontal: 20,
-    marginTop: 12,
+    marginTop: 10,
     height: 76,
     borderRadius: 20,
     backgroundColor: ProfileTheme.colors.profileCard,
@@ -144,6 +144,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.12)',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   levelBlock: {
     width: 105,

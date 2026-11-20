@@ -2454,6 +2454,7 @@ export const ar = {
     viewAllPredictions: 'مشاهدة الكل',
     showMore: 'عرض المزيد',
     showLess: 'عرض أقل',
+    viewAllBio: 'مشاهدة الكل',
     predictNow: 'توقع الآن',
     coinsEarned: 'كوينز مكتسبة من التوقعات',
     achievementsTitle: 'الإنجازات',

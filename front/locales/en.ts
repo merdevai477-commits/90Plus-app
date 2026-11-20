@@ -2498,6 +2498,7 @@ export const en = {
     viewAllPredictions: 'View all',
     showMore: 'Show more',
     showLess: 'Show less',
+    viewAllBio: 'View all',
     predictNow: 'Predict now',
     coinsEarned: 'Coins Earned from Predictions',
     achievementsTitle: 'Achievements',

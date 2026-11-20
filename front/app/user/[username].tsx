@@ -626,9 +626,10 @@ function UserProfileScreen() {
           userId={user.id}
           isOwnProfile={false}
           onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
-          onSharePress={handleShareProfilePress}
           onBackPress={() => router.back()}
           onMorePress={() => setShowMoreMenu(true)}
+          viewAllBioLabel={t.profile.viewAllBio}
+          showLessBioLabel={t.profile.showLess}
           actionBelowName={
             !blockedMe ? (
               <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>

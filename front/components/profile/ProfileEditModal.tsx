@@ -42,13 +42,18 @@ interface UserData {
     lastUsernameChange?: Date;
 }
 
+interface UsernameCooldownInfo {
+    canChange?: boolean;
+    daysRemaining?: number;
+    hoursRemaining?: number;
+}
+
 interface ProfileEditModalProps {
     visible: boolean;
     onClose: () => void;
     initialData: UserData;
     onSave: (data: UserData) => void;
-    /** Kept for call-site compatibility; identity edits moved to More menu. */
-    usernameCooldown?: unknown;
+    usernameCooldown?: UsernameCooldownInfo | null;
 }
 
 const SOCIAL_PLATFORMS = [
@@ -67,18 +72,26 @@ const ProfileEditModal = memo(function ProfileEditModal({
     onClose,
     initialData,
     onSave,
+    usernameCooldown,
 }: ProfileEditModalProps) {
     const { t, isRTL } = useTranslation();
 
+    const [name, setName] = useState(initialData.name);
+    const [username, setUsername] = useState((initialData.username || '').replace(/^@/, ''));
     const [bio, setBio] = useState(initialData.bio);
     const [socials, setSocials] = useState<SocialLinkRow[]>(() =>
         (initialData.socials || []).map((s, i) => ({ ...s, rowId: `social-${i}` })),
     );
     const [focusedField, setFocusedField] = useState<string | null>(null);
+    const [nameError, setNameError] = useState('');
+    const [usernameError, setUsernameError] = useState('');
 
     const wasVisibleRef = useRef(false);
     const socialRowIdRef = useRef(0);
     const bioInputRef = useRef<TextInput>(null);
+    const canEditUsername = usernameCooldown ? usernameCooldown.canChange !== false : true;
+    const daysRemaining = usernameCooldown?.daysRemaining ?? 0;
+    const hoursRemaining = usernameCooldown?.hoursRemaining ?? 0;
 
     const toSocialRows = useCallback((links: SocialLink[] = []): SocialLinkRow[] => {
         socialRowIdRef.current = links.length;
@@ -88,18 +101,64 @@ const ProfileEditModal = memo(function ProfileEditModal({
     useEffect(() => {
         const justOpened = visible && !wasVisibleRef.current;
         if (justOpened) {
+            setName(initialData.name);
+            setUsername((initialData.username || '').replace(/^@/, ''));
             setBio(initialData.bio);
             setSocials(toSocialRows(initialData.socials || []));
             setFocusedField(null);
+            setNameError('');
+            setUsernameError('');
         }
         wasVisibleRef.current = visible;
     }, [visible, initialData, toSocialRows]);
 
+    const validateName = useCallback(
+        (text: string): string => {
+            if (!text.trim()) return t.profile.nameRequired;
+            if (text.trim().length < 2) return t.profile.nameRequired;
+            return '';
+        },
+        [t.profile],
+    );
+
+    const validateUsername = useCallback(
+        (text: string): string => {
+            if (!text.trim()) return t.profile.usernameRequired;
+            if (text.length < 3) return t.profile.usernameMinLength;
+            if (text.length > 20) return t.profile.usernameMaxLength;
+            if (!/^[a-zA-Z0-9_]+$/.test(text)) return t.profile.usernamePatternError;
+            return '';
+        },
+        [t.profile],
+    );
+
     const handleSave = useCallback(() => {
         Keyboard.dismiss();
+        const nextName = name.trim();
+        const nextUsername = username.trim().toLowerCase();
+        const nameErr = validateName(nextName);
+        const userErr = validateUsername(nextUsername);
+        setNameError(nameErr);
+        setUsernameError(userErr);
+        if (nameErr || userErr) {
+            Alert.alert(t.common.error, nameErr || userErr);
+            return;
+        }
+
+        const currentUsername = (initialData.username || '').replace(/^@/, '').toLowerCase();
+        if (nextUsername !== currentUsername && !canEditUsername) {
+            Alert.alert(
+                t.common.error,
+                `${t.profile.usernameChangeAfter} ${t.profile.cooldownShortDaysHours
+                    .replace('{days}', String(daysRemaining))
+                    .replace('{hours}', String(hoursRemaining))}`,
+            );
+            return;
+        }
+
         onSave({
-            name: initialData.name,
-            username: initialData.username,
+            name: nextName,
+            username: nextUsername,
             bio: bio.trim(),
             socials: socials
                 .filter((s) => s.url.trim() !== '')
@@ -107,7 +166,23 @@ const ProfileEditModal = memo(function ProfileEditModal({
             lastUsernameChange: initialData.lastUsernameChange,
         });
         onClose();
-    }, [bio, socials, initialData, onSave, onClose]);
+    }, [
+        name,
+        username,
+        bio,
+        socials,
+        initialData,
+        onSave,
+        onClose,
+        validateName,
+        validateUsername,
+        canEditUsername,
+        daysRemaining,
+        hoursRemaining,
+        t.common.error,
+        t.profile.usernameChangeAfter,
+        t.profile.cooldownShortDaysHours,
+    ]);
 
     const handleAddSocial = useCallback(() => {
         setSocials((p) => {
@@ -187,6 +262,89 @@ const ProfileEditModal = memo(function ProfileEditModal({
                             contentContainerStyle={s.scroll}
                             keyboardShouldPersistTaps="handled"
                         >
+                            <View style={s.field}>
+                                <Text style={[s.label, isRTL && s.textRtl]}>{t.profile.nameLabel}</Text>
+                                <View
+                                    style={[
+                                        s.inputWrap,
+                                        {
+                                            borderColor:
+                                                focusedField === 'name'
+                                                    ? ACCENT
+                                                    : nameError
+                                                      ? '#ef4444'
+                                                      : 'rgba(168,85,247,0.28)',
+                                        },
+                                    ]}
+                                >
+                                    <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
+                                    <TextInput
+                                        style={[s.input, isRTL && s.textRtl]}
+                                        value={name}
+                                        onChangeText={(v) => {
+                                            setName(v);
+                                            if (nameError) setNameError(validateName(v));
+                                        }}
+                                        placeholder={t.profile.nameLabel}
+                                        placeholderTextColor="rgba(255,255,255,0.3)"
+                                        maxLength={40}
+                                        onFocus={() => setFocusedField('name')}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                                {!!nameError && (
+                                    <Text style={[s.errorTxt, isRTL && s.textRtl]}>{nameError}</Text>
+                                )}
+                            </View>
+
+                            <View style={s.field}>
+                                <Text style={[s.label, isRTL && s.textRtl]}>{t.profile.usernameLabel}</Text>
+                                <View
+                                    style={[
+                                        s.inputWrap,
+                                        {
+                                            borderColor:
+                                                focusedField === 'username'
+                                                    ? ACCENT
+                                                    : usernameError
+                                                      ? '#ef4444'
+                                                      : 'rgba(168,85,247,0.28)',
+                                            opacity: canEditUsername ? 1 : 0.72,
+                                        },
+                                    ]}
+                                >
+                                    <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
+                                    <TextInput
+                                        style={[s.input, isRTL && s.textRtl]}
+                                        value={username}
+                                        onChangeText={(v) => {
+                                            const next = v.replace(/^@/, '');
+                                            setUsername(next);
+                                            if (usernameError) setUsernameError(validateUsername(next));
+                                        }}
+                                        placeholder={t.profile.usernameLabel}
+                                        placeholderTextColor="rgba(255,255,255,0.3)"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        editable={canEditUsername}
+                                        maxLength={20}
+                                        onFocus={() => setFocusedField('username')}
+                                        onBlur={() => setFocusedField(null)}
+                                    />
+                                </View>
+                                {!!usernameError && (
+                                    <Text style={[s.errorTxt, isRTL && s.textRtl]}>{usernameError}</Text>
+                                )}
+                                {!canEditUsername ? (
+                                    <Text style={[s.hintTxt, isRTL && s.textRtl]}>
+                                        {t.profile.usernameChangeAfter}{' '}
+                                        {t.profile.cooldownShortDaysHours
+                                            .replace('{days}', String(daysRemaining))
+                                            .replace('{hours}', String(hoursRemaining))}
+                                    </Text>
+                                ) : null}
+                            </View>
+
                             <View style={s.field}>
                                 <Text style={[s.label, isRTL && s.textRtl]}>{t.profile.bioLabel}</Text>
                                 <View style={[s.inputWrap, s.textAreaWrap, { borderColor: bioBorder }]}>
@@ -425,6 +583,18 @@ const s = StyleSheet.create({
         minHeight: 110,
         textAlignVertical: 'top',
         paddingTop: 12,
+    },
+    errorTxt: {
+        marginTop: 6,
+        color: '#ef4444',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    hintTxt: {
+        marginTop: 6,
+        color: 'rgba(255,255,255,0.55)',
+        fontSize: 11,
+        fontWeight: '500',
     },
     charCount: {
         color: 'rgba(255,255,255,0.32)',

@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -64,11 +64,12 @@ export interface ProfileHeroProps {
   onEnergyPress?: () => void;
   onEditPress?: () => void;
   onBioPress?: () => void;
-  onAddSocialPress?: () => void;
   chooseCountryLabel?: string;
   addClubLabel?: string;
   energyLabel?: string;
   addBioLabel?: string;
+  viewAllBioLabel?: string;
+  showLessBioLabel?: string;
   /** Optional CTA under the bio (e.g. Follow on public profiles). */
   actionBelowName?: React.ReactNode;
 }
@@ -86,25 +87,27 @@ const ProfileHero = memo(function ProfileHero({
   isOwnProfile = false,
   isAvatarUploading = false,
   onAvatarPress,
-  onSharePress,
   onSettingsPress,
   onMorePress,
   onBackPress,
   onEditPress,
-  onBioPress,
-  onAddSocialPress,
-  addBioLabel,
+  viewAllBioLabel,
+  showLessBioLabel,
   actionBelowName,
 }: ProfileHeroProps) {
-  const { language } = useTranslation();
+  const { language, t } = useTranslation();
   const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
   const sheetWidth = Math.min(windowWidth, 456);
+  const [bioExpanded, setBioExpanded] = useState(false);
   const filledLinks = useMemo(
     () => socialLinks.filter((l) => !!l.url?.trim()).slice(0, 3),
     [socialLinks],
   );
   const trimmedBio = bio?.trim() ?? '';
+  const bioNeedsClamp = trimmedBio.length > 72 || trimmedBio.includes('\n');
+  const viewAllLabel = viewAllBioLabel || t.profile.showMore || 'View all';
+  const showLessLabel = showLessBioLabel || t.profile.showLess || 'Show less';
 
   const openSocial = async (url: string) => {
     try {
@@ -135,23 +138,12 @@ const ProfileHero = memo(function ProfileHero({
       <View style={[styles.topBar, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
         {onBackPress ? (
           <TouchableOpacity onPress={onBackPress} hitSlop={10} style={styles.navCircleBtn}>
-            <Ionicons name="chevron-back" size={22} color={ProfileTheme.colors.textPrimary} />
+            <Ionicons name="chevron-back" size={18} color={ProfileTheme.colors.textPrimary} />
           </TouchableOpacity>
         ) : (
           <View style={styles.navSpacer} />
         )}
         <View style={styles.navRight}>
-          {onSharePress ? (
-            <TouchableOpacity
-              onPress={onSharePress}
-              activeOpacity={0.85}
-              style={styles.navCircleBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Share profile"
-            >
-              <Ionicons name="share-outline" size={22} color={ProfileTheme.colors.textPrimary} />
-            </TouchableOpacity>
-          ) : null}
           {onSettingsPress ? (
             <TouchableOpacity
               onPress={onSettingsPress}
@@ -160,7 +152,7 @@ const ProfileHero = memo(function ProfileHero({
               accessibilityRole="button"
               accessibilityLabel="Settings"
             >
-              <Ionicons name="notifications-outline" size={22} color={ProfileTheme.colors.textPrimary} />
+              <Ionicons name="settings-outline" size={18} color={ProfileTheme.colors.textPrimary} />
             </TouchableOpacity>
           ) : null}
           {onMorePress ? (
@@ -170,7 +162,7 @@ const ProfileHero = memo(function ProfileHero({
               style={styles.navCircleBtn}
               accessibilityRole="button"
             >
-              <Ionicons name="ellipsis-horizontal" size={22} color={ProfileTheme.colors.textPrimary} />
+              <Ionicons name="ellipsis-horizontal" size={18} color={ProfileTheme.colors.textPrimary} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -235,34 +227,27 @@ const ProfileHero = memo(function ProfileHero({
                 </Text>
               </View>
 
-              <View style={styles.socialRow}>
-                {filledLinks.map((link) => {
-                  const brand = getSocialBrandIcon(link.platform);
-                  return (
-                    <TouchableOpacity
-                      key={`${link.platform}-${link.url}`}
-                      style={styles.socialBtn}
-                      onPress={() => openSocial(link.url)}
-                      activeOpacity={0.85}
-                    >
-                      <Image
-                        source={brand.source}
-                        style={{ width: brand.width, height: brand.height }}
-                        contentFit="contain"
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
-                {isOwnProfile && filledLinks.length < 3 ? (
-                  <TouchableOpacity
-                    style={[styles.socialBtn, styles.socialBtnEmpty]}
-                    onPress={onAddSocialPress}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="add" size={18} color={ProfileTheme.colors.profilePrimary} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+              {filledLinks.length > 0 ? (
+                <View style={styles.socialRow}>
+                  {filledLinks.map((link) => {
+                    const brand = getSocialBrandIcon(link.platform);
+                    return (
+                      <TouchableOpacity
+                        key={`${link.platform}-${link.url}`}
+                        style={styles.socialBtn}
+                        onPress={() => openSocial(link.url)}
+                        activeOpacity={0.85}
+                      >
+                        <Image
+                          source={brand.source}
+                          style={{ width: brand.width, height: brand.height }}
+                          contentFit="contain"
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
             </View>
 
             {isOwnProfile && onEditPress ? (
@@ -280,17 +265,26 @@ const ProfileHero = memo(function ProfileHero({
             )}
           </View>
 
-          {trimmedBio || isOwnProfile ? (
-            <TouchableOpacity
-              style={styles.bioWrap}
-              onPress={onBioPress}
-              disabled={!onBioPress}
-              activeOpacity={onBioPress ? 0.8 : 1}
-            >
-              <Text style={[styles.bio, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={3}>
-                {trimmedBio || addBioLabel || ''}
+          {trimmedBio ? (
+            <View style={styles.bioWrap}>
+              <Text
+                style={[styles.bio, { textAlign: isAr ? 'right' : 'left' }]}
+                numberOfLines={bioExpanded ? undefined : 1}
+              >
+                {trimmedBio}
               </Text>
-            </TouchableOpacity>
+              {bioNeedsClamp ? (
+                <TouchableOpacity
+                  onPress={() => setBioExpanded((v) => !v)}
+                  hitSlop={8}
+                  style={styles.bioToggle}
+                >
+                  <Text style={styles.bioToggleText}>
+                    {bioExpanded ? showLessLabel : viewAllLabel}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : null}
 
           {actionBelowName ? <View style={styles.actionBelowName}>{actionBelowName}</View> : null}
@@ -334,29 +328,33 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   navSpacer: {
-    width: 45,
-    height: 45,
+    width: 36,
+    height: 36,
   },
   navCircleBtn: {
-    width: 45,
-    height: 45,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sheet: {
     alignSelf: 'center',
     backgroundColor: ProfileTheme.colors.profileSheet,
     borderTopLeftRadius: ProfileTheme.radius.sheet,
     borderTopRightRadius: ProfileTheme.radius.sheet,
-    paddingTop: 12,
-    paddingBottom: 8,
-    minHeight: 210,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   identityBlock: {
     paddingHorizontal: 20,
-    gap: 16,
+    gap: 10,
   },
   identityRow: {
     alignItems: 'flex-start',
@@ -463,36 +461,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  socialBtnEmpty: {
-    backgroundColor: ProfileTheme.colors.profilePrimarySoft,
-    borderWidth: 1,
-    borderColor: ProfileTheme.colors.profileCardBorder,
-    borderStyle: 'dashed',
-  },
   editBtn: {
-    width: 45,
-    height: 45,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 70,
   },
   editBtnSpacer: {
-    width: 12,
+    width: 8,
     marginTop: 70,
   },
   bioWrap: {
     width: '100%',
+    gap: 4,
   },
   bio: {
     color: '#434343',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    textAlign: 'right',
-    lineHeight: 22,
+    lineHeight: 20,
+  },
+  bioToggle: {
+    alignSelf: 'flex-end',
+  },
+  bioToggleText: {
+    color: ProfileTheme.colors.profilePrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   actionBelowName: {
     width: '100%',
-    marginTop: 4,
+    marginTop: 2,
   },
 });

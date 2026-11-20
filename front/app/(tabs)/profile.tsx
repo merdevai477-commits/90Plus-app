@@ -1760,13 +1760,11 @@ function OwnProfileScreen() {
           isOwnProfile
           isAvatarUploading={isAvatarUploading}
           onAvatarPress={handleAvatarPress}
-          onSharePress={handleSharePress}
           onSettingsPress={() => router.push('/(tabs)/settings')}
           onMorePress={handleMorePress}
           onEditPress={handleEditProfile}
-          onBioPress={handleEditProfile}
-          onAddSocialPress={() => setAddLinkPlatform(true)}
-          addBioLabel={t.profile.addBio}
+          viewAllBioLabel={t.profile.viewAllBio}
+          showLessBioLabel={t.profile.showLess}
         />
 
         <ProfileAffiliationBar
@@ -2283,6 +2281,7 @@ function OwnProfileScreen() {
       <ProfileEditModal
         visible={isEditProfileModalVisible}
         onClose={() => setIsEditProfileModalVisible(false)}
+        usernameCooldown={cooldowns?.username}
         initialData={{
           name: userData?.displayName || userData?.username || 'User',
           username: userData?.username || 'user',

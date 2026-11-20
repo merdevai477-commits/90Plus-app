@@ -13,14 +13,14 @@ import DeveloperBadge from './DeveloperBadge';
 import ProfileEliteMarks from './ProfileEliteMarks';
 import VerifiedBadge from './VerifiedBadge';
 
-const REVEAL_START = 120;
-const REVEAL_END = 200;
-const ISLAND_HEIGHT = 56;
-const ISLAND_RADIUS = ISLAND_HEIGHT / 2;
+const REVEAL_START = 100;
+const REVEAL_END = 180;
+const ISLAND_HEIGHT = 52;
+const ISLAND_RADIUS = 22;
 const ISLAND_FILL =
   Platform.OS === 'ios'
-    ? (['rgba(255,255,255,0.92)', 'rgba(247,247,249,0.94)'] as const)
-    : (['rgba(255,255,255,0.98)', 'rgba(247,247,249,0.98)'] as const);
+    ? (['rgba(255,255,255,0.94)', 'rgba(248,245,255,0.96)'] as const)
+    : (['rgba(255,255,255,0.99)', 'rgba(248,245,255,0.99)'] as const);
 
 function GlassIsland({
   children,
@@ -32,13 +32,13 @@ function GlassIsland({
   return (
     <View style={[styles.island, style]}>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={40} tint="light" style={[StyleSheet.absoluteFill, styles.islandClip]} />
+        <BlurView intensity={48} tint="light" style={[StyleSheet.absoluteFill, styles.islandClip]} />
       ) : null}
       <View style={[StyleSheet.absoluteFill, styles.islandClip]}>
         <LinearGradient colors={ISLAND_FILL} style={StyleSheet.absoluteFill} />
       </View>
       <GlassSheen radius={ISLAND_RADIUS} />
-      <GlassRim radius={ISLAND_RADIUS} tint="rgba(17,17,17,0.12)" />
+      <GlassRim radius={ISLAND_RADIUS} tint="rgba(106,43,217,0.16)" />
       {children}
     </View>
   );
@@ -72,14 +72,19 @@ export function ProfileCollapsedBar({
   });
   const translateY = scrollY.interpolate({
     inputRange: [REVEAL_START, REVEAL_END],
-    outputRange: [-8, 0],
+    outputRange: [-10, 0],
+    extrapolate: 'clamp',
+  });
+  const scale = scrollY.interpolate({
+    inputRange: [REVEAL_START, REVEAL_END],
+    outputRange: [0.96, 1],
     extrapolate: 'clamp',
   });
   const rowDirection = isRTL ? 'row-reverse' : 'row';
 
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
-      const next = value > REVEAL_START + 20;
+      const next = value > REVEAL_START + 16;
       setShown((prev) => (prev === next ? prev : next));
     });
     return () => scrollY.removeListener(id);
@@ -93,7 +98,7 @@ export function ProfileCollapsedBar({
       style={({ pressed }) => pressed && styles.pressed}
     >
       <GlassIsland style={styles.roundIsland}>
-        <Ionicons name="chevron-back" size={26} color={ProfileTheme.colors.textPrimary} />
+        <Ionicons name="chevron-back" size={22} color={ProfileTheme.colors.textPrimary} />
       </GlassIsland>
     </Pressable>
   ) : null;
@@ -101,12 +106,23 @@ export function ProfileCollapsedBar({
   return (
     <Animated.View
       pointerEvents={shown ? 'box-none' : 'none'}
-      style={[styles.wrap, { paddingTop: Math.max(insets.top, 12) + 6, opacity, transform: [{ translateY }] }]}
+      style={[
+        styles.wrap,
+        {
+          paddingTop: Math.max(insets.top, 12) + 4,
+          opacity,
+          transform: [{ translateY }, { scale }],
+        },
+      ]}
     >
       <LinearGradient
         pointerEvents="none"
-        colors={['#FFFFFF', '#FFFFFF', 'rgba(255,255,255,0.92)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.88, 0.96, 1]}
+        colors={[
+          'rgba(249,246,254,0.98)',
+          'rgba(249,246,254,0.88)',
+          'rgba(249,246,254,0)',
+        ]}
+        locations={[0, 0.72, 1]}
         style={StyleSheet.absoluteFill}
       />
       <View pointerEvents="box-none" style={[styles.row, { flexDirection: rowDirection }]}>
@@ -126,8 +142,8 @@ export function ProfileCollapsedBar({
               <Text style={[styles.name, { fontFamily: nameFont }]} numberOfLines={1}>
                 {name}
               </Text>
-              {isVerified ? <VerifiedBadge size={16} /> : null}
-              {isDeveloper ? <DeveloperBadge size={16} /> : null}
+              {isVerified ? <VerifiedBadge size={15} /> : null}
+              {isDeveloper ? <DeveloperBadge size={15} /> : null}
               <ProfileEliteMarks userId={userId} />
             </View>
           </View>
@@ -160,8 +176,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
   },
   row: {
     alignItems: 'center',
@@ -172,13 +188,13 @@ const styles = StyleSheet.create({
     borderRadius: ISLAND_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
-    shadowColor: 'transparent',
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.14)',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   islandClip: {
     borderRadius: ISLAND_RADIUS,
@@ -211,15 +227,15 @@ const styles = StyleSheet.create({
     maxWidth: '64%',
   },
   pressed: {
-    transform: [{ scale: 0.92 }],
+    transform: [{ scale: 0.94 }],
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: ProfileTheme.colors.surfaceElevated,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
+    borderWidth: 1.5,
+    borderColor: 'rgba(106,43,217,0.22)',
   },
   avatarFallback: {
     alignItems: 'center',
@@ -229,6 +245,6 @@ const styles = StyleSheet.create({
   name: {
     flexShrink: 1,
     color: ProfileTheme.colors.textPrimary,
-    fontSize: 17,
+    fontSize: 16,
   },
 });

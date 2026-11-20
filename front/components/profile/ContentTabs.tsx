@@ -94,6 +94,13 @@ const styles = StyleSheet.create({
     height: 51,
     overflow: 'hidden',
     paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(106,43,217,0.12)',
+    shadowColor: '#1E0844',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   tab: {
     flex: 1,
