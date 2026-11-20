@@ -33,8 +33,8 @@ import type {
 } from './types';
 
 const DESIGN_WIDTH = 430;
-/** Figma 1855:223 hero photo frame height */
-const HERO_BODY = 306;
+/** Figma 1855:223 hero frame — keep room for cutout + identity */
+const HERO_BODY = 318;
 const HEADER_BAR_HEIGHT = 44;
 
 function useRtl() {
@@ -238,42 +238,41 @@ export default function PlayerProfileView({
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* Hero — Figma 2431:17436 stadium + cutout looking at identity 2431:17437 */}
+        {/* Hero — stadium plate + cutout looking at identity */}
         <View style={[styles.hero, { height: heroHeight }]}>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
-          {/* Stadium backdrop from Figma (behind the player) */}
-          <Image
-            source={PP_STADIUM}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            contentPosition="center"
-          />
-          {/* Soft wash so text stays readable on the identity side */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={
-              isDark
-                ? ['rgba(18,10,34,0.78)', 'rgba(18,10,34,0.25)', 'transparent']
-                : ['rgba(249,246,254,0.88)', 'rgba(249,246,254,0.42)', 'transparent']
-            }
-            locations={[0.18, 0.4, 0.72]}
-            start={rtl ? { x: 1, y: 0.1 } : { x: 0, y: 0.1 }}
-            end={rtl ? { x: 0.2, y: 0.9 } : { x: 0.8, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-          />
+          <View style={styles.heroStage} pointerEvents="none">
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
+            <Image
+              source={PP_STADIUM}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              contentPosition="center"
+            />
+            <LinearGradient
+              colors={
+                isDark
+                  ? ['rgba(18,10,34,0.7)', 'rgba(18,10,34,0.18)', 'transparent']
+                  : ['rgba(249,246,254,0.78)', 'rgba(249,246,254,0.28)', 'transparent']
+              }
+              locations={[0.12, 0.38, 0.7]}
+              start={rtl ? { x: 1, y: 0.08 } : { x: 0, y: 0.08 }}
+              end={rtl ? { x: 0.28, y: 0.92 } : { x: 0.72, y: 0.92 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
 
-          {/* Player cutout — left in RTL, spaced from the text, facing toward it */}
+          {/* Cutout fills ~left half, tucks under the attributes strip */}
           <Pressable
             style={[
               styles.heroCutoutWrap,
               {
-                width: Math.round(width * 0.52),
-                height: Math.round(heroHeight * 1.08),
-                bottom: -12,
+                width: Math.round(Math.min(width * 0.58, 268 * scale)),
+                height: Math.round(heroHeight * 1.14),
+                bottom: Math.round(-36 * scale),
               },
               rtl
-                ? { left: Math.round(-8 * scale) }
-                : { right: Math.round(-8 * scale) },
+                ? { left: Math.round(-4 * scale) }
+                : { right: Math.round(-4 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
@@ -282,11 +281,11 @@ export default function PlayerProfileView({
               <Image
                 source={{ uri: photoUri }}
                 style={styles.heroCutout}
-                contentFit="contain"
-                contentPosition={rtl ? 'bottom right' : 'bottom left'}
+                contentFit="cover"
+                contentPosition={rtl ? { bottom: 0, right: '8%' } : { bottom: 0, left: '8%' }}
                 cachePolicy="memory-disk"
                 priority="high"
-                transition={300}
+                transition={280}
                 recyclingKey={`${vm.photoKey}-${photoIndex}`}
                 onError={() =>
                   setPhotoIndex((i) =>
@@ -305,24 +304,22 @@ export default function PlayerProfileView({
             style={[
               styles.heroIdentity,
               {
-                // Figma 2431:17437 — x≈188, y≈99, w=219 on 430 artboard
-                top: Math.max(insets.top, 12) + Math.round(20 * scale),
-                width: Math.round(219 * scale),
-                gap: Math.round(11 * scale),
+                top: Math.max(insets.top, 10) + Math.round(28 * scale),
+                width: Math.round(210 * scale),
+                gap: Math.round(12 * scale),
                 alignItems: 'flex-end',
               },
               rtl
-                ? { right: Math.round(18 * scale) }
-                : { left: Math.round(18 * scale) },
+                ? { right: Math.round(20 * scale) }
+                : { left: Math.round(20 * scale) },
             ]}
           >
             <View
               style={{
                 width: '100%',
-                minHeight: Math.round(99 * scale),
-                justifyContent: 'space-between',
+                justifyContent: 'flex-start',
                 alignItems: 'flex-end',
-                gap: Math.round(8 * scale),
+                gap: Math.round(10 * scale),
               }}
             >
               {vm.nationality ? (
@@ -333,6 +330,7 @@ export default function PlayerProfileView({
                       {
                         fontFamily: fontSemi,
                         color: isDark ? C.ink : '#313131',
+                        fontSize: Math.round(15 * scale),
                       },
                     ]}
                     numberOfLines={1}
@@ -352,8 +350,9 @@ export default function PlayerProfileView({
                     {
                       fontFamily: fontBold,
                       color: C.ink,
-                      fontSize: Math.round(28 * scale),
-                      lineHeight: Math.round(35 * scale),
+                      fontSize: Math.round(26 * scale),
+                      lineHeight: Math.round(32 * scale),
+                      letterSpacing: -0.3,
                     },
                   ]}
                   numberOfLines={1}
@@ -371,8 +370,8 @@ export default function PlayerProfileView({
                       {
                         fontFamily: fontSemi,
                         color: isDark ? C.soft : '#373737',
-                        fontSize: Math.round(20 * scale),
-                        lineHeight: Math.round(25 * scale),
+                        fontSize: Math.round(18 * scale),
+                        lineHeight: Math.round(23 * scale),
                       },
                     ]}
                     numberOfLines={1}
@@ -382,14 +381,13 @@ export default function PlayerProfileView({
                   <TeamBadge
                     name={vm.clubName}
                     logo={vm.clubLogo || undefined}
-                    size={Math.round(28 * scale)}
+                    size={Math.round(26 * scale)}
                     color="transparent"
                   />
                 </View>
               ) : null}
             </View>
 
-            {/* Social pills under club — Figma 2431:17668 (no Follow) */}
             {hasSocials ? (
               <View style={styles.heroSocials}>
                 {socials?.facebookUrl ? (
@@ -427,16 +425,15 @@ export default function PlayerProfileView({
           </View>
         </View>
 
-        {/* Attributes — Figma 1855:91 */}
+        {/* Attributes — overlaps the cutout like Figma 1855:91 */}
         <View
           style={[
             styles.strip,
             cardShadow,
             {
               marginHorizontal: pad,
-              marginTop: -18,
+              marginTop: -28,
               backgroundColor: C.card,
-              // Figma L→R: position, height, age, nationality
               flexDirection: rtl ? 'row' : 'row-reverse',
             },
           ]}
@@ -1018,8 +1015,23 @@ const styles = StyleSheet.create({
   statusBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   statusBtnText: { color: '#fff', fontSize: 14 },
 
-  hero: { width: '100%', overflow: 'hidden', zIndex: 1 },
-  heroCutoutWrap: { position: 'absolute', zIndex: 3 },
+  hero: { width: '100%', overflow: 'visible', zIndex: 1 },
+  heroStage: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  heroCutoutWrap: {
+    position: 'absolute',
+    zIndex: 3,
+    // Soft contact shadow so the cutout sits on the stadium plate
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
   heroCutout: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroIdentity: { position: 'absolute', zIndex: 4 },
@@ -1029,20 +1041,20 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 9,
+    gap: 8,
     maxWidth: '100%',
   },
-  heroNation: { fontSize: 16, textAlign: 'right' },
+  heroNation: { textAlign: 'right' },
   heroNameRow: {
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 7,
+    gap: 6,
     width: '100%',
   },
   heroName: { flexShrink: 1, textAlign: 'right' },
-  verifiedBadge: { width: 24, height: 24 },
+  verifiedBadge: { width: 22, height: 22 },
   heroClubRow: {
     flexDirection: 'row',
     direction: 'ltr',
@@ -1058,31 +1070,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     alignSelf: 'stretch',
-    gap: 11,
+    gap: 10,
+    marginTop: 2,
   },
   socialPill: {
-    height: 42,
+    height: 40,
     borderRadius: 12,
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minWidth: 102,
+    minWidth: 98,
   },
   socialPillFilled: {},
   socialPillOutline: { borderWidth: 1 },
   socialPillText: { fontSize: 12, textAlign: 'center' },
-  socialPillIcon: { width: 24, height: 24 },
+  socialPillIcon: { width: 22, height: 22 },
 
   strip: {
-    height: 66,
+    height: 68,
     borderRadius: 20,
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 2,
+    zIndex: 5,
   },
   attrCell: { alignItems: 'center', gap: 6, flexGrow: 1, flexBasis: 0 },
   attrLabel: { fontSize: 9, textAlign: 'center', width: '100%' },

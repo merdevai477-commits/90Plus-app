@@ -189,7 +189,7 @@ export default function PlayerCareerScreen() {
         const imageVersion =
             scores365AthleteImageVersionFromUrl(career?.profile.imageUrl) ??
             scores365AthleteImageVersionFromUrl(preferred);
-        return [buildScores365AthleteCutoutUrl(athleteId, 500, imageVersion), ...circular];
+        return [buildScores365AthleteCutoutUrl(athleteId, 700, imageVersion), ...circular];
     }, [athleteId, career?.profile.imageUrl, params.photo]);
 
     const vm: PlayerProfileViewModel | null = useMemo(() => {
