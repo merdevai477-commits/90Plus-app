@@ -61,6 +61,52 @@ export const KING_DAILY_MATCH_LIMIT = 10;
 
 const KING_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Today's slate changes with the live score, so the memory copy stays short. */
+const KING_LIST_TTL_TODAY_MS = 12_000;
+const KING_LIST_TTL_FUTURE_MS = 2 * 60_000;
+const KING_LIST_TTL_PAST_MS = 10 * 60_000;
+const KING_LIST_TTL_EMPTY_MS = 8_000;
+const KING_LIVE_OVERLAY_MS = 700;
+
+type KingListCacheEntry = { at: number; rows: unknown[]; generation: number };
+
+let kingListGeneration = 0;
+let kingListTicket = 0;
+const kingListCache = new Map<string, KingListCacheEntry>();
+const kingListLatestTicket = new Map<string, number>();
+const kingListInflight = new Map<string, { generation: number; promise: Promise<unknown[]> }>();
+
+/** Drop a cached King day after an admin slate edit, or every day in tests. */
+export function clearKingDailyMatchesCache(day?: string): void {
+  kingListGeneration += 1;
+  if (day) kingListCache.delete(day);
+  else kingListCache.clear();
+}
+
+function kingListTtlMs(day: string, count: number): number {
+  if (count === 0) return KING_LIST_TTL_EMPTY_MS;
+  const today = calendarTodayKey();
+  if (day < today) return KING_LIST_TTL_PAST_MS;
+  if (day > today) return KING_LIST_TTL_FUTURE_MS;
+  return KING_LIST_TTL_TODAY_MS;
+}
+
+function withDeadline<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 const SECONDARY_LEAGUE_RE = /women|femenil|feminin|frauen|reserv|youth|primavera|\bU\d{2}\b/i;
 const SECONDARY_TEAM_RE = /\(W\)|\bRes\.?$|\bReserves?\b|\bII$|\bB$|\bU\d{2}\b/i;
 
@@ -145,7 +191,78 @@ export async function setKingDailySlate(
     });
   });
 
+  clearKingDailyMatchesCache(dateString);
   return { date: dateString, matchIds: unique, source: 'curated' };
+}
+
+const KING_LIST_FIXTURE_SELECT = {
+  fixtureId: true,
+  matchDate: true,
+  matchTimestamp: true,
+  status: true,
+  statusLong: true,
+  elapsed: true,
+  leagueId: true,
+  leagueName: true,
+  leagueCountry: true,
+  leagueLogo: true,
+  leagueRound: true,
+  homeTeamName: true,
+  homeTeamLogo: true,
+  awayTeamName: true,
+  awayTeamLogo: true,
+  homeScore: true,
+  awayScore: true,
+} as const;
+
+type KingListFixtureRow = {
+  fixtureId: number;
+  matchDate: Date;
+  matchTimestamp: number;
+  status: string;
+  statusLong: string | null;
+  elapsed: number | null;
+  leagueId: number;
+  leagueName: string;
+  leagueCountry: string | null;
+  leagueLogo: string | null;
+  leagueRound: string | null;
+  homeTeamName: string;
+  homeTeamLogo: string | null;
+  awayTeamName: string;
+  awayTeamLogo: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+/** List-view fixture from the scalar columns. Skips `fullData`, which carries lineups and events. */
+function slimFixtureFromCache(row: KingListFixtureRow): any | null {
+  if (!(row.matchDate instanceof Date) || Number.isNaN(row.matchDate.getTime())) return null;
+  return {
+    fixture: {
+      id: row.fixtureId,
+      date: row.matchDate.toISOString(),
+      timestamp: row.matchTimestamp,
+      periods: { first: null, second: null },
+      status: {
+        short: row.status,
+        long: row.statusLong,
+        elapsed: row.elapsed,
+      },
+    },
+    league: {
+      id: row.leagueId,
+      name: row.leagueName,
+      country: row.leagueCountry ?? '',
+      logo: row.leagueLogo ?? '',
+      round: row.leagueRound ?? '',
+    },
+    teams: {
+      home: { name: row.homeTeamName, logo: row.homeTeamLogo ?? '' },
+      away: { name: row.awayTeamName, logo: row.awayTeamLogo ?? '' },
+    },
+    goals: { home: row.homeScore, away: row.awayScore },
+  };
 }
 
 async function loadFixturesByIds(ids: number[], dayFixtures: any[]): Promise<any[]> {
@@ -157,14 +274,49 @@ async function loadFixturesByIds(ids: number[], dayFixtures: any[]): Promise<any
 
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length > 0) {
-    const { matchCacheService } = await import('./match-cache.service');
-    const rows = await prisma.cachedFixture.findMany({ where: { fixtureId: { in: missing } } });
-    for (const row of rows) {
-      byId.set(row.fixtureId, matchCacheService.convertDbMatchToApiFormat(row));
+    const rows = await prisma.cachedFixture.findMany({
+      where: { fixtureId: { in: missing } },
+      select: KING_LIST_FIXTURE_SELECT,
+    });
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const slim = slimFixtureFromCache(row);
+      if (slim) byId.set(row.fixtureId, slim);
     }
   }
 
   return ids.map((id) => byId.get(id)).filter(Boolean);
+}
+
+/**
+ * Scores for the ten King matches only. A slow live read must not hold the list:
+ * the database row is already enough to open the screen.
+ */
+async function overlayKingLive(fixtures: any[]): Promise<any[]> {
+  if (fixtures.length === 0) return fixtures;
+  try {
+    const mod = await import('./football-data-cache.service');
+    if (
+      typeof mod.mergeLiveWithoutRevivingFinished !== 'function'
+      || typeof mod.mergeFixtureProviders !== 'function'
+    ) {
+      return fixtures;
+    }
+    const liveMod = await import('./live-fixture-cache.service');
+    const ids = fixtures.map(fixtureIdOf).filter((id): id is number => id != null);
+    const [liveRows, terminals] = await withDeadline(
+      Promise.all([
+        liveMod.readLiveFixturesList().catch(() => null),
+        liveMod.readTerminalFixturesForIds(ids).catch(() => [] as any[]),
+      ]),
+      KING_LIVE_OVERLAY_MS,
+      [null, []] as [any[] | null, any[]],
+    );
+    let merged = liveRows?.length ? mod.mergeLiveWithoutRevivingFinished(fixtures, liveRows) : fixtures;
+    if (terminals.length) merged = mod.mergeFixtureProviders(merged, terminals);
+    return merged;
+  } catch {
+    return fixtures;
+  }
 }
 
 /**
@@ -225,18 +377,69 @@ async function ensureKingDailySlate(day: string, fixtures: any[]): Promise<numbe
   });
 }
 
+async function buildKingDailyMatches(day: string): Promise<unknown[]> {
+  const slateIds = await getKingDailySlateIds(day);
+  // The slate is already pinned: read those rows only. The full day list is the
+  // slow path, and it is only needed the first time a day is ranked.
+  if (slateIds.length > 0) {
+    try {
+      const direct = await loadFixturesByIds(slateIds, []);
+      if (direct.length === slateIds.length) {
+        const live = await overlayKingLive(direct);
+        return projectMatchesForListView(live.map(stripHeavyFixtureFields));
+      }
+    } catch {
+      // Missing rows fall through to the day list below.
+    }
+  }
+
+  const { footballDataCacheService } = await import('./football-data-cache.service');
+  const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
+  const pinned = await ensureKingDailySlate(day, fixtures);
+  if (pinned.length === 0) return [];
+  const curated = await loadFixturesByIds(pinned, fixtures);
+  return projectMatchesForListView(curated.map(stripHeavyFixtureFields));
+}
+
 /**
  * The day's King matches, in slate order. A match that has kicked off stays
  * in the list; only the prediction button closes.
+ * `fresh` skips the short memory copy (pull to refresh) and still uses the slate read.
  */
-export async function getKingDailyMatches(dateString?: string): Promise<unknown[]> {
+export async function getKingDailyMatches(
+  dateString?: string,
+  options?: { fresh?: boolean },
+): Promise<unknown[]> {
   const day = dateString && KING_DATE_RE.test(dateString) ? dateString : calendarTodayKey();
-  const { footballDataCacheService } = await import('./football-data-cache.service');
-  const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
-  const slateIds = await ensureKingDailySlate(day, fixtures);
-  if (slateIds.length === 0) return [];
-  const curated = await loadFixturesByIds(slateIds, fixtures);
-  return projectMatchesForListView(curated.map(stripHeavyFixtureFields));
+  const generation = kingListGeneration;
+  if (!options?.fresh) {
+    const hit = kingListCache.get(day);
+    if (
+      hit
+      && hit.generation === generation
+      && Date.now() - hit.at < kingListTtlMs(day, hit.rows.length)
+    ) {
+      return hit.rows;
+    }
+    const pending = kingListInflight.get(day);
+    if (pending && pending.generation === generation) return pending.promise;
+  }
+
+  const ticket = ++kingListTicket;
+  kingListLatestTicket.set(day, ticket);
+  const promise = buildKingDailyMatches(day)
+    .then((rows) => {
+      if (kingListGeneration === generation && kingListLatestTicket.get(day) === ticket) {
+        kingListCache.set(day, { at: Date.now(), rows, generation });
+      }
+      return rows;
+    })
+    .finally(() => {
+      const current = kingListInflight.get(day);
+      if (current?.promise === promise) kingListInflight.delete(day);
+    });
+  kingListInflight.set(day, { generation, promise });
+  return promise;
 }
 
 export interface UpsertKingPredictionInput {

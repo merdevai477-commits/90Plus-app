@@ -40,7 +40,11 @@ jest.mock('../../utils/matches-list-projection.util', () => ({
 
 import prisma from '../../lib/prisma';
 import { footballDataCacheService } from '../football-data-cache.service';
-import { getKingDailyMatches, setKingDailySlate } from '../king-prediction.service';
+import {
+  clearKingDailyMatchesCache,
+  getKingDailyMatches,
+  setKingDailySlate,
+} from '../king-prediction.service';
 
 const mockedPrisma = prisma as jest.Mocked<typeof prisma>;
 const mockedCache = footballDataCacheService as jest.Mocked<typeof footballDataCacheService>;
@@ -56,7 +60,31 @@ function fixture(id: number, name: string) {
 describe('king daily slate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearKingDailyMatchesCache();
+    (mockedPrisma.cachedFixture.findMany as jest.Mock).mockResolvedValue([]);
   });
+
+  function cacheRow(id: number, name: string) {
+    return {
+      fixtureId: id,
+      matchDate: new Date('2026-11-01T12:00:00.000Z'),
+      matchTimestamp: 1_762_000_000,
+      status: 'NS',
+      statusLong: 'Not Started',
+      elapsed: null,
+      leagueId: 1,
+      leagueName: 'Test',
+      leagueCountry: 'X',
+      leagueLogo: '',
+      leagueRound: '1',
+      homeTeamName: name,
+      homeTeamLogo: '',
+      awayTeamName: 'Away',
+      awayTeamLogo: '',
+      homeScore: null,
+      awayScore: null,
+    };
+  }
 
   it('returns curated ids in sortOrder when a slate exists', async () => {
     (mockedPrisma.kingDailySlate.findMany as jest.Mock).mockResolvedValue([
@@ -75,7 +103,7 @@ describe('king daily slate', () => {
 
   it('pins the auto ranking on the first read and keeps that list', async () => {
     const findMany = mockedPrisma.kingDailySlate.findMany as jest.Mock;
-    findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     (mockedCache.getMatchesByDate as jest.Mock).mockResolvedValue([
       fixture(1, 'One'),
       fixture(2, 'Two'),
@@ -90,10 +118,36 @@ describe('king daily slate', () => {
       ],
     });
 
+    const cached = (await getKingDailyMatches('2026-11-01')) as any[];
+    expect(cached.map((row) => row.fixture.id)).toEqual([1, 2]);
+    expect(mockedCache.getMatchesByDate).toHaveBeenCalledTimes(1);
+
+    clearKingDailyMatchesCache();
     findMany.mockResolvedValue([{ apiMatchId: 2 }, { apiMatchId: 1 }]);
     const again = (await getKingDailyMatches('2026-11-01')) as any[];
     expect(again.map((row) => row.fixture.id)).toEqual([2, 1]);
     expect(mockedPrisma.kingDailySlate.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads a saved slate from the ten fixture rows and skips the full day list', async () => {
+    (mockedPrisma.kingDailySlate.findMany as jest.Mock).mockResolvedValue([
+      { apiMatchId: 200 },
+      { apiMatchId: 100 },
+    ]);
+    (mockedPrisma.cachedFixture.findMany as jest.Mock).mockResolvedValue([
+      cacheRow(100, 'A'),
+      cacheRow(200, 'B'),
+    ]);
+
+    const rows = (await getKingDailyMatches('2026-11-01')) as any[];
+    expect(rows.map((row) => row.fixture.id)).toEqual([200, 100]);
+    expect(mockedCache.getMatchesByDate).not.toHaveBeenCalled();
+    expect(mockedPrisma.cachedFixture.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { fixtureId: { in: [200, 100] } },
+        select: expect.not.objectContaining({ fullData: true }),
+      }),
+    );
   });
 
   it('keeps the list already pinned inside the lock', async () => {

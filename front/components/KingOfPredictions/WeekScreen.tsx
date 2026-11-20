@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -40,6 +40,7 @@ import {
   KING_PURPLE,
   fallbackKingCalendar,
   fetchKingMatches,
+  peekKingMatches,
   fillTemplate,
   parseKingMode,
   toApiMode,
@@ -86,7 +87,12 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
     pickedDayRef.current = true;
     setDayIndex(index);
   };
-  const [dayMatchIds, setDayMatchIds] = useState<string[]>([]);
+  const [dayMatchIds, setDayMatchIds] = useState<string[]>(() => {
+    const cal = fallbackKingCalendar();
+    const index = Math.max(0, cal.days.indexOf(cal.today));
+    const key = cal.days[index] ?? cal.today;
+    return peekKingMatches(key)?.matches.map((match) => String(match.id)) ?? [];
+  });
   const matchCount = dayMatchIds.length;
   const serverPicks = useKingPicksStore((state) => state.server);
   const localPicks = useKingPicksStore((state) => state.local);
@@ -99,11 +105,24 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const selectedKey = days[dayIndex] ?? days[0];
 
   const loadGenRef = useRef(0);
+  const hasDayRef = useRef(dayMatchIds.length > 0);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const peeked = peekKingMatches(selectedKey)?.matches.map((match) => String(match.id)) ?? [];
+    if (peeked.length > 0) {
+      hasDayRef.current = true;
+      setDayMatchIds(peeked);
+      return;
+    }
+    hasDayRef.current = false;
+    setDayMatchIds([]);
+    setLoading(true);
+  }, [selectedKey]);
+
+  const load = useCallback(async (force = false) => {
     const gen = ++loadGenRef.current;
     const [day, token] = await Promise.all([
-      fetchKingMatches(selectedKey).catch(() => ({ matches: [], calendar: null })),
+      fetchKingMatches(selectedKey, { force }).catch(() => ({ matches: [], calendar: null })),
       getTokenRef.current().catch(() => null),
     ]);
     if (gen !== loadGenRef.current) return;
@@ -115,7 +134,9 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       // The selected key changes with the calendar; the reload that follows fetches the right day.
       return;
     }
-    setDayMatchIds(dayMatches.map((match) => String(match.id)));
+    const idStrings = dayMatches.map((match) => String(match.id));
+    hasDayRef.current = idStrings.length > 0;
+    setDayMatchIds(idStrings);
 
     // No token is a gap, not a sign-out: the picks stay until Clerk says otherwise (D6).
     if (!token) {
@@ -150,7 +171,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      setLoading(true);
+      if (!hasDayRef.current) setLoading(true);
       void load().finally(() => {
         if (active) setLoading(false);
       });
@@ -164,7 +185,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } finally {
       setRefreshing(false);
     }
@@ -443,7 +464,9 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
               {fillTemplate(copy.dayLine, { day: dayName, index: ordinal })}
             </Text>
             <Text style={styles.challengeLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              <Text style={[styles.challengeCount, { fontFamily: fontBold }]}>{loading ? '—' : matchCount}</Text>
+              <Text style={[styles.challengeCount, { fontFamily: fontBold }]}>
+                {loading && matchCount === 0 ? '—' : matchCount}
+              </Text>
               <Text style={[styles.challengeLabel, { fontFamily: fontSemi }]}>{` ${copy.matchCountLabel}`}</Text>
             </Text>
           </View>

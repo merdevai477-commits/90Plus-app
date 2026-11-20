@@ -303,7 +303,13 @@ function TeamBlock({
   return (
     <View style={[styles.team, { width: 116 }]}>
       {logo ? (
-        <Image source={{ uri: logo }} style={{ width: size, height: size }} contentFit="contain" />
+        <Image
+          source={{ uri: logo }}
+          style={{ width: size, height: size }}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          recyclingKey={logo}
+        />
       ) : (
         <View style={{ width: size, height: size }} />
       )}

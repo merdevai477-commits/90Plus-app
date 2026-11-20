@@ -437,11 +437,20 @@ export const PredictionsService = {
   /** Raw list-view fixtures for the day's top 10 King matches, plus the server's Cairo calendar. */
   getKingMatches: async (
     date: string,
+    options?: { fresh?: boolean },
   ): Promise<{ fixtures: unknown[]; calendar: { today: string; days: string[] } | null }> => {
-    const response = await fetch(
-      `${API_URL}/predictions/king/matches?date=${encodeURIComponent(date)}`,
-      { headers: { 'Content-Type': 'application/json' } },
-    );
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    const fresh = options?.fresh ? '&fresh=1' : '';
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_URL}/predictions/king/matches?date=${encodeURIComponent(date)}${fresh}`,
+        { headers: { 'Content-Type': 'application/json' }, signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) {
       throw await PredictionsService._parseError(response);
     }

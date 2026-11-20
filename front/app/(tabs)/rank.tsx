@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { cairoTodayKey, prefetchKingMatches } from '../../components/KingOfPredictions/shared';
 import CompCard from '../../components/rank/CompCard';
 import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
@@ -60,6 +61,7 @@ export default function RankScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      prefetchKingMatches(cairoTodayKey());
       const now = Date.now();
       if (now - lastRankFocusFetchAtRef.current >= 60_000) {
         lastRankFocusFetchAtRef.current = now;

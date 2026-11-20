@@ -64,14 +64,70 @@ export function kingLeagueLogos(): { id: number; logo: string }[] {
   });
 }
 
+type CachedKingMatches = {
+  matches: Match[];
+  calendar: KingCalendar | null;
+  at: number;
+};
+
+const KING_MATCHES_FRESH_MS = 15_000;
+const kingMatchesCache = new Map<string, CachedKingMatches>();
+const kingMatchesInflight = new Map<string, Promise<{ matches: Match[]; calendar: KingCalendar | null }>>();
+
+export function clearKingMatchesCache(): void {
+  kingMatchesCache.clear();
+}
+
+/** Last list for this day, including one that is ready to refresh. */
+export function peekKingMatches(
+  dateKey: string,
+): { matches: Match[]; calendar: KingCalendar | null } | null {
+  const hit = kingMatchesCache.get(dateKey);
+  if (!hit) return null;
+  return { matches: hit.matches, calendar: hit.calendar };
+}
+
+export function prefetchKingMatches(dateKey: string): void {
+  void fetchKingMatches(dateKey).catch(() => undefined);
+}
+
 export async function fetchKingMatches(
   dateKey: string,
+  options?: { force?: boolean },
 ): Promise<{ matches: Match[]; calendar: KingCalendar | null }> {
-  const { fixtures, calendar } = await PredictionsService.getKingMatches(dateKey);
-  return {
-    matches: mapFixturesToMatches(fixtures as Parameters<typeof mapFixturesToMatches>[0]),
-    calendar,
-  };
+  const hit = kingMatchesCache.get(dateKey);
+  if (hit && !options?.force && Date.now() - hit.at < KING_MATCHES_FRESH_MS) {
+    return { matches: hit.matches, calendar: hit.calendar };
+  }
+
+  if (!options?.force) {
+    const pending = kingMatchesInflight.get(dateKey);
+    if (pending) return pending;
+  }
+
+  const job = (async () => {
+    try {
+      const { fixtures, calendar } = await PredictionsService.getKingMatches(dateKey, {
+        fresh: options?.force === true,
+      });
+      const result = {
+        matches: mapFixturesToMatches(fixtures as Parameters<typeof mapFixturesToMatches>[0]),
+        calendar,
+      };
+      kingMatchesCache.set(dateKey, { ...result, at: Date.now() });
+      return result;
+    } catch (error) {
+      if (hit) return { matches: hit.matches, calendar: hit.calendar };
+      throw error;
+    }
+  })();
+
+  kingMatchesInflight.set(dateKey, job);
+  try {
+    return await job;
+  } finally {
+    if (kingMatchesInflight.get(dateKey) === job) kingMatchesInflight.delete(dateKey);
+  }
 }
 
 export function fillTemplate(template: string, values: Record<string, string | number>): string {

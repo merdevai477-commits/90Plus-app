@@ -46,6 +46,7 @@ import {
   cairoTodayKey,
   fetchKingMatches,
   parseKingMode,
+  peekKingMatches,
   type KingRouteMode,
 } from './shared';
 import { KingToast, type KingToastState } from './KingToast';
@@ -109,14 +110,16 @@ export function KingPlayScreen({
   const { isDark } = useResolvedAppScheme();
   const theme = useMemo(() => getKingPlayTheme(isDark), [isDark]);
 
-  const [matches, setMatches] = useState<Match[]>([]);
+  const openingDate = dateKey || cairoTodayKey();
+  const openingMatches = (peekKingMatches(openingDate)?.matches ?? []).filter(isPlausibleFootballMatch);
+  const [matches, setMatches] = useState<Match[]>(openingMatches);
   const serverPicks = useKingPicksStore((state) => state.server);
   const localPicks = useKingPicksStore((state) => state.local);
   const saved = useMemo<Record<string, KingPick>>(
     () => ({ ...serverPicks, ...localPicks }),
     [serverPicks, localPicks],
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(openingMatches.length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [toast, setToast] = useState<KingToastState | null>(null);
@@ -128,19 +131,20 @@ export function KingPlayScreen({
   const listBottom = navBottom + NAV_HEIGHT + 24;
 
   const loadGenRef = useRef(0);
-  const hasRows = useRef(false);
+  const hasRows = useRef(openingMatches.length > 0);
 
   useEffect(() => {
-    hasRows.current = false;
-    setMatches([]);
+    const seeded = (peekKingMatches(dateKey || cairoTodayKey())?.matches ?? []).filter(isPlausibleFootballMatch);
+    hasRows.current = seeded.length > 0;
+    setMatches(seeded);
     setError(false);
-    setLoading(true);
+    setLoading(seeded.length === 0);
     setSheetMatch(null);
-  }, [dateKey, apiMode]);
+  }, [dateKey]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     const gen = ++loadGenRef.current;
-    const { matches: dayMatches, calendar } = await fetchKingMatches(dateKey || cairoTodayKey());
+    const { matches: dayMatches, calendar } = await fetchKingMatches(dateKey || cairoTodayKey(), { force });
     if (gen !== loadGenRef.current) return;
     if (calendar) setTodayKey(calendar.today);
     setMatches(dayMatches.filter(isPlausibleFootballMatch));
@@ -176,7 +180,7 @@ export function KingPlayScreen({
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load();
+      await load(true);
     } catch {
       if (!hasRows.current) setError(true);
     } finally {

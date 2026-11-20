@@ -866,10 +866,13 @@ router.post('/submit', requireAuth, predictionWriteLimiter, async (req: Request,
 router.get('/king/matches', async (req: Request, res: Response): Promise<void> => {
     try {
         const date = typeof req.query.date === 'string' ? req.query.date : undefined;
-        const matches = await getKingDailyMatches(date);
+        const fresh = req.query.fresh === '1';
         const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : cairoDayKey();
-        const slateIds = await getKingDailySlateIds(day);
         const week = cairoWeekBounds();
+        const [matches, slateIds] = await Promise.all([
+            getKingDailyMatches(date, { fresh }),
+            getKingDailySlateIds(day),
+        ]);
         res.json({
             success: true,
             data: matches,
