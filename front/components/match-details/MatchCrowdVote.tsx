@@ -357,7 +357,8 @@ export function MatchCrowdVote({
           </View>
         </View>
 
-        <View style={[styles.tiles, { flexDirection: rowDir }]}>
+        {/* Same order as the match header: home, draw, away. Do not mirror in Arabic. */}
+        <View style={styles.tiles}>
           {CHOICES.map((choice) => (
             <VoteTile
               key={choice}
@@ -374,24 +375,20 @@ export function MatchCrowdVote({
       </View>
 
       <View style={styles.results}>
-        <View style={[styles.percentRow, { flexDirection: rowDir }]}>
-          {CHOICES.map((choice) =>
-            percents[choice] > 0 ? (
-              <Text
-                key={choice}
-                style={[styles.percentLabel, { color: ink, flex: percents[choice] }]}
-                numberOfLines={1}
-              >
-                {`${percents[choice]}%`}
-              </Text>
-            ) : (
-              <View key={choice} style={{ flex: 0 }} />
-            ),
-          )}
+        <View style={styles.percentRow}>
+          {CHOICES.map((choice) => (
+            <Text
+              key={choice}
+              style={[styles.percentLabel, { color: ink }]}
+              numberOfLines={1}
+            >
+              {`${percents[choice]}%`}
+            </Text>
+          ))}
         </View>
 
         <View style={[styles.barTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : TRACK }]}>
-          <View style={[styles.barFill, { flexDirection: rowDir }]}>
+          <View style={styles.barFill}>
             {CHOICES.map((choice) => (
               <BarSegment key={choice} choice={choice} flex={percents[choice]} />
             ))}
@@ -460,6 +457,7 @@ const styles = StyleSheet.create({
   },
   tiles: {
     width: '100%',
+    flexDirection: 'row',
     gap: 10,
   },
   tile: {
@@ -521,9 +519,13 @@ const styles = StyleSheet.create({
   },
   percentRow: {
     width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
   percentLabel: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 23,
