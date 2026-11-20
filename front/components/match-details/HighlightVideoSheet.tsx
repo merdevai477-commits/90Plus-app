@@ -42,6 +42,7 @@ import {
   isDirectHighlightFile,
   resolveHighlightPlaybackUrl,
   streaminPlaybackCandidates,
+  youtubeEmbedDocument,
   youtubeEmbedUrl,
   youtubeVideoId,
 } from '../../utils/highlightPlaybackUrl';
@@ -397,8 +398,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
             <WebView
               key={`${listKey}:${embedUrl}:${sessionNonce}`}
               source={{
-                uri: embedUrl,
-                headers: { Referer: 'https://www.youtube.com' },
+                html: youtubeEmbedDocument(videoId || ''),
+                baseUrl: 'https://90plus.pro',
               }}
               style={styles.webView}
               androidLayerType="hardware"
@@ -795,6 +796,7 @@ const styles = StyleSheet.create({
   webView: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000000',
+    opacity: 0.99,
     zIndex: 1,
   },
   loadingOverlay: {

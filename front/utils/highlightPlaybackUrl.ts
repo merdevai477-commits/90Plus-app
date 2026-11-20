@@ -81,3 +81,10 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
   return `https://www.youtube.com/embed/${id}?${params.toString()}`;
 }
 
+/** Local page so the WebView sends a Referer and the embed is allowed to paint. */
+export function youtubeEmbedDocument(videoId: string): string {
+  const id = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
+  const src = `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=1&origin=https%3A%2F%2F90plus.pro`;
+  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${src}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></body></html>`;
+}
+
