@@ -81,10 +81,31 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
   return `https://www.youtube.com/embed/${id}?${params.toString()}`;
 }
 
-/** Local page so the WebView sends a Referer and the embed is allowed to paint. */
+/**
+ * Local page so the WebView sends a Referer and the embed is allowed to paint.
+ * Uses the IFrame API so iOS can report PLAYER_READY / PLAYING / typed errors
+ * instead of treating the wrapper HTML load as "video ready".
+ */
 export function youtubeEmbedDocument(videoId: string): string {
   const id = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
-  const src = `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=1&origin=https%3A%2F%2F90plus.pro`;
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="${src}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></body></html>`;
+  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#player{position:absolute;inset:0;width:100%;height:100%}</style></head><body><div id="player"></div><script>
+var tag=document.createElement('script');
+tag.src='https://www.youtube.com/iframe_api';
+document.head.appendChild(tag);
+function post(reason){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('reason:'+reason+':'+location.href);}catch(e){}}
+function onYouTubeIframeAPIReady(){
+  try{
+    new YT.Player('player',{
+      width:'100%',height:'100%',videoId:'${id}',
+      playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,controls:1,iv_load_policy:3,enablejsapi:1,origin:'https://90plus.pro'},
+      events:{
+        onReady:function(e){try{e.target.playVideo();}catch(x){}post('PLAYER_READY');},
+        onStateChange:function(e){if(e&&e.data===1)post('PLAYING');},
+        onError:function(e){var c=String(e&&e.data);post(c==='100'?'SOURCE_NOT_FOUND':'EMBED_UNAVAILABLE');}
+      }
+    });
+  }catch(err){post('EMBED_UNAVAILABLE');}
+}
+</script></body></html>`;
 }
 

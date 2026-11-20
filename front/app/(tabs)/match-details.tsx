@@ -2099,7 +2099,14 @@ const MatchDetailsScreen = () => {
             thumbnail={matchSummary.thumbnail}
             url={matchSummary.url || matchSummary.embedUrl}
             playLabel={t.matchDetails.matchSummaryPlay || 'تشغيل ملخص المباراة'}
-            onPlay={() => setHighlightVideoUrls(summaryUrls.length ? summaryUrls : [])}
+            onPlay={() => {
+              if (summaryUrls.length) {
+                setHighlightVideoUrls(summaryUrls);
+                return;
+              }
+              const fallback = (matchSummary.url || matchSummary.embedUrl || '').trim();
+              setHighlightVideoUrls(fallback ? [fallback] : []);
+            }}
           />
         ) : (
           <MatchMomentumGraph

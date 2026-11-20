@@ -72,9 +72,12 @@ export function buildGoalClipPlaybackCandidates(
     urls.push(url);
   };
 
-  // Always keep the assigned primary even if unsupported — sheet classifies honestly.
+  // Supported primary URLs first. Unsupported assigned URLs stay as last resort
+  // so a dead streama.in row cannot block a same-clip YouTube/Streamin alternate.
   if (primary) {
-    for (const candidate of clipCandidateUrls(primary)) pushUrl(candidate, false);
+    const primaryUrls = clipCandidateUrls(primary);
+    for (const candidate of primaryUrls) pushUrl(candidate, true);
+    for (const candidate of primaryUrls) pushUrl(candidate, false);
   }
 
   const urlsAssignedElsewhere = new Set(

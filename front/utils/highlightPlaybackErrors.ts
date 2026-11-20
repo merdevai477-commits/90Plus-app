@@ -65,9 +65,19 @@ export function classifyHttpStatusForDirectSource(status: number): PlaybackFailu
  * Classify YouTube embed probe payloads.
  * Only confirmed country/region phrasing becomes GEO_RESTRICTED.
  */
+/** Positive YouTube IFrame API signals — not failures. */
+export function isYouTubePlaybackProgressSignal(raw: string): boolean {
+  const text = raw.trim();
+  const match = text.match(/^reason:(PLAYER_READY|PLAYING):/i);
+  return Boolean(match);
+}
+
 export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason | null {
   const text = raw.trim();
   if (!text) return null;
+
+  // Success / progress messages must never map to a failure reason.
+  if (isYouTubePlaybackProgressSignal(text)) return null;
 
   const reasonPrefix = text.match(/^reason:([A-Z_]+):/i);
   if (reasonPrefix) {

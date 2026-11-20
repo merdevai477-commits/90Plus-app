@@ -2,6 +2,7 @@ import {
   classifyHttpStatusForDirectSource,
   classifyYouTubeErrorCode,
   classifyYouTubeProbeSignal,
+  isYouTubePlaybackProgressSignal,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
 } from '../highlightPlaybackErrors';
@@ -60,6 +61,13 @@ describe('highlightPlaybackErrors', () => {
 
     it('does not invent geo from bare video unavailable text', () => {
       expect(classifyYouTubeProbeSignal('Video unavailable')).toBeNull();
+    });
+
+    it('treats PLAYER_READY / PLAYING as progress, not failure', () => {
+      expect(isYouTubePlaybackProgressSignal('reason:PLAYER_READY:https://90plus.pro/')).toBe(true);
+      expect(isYouTubePlaybackProgressSignal('reason:PLAYING:https://90plus.pro/')).toBe(true);
+      expect(classifyYouTubeProbeSignal('reason:PLAYER_READY:https://90plus.pro/')).toBeNull();
+      expect(classifyYouTubeProbeSignal('reason:PLAYING:https://90plus.pro/')).toBeNull();
     });
   });
 

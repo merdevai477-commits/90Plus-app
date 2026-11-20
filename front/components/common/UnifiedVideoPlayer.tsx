@@ -163,6 +163,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
   // -------- URL management (signed URL refresh support) --------
   const [activeVideoUrl, setActiveVideoUrl] = useState(reel.videoUrl);
+  const [isRecovering, setIsRecovering] = useState(false);
   const signedUrlRefreshAttempts = useRef(0);
   const MAX_SIGNED_URL_REFRESHES = 2;
 
@@ -432,17 +433,20 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       }
     }
 
-    // Refresh playback URL from API (R2 signed URL or Mux HLS) when load fails.
+    // Refresh only expired owner R2 signed URLs. Mux HLS is public; the
+    // signed-url route is owner-only and 403s for every other viewer.
     const isMux = activeVideoUrl.includes('stream.mux.com') || activeVideoUrl.includes('.m3u8');
     const isSignedUrl = activeVideoUrl.includes('X-Amz-Signature');
     const canRefreshFromApi =
       !!reel.id &&
       reel.id !== 'undefined' &&
-      (isSignedUrl || isMux) &&
+      isSignedUrl &&
+      !isMux &&
       signedUrlRefreshAttempts.current < MAX_SIGNED_URL_REFRESHES;
 
     if (canRefreshFromApi) {
       signedUrlRefreshAttempts.current += 1;
+      setIsRecovering(true);
       logger.info(
         `[UnifiedVideoPlayer] Refreshing playback URL (attempt ${signedUrlRefreshAttempts.current}) for reel ${reel.id}`,
       );
@@ -450,11 +454,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       (async () => {
         try {
           const token = await getTokenRef.current();
-          if (!token || !mountedRef.current) return;
+          if (!token || !mountedRef.current) {
+            if (mountedRef.current) setIsRecovering(false);
+            return;
+          }
           const res = await fetch(`${getApiUrl()}/reels/${reel.id}/signed-url`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (!res.ok || !mountedRef.current) return;
+          if (!res.ok || !mountedRef.current) {
+            if (mountedRef.current) setIsRecovering(false);
+            return;
+          }
           const data = await res.json();
           const newUrl: string | undefined = data?.data?.signedUrl;
           if (newUrl && !isInvalidVideoUrl(newUrl) && mountedRef.current) {
@@ -463,21 +473,16 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
             loadedUrlRef.current = newUrl;
             setErrorDetails('');
             try {
+              // replace() is async on iOS — play() when status becomes readyToPlay.
               player.replace(buildVideoSource(newUrl));
-              if (
-                isActive &&
-                mountedRef.current &&
-                player.status === 'readyToPlay' &&
-                !player.playing
-              ) {
-                player.play();
-              }
             } catch (replaceErr) {
               logger.warn('[UnifiedVideoPlayer] replace failed:', replaceErr);
             }
           }
         } catch (refreshErr) {
           logger.warn('[UnifiedVideoPlayer] Playback URL refresh failed:', refreshErr);
+        } finally {
+          if (mountedRef.current) setIsRecovering(false);
         }
       })();
       return;
@@ -533,7 +538,8 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   }, [onManualReplay, player, status]);
 
   // -------- Render ---------
-  const showErrorUi = (hasError || loadTimedOut || invalidSource) && !isLoading;
+  const showErrorUi =
+    (hasError || loadTimedOut || invalidSource) && !isLoading && !isRecovering;
 
   if (showErrorUi) {
     const invalidReason = invalidSource

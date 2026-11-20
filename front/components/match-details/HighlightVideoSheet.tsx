@@ -20,6 +20,7 @@ import { holdHighlightReplay, releaseHighlightReplay } from '../../services/sent
 import { useTranslation } from '../../src/i18n';
 import {
   classifyYouTubeProbeSignal,
+  isYouTubePlaybackProgressSignal,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
   type PlaybackFailureReason,
@@ -184,8 +185,10 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       });
       return;
     }
-    let cancelled = false;
-    setUiPhase('initializing');
+    // Mount the surface on the same turn as the tap. Waiting on async work
+    // (even a no-op) drops iOS user-activation and blocks YouTube autoplay.
+    setUiPhase('loading');
+    setSurfaceReady(true);
     emitHighlightPlaybackDiagnostic({
       sessionId: sessionId.current,
       stage: 'VIDEO_REQUESTED',
@@ -194,15 +197,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       sourceHost: sanitizePlaybackUrlForDiagnostics(firstCandidateUrl),
       retryCount,
     });
-    void (async () => {
-      await holdHighlightReplay();
-      if (!cancelled) {
-        setSurfaceReady(true);
-        setUiPhase('loading');
-      }
-    })();
+    void holdHighlightReplay();
     return () => {
-      cancelled = true;
       setSurfaceReady(false);
       releaseHighlightReplay();
     };
@@ -409,8 +405,6 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               androidLayerType="hardware"
               userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
-                // Keep the load watchdog armed until onLoadEnd — onLoadStart alone
-                // is too early and left iOS on a black embed with no timeout.
                 setUiPhase('loading');
               }}
               originWhitelist={['*']}
@@ -424,20 +418,26 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               domStorageEnabled
               injectedJavaScript={PLAYBACK_PROBE}
               onLoadEnd={() => {
-                setYoutubeLoaded(true);
-                setUiPhase('ready');
-                emitHighlightPlaybackDiagnostic({
-                  sessionId: sessionId.current,
-                  stage: 'PLAYER_READY',
-                  sourceType: 'youtube',
-                  provider: 'youtube',
-                  sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl),
-                  readyMs: Date.now() - sessionStartedAt.current,
-                  retryCount,
-                });
+                // Wrapper HTML finished — not proof the YouTube player can play.
+                // Keep the spinner/watchdog until PLAYER_READY / PLAYING.
+                setUiPhase('loading');
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
+                if (isYouTubePlaybackProgressSignal(data)) {
+                  setYoutubeLoaded(true);
+                  setUiPhase('ready');
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYER_READY',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl),
+                    readyMs: Date.now() - sessionStartedAt.current,
+                    retryCount,
+                  });
+                  return;
+                }
                 const reason = classifyYouTubeProbeSignal(data);
                 if (!reason) return;
                 if (videoId && !data.includes(videoId) && !data.includes(embedUrl)) return;
