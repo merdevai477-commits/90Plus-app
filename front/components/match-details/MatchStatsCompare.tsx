@@ -270,7 +270,7 @@ function PercentRing({
   );
 }
 
-/** One shared ring, Figma 1767:13395. Home sits on the left, same as the match header. */
+/** One shared ring, Figma 1767:13395. Home is always on the right. */
 function PossessionCard({
   pair,
   title,
@@ -359,23 +359,10 @@ function PossessionCard({
           />
         </View>
         <View style={[styles.possessionRow, { paddingHorizontal: 12 * s }]}>
-          {side(homePct, homeName, homeColor)}
+          {side(awayPct, awayName, awayColor)}
           <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
               <Circle cx={center} cy={center} r={r} stroke={track} strokeWidth={stroke} fill="transparent" />
-              {awayLen > 0 ? (
-                <Circle
-                  cx={center}
-                  cy={center}
-                  r={r}
-                  stroke={awayColor}
-                  strokeWidth={stroke}
-                  fill="transparent"
-                  strokeDasharray={`${awayLen} ${circ}`}
-                  strokeDashoffset={gap / 2}
-                  transform={`rotate(-90 ${center} ${center})`}
-                />
-              ) : null}
               {homeLen > 0 ? (
                 <Circle
                   cx={center}
@@ -385,7 +372,20 @@ function PossessionCard({
                   strokeWidth={stroke}
                   fill="transparent"
                   strokeDasharray={`${homeLen} ${circ}`}
-                  strokeDashoffset={homeLen + gap / 2}
+                  strokeDashoffset={gap / 2}
+                  transform={`rotate(-90 ${center} ${center})`}
+                />
+              ) : null}
+              {awayLen > 0 ? (
+                <Circle
+                  cx={center}
+                  cy={center}
+                  r={r}
+                  stroke={awayColor}
+                  strokeWidth={stroke}
+                  fill="transparent"
+                  strokeDasharray={`${awayLen} ${circ}`}
+                  strokeDashoffset={awayLen + gap / 2}
                   transform={`rotate(-90 ${center} ${center})`}
                 />
               ) : null}
@@ -397,7 +397,7 @@ function PossessionCard({
               tintColor={isDark ? '#F4EEFF' : undefined}
             />
           </View>
-          {side(awayPct, awayName, awayColor)}
+          {side(homePct, homeName, homeColor)}
         </View>
       </View>
     </View>
@@ -422,13 +422,13 @@ function RingPair({
   return (
     <View style={[styles.pairRow, { gap: (divider ? 28 : 40) * s }]}>
       <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
-        <PercentRing pct={n(pair.home)} size={size} color={C.homeRing} track={C.homeRingTrack} />
-        <TeamName name={homeName} s={s} />
+        <PercentRing pct={n(pair.away)} size={size} color={C.primary} track={C.awayRingTrack} />
+        <TeamName name={awayName} s={s} />
       </View>
       {divider ? <VDivider /> : null}
       <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
-        <PercentRing pct={n(pair.away)} size={size} color={C.primary} track={C.awayRingTrack} />
-        <TeamName name={awayName} s={s} />
+        <PercentRing pct={n(pair.home)} size={size} color={C.homeRing} track={C.homeRingTrack} />
+        <TeamName name={homeName} s={s} />
       </View>
     </View>
   );
@@ -467,14 +467,14 @@ function BigNumberPair({
 
   return (
     <View style={[styles.pairRow, { gap: 28 * s }]}>
-      {col(pair.home, homeName, C.secondary)}
-      <VDivider />
       {col(pair.away, awayName, C.primary)}
+      <VDivider />
+      {col(pair.home, homeName, C.secondary)}
     </View>
   );
 }
 
-/** Shared track: home fills from the left, away from the right. */
+/** Shared track: away fills from the left, home from the right. */
 function DualTrack({ pair, s }: { pair: Pair; s: number }) {
   const C = useStatsC();
   const total = n(pair.home) + n(pair.away);
@@ -483,8 +483,8 @@ function DualTrack({ pair, s }: { pair: Pair; s: number }) {
   const h = 8 * s;
   return (
     <View style={[styles.track, { height: h, borderRadius: h / 2, backgroundColor: C.barTrack }]}>
-      <View style={{ width: `${homePct}%`, height: h, borderRadius: h / 2, backgroundColor: C.secondary }} />
       <View style={{ width: `${awayPct}%`, height: h, borderRadius: h / 2, backgroundColor: C.primary }} />
+      <View style={{ width: `${homePct}%`, height: h, borderRadius: h / 2, backgroundColor: C.secondary }} />
     </View>
   );
 }
@@ -508,15 +508,15 @@ function ShotsCard({
       <View style={{ gap: 12 * s }}>
         <View style={styles.spaceBetween}>
           <View style={[styles.flex1, styles.alignStart]}>
-            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.home)}</Text>
-            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
-              {homeName}
-            </Text>
-          </View>
-          <View style={[styles.flex1, styles.alignEnd]}>
             <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.away)}</Text>
             <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
               {awayName}
+            </Text>
+          </View>
+          <View style={[styles.flex1, styles.alignEnd]}>
+            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.home)}</Text>
+            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
+              {homeName}
             </Text>
           </View>
         </View>
@@ -526,11 +526,11 @@ function ShotsCard({
       {rows.map((row) => (
         <View key={row.key} style={{ gap: 10 * s }}>
           <View style={styles.spaceBetween}>
-            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.home)}</Text>
+            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.away)}</Text>
             <Text style={[styles.rowLabel, { fontSize: 13 * s, color: C.text }]} numberOfLines={1}>
               {row.label}
             </Text>
-            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.away)}</Text>
+            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.home)}</Text>
           </View>
           <DualTrack pair={row.pair} s={s} />
         </View>
@@ -583,9 +583,9 @@ function SideBarsCard({
   return (
     <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s }}>
       <View style={[styles.pairRow, { gap: 16 * s }]}>
-        {side(pair.home, homeName, C.secondary, 'start')}
+        {side(pair.away, awayName, C.primary, 'start')}
         <VDivider />
-        {side(pair.away, awayName, C.primary, 'end')}
+        {side(pair.home, homeName, C.secondary, 'end')}
       </View>
     </Card>
   );
@@ -617,9 +617,9 @@ function CardsCard({
 
   const row = (pair: Pair, color: string) => (
     <View style={[styles.pairRow, { gap: 24 * s }]}>
-      {group(pair.home, homeName, color)}
-      <VDivider />
       {group(pair.away, awayName, color)}
+      <VDivider />
+      {group(pair.home, homeName, color)}
     </View>
   );
 
@@ -915,9 +915,9 @@ export function MatchStatsCompare({
           <Section title={md.statsSummary} icon={ICON.summary} {...sectionProps}>
             <Card style={{ padding: 14 * s }}>
               <View style={[styles.pairRow, { gap: 9 * s, alignItems: 'center' }]}>
-                <SummarySide name={homeName} logo={homeLogo} metrics={summaryMetrics('home')} align="start" s={s} />
+                <SummarySide name={awayName} logo={awayLogo} metrics={summaryMetrics('away')} align="start" s={s} />
                 <VDivider height={64 * s} />
-                <SummarySide name={awayName} logo={awayLogo} metrics={summaryMetrics('away')} align="end" s={s} />
+                <SummarySide name={homeName} logo={homeLogo} metrics={summaryMetrics('home')} align="end" s={s} />
               </View>
             </Card>
           </Section>

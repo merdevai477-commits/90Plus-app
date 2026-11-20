@@ -53,6 +53,8 @@ export type MatchCrowdVoteData = {
 type Props = MatchCrowdVoteData & { rtl: boolean };
 
 const CHOICES: CrowdVoteChoice[] = ['home', 'draw', 'away'];
+/** Home is always the right-hand card, away the left. */
+const DISPLAY: CrowdVoteChoice[] = ['away', 'draw', 'home'];
 
 function formatVotes(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
@@ -357,9 +359,8 @@ export function MatchCrowdVote({
           </View>
         </View>
 
-        {/* Same order as the match header: home, draw, away. Do not mirror in Arabic. */}
         <View style={styles.tiles}>
-          {CHOICES.map((choice) => (
+          {DISPLAY.map((choice) => (
             <VoteTile
               key={choice}
               media={tileMedia[choice]}
@@ -376,7 +377,7 @@ export function MatchCrowdVote({
 
       <View style={styles.results}>
         <View style={styles.percentRow}>
-          {CHOICES.map((choice) => (
+          {DISPLAY.map((choice) => (
             <Text
               key={choice}
               style={[styles.percentLabel, { color: ink }]}
@@ -389,7 +390,7 @@ export function MatchCrowdVote({
 
         <View style={[styles.barTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : TRACK }]}>
           <View style={styles.barFill}>
-            {CHOICES.map((choice) => (
+            {DISPLAY.map((choice) => (
               <BarSegment key={choice} choice={choice} flex={percents[choice]} />
             ))}
           </View>

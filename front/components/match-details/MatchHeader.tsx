@@ -215,17 +215,17 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
       <View style={styles.teamsRow}>
         <TouchableOpacity
           style={styles.teamCol}
-          onPress={onPressHomeTeam}
-          disabled={!onPressHomeTeam}
+          onPress={onPressAwayTeam}
+          disabled={!onPressAwayTeam}
           activeOpacity={0.7}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <TeamLogo name={homeTeam} uri={homeLogo} size={logoSize} />
+          <TeamLogo name={awayTeam} uri={awayLogo} size={logoSize} />
           <Text
             style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118, color: colors.textPrimary }]}
             numberOfLines={2}
           >
-            {homeTeam}
+            {awayTeam}
           </Text>
         </TouchableOpacity>
 
@@ -279,7 +279,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
                 ]}
                 numberOfLines={1}
               >
-                {homeScore || '0'}
+                {awayScore || '0'}
               </Text>
               <Text
                 style={[styles.scoreDash, { fontSize: Math.round(scoreFont * 0.72), color: colors.textPrimary }]}
@@ -298,7 +298,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
                 ]}
                 numberOfLines={1}
               >
-                {awayScore || '0'}
+                {homeScore || '0'}
               </Text>
             </View>
           )}
@@ -320,13 +320,13 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           {hasPenaltyScore ? (
             <View style={styles.penaltyRow}>
               <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
-                {`(${String(penaltyHome)}`}
+                {`(${String(penaltyAway)}`}
               </Text>
               <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
                 {' - '}
               </Text>
               <Text style={[styles.penaltyLine, { color: colors.primarySoft }]} numberOfLines={1}>
-                {`${String(penaltyAway)} ${
+                {`${String(penaltyHome)} ${
                   statusLabel && short !== 'FT' ? statusLabel : penaltiesShortLabel
                 })`}
               </Text>
@@ -336,17 +336,17 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
 
         <TouchableOpacity
           style={styles.teamCol}
-          onPress={onPressAwayTeam}
-          disabled={!onPressAwayTeam}
+          onPress={onPressHomeTeam}
+          disabled={!onPressHomeTeam}
           activeOpacity={0.7}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <TeamLogo name={awayTeam} uri={awayLogo} size={logoSize} />
+          <TeamLogo name={homeTeam} uri={homeLogo} size={logoSize} />
           <Text
             style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118, color: colors.textPrimary }]}
             numberOfLines={2}
           >
-            {awayTeam}
+            {homeTeam}
           </Text>
         </TouchableOpacity>
       </View>
@@ -354,8 +354,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
       {showScorers ? (
         <View style={styles.scorersRow}>
           <View style={styles.scorersCol}>
-            {homeScorers.map((s, i) => (
-              <View key={`h-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
+            {awayScorers.map((s, i) => (
+              <View key={`a-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
                 <Text style={[styles.scorerName, { color: scorerColor }]} numberOfLines={1}>
                   {s.name}
                 </Text>
@@ -366,8 +366,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           </View>
           <View style={[styles.scorersDivider, { backgroundColor: colors.divider }]} />
           <View style={styles.scorersCol}>
-            {awayScorers.map((s, i) => (
-              <View key={`a-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
+            {homeScorers.map((s, i) => (
+              <View key={`h-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
                 <Text style={[styles.scorerName, { color: scorerColor }]} numberOfLines={1}>
                   {s.name}
                 </Text>
