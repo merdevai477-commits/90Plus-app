@@ -387,22 +387,30 @@ export default function PlayerProfileView({
                 ) : null}
               </View>
             </View>
-            <View style={[styles.heroSocials, { flexDirection: 'row', width: 80, justifyContent: 'space-between' }]}>
-              {socials?.instagramUrl ? (
-                <Pressable onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}>
-                  <Image source={PP_ICON.instagram} style={styles.socialIcon} contentFit="contain" />
-                </Pressable>
-              ) : (
-                <View style={styles.socialIcon} />
-              )}
-              {socials?.facebookUrl ? (
-                <Pressable onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}>
-                  <Image source={PP_ICON.facebook} style={styles.socialIcon} contentFit="contain" />
-                </Pressable>
-              ) : (
-                <View style={styles.socialIcon} />
-              )}
-            </View>
+            {socials?.instagramUrl || socials?.facebookUrl ? (
+              <View style={[styles.heroSocials, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                {socials?.instagramUrl ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel="Instagram"
+                    onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}
+                    hitSlop={8}
+                  >
+                    <Image source={PP_ICON.instagram} style={styles.socialIcon} contentFit="contain" />
+                  </Pressable>
+                ) : null}
+                {socials?.facebookUrl ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel="Facebook"
+                    onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}
+                    hitSlop={8}
+                  >
+                    <Image source={PP_ICON.facebook} style={styles.socialIcon} contentFit="contain" />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -579,8 +587,8 @@ export default function PlayerProfileView({
             </View>
           ) : null}
 
-          {/* Social media */}
-          {(socials?.instagramUrl || socials?.facebookUrl) ? (
+          {/* Social media — only platforms with a curated URL */}
+          {socials && (socials.instagramUrl || socials.facebookUrl) ? (
             <SocialSection socials={socials} C={C} rtl={rtl} cardShadow={cardShadow} />
           ) : null}
         </View>
@@ -1223,6 +1231,8 @@ function SocialSection({
         {rows.map((row, idx) => (
           <React.Fragment key={row.key}>
             <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={row.handle}
               onPress={() => Linking.openURL(row.url).catch(() => undefined)}
               style={[styles.socialRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
             >
@@ -1297,7 +1307,7 @@ const styles = StyleSheet.create({
   nameFirst: { color: '#fff' },
   nameLast: { color: '#fff', marginTop: -2 },
   heroSub: { fontSize: 12, marginTop: 2 },
-  heroSocials: { marginTop: 0 },
+  heroSocials: { marginTop: 0, alignItems: 'center', gap: 8 },
   socialIcon: { width: 36, height: 36 },
 
   strip: {
