@@ -1419,6 +1419,46 @@ model FixtureHighlightSync {
   @@map("fixture_highlight_sync")
 }
 
+/// One physical highlight file. Bytes live in object storage, never in Postgres.
+model HighlightStoredAsset {
+  id            String   @id @default(uuid())
+  checksum      String   @unique
+  storageKey    String   @unique
+  storageStatus String
+  contentType   String
+  fileSize      Int
+  duration      Int?
+  width         Int?
+  height        Int?
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  ingestions    HighlightIngestion[]
+
+  @@index([storageStatus])
+  @@map("highlight_stored_assets")
+}
+
+/// Per-clip ingest attempt. Multiple clips may point at one asset checksum.
+model HighlightIngestion {
+  id             String   @id @default(uuid())
+  highlightlyId  Int      @unique
+  fixtureId      Int?
+  originalUrl    String
+  status         String
+  assetId        String?
+  asset          HighlightStoredAsset? @relation(fields: [assetId], references: [id])
+  lastErrorCode  String?
+  attempts       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([fixtureId, status])
+  @@index([status])
+  @@index([assetId])
+  @@map("highlight_ingestions")
+}
+
 model CachedPlayer {
   id              String   @id @default(uuid())
   playerId        Int      @unique

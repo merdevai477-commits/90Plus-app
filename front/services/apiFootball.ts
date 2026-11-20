@@ -567,6 +567,8 @@ export interface FixtureGoalClip {
   url: string;
   embedUrl: string | null;
   thumbnail: string | null;
+  /** Preferred URL first (owned copy when verified), then the external source. */
+  playbackUrls?: string[];
 }
 
 export interface FixtureHighlightsPayload {

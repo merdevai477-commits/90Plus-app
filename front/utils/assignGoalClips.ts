@@ -4,6 +4,7 @@ export interface GoalClipMedia {
   url: string;
   embedUrl?: string | null;
   thumbnail?: string | null;
+  playbackUrls?: string[];
 }
 
 type GoalEvent = {

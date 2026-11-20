@@ -1,6 +1,8 @@
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { isHighlightCoverageFixture } from './highlight-coverage';
+import { resolveHighlightPlayback } from '../highlight-storage/playback';
+import { canonicalizeHighlightSource } from '../highlight-storage/eligibility';
 import {
   isFinishedHighlightStatus,
   pickGoals,
@@ -67,9 +69,10 @@ export async function getFixtureHighlights(
   ]);
 
   const stored = clips as StoredHighlightClip[];
-  const summaries = pickSummaries(stored);
+  const ownedByUrl = await loadVerifiedPlaybackUrls(fixtureId);
+  const summaries = pickSummaries(stored).map((clip) => applyOwnedUrl(clip, ownedByUrl));
   const summary = summaries[0] ?? null;
-  const goals = pickGoals(stored);
+  const goals = pickGoals(stored).map((clip) => applyOwnedUrl(clip, ownedByUrl));
   const covered = isHighlightCoverageFixture(fixture);
   if (!covered && summary == null && goals.length === 0) {
     return { status: 'unavailable', summary: null, summaries: [], goals: [], checkedAt: null };
@@ -91,6 +94,46 @@ export async function getFixtureHighlights(
     goals,
     checkedAt: sync?.lastCheckedAt?.toISOString() ?? null,
   };
+}
+
+function ownedPublicUrl(storageKey: string): string | null {
+  const base = (process.env.R2_MEDIA_PUBLIC_URL || process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+  if (!base || !storageKey) return null;
+  return `${base}/${storageKey}`;
+}
+
+async function loadVerifiedPlaybackUrls(fixtureId: number): Promise<Map<string, string>> {
+  let rows: Array<{ originalUrl: string; asset: { storageKey: string } | null }> = [];
+  try {
+    rows = await prisma.highlightIngestion.findMany({
+      where: {
+        fixtureId,
+        status: 'VERIFIED',
+        asset: { storageStatus: 'VERIFIED' },
+      },
+      select: { originalUrl: true, asset: { select: { storageKey: true } } },
+    });
+  } catch (error) {
+    logger.warn('[HighlightStorage] verified lookup skipped', error);
+  }
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const url = ownedPublicUrl(row.asset?.storageKey || '');
+    if (!url) continue;
+    map.set(row.originalUrl, url);
+    map.set(canonicalizeHighlightSource(row.originalUrl), url);
+  }
+  return map;
+}
+
+function applyOwnedUrl(clip: PublicHighlight, ownedByUrl: Map<string, string>): PublicHighlight {
+  const owned = ownedByUrl.get(clip.url) || ownedByUrl.get(canonicalizeHighlightSource(clip.url)) || null;
+  const resolved = resolveHighlightPlayback({
+    originalUrl: clip.url,
+    ownedUrl: owned,
+    verified: Boolean(owned),
+  });
+  return { ...clip, url: resolved.url, playbackUrls: resolved.playbackUrls };
 }
 
 async function noteRead(

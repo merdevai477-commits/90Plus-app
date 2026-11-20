@@ -18,7 +18,15 @@ type GoalEvent = {
 };
 
 function clipPlayUrl(clip: GoalClipMedia | null | undefined): string {
-  return (clip?.url || clip?.embedUrl || '').trim();
+  const preferred = clip?.playbackUrls?.find((url) => url.trim()) || clip?.url || clip?.embedUrl || '';
+  return preferred.trim();
+}
+
+function clipCandidateUrls(clip: GoalClipMedia): string[] {
+  const listed = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
+  const primary = clipPlayUrl(clip);
+  const original = (clip.url || clip.embedUrl || '').trim();
+  return [...listed, primary, original].filter((url, index, all) => url && all.indexOf(url) === index);
 }
 
 function isSupportedPlaybackUrl(url: string): boolean {
@@ -65,7 +73,9 @@ export function buildGoalClipPlaybackCandidates(
   };
 
   // Always keep the assigned primary even if unsupported — sheet classifies honestly.
-  pushUrl(clipPlayUrl(primary), false);
+  if (primary) {
+    for (const candidate of clipCandidateUrls(primary)) pushUrl(candidate, false);
+  }
 
   const urlsAssignedElsewhere = new Set(
     assigned.flatMap((clip, index) => {

@@ -530,7 +530,11 @@ const MatchDetailsScreen = () => {
           : payload.summary
             ? [payload.summary]
             : []
-        ).map((clip) => clip.url || clip.embedUrl || '').filter(Boolean);
+        ).flatMap((clip) => {
+          const ordered = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
+          const fallback = (clip.url || clip.embedUrl || '').trim();
+          return [...ordered, fallback].filter((url, index, all) => url && all.indexOf(url) === index);
+        });
         setGoalClips(payload.goals ?? []);
         setMatchSummary(payload.summary);
         setSummaryUrls(clips);

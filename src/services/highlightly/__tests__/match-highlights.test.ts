@@ -37,6 +37,11 @@ jest.mock('../../../lib/prisma', () => ({
       findMany: jest.fn(),
       upsert: jest.fn(),
     },
+    highlightIngestion: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
   },
 }));
 

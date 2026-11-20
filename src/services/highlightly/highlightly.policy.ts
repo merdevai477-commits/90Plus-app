@@ -59,6 +59,8 @@ export interface PublicHighlight {
   thumbnail: string | null;
   source: string | null;
   type: string;
+  /** Owned CDN URL first, then the original external URL. */
+  playbackUrls?: string[];
 }
 
 export interface SyncDateFixture {

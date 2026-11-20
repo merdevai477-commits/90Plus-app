@@ -996,6 +996,8 @@ async function startServer() {
                         './services/highlightly/match-highlights-sync.service'
                     );
                     startMatchHighlightsSync();
+                    const { startHighlightIngestWorker } = await import('./queues/highlight-video-ingest.queue');
+                    startHighlightIngestWorker();
 
                     // ✅ Share & Win — archive finished 30-day cycles with their final
                     // ranks. Rollover is also lazy on every read/write, so this only

@@ -315,6 +315,13 @@ async function persistClips(
       },
     });
     if (link.fixtureId != null) linkedFixtureIds.push(link.fixtureId);
+    void import('../highlight-storage/ingest')
+      .then((mod) => mod.noteClipForStorage({
+        highlightlyId: clip.highlightlyId,
+        fixtureId: link.fixtureId,
+        url: clip.url,
+      }))
+      .catch((error) => logger.warn('[HighlightStorage] enqueue skipped', error));
     if (link.fixtureId != null && clip.category === SUMMARY_CATEGORY) {
       summaryFixtureIds.push(link.fixtureId);
     }
