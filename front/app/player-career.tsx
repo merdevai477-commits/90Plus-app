@@ -5,9 +5,6 @@ import {
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    LayoutAnimation,
-    Platform,
-    UIManager,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +16,6 @@ import ApiFootballService, {
     type Player365CareerSeason,
     type PlayerSocialLinks,
 } from '../services/apiFootball';
-import { ProfileTheme } from '../constants/ProfileTheme';
 import {
     buildScores365AthleteCutoutUrl,
     scores365AthleteImageVersionFromUrl,
@@ -45,15 +41,15 @@ import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName } from '../utils/i18nHelpers';
 import { logger } from '../utils/logger';
 
-if (
-    Platform.OS === 'android' &&
-    UIManager.setLayoutAnimationEnabledExperimental
-) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const CARD_BG = '#0b0518';
-const CARD_BORDER = '#281359';
+const CARD_BG = '#1a0b33';
+const CARD_BORDER = '#3b1d6e';
+const CARD_SHADOW = {
+    shadowColor: '#4b1fa3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 8,
+} as const;
 
 const fmt = (n: number | null | undefined): string => {
     if (n == null || !Number.isFinite(n)) return '0';
@@ -94,7 +90,6 @@ export default function PlayerCareerScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
-    const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
     const [highlightCompId, setHighlightCompId] = useState<number | null>(null);
     const [socials, setSocials] = useState<PlayerSocialLinks | null>(null);
 
@@ -239,23 +234,6 @@ export default function PlayerCareerScreen() {
         };
     }, [career, photoCandidates, athleteId, params.teamLogo, routeTeamName, language, selectedSeasonKey]);
 
-    const animateSeasonLayout = () => {
-        if (Platform.OS === 'ios') {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        }
-    };
-
-    const togglePicker = () => {
-        animateSeasonLayout();
-        setSeasonPickerOpen((o) => !o);
-    };
-
-    const pickSeason = (key: string) => {
-        animateSeasonLayout();
-        setSelectedSeasonKey(key);
-        setSeasonPickerOpen(false);
-    };
-
     const goBack = () => {
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)/matches' as never);
@@ -304,11 +282,7 @@ export default function PlayerCareerScreen() {
                                             transition={0}
                                         />
                                     ) : (
-                                        <Ionicons
-                                            name="trophy-outline"
-                                            size={16}
-                                            color={ProfileTheme.colors.textTertiary}
-                                        />
+                                        <Ionicons name="trophy-outline" size={16} color="#6b7387" />
                                     )}
                                     <Text
                                         style={[styles.compTabText, active && styles.compTabTextActive]}
@@ -342,59 +316,7 @@ export default function PlayerCareerScreen() {
                 </>
             )}
 
-            {/* Season selector */}
-            <View style={styles.sectionLabelRow}>
-                <View style={styles.sectionAccent} />
-                <Text style={styles.sectionLabel}>{pc.season}</Text>
-            </View>
-            <TouchableOpacity
-                style={styles.selector}
-                activeOpacity={0.85}
-                onPress={togglePicker}
-            >
-                <View style={styles.selectorLeft}>
-                    <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.neonPurple} />
-                    <View>
-                        <Text style={styles.selectorHint}>{pc.selectedSeason}</Text>
-                        <Text style={styles.selectorValue}>
-                            {selectedSeason?.label ?? '—'}
-                        </Text>
-                    </View>
-                </View>
-                <Ionicons
-                    name={seasonPickerOpen ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={ProfileTheme.colors.textSecondary}
-                />
-            </TouchableOpacity>
-            {seasonPickerOpen && (
-                <View style={styles.dropdown}>
-                    {career.seasons.map((s) => {
-                        const selected = s.seasonKey === selectedSeason?.seasonKey;
-                        return (
-                            <TouchableOpacity
-                                key={s.seasonKey}
-                                style={[styles.dropdownItem, selected && styles.dropdownItemActive]}
-                                onPress={() => pickSeason(s.seasonKey)}
-                            >
-                                <Text
-                                    style={[
-                                        styles.dropdownItemText,
-                                        selected && styles.dropdownItemTextActive,
-                                    ]}
-                                >
-                                    {s.label}
-                                </Text>
-                                {selected && (
-                                    <Ionicons name="checkmark" size={16} color={ProfileTheme.colors.neonGreen} />
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-            )}
-
-            {/* Season statistics */}
+            {/* Season totals for the selected season (season chosen beside تفاصيل الإحصائيات) */}
             {selectedSeason && (
                 <PlayerSeasonStatsCard
                     title={pc.statsComparison}
@@ -453,7 +375,6 @@ export default function PlayerCareerScreen() {
                 />
             )}
 
-            {/* Trend chart */}
             {career.trend.length > 1 && (
                 <>
                     <Text style={styles.heading}>{pc.goalsAssistsTrend}</Text>
@@ -461,12 +382,14 @@ export default function PlayerCareerScreen() {
                 </>
             )}
 
-            {/* Per competition */}
             {selectedSeason && selectedSeason.competitions.length > 0 && (
                 <>
                     <Text style={styles.heading}>{pc.perCompetition}</Text>
                     {selectedSeason.competitions.map((c, idx) => (
-                        <View key={`${c.competitionId ?? c.competitionName}-${idx}`} style={styles.compCard}>
+                        <View
+                            key={`${c.competitionId ?? c.competitionName}-${idx}`}
+                            style={[styles.compCard, CARD_SHADOW]}
+                        >
                             <View style={styles.compHeader}>
                                 {c.competitionLogo ? (
                                     <ExpoImage
@@ -480,7 +403,7 @@ export default function PlayerCareerScreen() {
                                     />
                                 ) : (
                                     <View style={styles.compLogoFallback}>
-                                        <Ionicons name="trophy-outline" size={14} color={ProfileTheme.colors.textTertiary} />
+                                        <Ionicons name="trophy-outline" size={14} color="#a78bfa" />
                                     </View>
                                 )}
                                 <Text style={styles.compName} numberOfLines={1}>
@@ -552,11 +475,11 @@ function TrendChart({
         <View style={styles.chartCard}>
             <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: ProfileTheme.colors.neonPurple }]} />
+                    <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
                     <Text style={styles.legendText}>{labels.goals}</Text>
                 </View>
                 <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: ProfileTheme.colors.neonBlue }]} />
+                    <View style={[styles.legendDot, { backgroundColor: '#38bdf8' }]} />
                     <Text style={styles.legendText}>{labels.assists}</Text>
                 </View>
                 <Text style={styles.legendAll}>{labels.allSeasons}</Text>
@@ -585,7 +508,7 @@ function TrendChart({
                                 width={barW}
                                 height={Math.max(gH, 1)}
                                 rx={3}
-                                fill={ProfileTheme.colors.neonPurple}
+                                fill="#8b5cf6"
                             />
                         );
                     })}
@@ -600,7 +523,7 @@ function TrendChart({
                                 width={barW}
                                 height={Math.max(aH, 1)}
                                 rx={3}
-                                fill={ProfileTheme.colors.neonBlue}
+                                fill="#38bdf8"
                             />
                         );
                     })}
@@ -633,59 +556,32 @@ const styles = StyleSheet.create({
         width: 3,
         height: 14,
         borderRadius: 2,
-        backgroundColor: ProfileTheme.colors.neonPurple,
+        backgroundColor: '#6a2bd9',
     },
-    sectionLabel: { color: ProfileTheme.colors.textSecondary, fontSize: 13, fontWeight: '600' },
+    sectionLabel: { color: '#6b7387', fontSize: 13, fontWeight: '600' },
 
-    selector: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: CARD_BG,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: CARD_BORDER,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
+    heading: {
+        color: '#24104e',
+        fontSize: 16,
+        fontWeight: '800',
+        marginTop: 20,
+        marginBottom: 12,
+        textAlign: 'right',
     },
-    selectorLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    selectorHint: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },
-    selectorValue: { color: '#fff', fontSize: 17, fontWeight: '800' },
-    dropdown: {
-        marginTop: 6,
-        backgroundColor: CARD_BG,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: CARD_BORDER,
-        overflow: 'hidden',
-    },
-    dropdownItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: CARD_BORDER,
-    },
-    dropdownItemActive: { backgroundColor: 'rgba(139,92,246,0.14)' },
-    dropdownItemText: { color: ProfileTheme.colors.textSecondary, fontSize: 15 },
-    dropdownItemTextActive: { color: '#fff', fontWeight: '700' },
-
-    heading: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 24, marginBottom: 12 },
 
     chartCard: {
         backgroundColor: CARD_BG,
-        borderRadius: 16,
+        borderRadius: 18,
         borderWidth: 1,
         borderColor: CARD_BORDER,
         padding: 14,
+        ...CARD_SHADOW,
     },
     legendRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 10 },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
-    legendText: { color: ProfileTheme.colors.textSecondary, fontSize: 12 },
-    legendAll: { marginLeft: 'auto', color: ProfileTheme.colors.textTertiary, fontSize: 11 },
+    legendText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+    legendAll: { marginLeft: 'auto', color: 'rgba(255,255,255,0.45)', fontSize: 11 },
 
     compCard: {
         backgroundColor: CARD_BG,
@@ -701,7 +597,7 @@ const styles = StyleSheet.create({
         width: 24,
         height: 24,
         borderRadius: 6,
-        backgroundColor: ProfileTheme.colors.glassMedium,
+        backgroundColor: 'rgba(167,139,250,0.15)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -710,13 +606,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 8,
-        backgroundColor: 'rgba(255,215,0,0.15)',
+        backgroundColor: '#FDBE3D',
     },
-    ratingPillText: { color: ProfileTheme.colors.gold, fontSize: 12, fontWeight: '800' },
+    ratingPillText: { color: '#272727', fontSize: 12, fontWeight: '800' },
     compStatsRow: { flexDirection: 'row', justifyContent: 'space-between' },
     compStat: { alignItems: 'center', flex: 1 },
     compStatValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
-    compStatLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 2 },
+    compStatLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 },
 
     compTabScroll: { marginBottom: 12, marginHorizontal: -4 },
     compTabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },
@@ -726,17 +622,20 @@ const styles = StyleSheet.create({
         gap: 6,
         paddingHorizontal: 12,
         paddingVertical: 8,
-        borderRadius: 999,
+        borderRadius: 14,
         borderWidth: 1,
-        borderColor: CARD_BORDER,
-        backgroundColor: CARD_BG,
+        borderColor: '#e8e0f5',
+        backgroundColor: '#fff',
         maxWidth: 180,
+        ...CARD_SHADOW,
+        shadowOpacity: 0.12,
+        elevation: 3,
     },
     compTabActive: {
-        borderColor: ProfileTheme.colors.neonPurple,
-        backgroundColor: 'rgba(139,92,246,0.18)',
+        borderColor: '#6a2bd9',
+        backgroundColor: '#f3edff',
     },
     compTabLogo: { width: 20, height: 20 },
-    compTabText: { color: ProfileTheme.colors.textSecondary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
-    compTabTextActive: { color: '#fff' },
+    compTabText: { color: '#6b7387', fontSize: 12, fontWeight: '600', flexShrink: 1 },
+    compTabTextActive: { color: '#24104e', fontWeight: '700' },
 });

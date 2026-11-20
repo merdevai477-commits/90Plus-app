@@ -1,23 +1,19 @@
 /**
- * Player season / highlight stats — Figma-inspired card (rings + bars),
- * adapted for a single athlete (not home/away comparison).
+ * Player season / highlight stats — rings + bars.
+ * Uses the new 90Plus purple palette and elevated card treatment.
  */
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
+import { getPPColors } from '../PlayerProfile/theme';
+
 const RING_SIZE = 64;
 const RING_STROKE = 7;
 const RING_R = (RING_SIZE - RING_STROKE) / 2;
 const RING_C = 2 * Math.PI * RING_R;
-
-const TRACK_BG = '#1a1a1a';
-const FILL_PURPLE = '#630db4';
-const FILL_PURPLE_DEEP = '#240145';
-const RING_TRACK = '#1C0F36';
-const CARD_BORDER = '#2d0652';
-const CARD_BG = '#07040D';
 
 export type PlayerStatRingItem = {
   label: string;
@@ -49,11 +45,15 @@ function StatRing({
   max,
   label,
   display,
+  track,
+  fill,
 }: {
   value: number;
   max: number;
   label: string;
   display?: string;
+  track: string;
+  fill: string;
 }) {
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const fillLen = pct * RING_C;
@@ -67,7 +67,7 @@ function StatRing({
             cx={RING_SIZE / 2}
             cy={RING_SIZE / 2}
             r={RING_R}
-            stroke={RING_TRACK}
+            stroke={track}
             strokeWidth={RING_STROKE}
             fill="transparent"
           />
@@ -75,7 +75,7 @@ function StatRing({
             cx={RING_SIZE / 2}
             cy={RING_SIZE / 2}
             r={RING_R}
-            stroke={FILL_PURPLE}
+            stroke={fill}
             strokeWidth={RING_STROKE}
             fill="transparent"
             strokeDasharray={`${fillLen} ${RING_C}`}
@@ -106,11 +106,13 @@ function StatBarRow({
   value,
   max,
   display,
+  track,
 }: {
   label: string;
   value: number;
   max: number;
   display?: string;
+  track: string;
 }) {
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
 
@@ -119,10 +121,10 @@ function StatBarRow({
       <Text style={styles.barTitle}>{label}</Text>
       <View style={styles.barRow}>
         <Text style={styles.barValue}>{display ?? String(Math.round(value))}</Text>
-        <View style={styles.barTrack}>
+        <View style={[styles.barTrack, { backgroundColor: track }]}>
           {pct > 0 ? (
             <LinearGradient
-              colors={[FILL_PURPLE, FILL_PURPLE_DEEP]}
+              colors={['#8b5cf6', '#5422ae', '#230e48']}
               start={{ x: 1, y: 0.5 }}
               end={{ x: 0, y: 0.5 }}
               style={[styles.barFill, { flex: Math.max(pct, 0.02) }]}
@@ -146,6 +148,9 @@ export function PlayerSeasonStatsCard({
   rings,
   bars,
 }: PlayerSeasonStatsCardProps): React.ReactElement | null {
+  const { isDark } = useResolvedAppScheme();
+  const C = getPPColors(isDark);
+
   const ringMax = useMemo(() => {
     const m = Math.max(0, ...rings.map((r) => r.value));
     return m > 0 ? m : 1;
@@ -158,8 +163,21 @@ export function PlayerSeasonStatsCard({
 
   if (rings.length === 0 && bars.length === 0) return null;
 
+  const cardBg = isDark ? '#120a22' : '#1a0b33';
+  const border = isDark ? C.border : '#3b1d6e';
+  const track = isDark ? '#2a2040' : '#2c1548';
+
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: cardBg,
+          borderColor: border,
+          shadowColor: C.primaryDark,
+        },
+      ]}
+    >
       <Text style={styles.title}>{title}</Text>
 
       {rings.length > 0 ? (
@@ -171,6 +189,8 @@ export function PlayerSeasonStatsCard({
               max={ringMax}
               label={r.label}
               display={r.display}
+              track={track}
+              fill={C.primarySoft}
             />
           ))}
         </View>
@@ -185,6 +205,7 @@ export function PlayerSeasonStatsCard({
               value={b.value}
               max={b.max != null && b.max > 0 ? b.max : barMax}
               display={b.display}
+              track={track}
             />
           ))}
         </View>
@@ -195,24 +216,21 @@ export function PlayerSeasonStatsCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: CARD_BG,
-    borderRadius: 24,
-    borderWidth: 0.5,
-    borderColor: CARD_BORDER,
+    borderRadius: 20,
+    borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 20,
     gap: 24,
     marginTop: 12,
-    shadowColor: '#29054F',
-    shadowOpacity: 0.48,
-    shadowRadius: 21,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    elevation: 10,
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'center',
   },
   ringsRow: {
@@ -247,7 +265,7 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   ringLabel: {
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.88)',
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
@@ -259,7 +277,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   barTitle: {
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
@@ -272,7 +290,7 @@ const styles = StyleSheet.create({
   barValue: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     minWidth: 28,
     textAlign: 'center',
   },
@@ -280,7 +298,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 10,
     borderRadius: 33,
-    backgroundColor: TRACK_BG,
     overflow: 'hidden',
     flexDirection: 'row',
   },
