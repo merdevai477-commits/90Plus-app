@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_ICONS, PROFILE_RANK_ICON } from './profileV2Assets';
 
@@ -42,6 +43,7 @@ function pad2(n: number): string {
 
 export function ProfileAchievementsTab({ analytics }: Props) {
   const { t } = useTranslation();
+  const { colors: C, isDark } = useProfileTheme();
   const [subTab, setSubTab] = useState<AchievementsSubTab>('titles');
   const [filter, setFilter] = useState<BadgeFilter>('all');
 
@@ -130,22 +132,40 @@ export function ProfileAchievementsTab({ analytics }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.segment}>
+      <View style={[styles.segment, { backgroundColor: C.profilePrimarySoft }]}>
         <TouchableOpacity
-          style={[styles.segmentBtn, subTab === 'titles' && styles.segmentBtnActive]}
+          style={[
+            styles.segmentBtn,
+            subTab === 'titles' && [styles.segmentBtnActive, { backgroundColor: C.profilePrimary }],
+          ]}
           onPress={() => setSubTab('titles')}
           activeOpacity={0.85}
         >
-          <Text style={[styles.segmentText, subTab === 'titles' && styles.segmentTextActive]}>
+          <Text
+            style={[
+              styles.segmentText,
+              { color: C.profilePrimary },
+              subTab === 'titles' && styles.segmentTextActive,
+            ]}
+          >
             {t.profile.achievementsMyTitles}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.segmentBtn, subTab === 'ranks' && styles.segmentBtnActive]}
+          style={[
+            styles.segmentBtn,
+            subTab === 'ranks' && [styles.segmentBtnActive, { backgroundColor: C.profilePrimary }],
+          ]}
           onPress={() => setSubTab('ranks')}
           activeOpacity={0.85}
         >
-          <Text style={[styles.segmentText, subTab === 'ranks' && styles.segmentTextActive]}>
+          <Text
+            style={[
+              styles.segmentText,
+              { color: C.profilePrimary },
+              subTab === 'ranks' && styles.segmentTextActive,
+            ]}
+          >
             {t.profile.achievementsMyRanking}
           </Text>
         </TouchableOpacity>
@@ -153,32 +173,47 @@ export function ProfileAchievementsTab({ analytics }: Props) {
 
       {subTab === 'titles' ? (
         <>
-          <View style={styles.summaryCard}>
+          <View style={[styles.summaryCard, { backgroundColor: C.achievementsCard }]}>
             <View style={styles.summaryTop}>
               <View>
-                <Text style={styles.summaryCount}>
+                <Text style={[styles.summaryCount, { color: C.textPrimary }]}>
                   {pad2(doneCount)} / {pad2(totalCount)}
                 </Text>
-                <Text style={styles.summaryCountLabel}>{t.profile.achievementsCompletedLabel}</Text>
+                <Text style={[styles.summaryCountLabel, { color: C.profileMuted }]}>
+                  {t.profile.achievementsCompletedLabel}
+                </Text>
               </View>
               <View style={styles.summaryTitleRow}>
                 <View style={styles.summaryCopy}>
-                  <Text style={styles.summaryTitle}>{t.profile.myAchievements}</Text>
-                  <Text style={styles.summarySub}>{t.profile.achievementsTitlesTagline}</Text>
+                  <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
+                    {t.profile.myAchievements}
+                  </Text>
+                  <Text style={[styles.summarySub, { color: C.profileMuted }]}>
+                    {t.profile.achievementsTitlesTagline}
+                  </Text>
                 </View>
-                <View style={styles.trophyBubble}>
+                <View style={[styles.trophyBubble, { backgroundColor: C.achievementsIconBg }]}>
                   <Image source={PROFILE_ICONS.trophy} style={styles.trophyIcon} contentFit="contain" />
                 </View>
               </View>
             </View>
             <View style={styles.progressLabels}>
-              <Text style={styles.progressPct}>{pct}%</Text>
-              <Text style={styles.progressLabel}>{t.profile.achievementsProgressLabel}</Text>
+              <Text style={[styles.progressPct, { color: C.profilePrimary }]}>{pct}%</Text>
+              <Text style={[styles.progressLabel, { color: C.profileMuted }]}>
+                {t.profile.achievementsProgressLabel}
+              </Text>
             </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${pct}%` }]} />
+            <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#DED0F2' }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${pct}%`, backgroundColor: C.profilePrimary },
+                ]}
+              />
             </View>
-            <Text style={styles.summaryHint}>{t.profile.achievementsUnlockHint}</Text>
+            <Text style={[styles.summaryHint, { color: C.profileMuted }]}>
+              {t.profile.achievementsUnlockHint}
+            </Text>
           </View>
 
           <ScrollView
@@ -196,11 +231,26 @@ export function ProfileAchievementsTab({ analytics }: Props) {
             ).map(([id, label]) => (
               <TouchableOpacity
                 key={id}
-                style={[styles.filterChip, filter === id && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: C.profileCard,
+                    borderColor: C.profileCardBorder,
+                  },
+                  filter === id && { backgroundColor: C.profilePrimary, borderColor: C.profilePrimary },
+                ]}
                 onPress={() => setFilter(id)}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.filterText, filter === id && styles.filterTextActive]}>{label}</Text>
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: C.profileMuted },
+                    filter === id && styles.filterTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -211,30 +261,45 @@ export function ProfileAchievementsTab({ analytics }: Props) {
                 key={badge.id}
                 style={[
                   styles.badgeCard,
+                  {
+                    backgroundColor: C.profileCard,
+                    borderColor: C.embossBorder,
+                    borderWidth: 1,
+                  },
                   badge.status === 'locked' && styles.badgeCardLocked,
                 ]}
               >
-                <View style={styles.badgeIconWrap}>
+                <View style={[styles.badgeIconWrap, { backgroundColor: C.profilePrimarySoft }]}>
                   {badge.status === 'locked' ? (
-                    <Ionicons name="lock-closed" size={22} color="#9CA3AF" />
+                    <Ionicons name="lock-closed" size={22} color={C.profileMuted} />
                   ) : (
                     <Image source={PROFILE_ICONS.trophy} style={styles.badgeIcon} contentFit="contain" />
                   )}
                 </View>
-                <Text style={styles.badgeTitle} numberOfLines={2}>
+                <Text style={[styles.badgeTitle, { color: C.textPrimary }]} numberOfLines={2}>
                   {badge.title}
                 </Text>
                 {badge.status === 'progress' ? (
                   <>
-                    <View style={styles.badgeProgressTrack}>
+                    <View
+                      style={[
+                        styles.badgeProgressTrack,
+                        { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#E8E2F0' },
+                      ]}
+                    >
                       <View
                         style={[
                           styles.badgeProgressFill,
-                          { width: `${Math.round((badge.progressPct || 0) * 100)}%` },
+                          {
+                            width: `${Math.round((badge.progressPct || 0) * 100)}%`,
+                            backgroundColor: C.profilePrimary,
+                          },
                         ]}
                       />
                     </View>
-                    <Text style={styles.badgeProgressText}>{badge.progress}</Text>
+                    <Text style={[styles.badgeProgressText, { color: C.profileMuted }]}>
+                      {badge.progress}
+                    </Text>
                   </>
                 ) : null}
                 <View
@@ -242,7 +307,10 @@ export function ProfileAchievementsTab({ analytics }: Props) {
                     styles.statusTag,
                     badge.status === 'done' && styles.statusDone,
                     badge.status === 'progress' && styles.statusProgress,
-                    badge.status === 'locked' && styles.statusLocked,
+                    badge.status === 'locked' && [
+                      styles.statusLocked,
+                      isDark && { backgroundColor: 'rgba(255,255,255,0.08)' },
+                    ],
                   ]}
                 >
                   <Text
@@ -250,7 +318,10 @@ export function ProfileAchievementsTab({ analytics }: Props) {
                       styles.statusText,
                       badge.status === 'done' && styles.statusTextDone,
                       badge.status === 'progress' && styles.statusTextProgress,
-                      badge.status === 'locked' && styles.statusTextLocked,
+                      badge.status === 'locked' && [
+                        styles.statusTextLocked,
+                        { color: C.profileMuted },
+                      ],
                     ]}
                   >
                     {badge.status === 'done'
@@ -266,52 +337,82 @@ export function ProfileAchievementsTab({ analytics }: Props) {
         </>
       ) : (
         <>
-          <View style={styles.rankOverview}>
+          <View style={[styles.rankOverview, { backgroundColor: C.achievementsCard }]}>
             <View style={styles.summaryTitleRow}>
               <View style={styles.summaryCopy}>
-                <Text style={styles.summaryTitle}>{t.profile.myAchievements}</Text>
-                <Text style={styles.summarySub}>{t.profile.achievementsRanksTagline}</Text>
+                <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
+                  {t.profile.myAchievements}
+                </Text>
+                <Text style={[styles.summarySub, { color: C.profileMuted }]}>
+                  {t.profile.achievementsRanksTagline}
+                </Text>
               </View>
-              <View style={styles.trophyBubble}>
+              <View style={[styles.trophyBubble, { backgroundColor: C.achievementsIconBg }]}>
                 <Image source={PROFILE_ICONS.trophy} style={styles.trophyIcon} contentFit="contain" />
               </View>
             </View>
             <View style={styles.rankMetrics}>
               <View style={styles.rankMetric}>
-                <Text style={styles.rankMetricValue}>{pad2(ranks.length)}</Text>
-                <Text style={styles.rankMetricLabel}>{t.profile.achievementsCompetitions}</Text>
+                <Text style={[styles.rankMetricValue, { color: C.textPrimary }]}>
+                  {pad2(ranks.length)}
+                </Text>
+                <Text style={[styles.rankMetricLabel, { color: C.profileMuted }]}>
+                  {t.profile.achievementsCompetitions}
+                </Text>
               </View>
-              <View style={styles.rankMetricDivider} />
+              <View style={[styles.rankMetricDivider, { backgroundColor: C.divider }]} />
               <View style={styles.rankMetric}>
-                <Text style={styles.rankMetricValue}>#{pad2(bestRank)}</Text>
-                <Text style={styles.rankMetricLabel}>{t.profile.achievementsBestRank}</Text>
+                <Text style={[styles.rankMetricValue, { color: C.textPrimary }]}>
+                  #{pad2(bestRank)}
+                </Text>
+                <Text style={[styles.rankMetricLabel, { color: C.profileMuted }]}>
+                  {t.profile.achievementsBestRank}
+                </Text>
               </View>
             </View>
           </View>
 
           <View style={styles.rankHeading}>
-            <Text style={styles.rankHeadingHint}>{t.profile.achievementsCurrentRank}</Text>
-            <Text style={styles.rankHeadingTitle}>{t.profile.achievementsCompetitionRanks}</Text>
+            <Text style={[styles.rankHeadingHint, { color: C.profilePrimary }]}>
+              {t.profile.achievementsCurrentRank}
+            </Text>
+            <Text style={[styles.rankHeadingTitle, { color: C.textPrimary }]}>
+              {t.profile.achievementsCompetitionRanks}
+            </Text>
           </View>
 
           <View style={styles.rankList}>
             {ranks.map((row) => (
-              <View key={row.id} style={styles.rankRow}>
+              <View
+                key={row.id}
+                style={[
+                  styles.rankRow,
+                  {
+                    backgroundColor: C.profileCard,
+                    borderColor: C.embossBorder,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View style={styles.rankScoreCol}>
-                  <Text style={styles.rankNumber}>{row.rank}</Text>
-                  <Text style={styles.rankScore}>{row.score}</Text>
+                  <Text style={[styles.rankNumber, { color: C.profilePrimary }]}>{row.rank}</Text>
+                  <Text style={[styles.rankScore, { color: C.profileMuted }]}>{row.score}</Text>
                 </View>
                 <View style={styles.rankCopyCol}>
-                  <Text style={styles.rankCompetition}>{row.competition}</Text>
-                  <Text style={styles.rankPeriod}>{row.period}</Text>
+                  <Text style={[styles.rankCompetition, { color: C.textPrimary }]}>
+                    {row.competition}
+                  </Text>
+                  <Text style={[styles.rankPeriod, { color: C.profileMuted }]}>{row.period}</Text>
                 </View>
-                <View style={styles.rankIconBubble}>
+                <View style={[styles.rankIconBubble, { backgroundColor: C.profilePrimarySoft }]}>
                   <Image source={PROFILE_RANK_ICON} style={styles.rankIcon} contentFit="contain" />
                 </View>
               </View>
             ))}
           </View>
-          <Text style={styles.rankFooter}>{t.profile.achievementsRankFooter}</Text>
+          <Text style={[styles.rankFooter, { color: C.profileMuted }]}>
+            {t.profile.achievementsRankFooter}
+          </Text>
         </>
       )}
     </View>

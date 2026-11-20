@@ -11,9 +11,11 @@ import { useFeedMetrics } from '../community/CommunityFeedList';
 import { PostCard } from '../community/PostCard';
 import { formatRelativeTime } from '../community/format';
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 
 export function ProfilePostsPane({ username }: { username: string }) {
   const { colors } = useCommunityTheme();
+  const { colors: profileColors, isDark } = useProfileTheme();
   const actions = usePostActions();
   const { t, language } = useTranslation();
   const s = t.community;
@@ -50,7 +52,17 @@ export function ProfilePostsPane({ username }: { username: string }) {
   return (
     <View style={[styles.list, { paddingHorizontal: metrics.sidePad }]}>
       {feed.posts.map((post, index) => (
-        <View key={post.id} style={styles.elevatedCard}>
+        <View
+          key={post.id}
+          style={[
+            styles.elevatedCard,
+            {
+              backgroundColor: isDark ? profileColors.profileCard : '#FFFFFF',
+              borderColor: profileColors.embossBorder,
+              shadowColor: profileColors.embossShadow,
+            },
+          ]}
+        >
           <PostCard
             post={post}
             contentWidth={metrics.contentWidth}
@@ -92,11 +104,8 @@ const styles = StyleSheet.create({
   list: { gap: 14, paddingTop: 12, paddingBottom: 24 },
   elevatedCard: {
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(106,43,217,0.12)',
-    shadowColor: '#1E0844',
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,

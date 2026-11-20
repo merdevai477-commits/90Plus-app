@@ -23,6 +23,7 @@ import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuMo
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -157,7 +158,6 @@ const styles = StyleSheet.create({
   contentPanel: {
     marginHorizontal: 20,
     marginTop: 8,
-    backgroundColor: ProfileTheme.colors.profileCard,
     borderRadius: 19,
     overflow: 'hidden',
     minHeight: 120,
@@ -331,6 +331,7 @@ function OwnProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
+  const { colors: profileColors } = useProfileTheme();
   const [activeTab, setActiveTab] = useState('posts');
   const profileScrollY = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
@@ -1622,8 +1623,8 @@ function OwnProfileScreen() {
   // Loading state - show skeleton when loading and no cache
   if ((isLoading || !userData) && !cacheError) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+      <View style={[styles.container, { backgroundColor: profileColors.profileBg }]}>
+        <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
@@ -1634,8 +1635,8 @@ function OwnProfileScreen() {
   if (!userData && cacheError && !isLoading) {
     const isAutoRetrying = retryCountdown !== null && autoRetryCountRef.current < MAX_AUTO_RETRIES;
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+      <View style={[styles.container, styles.centerContent, { backgroundColor: profileColors.profileBg }]}>
+        <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
         <Ionicons name="alert-circle-outline" size={64} color={ProfileTheme.colors.textSecondary} />
         <Text style={[styles.loadingText, { marginTop: 16, textAlign: 'center', paddingHorizontal: 40 }]}>
           {t.profile.profileLoadFailed}
@@ -1702,15 +1703,15 @@ function OwnProfileScreen() {
   // If no userData after loading, show skeleton (will retry)
   if (!userData) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+      <View style={[styles.container, { backgroundColor: profileColors.profileBg }]}>
+        <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
   }
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+    <View style={[styles.container, { backgroundColor: profileColors.profileBg }]}>
+      <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
 
       {/* Offline Banner */}
       {isOffline && (
@@ -1741,9 +1742,9 @@ function OwnProfileScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor={ProfileTheme.colors.profilePrimary}
-            colors={[ProfileTheme.colors.profilePrimary]}
-            progressBackgroundColor={ProfileTheme.colors.profileBg}
+            tintColor={profileColors.profilePrimary}
+            colors={[profileColors.profilePrimary]}
+            progressBackgroundColor={profileColors.profileBg}
           />
         }
       >
@@ -1826,7 +1827,7 @@ function OwnProfileScreen() {
         {activeTab === 'posts' && userData?.username ? (
           <ProfilePostsPane username={userData.username} />
         ) : (
-        <View style={styles.contentPanel}>
+        <View style={[styles.contentPanel, { backgroundColor: profileColors.profileCard }]}>
           {activeTab === 'videos' && (
             <VideoGrid
               videos={myVideos}

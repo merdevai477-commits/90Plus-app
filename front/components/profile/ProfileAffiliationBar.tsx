@@ -9,6 +9,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { formatProfileStat } from './formatProfileStat';
 import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
@@ -46,13 +47,24 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
   chooseCountryLabel,
   addClubLabel,
 }: ProfileAffiliationBarProps) {
+  const { colors: C } = useProfileTheme();
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
   const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
   const hasClub = !!(clubLogo || clubName?.trim());
   const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
 
   return (
-    <View style={styles.wrap} testID="profile-affiliation-bar">
+    <View
+      style={[
+        styles.wrap,
+        {
+          backgroundColor: C.profileCard,
+          borderColor: C.embossBorder,
+          shadowColor: C.embossShadow,
+        },
+      ]}
+      testID="profile-affiliation-bar"
+    >
       <TouchableOpacity
         style={styles.levelBlock}
         onPress={onLevelPress}
@@ -60,18 +72,23 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
         activeOpacity={0.85}
       >
         <View style={styles.levelHeader}>
-          <Ionicons name="chevron-back" size={14} color={ProfileTheme.colors.textPrimary} />
-          <Text style={styles.levelLabel}>LVL {level}</Text>
+          <Ionicons name="chevron-back" size={14} color={C.textPrimary} />
+          <Text style={[styles.levelLabel, { color: C.textPrimary }]}>LVL {level}</Text>
         </View>
-        <View style={styles.xpTrack}>
-          <View style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]} />
+        <View style={[styles.xpTrack, { backgroundColor: C.xpTrack }]}>
+          <View
+            style={[
+              styles.xpFill,
+              { width: `${Math.round(fillPct * 100)}%`, backgroundColor: C.profilePrimary },
+            ]}
+          />
         </View>
-        <Text style={styles.xpCaption} numberOfLines={1}>
+        <Text style={[styles.xpCaption, { color: C.profileMuted }]} numberOfLines={1}>
           XP {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)}
         </Text>
       </TouchableOpacity>
 
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
       <TouchableOpacity
         style={styles.countryBlock}
@@ -81,7 +98,7 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
       >
         {hasCountry ? (
           <>
-            <Text style={styles.countryLabel} numberOfLines={1}>
+            <Text style={[styles.countryLabel, { color: C.textPrimary }]} numberOfLines={1}>
               {countryLabel?.trim() || '—'}
             </Text>
             {countryFlagUri ? (
@@ -91,13 +108,13 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
             )}
           </>
         ) : (
-          <Text style={styles.emptyLabel} numberOfLines={2}>
+          <Text style={[styles.emptyLabel, { color: C.profileMuted }]} numberOfLines={2}>
             {isOwnProfile ? chooseCountryLabel : '—'}
           </Text>
         )}
       </TouchableOpacity>
 
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
       <TouchableOpacity
         style={styles.clubBlock}
@@ -114,14 +131,14 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
                 contentFit="contain"
               />
             ) : (
-              <Ionicons name="football-outline" size={22} color={ProfileTheme.colors.profilePrimary} />
+              <Ionicons name="football-outline" size={22} color={C.profilePrimary} />
             )}
-            <Text style={styles.clubName} numberOfLines={2}>
+            <Text style={[styles.clubName, { color: C.textPrimary }]} numberOfLines={2}>
               {clubName}
             </Text>
           </>
         ) : (
-          <Text style={styles.emptyLabel} numberOfLines={2}>
+          <Text style={[styles.emptyLabel, { color: C.profileMuted }]} numberOfLines={2}>
             {isOwnProfile ? addClubLabel : '—'}
           </Text>
         )}

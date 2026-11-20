@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_STADIUM_COVER, PROFILE_AVATAR_PLACEHOLDER } from './profileV2Assets';
 import VerifiedBadge from './VerifiedBadge';
@@ -96,6 +97,7 @@ const ProfileHero = memo(function ProfileHero({
   actionBelowName,
 }: ProfileHeroProps) {
   const { language, t } = useTranslation();
+  const { colors: C } = useProfileTheme();
   const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
   const sheetWidth = Math.min(windowWidth, 456);
@@ -119,7 +121,7 @@ const ProfileHero = memo(function ProfileHero({
   };
 
   return (
-    <View style={styles.wrap} testID="profile-hero">
+    <View style={[styles.wrap, { backgroundColor: C.profileBg }]} testID="profile-hero">
       <View style={styles.coverHit} pointerEvents="none" testID="profile-cover">
         <Image
           source={PROFILE_STADIUM_COVER}
@@ -129,7 +131,7 @@ const ProfileHero = memo(function ProfileHero({
           priority="high"
         />
         <LinearGradient
-          colors={['rgba(249,246,254,0)', 'rgba(249,246,254,0.35)', ProfileTheme.colors.profileBg]}
+          colors={[...C.coverFade]}
           locations={[0.55, 0.82, 1]}
           style={StyleSheet.absoluteFill}
         />
@@ -137,8 +139,12 @@ const ProfileHero = memo(function ProfileHero({
 
       <View style={[styles.topBar, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
         {onBackPress ? (
-          <TouchableOpacity onPress={onBackPress} hitSlop={10} style={styles.navCircleBtn}>
-            <Ionicons name="chevron-back" size={18} color={ProfileTheme.colors.textPrimary} />
+          <TouchableOpacity
+            onPress={onBackPress}
+            hitSlop={10}
+            style={[styles.navCircleBtn, { backgroundColor: C.navBtnBg, shadowColor: C.embossShadow }]}
+          >
+            <Ionicons name="chevron-back" size={18} color={C.navBtnIcon} />
           </TouchableOpacity>
         ) : (
           <View style={styles.navSpacer} />
@@ -148,27 +154,36 @@ const ProfileHero = memo(function ProfileHero({
             <TouchableOpacity
               onPress={onSettingsPress}
               activeOpacity={0.85}
-              style={styles.navCircleBtn}
+              style={[styles.navCircleBtn, { backgroundColor: C.navBtnBg, shadowColor: C.embossShadow }]}
               accessibilityRole="button"
               accessibilityLabel="Settings"
             >
-              <Ionicons name="settings-outline" size={18} color={ProfileTheme.colors.textPrimary} />
+              <Ionicons name="settings-outline" size={18} color={C.navBtnIcon} />
             </TouchableOpacity>
           ) : null}
           {onMorePress ? (
             <TouchableOpacity
               onPress={onMorePress}
               activeOpacity={0.85}
-              style={styles.navCircleBtn}
+              style={[styles.navCircleBtn, { backgroundColor: C.navBtnBg, shadowColor: C.embossShadow }]}
               accessibilityRole="button"
             >
-              <Ionicons name="ellipsis-horizontal" size={18} color={ProfileTheme.colors.textPrimary} />
+              <Ionicons name="ellipsis-horizontal" size={18} color={C.navBtnIcon} />
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
 
-      <View style={[styles.sheet, { width: sheetWidth, marginTop: COVER_HEIGHT - SHEET_OVERLAP }]}>
+      <View
+        style={[
+          styles.sheet,
+          {
+            width: sheetWidth,
+            marginTop: COVER_HEIGHT - SHEET_OVERLAP,
+            backgroundColor: C.profileSheet,
+          },
+        ]}
+      >
         <View style={styles.identityBlock}>
           <View style={[styles.identityRow, isAr ? styles.identityRowRtl : styles.identityRowLtr]}>
             <View style={styles.avatarColumn}>
@@ -180,7 +195,12 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole={onAvatarPress ? 'button' : undefined}
               >
                 {avatarUri ? (
-                  <View style={styles.avatarGlow}>
+                  <View
+                    style={[
+                      styles.avatarGlow,
+                      { borderColor: C.avatarRing, shadowColor: C.avatarGlow },
+                    ]}
+                  >
                     <Image
                       source={{ uri: avatarUri }}
                       style={styles.avatar}
@@ -198,7 +218,7 @@ const ProfileHero = memo(function ProfileHero({
                 )}
                 {isAvatarUploading ? (
                   <View style={styles.avatarBusy}>
-                    <ActivityIndicator color={ProfileTheme.colors.profilePrimary} />
+                    <ActivityIndicator color={C.profilePrimary} />
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -208,7 +228,7 @@ const ProfileHero = memo(function ProfileHero({
               <View style={[styles.nameBlock, isAr ? styles.alignEnd : styles.alignStart]}>
                 <View style={[styles.nameRow, isAr ? styles.rowEnd : styles.rowStart]}>
                   <Text
-                    style={[styles.name, { textAlign: isAr ? 'right' : 'left' }]}
+                    style={[styles.name, { textAlign: isAr ? 'right' : 'left', color: C.nameColor }]}
                     numberOfLines={1}
                     maxFontSizeMultiplier={1.2}
                   >
@@ -219,7 +239,7 @@ const ProfileHero = memo(function ProfileHero({
                   <ProfileEliteMarks userId={userId} />
                 </View>
                 <Text
-                  style={[styles.handle, { textAlign: isAr ? 'right' : 'left' }]}
+                  style={[styles.handle, { textAlign: isAr ? 'right' : 'left', color: C.profileHandle }]}
                   numberOfLines={1}
                   maxFontSizeMultiplier={1.2}
                 >
@@ -258,7 +278,7 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole="button"
                 accessibilityLabel="Edit profile"
               >
-                <Ionicons name="pencil" size={20} color={ProfileTheme.colors.profilePrimary} />
+                <Ionicons name="pencil" size={20} color={C.profilePrimary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.editBtnSpacer} />
@@ -268,7 +288,7 @@ const ProfileHero = memo(function ProfileHero({
           {trimmedBio ? (
             <View style={styles.bioWrap}>
               <Text
-                style={[styles.bio, { textAlign: isAr ? 'right' : 'left' }]}
+                style={[styles.bio, { textAlign: isAr ? 'right' : 'left', color: C.bioColor }]}
                 numberOfLines={bioExpanded ? undefined : 1}
               >
                 {trimmedBio}
@@ -279,7 +299,7 @@ const ProfileHero = memo(function ProfileHero({
                   hitSlop={8}
                   style={styles.bioToggle}
                 >
-                  <Text style={styles.bioToggleText}>
+                  <Text style={[styles.bioToggleText, { color: C.profilePrimary }]}>
                     {bioExpanded ? showLessLabel : viewAllLabel}
                   </Text>
                 </TouchableOpacity>

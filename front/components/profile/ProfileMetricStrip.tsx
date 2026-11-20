@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ImageSourcePropType } from 'r
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { formatProfileStat } from './formatProfileStat';
 
 export interface ProfileMetricItem {
@@ -22,46 +23,84 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
   items,
   variant = 'social',
 }: ProfileMetricStripProps) {
+  const { colors: C } = useProfileTheme();
   const isPerf = variant === 'performance';
   const inner = (
     <View style={[styles.row, isPerf && styles.perfRow]}>
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
-          {index > 0 && <View style={[styles.divider, isPerf && styles.perfDivider]} />}
-          <MetricCell item={item} compact={isPerf} social={!isPerf} />
+          {index > 0 && (
+            <View
+              style={[
+                styles.divider,
+                isPerf && styles.perfDivider,
+                { backgroundColor: C.divider },
+              ]}
+            />
+          )}
+          <MetricCell item={item} compact={isPerf} social={!isPerf} colors={C} />
         </React.Fragment>
       ))}
     </View>
   );
 
   if (variant === 'performance') {
-    return <View style={[styles.card, styles.performanceCard]}>{inner}</View>;
+    return (
+      <View
+        style={[
+          styles.card,
+          styles.performanceCard,
+          {
+            backgroundColor: C.profileCard,
+            borderColor: C.profileCardBorder,
+          },
+        ]}
+      >
+        {inner}
+      </View>
+    );
   }
 
-  return <View style={[styles.card, styles.socialCard]}>{inner}</View>;
+  return (
+    <View
+      style={[
+        styles.card,
+        styles.socialCard,
+        {
+          backgroundColor: C.profileCard,
+          borderColor: C.embossBorder,
+          shadowColor: C.embossShadow,
+        },
+      ]}
+    >
+      {inner}
+    </View>
+  );
 });
 
 function MetricCell({
   item,
   compact,
   social,
+  colors: C,
 }: {
   item: ProfileMetricItem;
   compact: boolean;
   social: boolean;
+  colors: ReturnType<typeof useProfileTheme>['colors'];
 }) {
   const body = (
     <View style={[styles.cell, compact && styles.perfCell, social && styles.socialCell]}>
       <View style={[styles.iconBox, social && styles.socialIconBox]}>
         <Image
           source={item.icon}
-          style={[styles.icon, social && styles.socialIcon]}
+          style={[styles.icon, social && styles.socialIcon, social && { tintColor: C.profilePrimary }]}
           contentFit="contain"
         />
       </View>
       <View style={styles.copy}>
         <Text
-          style={[styles.value, social && styles.socialValue]}
+          style={[styles.value, social && styles.socialValue, { color: C.textPrimary }]}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.75}
@@ -70,7 +109,12 @@ function MetricCell({
           {formatProfileStat(item.value)}
         </Text>
         <Text
-          style={[styles.label, compact && styles.perfLabel, social && styles.socialLabel]}
+          style={[
+            styles.label,
+            compact && styles.perfLabel,
+            social && styles.socialLabel,
+            { color: social ? C.textPrimary : C.profileMuted },
+          ]}
           numberOfLines={compact ? 2 : 1}
           maxFontSizeMultiplier={1.15}
         >

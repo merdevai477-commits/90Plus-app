@@ -32,6 +32,7 @@ import { ProfileGridScrollProvider, useGridScrollReporter } from '../../componen
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useProfileTheme } from '../../hooks/useProfileTheme';
 import {
   AuthService,
   SearchUserResult,
@@ -84,6 +85,7 @@ function UserProfileScreen() {
   const toast = useToast();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { colors: profileColors } = useProfileTheme();
   const { reelComments, addComment, toggleCommentLike } = useVideos();
   const {
     reportUser,
@@ -440,8 +442,8 @@ function UserProfileScreen() {
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading && !user) {
     return (
-      <View style={s.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+      <View style={[s.container, { backgroundColor: profileColors.profileBg }]}>
+        <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
         <ProfileSkeleton />
       </View>
     );
@@ -450,7 +452,7 @@ function UserProfileScreen() {
   if (error || !user) {
     return (
       <View style={[s.container, s.center]}>
-        <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+        <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
         <Ionicons name="person-outline" size={64} color="#555" />
         <Text style={s.errorTxt}>{error || t.publicProfile.notFound}</Text>
         <TouchableOpacity style={s.backBtnLarge} onPress={() => router.back()}>
@@ -501,8 +503,8 @@ function UserProfileScreen() {
   };
 
   return (
-    <View style={s.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={ProfileTheme.colors.profileBg} />
+    <View style={[s.container, { backgroundColor: profileColors.profileBg }]}>
+      <StatusBar barStyle={profileColors.statusBar === "light" ? "light-content" : "dark-content"} backgroundColor={profileColors.profileBg} />
 
       {/* ── Block confirmation modal ──────────────────────────────── */}
       <Modal
@@ -610,7 +612,7 @@ function UserProfileScreen() {
             onRefresh={onRefresh}
             tintColor={ACCENT}
             colors={[ACCENT]}
-            progressBackgroundColor={ProfileTheme.colors.profileBg}
+            progressBackgroundColor={profileColors.profileBg}
           />
         }
       >
@@ -740,7 +742,7 @@ function UserProfileScreen() {
         {activeTab === 'posts' && user.username ? (
           <ProfilePostsPane username={user.username} />
         ) : (
-        <View style={s.contentPanel}>
+        <View style={[s.contentPanel, { backgroundColor: profileColors.profileCard }]}>
         {activeTab === 'videos' && (
           <>
         {isLoadingVideos ? (
@@ -964,7 +966,6 @@ const s = StyleSheet.create({
   contentPanel: {
     marginHorizontal: 20,
     marginTop: 8,
-    backgroundColor: ProfileTheme.colors.profileCard,
     borderRadius: 19,
     overflow: 'hidden',
     minHeight: 120,
