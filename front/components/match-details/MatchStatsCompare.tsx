@@ -16,7 +16,8 @@ import { useTranslation } from '../../src/i18n';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
 const ICON = {
-  possession: require('../../assets/images/match-stats/icon-possession.svg'),
+  possessionChart: require('../../assets/images/match-stats/icon-possession-chart.svg'),
+  soccerBall: require('../../assets/images/match-stats/icon-soccer-ball.svg'),
   xg: require('../../assets/images/match-stats/icon-xg.svg'),
   shots: require('../../assets/images/match-stats/icon-shots.svg'),
   passes: require('../../assets/images/match-stats/icon-passes.svg'),
@@ -265,6 +266,140 @@ function PercentRing({
         ) : null}
       </Svg>
       <Text style={[styles.ringValue, { fontSize: size / 6, color: C.text }]}>{`${Math.round(clamped)}%`}</Text>
+    </View>
+  );
+}
+
+/** One shared ring, Figma 1767:13395. Home sits on the left, same as the match header. */
+function PossessionCard({
+  pair,
+  title,
+  homeName,
+  awayName,
+  rtl,
+  s,
+}: {
+  pair: Pair;
+  title: string;
+  homeName: string;
+  awayName: string;
+  rtl: boolean;
+  s: number;
+}) {
+  const C = useStatsC();
+  const { isDark } = useMatchDetailsTheme();
+  const homeColor = isDark ? '#C4B5FD' : '#8856E1';
+  const awayColor = isDark ? '#A78BFA' : '#4B1FA3';
+  const nameColor = isDark ? C.text : '#4B1FA3';
+  const titleColor = isDark ? C.text : '#24104E';
+  const track = isDark ? '#2A1B4A' : '#F3EDFF';
+  const size = 88 * s;
+  const stroke = 10.83 * s;
+  const r = (size - stroke) / 2;
+  const center = size / 2;
+  const circ = 2 * Math.PI * r;
+  const homePct = Math.max(0, n(pair.home));
+  const awayPct = Math.max(0, n(pair.away));
+  const total = homePct + awayPct;
+  const homeShare = total > 0 ? homePct / total : 0;
+  const awayShare = total > 0 ? awayPct / total : 0;
+  const gap = (8 / 360) * circ;
+  const homeLen = Math.max(0, circ * homeShare - gap);
+  const awayLen = Math.max(0, circ * awayShare - gap);
+
+  const side = (value: number, name: string, color: string) => (
+    <View style={[styles.possessionSide, { gap: 10 * s }]}>
+      <Text style={[styles.possessionPct, { color, fontSize: 24 * s, lineHeight: 28 * s }]} numberOfLines={1}>
+        {`${Math.round(value)}%`}
+      </Text>
+      <Text
+        style={[styles.possessionName, { color: nameColor, fontSize: 16 * s, lineHeight: 20 * s }]}
+        numberOfLines={2}
+      >
+        {name}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View
+      style={[
+        styles.possessionCard,
+        isDark
+          ? { backgroundColor: C.card, borderColor: C.cardBorder, borderWidth: 1 }
+          : styles.possessionShadow,
+      ]}
+    >
+      {!isDark ? (
+        <LinearGradient
+          colors={['#FFFFFF', '#FDFBFF']}
+          start={{ x: 0.05, y: 0 }}
+          end={{ x: 0.95, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
+      <View style={{ paddingHorizontal: 11 * s, paddingVertical: 17 * s, gap: 13 * s }}>
+        <View
+          style={[
+            styles.sectionTitleRow,
+            {
+              flexDirection: rtl ? 'row' : 'row-reverse',
+              alignSelf: rtl ? 'flex-end' : 'flex-start',
+              gap: 8 * s,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: titleColor }]}>{title}</Text>
+          <Image
+            source={ICON.possessionChart}
+            style={{ width: 21 * s, height: 21 * s }}
+            contentFit="contain"
+            tintColor={isDark ? '#C4B5FD' : undefined}
+          />
+        </View>
+        <View style={[styles.possessionRow, { paddingHorizontal: 12 * s }]}>
+          {side(homePct, homeName, homeColor)}
+          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+            <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+              <Circle cx={center} cy={center} r={r} stroke={track} strokeWidth={stroke} fill="transparent" />
+              {awayLen > 0 ? (
+                <Circle
+                  cx={center}
+                  cy={center}
+                  r={r}
+                  stroke={awayColor}
+                  strokeWidth={stroke}
+                  fill="transparent"
+                  strokeDasharray={`${awayLen} ${circ}`}
+                  strokeDashoffset={gap / 2}
+                  transform={`rotate(-90 ${center} ${center})`}
+                />
+              ) : null}
+              {homeLen > 0 ? (
+                <Circle
+                  cx={center}
+                  cy={center}
+                  r={r}
+                  stroke={homeColor}
+                  strokeWidth={stroke}
+                  fill="transparent"
+                  strokeDasharray={`${homeLen} ${circ}`}
+                  strokeDashoffset={homeLen + gap / 2}
+                  transform={`rotate(-90 ${center} ${center})`}
+                />
+              ) : null}
+            </Svg>
+            <Image
+              source={ICON.soccerBall}
+              style={{ width: 24 * s, height: 24 * s }}
+              contentFit="contain"
+              tintColor={isDark ? '#F4EEFF' : undefined}
+            />
+          </View>
+          {side(awayPct, awayName, awayColor)}
+        </View>
+      </View>
     </View>
   );
 }
@@ -682,11 +817,14 @@ export function MatchStatsCompare({
   return (
     <View style={[styles.root, { gap: 22 * s }]} onLayout={onLayout}>
       {has(p.possession) ? (
-        <Section title={getLocalizedStatType('Ball Possession', language)} icon={ICON.possession} {...sectionProps}>
-          <Card style={{ paddingVertical: 16 * s, paddingHorizontal: 12 * s }}>
-            <RingPair pair={p.possession} {...names} />
-          </Card>
-        </Section>
+        <PossessionCard
+          pair={p.possession}
+          title={getLocalizedStatType('Ball Possession', language)}
+          homeName={homeName}
+          awayName={awayName}
+          rtl={rtl}
+          s={s}
+        />
       ) : null}
 
       {has(p.xg) ? (
@@ -857,6 +995,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+  },
+  possessionCard: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  possessionShadow: {
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  possessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  possessionSide: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  possessionPct: {
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  possessionName: {
+    fontWeight: '600',
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   ringCol: {
     flex: 1,

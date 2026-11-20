@@ -956,7 +956,7 @@ export const ar = {
       fouls: 'الأخطاء',
       cornerKicks: 'الركنيات',
       offsides: 'التسلل',
-      ballPossession: 'الاستحواذ',
+      ballPossession: 'الاستحواذ على الكرة',
       yellowCards: 'البطاقات الصفراء',
       redCards: 'البطاقات الحمراء',
       goalkeeperSaves: 'تصديات الحارس',
