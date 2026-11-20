@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  type AppStateStatus,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -12,6 +23,21 @@ import {
   playbackErrorMessageKey,
   type PlaybackFailureReason,
 } from '../../utils/highlightPlaybackErrors';
+import {
+  buildHighlightVideoSource,
+  classifyHighlightSourceType,
+  createHighlightPlaybackSessionId,
+  emitHighlightPlaybackDiagnostic,
+  highlightUiPhaseForFailure,
+  HIGHLIGHT_PLAYBACK_TIMEOUTS,
+  inferHighlightProvider,
+  isRecoverablePlaybackFailure,
+  resolveTimeoutReason,
+  sanitizePlaybackUrlForDiagnostics,
+  youtubeAllowsFullscreenVideo,
+  youtubeWebViewUserAgent,
+  type HighlightUiPhase,
+} from '../../utils/highlightPlaybackLifecycle';
 import { preflightDirectMp4 } from '../../utils/highlightMp4Preflight';
 import {
   isDirectHighlightFile,
@@ -26,9 +52,6 @@ type Props = {
   onClose: () => void;
   closeLabel?: string;
 };
-
-const PLAYER_AGENT =
-  'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36';
 
 /** Reports typed reasons — geo only when country/region evidence is present. */
 const PLAYBACK_PROBE = `
@@ -88,9 +111,22 @@ const FALLBACK_MESSAGES: Record<string, string> = {
   playbackTimeout: 'Unable to load the video. Please try again.',
   playbackUnknownError: 'Something went wrong. Please try again.',
   openInYouTube: 'Open in YouTube',
+  playbackLoading: 'Loading video…',
+  playbackInitializing: 'Preparing player…',
+  playbackRetry: 'Retry',
 };
 
-/** Plays highlight / goal clips with typed failures and URL fallback. */
+function resetSessionRefs(refs: {
+  skippedId: { current: string };
+  attempted: { current: string[] };
+  failureReasons: { current: PlaybackFailureReason[] };
+}) {
+  refs.skippedId.current = '';
+  refs.attempted.current = [];
+  refs.failureReasons.current = [];
+}
+
+/** Plays highlight / goal clips with typed failures, timeouts, and URL fallback. */
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
@@ -98,39 +134,71 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [failureReason, setFailureReason] = useState<PlaybackFailureReason | null>(null);
   const [surfaceReady, setSurfaceReady] = useState(false);
   const [directReady, setDirectReady] = useState(false);
+  const [uiPhase, setUiPhase] = useState<HighlightUiPhase>('idle');
+  const [sessionNonce, setSessionNonce] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const [youtubeLoaded, setYoutubeLoaded] = useState(false);
+
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
   const failureReasons = useRef<PlaybackFailureReason[]>([]);
+  const sessionId = useRef(createHighlightPlaybackSessionId());
+  const sessionStartedAt = useRef(Date.now());
   const listKey = urls.join('|');
-  const openKey = visible ? listKey : '';
+  const openKey = visible ? `${listKey}#${sessionNonce}` : '';
   const [seenKey, setSeenKey] = useState(openKey);
+
   if (seenKey !== openKey) {
-    skippedId.current = '';
-    attempted.current = [];
-    failureReasons.current = [];
+    resetSessionRefs({ skippedId, attempted, failureReasons });
+    if (visible) {
+      sessionId.current = createHighlightPlaybackSessionId();
+      sessionStartedAt.current = Date.now();
+    }
     setSeenKey(openKey);
     setIndex(0);
     setFailed(false);
     setFailureReason(null);
     setDirectReady(false);
+    setYoutubeLoaded(false);
+    setUiPhase(visible ? 'initializing' : 'idle');
   }
+
+  const firstCandidateUrl = urls[0] ?? '';
 
   useEffect(() => {
     if (!visible) {
       setSurfaceReady(false);
+      setUiPhase('idle');
+      emitHighlightPlaybackDiagnostic({
+        sessionId: sessionId.current,
+        stage: 'PLAYER_DISPOSED',
+        retryCount,
+      });
       return;
     }
     let cancelled = false;
+    setUiPhase('initializing');
+    emitHighlightPlaybackDiagnostic({
+      sessionId: sessionId.current,
+      stage: 'VIDEO_REQUESTED',
+      sourceType: classifyHighlightSourceType(firstCandidateUrl),
+      provider: inferHighlightProvider(firstCandidateUrl),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(firstCandidateUrl),
+      retryCount,
+    });
     void (async () => {
       await holdHighlightReplay();
-      if (!cancelled) setSurfaceReady(true);
+      if (!cancelled) {
+        setSurfaceReady(true);
+        setUiPhase('loading');
+      }
     })();
     return () => {
       cancelled = true;
       setSurfaceReady(false);
       releaseHighlightReplay();
     };
-  }, [visible]);
+  }, [visible, sessionNonce, listKey, firstCandidateUrl, retryCount]);
 
   const url = urls[index] ?? '';
   const fileUrl = resolveHighlightPlaybackUrl(url);
@@ -139,6 +207,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const videoId = url ? youtubeVideoId(url) : null;
   const showSurface = visible && surfaceReady;
   const unsupported = Boolean(url) && !embedUrl && !direct;
+  const sourceType = classifyHighlightSourceType(fileUrl || url);
 
   const matchDetailsText = t.matchDetails as unknown as Record<string, string | undefined>;
 
@@ -156,7 +225,18 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setFailureReason(finalReason);
     setFailed(true);
     setDirectReady(false);
-  }, []);
+    setUiPhase(highlightUiPhaseForFailure(finalReason));
+    emitHighlightPlaybackDiagnostic({
+      sessionId: sessionId.current,
+      stage: 'PLAYBACK_ERROR',
+      errorCategory: finalReason,
+      sourceType,
+      provider: inferHighlightProvider(url || fileUrl),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(url || fileUrl),
+      retryCount,
+      initMs: Date.now() - sessionStartedAt.current,
+    });
+  }, [fileUrl, retryCount, sourceType, url]);
 
   const skipWithReason = useCallback(
     (reason: PlaybackFailureReason) => {
@@ -165,20 +245,30 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
         finishWithReasons();
         return;
       }
-      // Never retry the same candidate in one sheet session.
       if (attempted.current.includes(url)) return;
       if (videoId && skippedId.current === videoId) return;
       if (videoId) skippedId.current = videoId;
       attempted.current.push(url);
       failureReasons.current.push(reason);
+      emitHighlightPlaybackDiagnostic({
+        sessionId: sessionId.current,
+        stage: reason === 'PLAYBACK_TIMEOUT' ? 'PLAYER_TIMEOUT' : 'PLAYBACK_ERROR',
+        errorCategory: reason,
+        sourceType,
+        provider: inferHighlightProvider(url),
+        sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+        retryCount,
+      });
       if (index + 1 < urls.length) {
         setDirectReady(false);
+        setYoutubeLoaded(false);
+        setUiPhase('loading');
         setIndex((current) => current + 1);
       } else {
         finishWithReasons();
       }
     },
-    [finishWithReasons, index, url, urls.length, videoId],
+    [finishWithReasons, index, retryCount, sourceType, url, urls.length, videoId],
   );
 
   // Unsupported hosts: advance with typed reason (never show geo).
@@ -187,7 +277,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     skipWithReason('UNSUPPORTED_PROVIDER');
   }, [visible, failed, unsupported, index, skipWithReason]);
 
-  // MP4 Range preflight before mounting native player.
+  // MP4/HLS Range preflight before mounting native player.
   useEffect(() => {
     if (!visible || failed || !direct || !fileUrl) {
       setDirectReady(false);
@@ -195,6 +285,15 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     }
     let cancelled = false;
     setDirectReady(false);
+    setUiPhase('loading');
+    emitHighlightPlaybackDiagnostic({
+      sessionId: sessionId.current,
+      stage: 'PLAYER_INITIALIZING',
+      sourceType,
+      provider: inferHighlightProvider(fileUrl),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(fileUrl),
+      retryCount,
+    });
     void preflightDirectMp4(fileUrl).then((result) => {
       if (cancelled) return;
       if (result.ok === true) {
@@ -206,17 +305,70 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     return () => {
       cancelled = true;
     };
-  }, [visible, failed, direct, fileUrl, index, skipWithReason]);
+  }, [visible, failed, direct, fileUrl, index, skipWithReason, sourceType, retryCount]);
+
+  // YouTube WebView load watchdog (ref avoids stale closures / duplicate timers).
+  const youtubeLoadedRef = useRef(false);
+  useEffect(() => {
+    youtubeLoadedRef.current = youtubeLoaded;
+  }, [youtubeLoaded]);
+
+  useEffect(() => {
+    if (!visible || failed || !embedUrl || !showSurface) return;
+    setYoutubeLoaded(false);
+    youtubeLoadedRef.current = false;
+    setUiPhase('loading');
+    const timer = setTimeout(() => {
+      if (!youtubeLoadedRef.current) {
+        skipWithReason(resolveTimeoutReason('youtube_load'));
+      }
+    }, HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS);
+    return () => clearTimeout(timer);
+  }, [visible, failed, embedUrl, showSurface, index, sessionNonce, skipWithReason]);
+
+  const handleRetry = useCallback(() => {
+    emitHighlightPlaybackDiagnostic({
+      sessionId: sessionId.current,
+      stage: 'PLAYER_RETRY',
+      errorCategory: failureReason ?? undefined,
+      retryCount: retryCount + 1,
+    });
+    resetSessionRefs({ skippedId, attempted, failureReasons });
+    setRetryCount((count) => count + 1);
+    setFailed(false);
+    setFailureReason(null);
+    setDirectReady(false);
+    setYoutubeLoaded(false);
+    setIndex(0);
+    setUiPhase('initializing');
+    setSessionNonce((nonce) => nonce + 1);
+  }, [failureReason, retryCount]);
 
   const openInYouTubeLabel = matchDetailsText.openInYouTube || FALLBACK_MESSAGES.openInYouTube;
+  const loadingLabel =
+    uiPhase === 'initializing'
+      ? matchDetailsText.playbackInitializing || FALLBACK_MESSAGES.playbackInitializing
+      : matchDetailsText.playbackLoading || FALLBACK_MESSAGES.playbackLoading;
+  const retryLabel = matchDetailsText.playbackRetry || FALLBACK_MESSAGES.playbackRetry;
 
-  const lastYouTubeUrl = [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate))
-    || (videoId ? url : '');
+  const lastYouTubeUrl =
+    [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate)) ||
+    (videoId ? url : '');
 
   const showOpenInYouTube =
     failed &&
     failureReason === 'EMBED_UNAVAILABLE' &&
     Boolean(lastYouTubeUrl && youtubeVideoId(lastYouTubeUrl));
+
+  const showRetry = failed && failureReason != null && isRecoverablePlaybackFailure(failureReason);
+
+  const showLoadingChrome =
+    visible &&
+    !failed &&
+    (uiPhase === 'initializing' ||
+      uiPhase === 'loading' ||
+      (direct && !directReady) ||
+      (Boolean(embedUrl) && !youtubeLoaded));
 
   return (
     <Modal
@@ -232,23 +384,36 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           <View style={styles.player}>
             <View pointerEvents="none" style={styles.playerPlate} />
             <WebView
-              key={`${listKey}:${embedUrl}`}
+              key={`${listKey}:${embedUrl}:${sessionNonce}`}
               source={{
                 uri: embedUrl,
                 headers: { Referer: 'https://90plus.pro' },
               }}
               style={[styles.video, Platform.OS === 'ios' && styles.videoIos]}
-              userAgent={PLAYER_AGENT}
+              userAgent={youtubeWebViewUserAgent()}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
               thirdPartyCookiesEnabled
               sharedCookiesEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              allowsFullscreenVideo={Platform.OS !== 'ios'}
+              allowsFullscreenVideo={youtubeAllowsFullscreenVideo()}
               javaScriptEnabled
               domStorageEnabled
               injectedJavaScript={PLAYBACK_PROBE}
+              onLoadEnd={() => {
+                setYoutubeLoaded(true);
+                setUiPhase('ready');
+                emitHighlightPlaybackDiagnostic({
+                  sessionId: sessionId.current,
+                  stage: 'PLAYER_READY',
+                  sourceType: 'youtube',
+                  provider: 'youtube',
+                  sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl),
+                  readyMs: Date.now() - sessionStartedAt.current,
+                  retryCount,
+                });
+              }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
                 const reason = classifyYouTubeProbeSignal(data);
@@ -264,33 +429,53 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 else if (status >= 500) skipWithReason('NETWORK_ERROR');
                 else skipWithReason('UNKNOWN_ERROR');
               }}
+              onError={() => skipWithReason('NETWORK_ERROR')}
             />
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
         {showSurface && direct && directReady && !failed ? (
           <DirectClipPlayer
-            key={fileUrl}
+            key={`${fileUrl}:${sessionNonce}`}
             url={fileUrl}
+            sessionId={sessionId.current}
+            retryCount={retryCount}
+            startedAt={sessionStartedAt.current}
             onClose={onClose}
             closeLabel={closeLabel}
-            onFailed={() => skipWithReason('PLAYER_INITIALIZATION_FAILED')}
+            onPhase={setUiPhase}
+            onFailed={(reason) => skipWithReason(reason)}
           />
+        ) : null}
+        {showLoadingChrome ? (
+          <View pointerEvents="none" style={styles.loadingOverlay}>
+            <ActivityIndicator color="#FFFFFF" size="large" />
+            <Text style={styles.loadingText}>{loadingLabel}</Text>
+          </View>
         ) : null}
         {visible && failed ? (
           <View style={styles.player}>
             <View pointerEvents="none" style={styles.playerPlate} />
-            <Text style={styles.error}>
-              {messageFor(failureReason ?? 'UNKNOWN_ERROR')}
-            </Text>
+            <Text style={styles.error}>{messageFor(failureReason ?? 'UNKNOWN_ERROR')}</Text>
+            {showRetry ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={retryLabel}
+                onPress={handleRetry}
+                style={styles.openYoutube}
+              >
+                <Text style={styles.openYoutubeText}>{retryLabel}</Text>
+              </Pressable>
+            ) : null}
             {showOpenInYouTube ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={openInYouTubeLabel}
                 onPress={() => {
-                  const watch = lastYouTubeUrl.includes('youtube') || lastYouTubeUrl.includes('youtu.be')
-                    ? lastYouTubeUrl
-                    : `https://www.youtube.com/watch?v=${youtubeVideoId(lastYouTubeUrl)}`;
+                  const watch =
+                    lastYouTubeUrl.includes('youtube') || lastYouTubeUrl.includes('youtu.be')
+                      ? lastYouTubeUrl
+                      : `https://www.youtube.com/watch?v=${youtubeVideoId(lastYouTubeUrl)}`;
                   void Linking.openURL(watch);
                 }}
                 style={styles.openYoutube}
@@ -308,28 +493,169 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
 
 function DirectClipPlayer({
   url,
+  sessionId,
+  retryCount,
+  startedAt,
   onClose,
   closeLabel,
   onFailed,
+  onPhase,
 }: {
   url: string;
+  sessionId: string;
+  retryCount: number;
+  startedAt: number;
   onClose: () => void;
   closeLabel: string;
-  onFailed: () => void;
+  onFailed: (reason: PlaybackFailureReason) => void;
+  onPhase: (phase: HighlightUiPhase) => void;
 }) {
-  const player = useVideoPlayer(url, (instance) => {
+  const source = buildHighlightVideoSource(url);
+  const sourceType = classifyHighlightSourceType(url);
+  const player = useVideoPlayer(source, (instance) => {
     instance.loop = false;
+    try {
+      Object.assign(instance, {
+        bufferOptions: {
+          preferredForwardBufferDuration: 6,
+          waitsToMinimizeStalling: true,
+          minBufferForPlayback: 0.5,
+        },
+      });
+    } catch {
+      /* buffer options optional */
+    }
   });
   const { status } = useEvent(player, 'statusChange', {
     status: player.status,
   });
+  const playingEvent = useEvent(player, 'playingChange', {
+    isPlaying: player.playing,
+  });
   const reported = useRef(false);
+  const readyAt = useRef<number | null>(null);
+  const playbackObserved = useRef(false);
+  const wasPlayingBeforeBackground = useRef(false);
+
+  const failOnce = useCallback(
+    (reason: PlaybackFailureReason) => {
+      if (reported.current) return;
+      reported.current = true;
+      onFailed(reason);
+    },
+    [onFailed],
+  );
+
+  useEffect(() => {
+    onPhase('loading');
+    emitHighlightPlaybackDiagnostic({
+      sessionId,
+      stage: 'PLAYER_INITIALIZING',
+      sourceType,
+      provider: inferHighlightProvider(url),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+      playerStatus: status,
+      retryCount,
+    });
+    // Mount-only init signal; status updates are emitted by ready/error watchdogs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onPhase, sessionId, sourceType, url, retryCount]);
+
+  // Initialization watchdog (readyToPlay).
+  useEffect(() => {
+    if (reported.current) return;
+    const timer = setTimeout(() => {
+      if (reported.current) return;
+      if (player.status !== 'readyToPlay' && player.status !== 'error') {
+        emitHighlightPlaybackDiagnostic({
+          sessionId,
+          stage: 'PLAYER_TIMEOUT',
+          timeoutStage: 'initialization',
+          playerStatus: player.status,
+          sourceType,
+          sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+          initMs: Date.now() - startedAt,
+          retryCount,
+        });
+        onPhase('timed_out');
+        failOnce(resolveTimeoutReason('initialization'));
+      }
+    }, HIGHLIGHT_PLAYBACK_TIMEOUTS.INITIALIZATION_MS);
+    return () => clearTimeout(timer);
+  }, [failOnce, onPhase, player, sessionId, sourceType, startedAt, url, retryCount]);
+
+  // Playback-start watchdog after ready.
+  useEffect(() => {
+    if (status !== 'readyToPlay' || reported.current) return;
+    if (readyAt.current == null) {
+      readyAt.current = Date.now();
+      onPhase('ready');
+      emitHighlightPlaybackDiagnostic({
+        sessionId,
+        stage: 'PLAYER_READY',
+        sourceType,
+        provider: inferHighlightProvider(url),
+        sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+        readyMs: Date.now() - startedAt,
+        retryCount,
+      });
+    }
+    const timer = setTimeout(() => {
+      if (reported.current || playbackObserved.current) return;
+      emitHighlightPlaybackDiagnostic({
+        sessionId,
+        stage: 'PLAYER_TIMEOUT',
+        timeoutStage: 'playback_start',
+        playerStatus: player.status,
+        sourceType,
+        sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+        playbackStartMs: Date.now() - startedAt,
+        retryCount,
+      });
+      onPhase('timed_out');
+      failOnce(resolveTimeoutReason('playback_start'));
+    }, HIGHLIGHT_PLAYBACK_TIMEOUTS.PLAYBACK_START_MS);
+    return () => clearTimeout(timer);
+  }, [status, failOnce, onPhase, player, sessionId, sourceType, startedAt, url, retryCount]);
 
   useEffect(() => {
     if (status !== 'error' || reported.current) return;
-    reported.current = true;
-    onFailed();
-  }, [status, onFailed]);
+    emitHighlightPlaybackDiagnostic({
+      sessionId,
+      stage: 'PLAYBACK_ERROR',
+      errorCategory: 'PLAYER_INITIALIZATION_FAILED',
+      playerStatus: status,
+      sourceType,
+      sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+      retryCount,
+    });
+    onPhase('error_recoverable');
+    failOnce('PLAYER_INITIALIZATION_FAILED');
+  }, [status, failOnce, onPhase, sessionId, sourceType, url, retryCount]);
+
+  useEffect(() => {
+    const isPlaying = Boolean(playingEvent?.isPlaying ?? player.playing);
+    if (!isPlaying || playbackObserved.current) return;
+    playbackObserved.current = true;
+    onPhase('playing');
+    // expo-video exposes playingChange, not a dedicated first-frame event.
+    emitHighlightPlaybackDiagnostic({
+      sessionId,
+      stage: 'PLAYBACK_STARTED_OBSERVED',
+      sourceType,
+      provider: inferHighlightProvider(url),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+      playbackStartMs: Date.now() - startedAt,
+      retryCount,
+    });
+    emitHighlightPlaybackDiagnostic({
+      sessionId,
+      stage: 'PLAYBACK_CONFIRMED',
+      sourceType,
+      playbackStartMs: Date.now() - startedAt,
+      retryCount,
+    });
+  }, [playingEvent, player.playing, onPhase, sessionId, sourceType, url, startedAt, retryCount]);
 
   useEffect(() => {
     const attempt = () => {
@@ -356,6 +682,38 @@ function DirectClipPlayer({
       }
     };
   }, [player, status]);
+
+  // Background: pause only (no background audio). Do not auto-resume.
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      try {
+        if (next !== 'active') {
+          if (player.playing) {
+            wasPlayingBeforeBackground.current = true;
+            player.pause();
+          }
+          return;
+        }
+        wasPlayingBeforeBackground.current = false;
+      } catch {
+        /* player may already be released */
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [player]);
+
+  useEffect(() => {
+    return () => {
+      emitHighlightPlaybackDiagnostic({
+        sessionId,
+        stage: 'PLAYER_DISPOSED',
+        sourceType,
+        sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+        retryCount,
+      });
+    };
+  }, [sessionId, sourceType, url, retryCount]);
 
   return (
     <View style={styles.player}>
@@ -414,6 +772,17 @@ const styles = StyleSheet.create({
   },
   videoIos: {
     opacity: 0.99,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
   error: {
     color: '#FFFFFF',
