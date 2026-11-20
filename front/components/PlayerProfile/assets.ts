@@ -31,5 +31,5 @@ export const PP_ICON = {
   instagramPill: require('../../assets/images/player-profile/instagram-pill.svg'),
 } as const;
 
-/** Figma 2431:17436 stadium hero backdrop */
+/** Empty stadium plate — player cutout is layered on top (never bake a specific athlete in). */
 export const PP_STADIUM = require('../../assets/images/player-profile/hero-stadium.png');
