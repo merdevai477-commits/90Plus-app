@@ -35,13 +35,13 @@ import {
   resolveTimeoutReason,
   sanitizePlaybackUrlForDiagnostics,
   youtubeAllowsFullscreenVideo,
-  youtubeWebViewUserAgent,
   type HighlightUiPhase,
 } from '../../utils/highlightPlaybackLifecycle';
 import { preflightDirectMp4 } from '../../utils/highlightMp4Preflight';
 import {
   isDirectHighlightFile,
   resolveHighlightPlaybackUrl,
+  streaminPlaybackCandidates,
   youtubeEmbedUrl,
   youtubeVideoId,
 } from '../../utils/highlightPlaybackUrl';
@@ -134,6 +134,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [failureReason, setFailureReason] = useState<PlaybackFailureReason | null>(null);
   const [surfaceReady, setSurfaceReady] = useState(false);
   const [directReady, setDirectReady] = useState(false);
+  const [playableDirectUrl, setPlayableDirectUrl] = useState('');
   const [uiPhase, setUiPhase] = useState<HighlightUiPhase>('idle');
   const [sessionNonce, setSessionNonce] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
@@ -159,6 +160,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setFailed(false);
     setFailureReason(null);
     setDirectReady(false);
+    setPlayableDirectUrl('');
     setYoutubeLoaded(false);
     setUiPhase(visible ? 'initializing' : 'idle');
   }
@@ -285,23 +287,33 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     }
     let cancelled = false;
     setDirectReady(false);
+    setPlayableDirectUrl('');
     setUiPhase('loading');
+    const targets = streaminPlaybackCandidates(url);
+    const urlsToTry = targets.length ? targets : [fileUrl];
     emitHighlightPlaybackDiagnostic({
       sessionId: sessionId.current,
       stage: 'PLAYER_INITIALIZING',
       sourceType,
-      provider: inferHighlightProvider(fileUrl),
-      sourceHost: sanitizePlaybackUrlForDiagnostics(fileUrl),
+      provider: inferHighlightProvider(urlsToTry[0]),
+      sourceHost: sanitizePlaybackUrlForDiagnostics(urlsToTry[0]),
       retryCount,
     });
-    void preflightDirectMp4(fileUrl).then((result) => {
-      if (cancelled) return;
-      if (result.ok === true) {
-        setDirectReady(true);
-        return;
+    void (async () => {
+      let lastReason: PlaybackFailureReason = 'SOURCE_NOT_FOUND';
+      for (const target of urlsToTry) {
+        const result = await preflightDirectMp4(target);
+        if (cancelled) return;
+        if (result.ok === true) {
+          setPlayableDirectUrl(target);
+          setDirectReady(true);
+          return;
+        }
+        lastReason = result.reason;
+        if (lastReason !== 'SOURCE_NOT_FOUND' && lastReason !== 'SOURCE_EXPIRED') break;
       }
-      skipWithReason(result.reason);
-    });
+      if (!cancelled) skipWithReason(lastReason);
+    })();
     return () => {
       cancelled = true;
     };
@@ -386,10 +398,14 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               key={`${listKey}:${embedUrl}:${sessionNonce}`}
               source={{
                 uri: embedUrl,
-                headers: { Referer: 'https://90plus.pro' },
+                headers: { Referer: 'https://www.youtube.com' },
               }}
-              style={[styles.video, Platform.OS === 'ios' && styles.videoIos]}
-              userAgent={youtubeWebViewUserAgent()}
+              style={styles.webView}
+              androidLayerType="hardware"
+              onLoadStart={() => {
+                setYoutubeLoaded(true);
+                setUiPhase('ready');
+              }}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
               thirdPartyCookiesEnabled
@@ -435,15 +451,14 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 else if (status >= 500) skipWithReason('NETWORK_ERROR');
                 else skipWithReason('UNKNOWN_ERROR');
               }}
-              onError={() => skipWithReason('NETWORK_ERROR')}
             />
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
         {showSurface && direct && directReady && !failed ? (
           <DirectClipPlayer
-            key={`${fileUrl}:${sessionNonce}`}
-            url={fileUrl}
+            key={`${playableDirectUrl || fileUrl}:${sessionNonce}`}
+            url={playableDirectUrl || fileUrl}
             sessionId={sessionId.current}
             retryCount={retryCount}
             startedAt={sessionStartedAt.current}
@@ -764,6 +779,7 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     backgroundColor: 'transparent',
   },
   playerPlate: {
@@ -776,8 +792,10 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#000000',
   },
-  videoIos: {
-    opacity: 0.99,
+  webView: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    zIndex: 1,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

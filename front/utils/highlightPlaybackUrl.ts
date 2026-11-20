@@ -1,4 +1,26 @@
 const STREAMIN_HOSTS = new Set(['streamin.link', 'streamin.me']);
+/** Streamin moved live files off c-cdn. Try the current host first, then the old one. */
+const STREAMIN_CDN_HOSTS = ['w-cdn.streamin.top', 'c-cdn.streamin.top'];
+
+export function streaminClipId(pageUrl: string): string | null {
+  try {
+    const parsed = new URL(pageUrl.trim());
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+    const cdnHost = STREAMIN_CDN_HOSTS.some((cdn) => host === cdn);
+    const watchHost = STREAMIN_HOSTS.has(host) || host.endsWith('.streamin.link') || host.endsWith('.streamin.me');
+    if (!cdnHost && !watchHost) return null;
+    const id = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/\.mp4$/i, '') ?? '';
+    return /^[a-z0-9]+$/i.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function streaminPlaybackCandidates(pageUrl: string): string[] {
+  const id = streaminClipId(pageUrl);
+  if (!id) return [];
+  return STREAMIN_CDN_HOSTS.map((host) => `https://${host}/uploads/${id}.mp4`);
+}
 
 /** Turn a Streamin watch page into the MP4, so the app plays the file itself. */
 export function resolveHighlightPlaybackUrl(pageUrl: string): string {
@@ -7,12 +29,8 @@ export function resolveHighlightPlaybackUrl(pageUrl: string): string {
   try {
     const parsed = new URL(trimmed);
     const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
-    if (STREAMIN_HOSTS.has(host) || host.endsWith('.streamin.link') || host.endsWith('.streamin.me')) {
-      const id = parsed.pathname.split('/').filter(Boolean).pop() ?? '';
-      if (/^[a-z0-9]+$/i.test(id)) {
-        return `https://c-cdn.streamin.top/uploads/${id}.mp4`;
-      }
-    }
+    const candidates = streaminPlaybackCandidates(trimmed);
+    if (candidates.length) return candidates[0];
   } catch {
     return trimmed;
   }
@@ -60,5 +78,6 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
     enablejsapi: '1',
     origin: 'https://90plus.pro',
   });
-  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
+  return `https://www.youtube.com/embed/${id}?${params.toString()}`;
 }
+

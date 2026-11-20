@@ -29,7 +29,7 @@ const prisma = jest.requireMock('../../../lib/prisma').default;
 describe('highlight storage eligibility', () => {
   const env = {
     VIDEO_STORAGE_ENABLED: 'true',
-    VIDEO_STORAGE_ALLOWED_HOSTS: 'c-cdn.streamin.top',
+    VIDEO_STORAGE_ALLOWED_HOSTS: 'w-cdn.streamin.top',
   } as NodeJS.ProcessEnv;
 
   it('keeps YouTube external only', () => {

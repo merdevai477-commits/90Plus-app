@@ -64,7 +64,7 @@ export function canonicalizeHighlightSource(pageUrl: string): string {
     const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
     if (host === 'streamin.link' || host === 'streamin.me' || host.endsWith('.streamin.link') || host.endsWith('.streamin.me')) {
       const id = parsed.pathname.split('/').filter(Boolean).pop() ?? '';
-      if (/^[a-z0-9]+$/i.test(id)) return `https://c-cdn.streamin.top/uploads/${id}.mp4`;
+      if (/^[a-z0-9]+$/i.test(id)) return `https://w-cdn.streamin.top/uploads/${id}.mp4`;
     }
   } catch {
     return trimmed;
