@@ -68,8 +68,7 @@ export function PlayerProfileHeader({
   const { isDark } = useResolvedAppScheme();
   const C = colors ?? getPPColors(isDark);
   const rtl = useRtl();
-  const fontBold = useAppFont(700);
-  const pageTitle = title ?? t.playerCareer.pageTitle;
+  void title; // optional scroll title — Figma hero keeps identity only
 
   const barOpacity = scrollY
     ? scrollY.interpolate({ inputRange: [0, 120], outputRange: [0, 1], extrapolate: 'clamp' })
@@ -90,17 +89,18 @@ export function PlayerProfileHeader({
         />
       ) : null}
 
-      {/* RTL: back on the right pointing right; LTR: back on the left pointing left */}
+      {/* Keep back on the photo side so it never covers the Figma identity panel */}
       <View
         style={[
           styles.headerTrailing,
           {
-            flexDirection: rtl ? 'row-reverse' : 'row',
-            alignSelf: rtl ? 'flex-end' : 'flex-start',
-            backgroundColor: 'rgba(35,14,72,0.45)',
-            borderRadius: 14,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            flexDirection: 'row',
+            // Identity sits on the end (right in RTL / left in LTR) — back goes opposite.
+            alignSelf: rtl ? 'flex-start' : 'flex-end',
+            backgroundColor: 'rgba(35,14,72,0.4)',
+            borderRadius: 20,
+            paddingHorizontal: 8,
+            paddingVertical: 8,
           },
         ]}
       >
@@ -117,13 +117,6 @@ export function PlayerProfileHeader({
             contentFit="contain"
           />
         </Pressable>
-        <Text
-          style={[styles.headerTitle, { fontFamily: fontBold, color: '#F9F6FE', fontSize: 16 }]}
-          numberOfLines={1}
-          allowFontScaling={false}
-        >
-          {pageTitle}
-        </Text>
       </View>
     </View>
   );
@@ -247,7 +240,7 @@ export default function PlayerProfileView({
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* Hero — Figma 1855:223 (no Follow button) */}
+        {/* Hero — Figma 2431:17436 + identity 2431:17437 (no Follow) */}
         <View style={[styles.hero, { height: heroHeight }]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
           <Pressable
@@ -260,7 +253,7 @@ export default function PlayerProfileView({
                 source={{ uri: photoUri }}
                 style={styles.heroPhoto}
                 contentFit="cover"
-                contentPosition="top"
+                contentPosition={rtl ? 'left' : 'right'}
                 cachePolicy="memory-disk"
                 priority="high"
                 transition={300}
@@ -278,52 +271,52 @@ export default function PlayerProfileView({
               </View>
             )}
           </Pressable>
+          {/* Figma: linear-gradient(-70deg, rgba(249,246,254,0.77) 30%, transparent 60.5%) */}
           <LinearGradient
             pointerEvents="none"
             colors={
-              rtl
-                ? ['rgba(249,246,254,0.82)', 'rgba(249,246,254,0.35)', 'transparent']
-                : ['transparent', 'rgba(249,246,254,0.35)', 'rgba(249,246,254,0.82)']
+              isDark
+                ? ['rgba(18,10,34,0.72)', 'rgba(18,10,34,0.28)', 'transparent']
+                : ['rgba(249,246,254,0.82)', 'rgba(249,246,254,0.45)', 'transparent']
             }
-            locations={[0.2, 0.45, 0.78]}
-            start={{ x: rtl ? 1 : 0, y: 0.5 }}
-            end={{ x: rtl ? 0 : 1, y: 0.5 }}
+            locations={[0.22, 0.42, 0.68]}
+            start={rtl ? { x: 1, y: 0.05 } : { x: 0, y: 0.05 }}
+            end={rtl ? { x: 0.15, y: 0.95 } : { x: 0.85, y: 0.95 }}
             style={StyleSheet.absoluteFill}
           />
-          {isDark ? (
-            <View
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,6,15,0.28)' }]}
-            />
-          ) : null}
 
           <View
             style={[
               styles.heroIdentity,
               {
-                top: Math.max(insets.top, 10) + 8,
-                maxWidth: Math.round(210 * scale),
-                alignItems: rtl ? 'flex-end' : 'flex-start',
-                gap: 11,
+                // Figma frame at y≈67 / width 201 on 430 artboard
+                top: Math.max(insets.top, 12) + 8,
+                width: Math.round(201 * scale),
+                gap: Math.round(11 * scale),
+                alignItems: 'flex-end',
               },
-              rtl ? { right: Math.round(20 * scale) } : { left: Math.round(20 * scale) },
+              rtl
+                ? { right: Math.round(20 * scale) }
+                : { left: Math.round(20 * scale) },
             ]}
           >
-            <View style={{ gap: 7, alignItems: rtl ? 'flex-end' : 'flex-start', width: '100%' }}>
+            <View
+              style={{
+                width: '100%',
+                minHeight: Math.round(99 * scale),
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+                gap: Math.round(8 * scale),
+              }}
+            >
               {vm.nationality ? (
-                <View
-                  style={[
-                    styles.heroNationRow,
-                    { flexDirection: rtl ? 'row-reverse' : 'row' },
-                  ]}
-                >
+                <View style={styles.heroMetaRow}>
                   <Text
                     style={[
                       styles.heroNation,
                       {
                         fontFamily: fontSemi,
                         color: isDark ? C.ink : '#313131',
-                        textAlign: rtl ? 'right' : 'left',
                       },
                     ]}
                     numberOfLines={1}
@@ -336,23 +329,18 @@ export default function PlayerProfileView({
                 </View>
               ) : null}
 
-              <View
-                style={[
-                  styles.heroNameRow,
-                  { flexDirection: rtl ? 'row-reverse' : 'row' },
-                ]}
-              >
+              <View style={styles.heroNameRow}>
                 <Text
                   style={[
                     styles.heroName,
                     {
                       fontFamily: fontBold,
                       color: C.ink,
-                      textAlign: rtl ? 'right' : 'left',
                       fontSize: Math.round(28 * scale),
+                      lineHeight: Math.round(35 * scale),
                     },
                   ]}
-                  numberOfLines={2}
+                  numberOfLines={1}
                 >
                   {vm.name}
                 </Text>
@@ -360,20 +348,15 @@ export default function PlayerProfileView({
               </View>
 
               {vm.clubName ? (
-                <View
-                  style={[
-                    styles.heroClubRow,
-                    { flexDirection: rtl ? 'row-reverse' : 'row' },
-                  ]}
-                >
+                <View style={styles.heroClubRow}>
                   <Text
                     style={[
                       styles.heroClub,
                       {
                         fontFamily: fontSemi,
                         color: isDark ? C.soft : '#373737',
-                        textAlign: rtl ? 'right' : 'left',
                         fontSize: Math.round(20 * scale),
+                        lineHeight: Math.round(25 * scale),
                       },
                     ]}
                     numberOfLines={1}
@@ -383,7 +366,7 @@ export default function PlayerProfileView({
                   <TeamBadge
                     name={vm.clubName}
                     logo={vm.clubLogo || undefined}
-                    size={28}
+                    size={Math.round(28 * scale)}
                     color="transparent"
                   />
                 </View>
@@ -391,7 +374,7 @@ export default function PlayerProfileView({
             </View>
 
             {hasSocials ? (
-              <View style={[styles.heroSocials, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+              <View style={styles.heroSocials}>
                 {socials?.twitterUrl ? (
                   <Pressable
                     accessibilityRole="link"
@@ -436,6 +419,7 @@ export default function PlayerProfileView({
               marginHorizontal: pad,
               marginTop: -18,
               backgroundColor: C.card,
+              // Figma L→R: position, height, age, nationality
               flexDirection: rtl ? 'row' : 'row-reverse',
             },
           ]}
@@ -1021,14 +1005,43 @@ const styles = StyleSheet.create({
   heroPhoto: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroIdentity: { position: 'absolute', zIndex: 4 },
-  heroNationRow: { alignItems: 'center', gap: 9 },
-  heroNation: { fontSize: 16 },
-  heroNameRow: { alignItems: 'center', gap: 7, maxWidth: '100%' },
-  heroName: { flexShrink: 1 },
+  /** Figma rows are LTR DOM order [label][icon] packed to the end of the panel */
+  heroMetaRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 9,
+    maxWidth: '100%',
+  },
+  heroNation: { fontSize: 16, textAlign: 'right' },
+  heroNameRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+    width: '100%',
+  },
+  heroName: { flexShrink: 1, textAlign: 'right' },
   verifiedBadge: { width: 24, height: 24 },
-  heroClubRow: { alignItems: 'center', gap: 6 },
-  heroClub: { flexShrink: 1 },
-  heroSocials: { alignItems: 'center', gap: 8 },
+  heroClubRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    maxWidth: '100%',
+  },
+  heroClub: { flexShrink: 1, textAlign: 'right' },
+  heroSocials: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+    gap: 8,
+  },
   socialIcon: { width: 36, height: 36 },
 
   strip: {
@@ -1043,8 +1056,9 @@ const styles = StyleSheet.create({
   attrLabel: { fontSize: 9, textAlign: 'center', width: '100%' },
   attrValueRow: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     gap: 4,
   },
   attrValue: { fontSize: 15 },

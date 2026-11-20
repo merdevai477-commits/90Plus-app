@@ -1,11 +1,4 @@
-<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="Verified Badge &#194;&#183; Instagram" clip-path="url(#clip0_0_22)">
-<path id="Vector" d="M7 14C10.866 14 14 10.866 14 7C14 3.13401 10.866 0 7 0C3.13401 0 0 3.13401 0 7C0 10.866 3.13401 14 7 14Z" fill="#1D9BF0"/>
-<path id="Vector_2" d="M3.6 7.1L5.8 9.2L10.4 4.7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
-</g>
-<defs>
-<clipPath id="clip0_0_22">
-<rect width="14" height="14" fill="white"/>
-</clipPath>
-</defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <circle cx="12" cy="12" r="12" fill="#6A2BD9"/>
+  <path d="M7.5 12.2L10.4 15L16.5 9" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
