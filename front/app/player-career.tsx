@@ -198,11 +198,16 @@ export default function PlayerCareerScreen() {
             profile.transfers?.find((tr) => tr.active && tr.competitorLogo)?.competitorLogo ||
             profile.transfers?.find((tr) => tr.competitorLogo)?.competitorLogo ||
             null;
-        const height = profile.height
-            ? /^\d+(\.\d+)?$/.test(profile.height.trim())
-                ? `${profile.height.trim()} ${pc.heightUnit}`
-                : profile.height
-            : null;
+        // Figma shows height as "178 cm". 365 may send metres ("1.78") or cm ("178").
+        const height = (() => {
+            const raw = profile.height?.trim();
+            if (!raw) return null;
+            if (!/^\d+(\.\d+)?$/.test(raw)) return raw;
+            const n = Number.parseFloat(raw);
+            if (!Number.isFinite(n)) return raw;
+            const cm = n > 0 && n < 3 ? Math.round(n * 100) : Math.round(n);
+            return `${cm} cm`;
+        })();
         const shown =
             career.seasons.find((s) => s.seasonKey === selectedSeasonKey) ?? careerCurrentSeason(career);
         return {
@@ -232,7 +237,7 @@ export default function PlayerCareerScreen() {
                 clubName: getTeamDisplayName(tr.clubName, language),
             })),
         };
-    }, [career, photoCandidates, athleteId, params.teamLogo, routeTeamName, language, pc.heightUnit, selectedSeasonKey]);
+    }, [career, photoCandidates, athleteId, params.teamLogo, routeTeamName, language, selectedSeasonKey]);
 
     const animateSeasonLayout = () => {
         if (Platform.OS === 'ios') {

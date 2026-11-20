@@ -258,7 +258,7 @@ export default function PlayerProfileView({
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* Hero */}
+        {/* Hero — Figma 1855:12 photo + identity panel */}
         <View style={[styles.hero, { height: heroHeight }]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
           <Image source={PP_STADIUM} style={[StyleSheet.absoluteFill, { opacity: 0.2 }]} contentFit="cover" />
@@ -270,11 +270,16 @@ export default function PlayerProfileView({
             ]}
           />
 
+          {/* Photo: Figma 308×287, left in RTL / right in LTR, bottom-aligned */}
           <Pressable
             style={[
               styles.heroPhotoWrap,
-              { width: Math.round(308 * scale * 0.72), height: Math.round(287 * scale) },
-              rtl ? { left: -18 } : { right: -18 },
+              {
+                width: Math.round(308 * scale),
+                height: Math.round(287 * scale),
+                bottom: -8,
+              },
+              rtl ? { left: Math.round(-34 * scale) } : { right: Math.round(-34 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
@@ -283,8 +288,8 @@ export default function PlayerProfileView({
               <Image
                 source={{ uri: photoUri }}
                 style={styles.heroPhoto}
-                contentFit="contain"
-                contentPosition="bottom"
+                contentFit="cover"
+                contentPosition="top"
                 cachePolicy="memory-disk"
                 priority="high"
                 transition={300}
@@ -307,83 +312,107 @@ export default function PlayerProfileView({
               styles.heroIdentity,
               {
                 width: Math.round(124 * scale),
-                top: headerHeight + 8,
+                top: Math.round(117 * scale),
+                gap: Math.round(16 * scale),
                 alignItems: rtl ? 'flex-end' : 'flex-start',
               },
-              rtl ? { right: 22 } : { left: 22 },
+              rtl ? { right: Math.round(22 * scale) } : { left: Math.round(22 * scale) },
             ]}
           >
-            {vm.jerseyNumber != null ? (
-              <Text
-                style={[
-                  styles.jersey,
-                  {
-                    fontFamily: fontBold,
-                    fontSize: Math.round(72 * scale),
-                    color: C.jersey,
-                    textAlign: rtl ? 'right' : 'left',
-                  },
-                ]}
-                allowFontScaling={false}
-              >
-                {vm.jerseyNumber}
-              </Text>
-            ) : null}
-            <Text
-              style={[
-                styles.nameFirst,
-                { fontFamily: fontBold, fontSize: Math.round(22 * scale), textAlign: rtl ? 'right' : 'left' },
-              ]}
-              numberOfLines={1}
-            >
-              {first.toUpperCase()}
-            </Text>
-            {last ? (
-              <Text
-                style={[
-                  styles.nameLast,
-                  { fontFamily: fontBold, fontSize: Math.round(25 * scale), textAlign: rtl ? 'right' : 'left' },
-                ]}
-                numberOfLines={2}
-              >
-                {last.toUpperCase()}
-              </Text>
-            ) : null}
-            {subline ? (
-              <Text
-                style={[
-                  styles.heroSub,
-                  { fontFamily: fontReg, color: C.softLilac, textAlign: rtl ? 'right' : 'left' },
-                ]}
-                numberOfLines={2}
-              >
-                {subline}
-              </Text>
-            ) : null}
-            <View style={[styles.heroSocials, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+            <View style={{ gap: Math.round(12 * scale), alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+              {vm.jerseyNumber != null ? (
+                <Text
+                  style={[
+                    styles.jersey,
+                    {
+                      fontFamily: fontBold,
+                      fontSize: Math.round(72 * scale),
+                      lineHeight: Math.round(78 * scale),
+                      color: C.jersey,
+                      textAlign: rtl ? 'right' : 'left',
+                      width: '100%',
+                    },
+                  ]}
+                  allowFontScaling={false}
+                >
+                  {vm.jerseyNumber}
+                </Text>
+              ) : null}
+              <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+                <Text
+                  style={[
+                    styles.nameFirst,
+                    {
+                      fontFamily: fontBold,
+                      fontSize: Math.round(22 * scale),
+                      textAlign: rtl ? 'right' : 'left',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {first.toUpperCase()}
+                </Text>
+                {last ? (
+                  <Text
+                    style={[
+                      styles.nameLast,
+                      {
+                        fontFamily: fontBold,
+                        fontSize: Math.round(25 * scale),
+                        textAlign: rtl ? 'right' : 'left',
+                      },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {last.toUpperCase()}
+                  </Text>
+                ) : null}
+                {subline ? (
+                  <Text
+                    style={[
+                      styles.heroSub,
+                      {
+                        fontFamily: fontReg,
+                        color: C.softLilac,
+                        textAlign: rtl ? 'right' : 'left',
+                      },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {subline}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <View style={[styles.heroSocials, { flexDirection: 'row', width: 80, justifyContent: 'space-between' }]}>
               {socials?.instagramUrl ? (
                 <Pressable onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}>
                   <Image source={PP_ICON.instagram} style={styles.socialIcon} contentFit="contain" />
                 </Pressable>
-              ) : null}
+              ) : (
+                <View style={styles.socialIcon} />
+              )}
               {socials?.facebookUrl ? (
                 <Pressable onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}>
                   <Image source={PP_ICON.facebook} style={styles.socialIcon} contentFit="contain" />
                 </Pressable>
-              ) : null}
+              ) : (
+                <View style={styles.socialIcon} />
+              )}
             </View>
           </View>
         </View>
 
-        {/* Attributes strip */}
+        {/* Attributes — Figma 1855:91: position · height · age · nationality */}
         <View
           style={[
             styles.strip,
             cardShadow,
             {
               marginHorizontal: pad,
-              marginTop: -66 + STRIP_OVERLAP,
+              marginTop: -56,
               backgroundColor: C.card,
+              // Figma frame order is L→R: position, height, age, nationality
               flexDirection: rtl ? 'row' : 'row-reverse',
             },
           ]}
@@ -394,7 +423,6 @@ export default function PlayerProfileView({
             icon={PP_ICON.position}
             iconSize={21}
             C={C}
-            rtl={rtl}
           />
           <AttrCell
             label={pc.height}
@@ -402,7 +430,6 @@ export default function PlayerProfileView({
             icon={PP_ICON.height}
             iconSize={16}
             C={C}
-            rtl={rtl}
           />
           <AttrCell
             label={pc.age}
@@ -410,7 +437,6 @@ export default function PlayerProfileView({
             icon={PP_ICON.cake}
             iconSize={16}
             C={C}
-            rtl={rtl}
           />
           <AttrCell
             label={pc.nationality}
@@ -419,35 +445,40 @@ export default function PlayerProfileView({
               flagUri ? <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" /> : null
             }
             C={C}
-            rtl={rtl}
           />
         </View>
 
         <View style={{ paddingHorizontal: pad, marginTop: 24, gap: 24 }}>
-          {/* Season statistics */}
+          {/* Season statistics — Figma 1855:6120 */}
           {vm.season ? (
-            <View style={{ gap: 16 }}>
-              <View style={[styles.sectionRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-                <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
-                  {pc.seasonStatsTitle}
-                </Text>
+            <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+              <View
+                style={[
+                  styles.sectionRow,
+                  // Figma: season label on the left, title on the right
+                  { flexDirection: 'row', width: '100%' },
+                ]}
+              >
                 <Pressable
-                  onPress={() => setPickerOpen((o) => !o)}
+                  onPress={() => vm.seasons.length > 1 && setPickerOpen((o) => !o)}
                   hitSlop={8}
-                  style={[styles.seasonTap, { flexDirection: rtl ? 'row' : 'row-reverse' }]}
+                  style={styles.seasonTap}
                 >
                   <Text style={[styles.seasonLabel, { fontFamily: fontSemi, color: C.primary }]}>
                     {vm.seasonLabel ?? '—'}
                   </Text>
-                  <Ionicons
-                    name={pickerOpen ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color={C.primary}
-                  />
                 </Pressable>
+                <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
+                  {pc.seasonStatsTitle}
+                </Text>
               </View>
               {pickerOpen ? (
-                <View style={[styles.seasonDropdown, { backgroundColor: C.card, borderColor: C.border }]}>
+                <View
+                  style={[
+                    styles.seasonDropdown,
+                    { backgroundColor: C.card, borderColor: C.border, alignSelf: 'stretch' },
+                  ]}
+                >
                   {vm.seasons.map((season) => {
                     const active = season.key === vm.selectedSeasonKey;
                     return (
@@ -464,6 +495,7 @@ export default function PlayerProfileView({
                             fontFamily: active ? fontBold : fontSemi,
                             color: active ? C.primary : C.ink,
                             fontSize: 14,
+                            textAlign: rtl ? 'right' : 'left',
                           }}
                         >
                           {season.label}
@@ -473,18 +505,21 @@ export default function PlayerProfileView({
                   })}
                 </View>
               ) : null}
-              <View style={[styles.keyStatsRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+              {/* Figma L→R: minutes, matches, assists, goals */}
+              <View style={[styles.keyStatsRow, { flexDirection: 'row', alignSelf: 'stretch' }]}>
                 {[
-                  { value: fmtNum(vm.season.goals), label: pc.statGoals },
-                  { value: fmtNum(vm.season.assists), label: pc.statAssists },
-                  { value: fmtNum(vm.season.matches), label: pc.statMatches },
                   { value: fmtNum(vm.season.minutes), label: pc.minutes },
+                  { value: fmtNum(vm.season.matches), label: pc.statMatches },
+                  { value: fmtNum(vm.season.assists), label: pc.statAssists },
+                  { value: fmtNum(vm.season.goals), label: pc.statGoals },
                 ].map((s) => (
                   <View
                     key={s.label}
                     style={[styles.keyStatCard, cardShadow, { backgroundColor: C.card }]}
                   >
-                    <Text style={[styles.keyStatValue, { fontFamily: fontBold, color: C.ink }]}>
+                    <Text
+                      style={[styles.keyStatValue, { fontFamily: fontBold, color: isDark ? C.ink : '#241444' }]}
+                    >
                       {s.value}
                     </Text>
                     <Text style={[styles.keyStatLabel, { fontFamily: fontReg, color: C.muted }]}>
@@ -576,7 +611,6 @@ function AttrCell({
   iconSize = 16,
   leading,
   C,
-  rtl,
 }: {
   label: string;
   value: string;
@@ -584,16 +618,16 @@ function AttrCell({
   iconSize?: number;
   leading?: ReactNode;
   C: PPColors;
-  rtl: boolean;
 }) {
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
+  // Figma 1855:91: label above; value row is text then icon (icon on the right).
   return (
     <View style={styles.attrCell}>
       <Text style={[styles.attrLabel, { fontFamily: fontSemi, color: C.muted }]} numberOfLines={1}>
         {label}
       </Text>
-      <View style={[styles.attrValueRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
+      <View style={styles.attrValueRow}>
         <Text style={[styles.attrValue, { fontFamily: fontBold, color: C.ink }]} numberOfLines={1}>
           {value}
         </Text>
@@ -1103,7 +1137,7 @@ const styles = StyleSheet.create({
   statusBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   statusBtnText: { color: '#fff', fontSize: 14 },
 
-  hero: { width: '100%', overflow: 'hidden' },
+  hero: { width: '100%', overflow: 'visible', zIndex: 1 },
   heroSide: {
     position: 'absolute',
     top: 0,
@@ -1112,16 +1146,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     shadowOffset: { width: -3, height: 0 },
+    elevation: 4,
   },
-  heroPhotoWrap: { position: 'absolute', bottom: 0 },
+  heroPhotoWrap: { position: 'absolute', zIndex: 3 },
   heroPhoto: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  heroIdentity: { position: 'absolute', gap: 4 },
+  heroIdentity: { position: 'absolute', zIndex: 4 },
   jersey: { includeFontPadding: false },
   nameFirst: { color: '#fff' },
   nameLast: { color: '#fff', marginTop: -2 },
   heroSub: { fontSize: 12, marginTop: 2 },
-  heroSocials: { gap: 8, marginTop: 12 },
+  heroSocials: { marginTop: 0 },
   socialIcon: { width: 36, height: 36 },
 
   strip: {
@@ -1132,17 +1167,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 2,
   },
-  attrCell: { alignItems: 'center', gap: 6, flex: 1 },
-  attrLabel: { fontSize: 9, textAlign: 'center' },
-  attrValueRow: { alignItems: 'center', gap: 4 },
+  attrCell: { alignItems: 'center', gap: 6, flexGrow: 1, flexBasis: 0 },
+  attrLabel: { fontSize: 9, textAlign: 'center', width: '100%' },
+  attrValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
   attrValue: { fontSize: 15 },
   flag: { width: 16, height: 16, borderRadius: 2 },
 
   sectionRow: { alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   sectionTitle: { fontSize: 16 },
   sectionDesc: { fontSize: 10 },
-  seasonTap: { alignItems: 'center', gap: 4 },
-  seasonLabel: { fontSize: 11 },
+  seasonTap: { alignItems: 'center' },
+  seasonLabel: { fontSize: 11, textAlign: 'right' },
   seasonDropdown: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   seasonOption: { paddingHorizontal: 14, paddingVertical: 12 },
 
@@ -1154,6 +1194,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
+    minWidth: 0,
   },
   keyStatValue: { fontSize: 19 },
   keyStatLabel: { fontSize: 10 },
