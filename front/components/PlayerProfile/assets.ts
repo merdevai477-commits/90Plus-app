@@ -26,6 +26,10 @@ export const PP_ICON = {
   instagram: require('../../assets/images/player-profile/instagram.svg'),
   facebook: require('../../assets/images/player-profile/facebook.svg'),
   twitter: require('../../assets/images/player-profile/twitter-x.svg'),
+  /** Figma social pills (2431:17663 / 2431:17625) */
+  facebookPill: require('../../assets/images/player-profile/facebook-pill.svg'),
+  instagramPill: require('../../assets/images/player-profile/instagram-pill.svg'),
 } as const;
 
-export const PP_STADIUM = require('../../assets/images/player-profile/hero-bg.jpg');
+/** Figma 2431:17436 stadium hero backdrop */
+export const PP_STADIUM = require('../../assets/images/player-profile/hero-stadium.png');

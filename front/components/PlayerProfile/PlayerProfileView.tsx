@@ -208,9 +208,7 @@ export default function PlayerProfileView({
   const photoUri = vm.photoCandidates[photoIndex];
   const photoFailed = photoIndex >= vm.photoCandidates.length;
   const flagUri = vm.nationality ? getCountryFlagUri(vm.nationality, null, 80) : null;
-  const hasSocials = Boolean(
-    socials?.twitterUrl || socials?.instagramUrl || socials?.facebookUrl,
-  );
+  const hasSocials = Boolean(socials?.instagramUrl || socials?.facebookUrl);
   const recentMatches = useMemo(
     () => (vm.lastMatches ?? []).filter((m) => m.played && m.rating != null).slice(0, 3),
     [vm.lastMatches],
@@ -240,20 +238,52 @@ export default function PlayerProfileView({
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* Hero — Figma 2431:17436 + identity 2431:17437 (no Follow) */}
+        {/* Hero — Figma 2431:17436 stadium + cutout looking at identity 2431:17437 */}
         <View style={[styles.hero, { height: heroHeight }]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
-          <Pressable
+          {/* Stadium backdrop from Figma (behind the player) */}
+          <Image
+            source={PP_STADIUM}
             style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            contentPosition="center"
+          />
+          {/* Soft wash so text stays readable on the identity side */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={
+              isDark
+                ? ['rgba(18,10,34,0.78)', 'rgba(18,10,34,0.25)', 'transparent']
+                : ['rgba(249,246,254,0.88)', 'rgba(249,246,254,0.42)', 'transparent']
+            }
+            locations={[0.18, 0.4, 0.72]}
+            start={rtl ? { x: 1, y: 0.1 } : { x: 0, y: 0.1 }}
+            end={rtl ? { x: 0.2, y: 0.9 } : { x: 0.8, y: 0.9 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Player cutout — left in RTL, spaced from the text, facing toward it */}
+          <Pressable
+            style={[
+              styles.heroCutoutWrap,
+              {
+                width: Math.round(width * 0.52),
+                height: Math.round(heroHeight * 1.08),
+                bottom: -12,
+              },
+              rtl
+                ? { left: Math.round(-8 * scale) }
+                : { right: Math.round(-8 * scale) },
+            ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
           >
             {photoUri && !photoFailed ? (
               <Image
                 source={{ uri: photoUri }}
-                style={styles.heroPhoto}
-                contentFit="cover"
-                contentPosition={rtl ? 'left' : 'right'}
+                style={styles.heroCutout}
+                contentFit="contain"
+                contentPosition={rtl ? 'bottom right' : 'bottom left'}
                 cachePolicy="memory-disk"
                 priority="high"
                 transition={300}
@@ -266,38 +296,24 @@ export default function PlayerProfileView({
               />
             ) : (
               <View style={styles.heroPhotoFallback}>
-                <Image source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
-                <Ionicons name="person" size={72} color="rgba(255,255,255,0.25)" />
+                <Ionicons name="person" size={72} color="rgba(255,255,255,0.35)" />
               </View>
             )}
           </Pressable>
-          {/* Figma: linear-gradient(-70deg, rgba(249,246,254,0.77) 30%, transparent 60.5%) */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={
-              isDark
-                ? ['rgba(18,10,34,0.72)', 'rgba(18,10,34,0.28)', 'transparent']
-                : ['rgba(249,246,254,0.82)', 'rgba(249,246,254,0.45)', 'transparent']
-            }
-            locations={[0.22, 0.42, 0.68]}
-            start={rtl ? { x: 1, y: 0.05 } : { x: 0, y: 0.05 }}
-            end={rtl ? { x: 0.15, y: 0.95 } : { x: 0.85, y: 0.95 }}
-            style={StyleSheet.absoluteFill}
-          />
 
           <View
             style={[
               styles.heroIdentity,
               {
-                // Figma frame at y≈67 / width 201 on 430 artboard
-                top: Math.max(insets.top, 12) + 8,
-                width: Math.round(201 * scale),
+                // Figma 2431:17437 — x≈188, y≈99, w=219 on 430 artboard
+                top: Math.max(insets.top, 12) + Math.round(20 * scale),
+                width: Math.round(219 * scale),
                 gap: Math.round(11 * scale),
                 alignItems: 'flex-end',
               },
               rtl
-                ? { right: Math.round(20 * scale) }
-                : { left: Math.round(20 * scale) },
+                ? { right: Math.round(18 * scale) }
+                : { left: Math.round(18 * scale) },
             ]}
           >
             <View
@@ -373,16 +389,20 @@ export default function PlayerProfileView({
               ) : null}
             </View>
 
+            {/* Social pills under club — Figma 2431:17668 (no Follow) */}
             {hasSocials ? (
               <View style={styles.heroSocials}>
-                {socials?.twitterUrl ? (
+                {socials?.facebookUrl ? (
                   <Pressable
                     accessibilityRole="link"
-                    accessibilityLabel={pc.twitter}
-                    onPress={() => Linking.openURL(socials.twitterUrl!).catch(() => undefined)}
-                    hitSlop={8}
+                    accessibilityLabel={pc.facebook}
+                    onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}
+                    style={[styles.socialPill, styles.socialPillFilled, { backgroundColor: C.primary }]}
                   >
-                    <Image source={PP_ICON.twitter} style={styles.socialIcon} contentFit="contain" />
+                    <Text style={[styles.socialPillText, { fontFamily: fontBold, color: '#fff' }]}>
+                      {pc.facebook}
+                    </Text>
+                    <Image source={PP_ICON.facebookPill} style={styles.socialPillIcon} contentFit="contain" />
                   </Pressable>
                 ) : null}
                 {socials?.instagramUrl ? (
@@ -390,19 +410,16 @@ export default function PlayerProfileView({
                     accessibilityRole="link"
                     accessibilityLabel={pc.instagram}
                     onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}
-                    hitSlop={8}
+                    style={[
+                      styles.socialPill,
+                      styles.socialPillOutline,
+                      { borderColor: C.primary, backgroundColor: C.card },
+                    ]}
                   >
-                    <Image source={PP_ICON.instagram} style={styles.socialIcon} contentFit="contain" />
-                  </Pressable>
-                ) : null}
-                {socials?.facebookUrl ? (
-                  <Pressable
-                    accessibilityRole="link"
-                    accessibilityLabel={pc.facebook}
-                    onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}
-                    hitSlop={8}
-                  >
-                    <Image source={PP_ICON.facebook} style={styles.socialIcon} contentFit="contain" />
+                    <Text style={[styles.socialPillText, { fontFamily: fontBold, color: C.primary }]}>
+                      {pc.instagram}
+                    </Text>
+                    <Image source={PP_ICON.instagramPill} style={styles.socialPillIcon} contentFit="contain" />
                   </Pressable>
                 ) : null}
               </View>
@@ -1002,7 +1019,8 @@ const styles = StyleSheet.create({
   statusBtnText: { color: '#fff', fontSize: 14 },
 
   hero: { width: '100%', overflow: 'hidden', zIndex: 1 },
-  heroPhoto: { width: '100%', height: '100%' },
+  heroCutoutWrap: { position: 'absolute', zIndex: 3 },
+  heroCutout: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroIdentity: { position: 'absolute', zIndex: 4 },
   /** Figma rows are LTR DOM order [label][icon] packed to the end of the panel */
@@ -1039,10 +1057,24 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    alignSelf: 'flex-end',
-    gap: 8,
+    alignSelf: 'stretch',
+    gap: 11,
   },
-  socialIcon: { width: 36, height: 36 },
+  socialPill: {
+    height: 42,
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minWidth: 102,
+  },
+  socialPillFilled: {},
+  socialPillOutline: { borderWidth: 1 },
+  socialPillText: { fontSize: 12, textAlign: 'center' },
+  socialPillIcon: { width: 24, height: 24 },
 
   strip: {
     height: 66,
