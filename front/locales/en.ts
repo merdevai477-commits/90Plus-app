@@ -839,6 +839,7 @@ export const en = {
     chooseSeason: 'Choose season',
     instagram: 'Instagram',
     facebook: 'Facebook',
+    twitter: 'X',
     onlyOneSeason: 'This is the only season on record for this player so far',
     pageTitle: 'Player Profile',
     detailedStatsTitle: 'Detailed Statistics',

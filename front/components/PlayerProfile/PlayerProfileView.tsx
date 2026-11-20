@@ -15,7 +15,6 @@ import {
   type RefreshControlProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Polygon } from 'react-native-svg';
 
 import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import type { Player365LastMatch } from '../../services/apiFootball';
@@ -26,16 +25,16 @@ import { toFullscreenPhotoUrl } from '../../utils/scores365AthletePhoto';
 import ImageViewerModal from '../common/ImageViewerModal';
 import TeamBadge from '../common/TeamBadge';
 import { PP_ICON, PP_STADIUM } from './assets';
-import { getPPColors, type PPColors } from './theme';
+import { getPPColors, ratingTone, type PPColors } from './theme';
 import type {
-  PlayerDetailedStats,
-  PlayerPer90Stats,
   PlayerProfileViewModel,
+  PlayerSeasonSummary,
   PlayerTransferRow,
 } from './types';
 
 const DESIGN_WIDTH = 430;
-const HERO_BODY = 398;
+/** Figma 1855:223 hero photo frame height */
+const HERO_BODY = 306;
 const HEADER_BAR_HEIGHT = 44;
 
 function useRtl() {
@@ -46,29 +45,6 @@ function useRtl() {
 function fmtNum(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return n.toLocaleString('en-US');
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '—';
-  return `${Math.round(n)}%`;
-}
-
-function splitName(name: string): { first: string; last: string } {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { first: name.trim(), last: '' };
-  return { first: parts[0], last: parts.slice(1).join(' ') };
-}
-
-function handleFromUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const path = new URL(url).pathname.replace(/\/+$/, '');
-    const last = path.split('/').filter(Boolean).pop();
-    if (!last) return null;
-    return last.startsWith('@') ? last : `@${last}`;
-  } catch {
-    return null;
-  }
 }
 
 export function usePlayerHeaderHeight(): number {
@@ -121,6 +97,10 @@ export function PlayerProfileHeader({
           {
             flexDirection: rtl ? 'row-reverse' : 'row',
             alignSelf: rtl ? 'flex-end' : 'flex-start',
+            backgroundColor: 'rgba(35,14,72,0.45)',
+            borderRadius: 14,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
           },
         ]}
       >
@@ -138,7 +118,7 @@ export function PlayerProfileHeader({
           />
         </Pressable>
         <Text
-          style={[styles.headerTitle, { fontFamily: fontBold, color: C.softLilac }]}
+          style={[styles.headerTitle, { fontFamily: fontBold, color: '#F9F6FE', fontSize: 16 }]}
           numberOfLines={1}
           allowFontScaling={false}
         >
@@ -195,12 +175,16 @@ interface PlayerProfileViewProps {
   refreshControl?: ReactElement<RefreshControlProps>;
   onBack: () => void;
   onSelectSeason?: (seasonKey: string) => void;
-  socials?: { facebookUrl: string | null; instagramUrl: string | null } | null;
+  socials?: {
+    facebookUrl: string | null;
+    instagramUrl: string | null;
+    twitterUrl?: string | null;
+  } | null;
 }
 
 export default function PlayerProfileView({
   vm,
-  statsContent,
+  statsContent: _statsContent,
   refreshControl,
   onBack,
   onSelectSeason,
@@ -217,11 +201,9 @@ export default function PlayerProfileView({
   const C = useMemo(() => getPPColors(isDark), [isDark]);
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
-  const fontReg = useAppFont(400);
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     setPhotoIndex(0);
@@ -230,12 +212,16 @@ export default function PlayerProfileView({
   const scale = Math.min(width / DESIGN_WIDTH, 1.08);
   const heroHeight = Math.round(HERO_BODY * scale);
   const pad = 20;
-  const contentW = width - pad * 2;
-  const { first, last } = splitName(vm.name);
   const photoUri = vm.photoCandidates[photoIndex];
   const photoFailed = photoIndex >= vm.photoCandidates.length;
   const flagUri = vm.nationality ? getCountryFlagUri(vm.nationality, null, 80) : null;
-  const subline = [vm.position, vm.clubName, vm.nationality].filter(Boolean).join(' · ');
+  const hasSocials = Boolean(
+    socials?.twitterUrl || socials?.instagramUrl || socials?.facebookUrl,
+  );
+  const recentMatches = useMemo(
+    () => (vm.lastMatches ?? []).filter((m) => m.played && m.rating != null).slice(0, 3),
+    [vm.lastMatches],
+  );
 
   const cardShadow = {
     shadowColor: C.shadow,
@@ -247,7 +233,7 @@ export default function PlayerProfileView({
 
   return (
     <View style={[styles.screen, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -261,29 +247,11 @@ export default function PlayerProfileView({
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* Hero — Figma 1855:12 photo + identity panel */}
+        {/* Hero — Figma 1855:223 (no Follow button) */}
         <View style={[styles.hero, { height: heroHeight }]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: C.hero }]} />
-          <Image source={PP_STADIUM} style={[StyleSheet.absoluteFill, { opacity: 0.2 }]} contentFit="cover" />
-          <View
-            style={[
-              styles.heroSide,
-              { backgroundColor: C.heroSide, width: Math.round(160 * scale) },
-              rtl ? { right: 0 } : { left: 0 },
-            ]}
-          />
-
-          {/* Photo: Figma 308×287, left in RTL / right in LTR, bottom-aligned */}
           <Pressable
-            style={[
-              styles.heroPhotoWrap,
-              {
-                width: Math.round(308 * scale),
-                height: Math.round(287 * scale),
-                bottom: -8,
-              },
-              rtl ? { left: Math.round(-34 * scale) } : { right: Math.round(-34 * scale) },
-            ]}
+            style={StyleSheet.absoluteFill}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
           >
@@ -305,94 +273,139 @@ export default function PlayerProfileView({
               />
             ) : (
               <View style={styles.heroPhotoFallback}>
+                <Image source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
                 <Ionicons name="person" size={72} color="rgba(255,255,255,0.25)" />
               </View>
             )}
           </Pressable>
+          <LinearGradient
+            pointerEvents="none"
+            colors={
+              rtl
+                ? ['rgba(249,246,254,0.82)', 'rgba(249,246,254,0.35)', 'transparent']
+                : ['transparent', 'rgba(249,246,254,0.35)', 'rgba(249,246,254,0.82)']
+            }
+            locations={[0.2, 0.45, 0.78]}
+            start={{ x: rtl ? 1 : 0, y: 0.5 }}
+            end={{ x: rtl ? 0 : 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+          {isDark ? (
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,6,15,0.28)' }]}
+            />
+          ) : null}
 
           <View
             style={[
               styles.heroIdentity,
               {
-                width: Math.round(124 * scale),
-                top: Math.round(117 * scale),
-                gap: Math.round(16 * scale),
+                top: Math.max(insets.top, 10) + 8,
+                maxWidth: Math.round(210 * scale),
                 alignItems: rtl ? 'flex-end' : 'flex-start',
+                gap: 11,
               },
-              rtl ? { right: Math.round(22 * scale) } : { left: Math.round(22 * scale) },
+              rtl ? { right: Math.round(20 * scale) } : { left: Math.round(20 * scale) },
             ]}
           >
-            <View style={{ gap: Math.round(12 * scale), alignItems: rtl ? 'flex-end' : 'flex-start' }}>
-              {vm.jerseyNumber != null ? (
-                <Text
+            <View style={{ gap: 7, alignItems: rtl ? 'flex-end' : 'flex-start', width: '100%' }}>
+              {vm.nationality ? (
+                <View
                   style={[
-                    styles.jersey,
-                    {
-                      fontFamily: fontBold,
-                      fontSize: Math.round(72 * scale),
-                      lineHeight: Math.round(78 * scale),
-                      color: C.jersey,
-                      textAlign: rtl ? 'right' : 'left',
-                      width: '100%',
-                    },
+                    styles.heroNationRow,
+                    { flexDirection: rtl ? 'row-reverse' : 'row' },
                   ]}
-                  allowFontScaling={false}
                 >
-                  {vm.jerseyNumber}
-                </Text>
+                  <Text
+                    style={[
+                      styles.heroNation,
+                      {
+                        fontFamily: fontSemi,
+                        color: isDark ? C.ink : '#313131',
+                        textAlign: rtl ? 'right' : 'left',
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {vm.nationality}
+                  </Text>
+                  {flagUri ? (
+                    <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" />
+                  ) : null}
+                </View>
               ) : null}
-              <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+
+              <View
+                style={[
+                  styles.heroNameRow,
+                  { flexDirection: rtl ? 'row-reverse' : 'row' },
+                ]}
+              >
                 <Text
                   style={[
-                    styles.nameFirst,
+                    styles.heroName,
                     {
                       fontFamily: fontBold,
-                      fontSize: Math.round(22 * scale),
+                      color: C.ink,
                       textAlign: rtl ? 'right' : 'left',
+                      fontSize: Math.round(28 * scale),
                     },
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
-                  {first.toUpperCase()}
+                  {vm.name}
                 </Text>
-                {last ? (
-                  <Text
-                    style={[
-                      styles.nameLast,
-                      {
-                        fontFamily: fontBold,
-                        fontSize: Math.round(25 * scale),
-                        textAlign: rtl ? 'right' : 'left',
-                      },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {last.toUpperCase()}
-                  </Text>
-                ) : null}
-                {subline ? (
-                  <Text
-                    style={[
-                      styles.heroSub,
-                      {
-                        fontFamily: fontReg,
-                        color: C.softLilac,
-                        textAlign: rtl ? 'right' : 'left',
-                      },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {subline}
-                  </Text>
-                ) : null}
+                <Image source={PP_ICON.verified} style={styles.verifiedBadge} contentFit="contain" />
               </View>
+
+              {vm.clubName ? (
+                <View
+                  style={[
+                    styles.heroClubRow,
+                    { flexDirection: rtl ? 'row-reverse' : 'row' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.heroClub,
+                      {
+                        fontFamily: fontSemi,
+                        color: isDark ? C.soft : '#373737',
+                        textAlign: rtl ? 'right' : 'left',
+                        fontSize: Math.round(20 * scale),
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {vm.clubName}
+                  </Text>
+                  <TeamBadge
+                    name={vm.clubName}
+                    logo={vm.clubLogo || undefined}
+                    size={28}
+                    color="transparent"
+                  />
+                </View>
+              ) : null}
             </View>
-            {socials?.instagramUrl || socials?.facebookUrl ? (
+
+            {hasSocials ? (
               <View style={[styles.heroSocials, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                {socials?.twitterUrl ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={pc.twitter}
+                    onPress={() => Linking.openURL(socials.twitterUrl!).catch(() => undefined)}
+                    hitSlop={8}
+                  >
+                    <Image source={PP_ICON.twitter} style={styles.socialIcon} contentFit="contain" />
+                  </Pressable>
+                ) : null}
                 {socials?.instagramUrl ? (
                   <Pressable
                     accessibilityRole="link"
-                    accessibilityLabel="Instagram"
+                    accessibilityLabel={pc.instagram}
                     onPress={() => Linking.openURL(socials.instagramUrl!).catch(() => undefined)}
                     hitSlop={8}
                   >
@@ -402,7 +415,7 @@ export default function PlayerProfileView({
                 {socials?.facebookUrl ? (
                   <Pressable
                     accessibilityRole="link"
-                    accessibilityLabel="Facebook"
+                    accessibilityLabel={pc.facebook}
                     onPress={() => Linking.openURL(socials.facebookUrl!).catch(() => undefined)}
                     hitSlop={8}
                   >
@@ -414,16 +427,15 @@ export default function PlayerProfileView({
           </View>
         </View>
 
-        {/* Attributes — Figma 1855:91: position · height · age · nationality */}
+        {/* Attributes — Figma 1855:91 */}
         <View
           style={[
             styles.strip,
             cardShadow,
             {
               marginHorizontal: pad,
-              marginTop: -56,
+              marginTop: -18,
               backgroundColor: C.card,
-              // Figma frame order is L→R: position, height, age, nationality
               flexDirection: rtl ? 'row' : 'row-reverse',
             },
           ]}
@@ -459,117 +471,45 @@ export default function PlayerProfileView({
           />
         </View>
 
-        <View style={{ paddingHorizontal: pad, marginTop: 24, gap: 24 }}>
-          {/* Season statistics — Figma 1855:6120 */}
+        <View style={{ paddingHorizontal: pad, marginTop: 24, gap: 20 }}>
+          {/* Season statistics — Figma 2431:17457 */}
           {vm.season ? (
-            <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
-              <View style={[styles.sectionRow, { flexDirection: 'row', width: '100%' }]}>
-                <Text style={[styles.seasonLabel, { fontFamily: fontSemi, color: C.primary }]}>
-                  {vm.seasonLabel ?? '—'}
-                </Text>
-                <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
-                  {pc.seasonStatsTitle}
-                </Text>
-              </View>
-              <View style={[styles.keyStatsRow, { flexDirection: 'row', alignSelf: 'stretch' }]}>
-                {[
-                  { value: fmtNum(vm.season.minutes), label: pc.minutes },
-                  { value: fmtNum(vm.season.matches), label: pc.statMatches },
-                  { value: fmtNum(vm.season.assists), label: pc.statAssists },
-                  { value: fmtNum(vm.season.goals), label: pc.statGoals },
-                ].map((s) => (
-                  <View
-                    key={s.label}
-                    style={[
-                      styles.keyStatCard,
-                      cardShadow,
-                      {
-                        backgroundColor: C.card,
-                        borderWidth: 1,
-                        borderColor: C.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.keyStatValue, { fontFamily: fontBold, color: isDark ? C.ink : '#241444' }]}
-                    >
-                      {s.value}
-                    </Text>
-                    <Text style={[styles.keyStatLabel, { fontFamily: fontReg, color: C.muted }]}>
-                      {s.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+            <SeasonStatsCard
+              season={vm.season}
+              seasonLabel={vm.seasonLabel}
+              seasons={vm.seasons}
+              selectedSeasonKey={vm.selectedSeasonKey}
+              onSelectSeason={onSelectSeason}
+              C={C}
+              rtl={rtl}
+              cardShadow={cardShadow}
+            />
           ) : null}
 
-          {/* Detailed statistics + season dropdown beside title */}
-          <DetailedStatsSection
-            detailed={vm.detailed}
-            C={C}
-            rtl={rtl}
-            cardShadow={cardShadow}
-            seasons={vm.seasons}
-            seasonLabel={vm.seasonLabel}
-            selectedSeasonKey={vm.selectedSeasonKey}
-            pickerOpen={pickerOpen}
-            onTogglePicker={() => setPickerOpen((o) => !o)}
-            onSelectSeason={(key) => {
-              onSelectSeason?.(key);
-              setPickerOpen(false);
-            }}
-          />
-
-          {/* Average rating — Figma order after detailed stats */}
-          {vm.averageRating != null ? (
-            <LinearGradient
-              colors={['#5422ae', '#230e48']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[styles.ratingCard, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}
-            >
-              <Text style={[styles.ratingLabel, { fontFamily: fontSemi, color: C.ratingLabel }]}>
-                {pc.averageRating}
-              </Text>
-              <View style={[styles.ratingValueRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
-                <Image source={PP_ICON.star} style={styles.starIcon} contentFit="contain" />
-                <Text style={[styles.ratingValue, { fontFamily: fontBold }]}>
-                  {vm.averageRating.toFixed(1)}
-                </Text>
-              </View>
-            </LinearGradient>
+          {/* Last matches — Figma 2431:17519 */}
+          {recentMatches.length > 0 ? (
+            <LastMatchesCard matches={recentMatches} C={C} rtl={rtl} cardShadow={cardShadow} />
           ) : null}
 
-          {/* Figma 1856:32 performance radar — drawn from last 10 matches (+ per90 fallback) */}
-          <PerformanceRadarSection
-            matches={vm.lastMatches}
-            per90={vm.per90}
-            C={C}
-            rtl={rtl}
-            cardShadow={cardShadow}
-            width={contentW}
-          />
-
-          {/* Deep stats: comparison / trend / competitions (light cards in light mode) */}
-          {statsContent ? <View style={{ marginTop: 4 }}>{statsContent}</View> : null}
-
-          {/* Transfers */}
+          {/* Transfers — Figma 2431:17554 */}
           {vm.transfers.length > 0 ? (
-            <View style={{ gap: 16 }}>
-              <Text
+            <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+              <View
                 style={[
-                  styles.sectionTitle,
-                  { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
+                  styles.sectionTitleRow,
+                  { flexDirection: rtl ? 'row-reverse' : 'row', alignSelf: rtl ? 'flex-end' : 'flex-start' },
                 ]}
               >
-                {pc.transferHistory}
-              </Text>
+                <Text style={[styles.sectionTitleLg, { fontFamily: fontSemi, color: C.ink }]}>
+                  {pc.transferHistory}
+                </Text>
+                <Image source={PP_ICON.transfers} style={styles.sectionIcon} contentFit="contain" />
+              </View>
               <View
                 style={[
                   styles.transferCard,
                   cardShadow,
-                  { backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
+                  { backgroundColor: C.card, alignSelf: 'stretch' },
                 ]}
               >
                 {vm.transfers.slice(0, 8).map((tr, idx, arr) => (
@@ -585,11 +525,6 @@ export default function PlayerProfileView({
                 ))}
               </View>
             </View>
-          ) : null}
-
-          {/* Social media — only platforms with a curated URL */}
-          {socials && (socials.instagramUrl || socials.facebookUrl) ? (
-            <SocialSection socials={socials} C={C} rtl={rtl} cardShadow={cardShadow} />
           ) : null}
         </View>
       </Animated.ScrollView>
@@ -641,6 +576,293 @@ function AttrCell({
   );
 }
 
+function SeasonStatCell({
+  value,
+  label,
+  icon,
+  C,
+  valueSize = 25,
+  labelSize = 12,
+  cards,
+}: {
+  value: string;
+  label: string;
+  icon?: number;
+  C: PPColors;
+  valueSize?: number;
+  labelSize?: number;
+  cards?: boolean;
+}) {
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  return (
+    <View style={styles.seasonStatCell}>
+      <Text style={[styles.seasonStatValue, { fontFamily: fontBold, color: C.ink, fontSize: valueSize }]}>
+        {value}
+      </Text>
+      <View style={styles.seasonStatLabelRow}>
+        <Text
+          style={[styles.seasonStatLabel, { fontFamily: fontSemi, color: C.muted, fontSize: labelSize }]}
+          numberOfLines={2}
+        >
+          {label}
+        </Text>
+        {cards ? (
+          <View style={styles.cardPair}>
+            <View style={[styles.miniCard, { backgroundColor: C.cardYellow, transform: [{ rotate: '-25deg' }] }]} />
+            <View
+              style={[
+                styles.miniCard,
+                styles.miniCardOverlap,
+                { backgroundColor: C.cardRed, transform: [{ rotate: '-25deg' }] },
+              ]}
+            />
+          </View>
+        ) : icon ? (
+          <Image source={icon} style={styles.seasonStatIcon} contentFit="contain" />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function SeasonStatsCard({
+  season,
+  seasonLabel,
+  seasons,
+  selectedSeasonKey,
+  onSelectSeason,
+  C,
+  rtl,
+  cardShadow,
+}: {
+  season: PlayerSeasonSummary;
+  seasonLabel: string | null;
+  seasons: { key: string; label: string }[];
+  selectedSeasonKey: string | null;
+  onSelectSeason?: (seasonKey: string) => void;
+  C: PPColors;
+  rtl: boolean;
+  cardShadow: object;
+}) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  const fontReg = useAppFont(400);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const rowDir = rtl ? 'row' : 'row-reverse';
+  const cardsValue = `${fmtNum(season.yellowCards)} / ${fmtNum(season.redCards)}`;
+
+  return (
+    <View style={{ gap: 16, alignSelf: 'stretch' }}>
+      <View style={[styles.sectionRow, { flexDirection: 'row' }]}>
+        <Pressable
+          onPress={() => seasons.length > 1 && setPickerOpen((o) => !o)}
+          hitSlop={8}
+          style={[styles.seasonTap, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: pickerOpen }}
+        >
+          <Text style={[styles.seasonLabelMuted, { fontFamily: fontReg, color: C.muted }]}>
+            {seasonLabel ?? '—'}
+          </Text>
+          {seasons.length > 1 ? (
+            <Ionicons name={pickerOpen ? 'chevron-up' : 'chevron-down'} size={14} color={C.muted} />
+          ) : null}
+        </Pressable>
+        <View style={[styles.sectionTitleRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+          <Text style={[styles.sectionTitleLg, { fontFamily: fontSemi, color: C.ink }]}>
+            {pc.seasonStatsTitle}
+          </Text>
+          <Image source={PP_ICON.seasonStats} style={styles.sectionIcon} contentFit="contain" />
+        </View>
+      </View>
+
+      {pickerOpen ? (
+        <View style={[styles.seasonDropdown, cardShadow, { backgroundColor: C.card, borderColor: C.border }]}>
+          {seasons.map((item) => {
+            const active = item.key === selectedSeasonKey;
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => {
+                  onSelectSeason?.(item.key);
+                  setPickerOpen(false);
+                }}
+                style={[styles.seasonOption, active && { backgroundColor: C.pale }]}
+              >
+                <Text
+                  style={{
+                    fontFamily: active ? fontBold : fontSemi,
+                    color: active ? C.primary : C.ink,
+                    fontSize: 14,
+                    textAlign: rtl ? 'right' : 'left',
+                  }}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      <View style={[styles.seasonCard, cardShadow, { backgroundColor: C.card }]}>
+        <View style={[styles.seasonTopRow, { flexDirection: rowDir, borderBottomColor: C.pale }]}>
+          <SeasonStatCell
+            value={fmtNum(season.assists)}
+            label={pc.statAssists}
+            icon={PP_ICON.court}
+            C={C}
+          />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell value={fmtNum(season.goals)} label={pc.statGoals} icon={PP_ICON.goals} C={C} />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell
+            value={fmtNum(season.matches)}
+            label={pc.statMatches}
+            icon={PP_ICON.court}
+            C={C}
+          />
+        </View>
+        <View style={[styles.seasonBottomRow, { flexDirection: rowDir }]}>
+          <SeasonStatCell
+            value={cardsValue}
+            label={pc.cardsYellowRed}
+            cards
+            C={C}
+            valueSize={18}
+            labelSize={10}
+          />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell
+            value={fmtNum(season.chancesCreated)}
+            label={pc.chancesCreated}
+            icon={PP_ICON.sneaker}
+            C={C}
+            valueSize={18}
+            labelSize={10}
+          />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell
+            value={fmtNum(season.shotsOnTarget)}
+            label={pc.shotsOnTarget}
+            icon={PP_ICON.goalNet}
+            C={C}
+            valueSize={18}
+            labelSize={10}
+          />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell
+            value={fmtNum(season.minutes)}
+            label={pc.minutesPlayed}
+            icon={PP_ICON.time}
+            C={C}
+            valueSize={18}
+            labelSize={10}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function fmtMatchDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y} - ${m} - ${day}`;
+}
+
+function LastMatchesCard({
+  matches,
+  C,
+  rtl,
+  cardShadow,
+}: {
+  matches: Player365LastMatch[];
+  C: PPColors;
+  rtl: boolean;
+  cardShadow: object;
+}) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
+  const fontSemi = useAppFont(600);
+  const ordered = rtl ? matches : [...matches].reverse();
+
+  return (
+    <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start', alignSelf: 'stretch' }}>
+      <View
+        style={[
+          styles.sectionTitleRow,
+          { flexDirection: rtl ? 'row-reverse' : 'row', alignSelf: rtl ? 'flex-end' : 'flex-start' },
+        ]}
+      >
+        <Text style={[styles.sectionTitleLg, { fontFamily: fontSemi, color: C.ink }]}>
+          {pc.lastMatches}
+        </Text>
+        <Image source={PP_ICON.history} style={styles.sectionIcon} contentFit="contain" />
+      </View>
+      <View
+        style={[
+          styles.lastMatchesCard,
+          cardShadow,
+          {
+            backgroundColor: C.card,
+            flexDirection: rtl ? 'row' : 'row-reverse',
+            alignSelf: 'stretch',
+          },
+        ]}
+      >
+        {ordered.map((match, idx) => {
+          const rating = match.rating ?? 0;
+          const tone = match.ratingColor || ratingTone(rating);
+          return (
+            <React.Fragment key={match.gameId}>
+              {idx > 0 ? <View style={[styles.matchDivider, { backgroundColor: C.pale }]} /> : null}
+              <View style={styles.matchCell}>
+                <View
+                  style={[
+                    styles.matchTop,
+                    { flexDirection: rtl ? 'row-reverse' : 'row' },
+                  ]}
+                >
+                  <View style={[styles.ratingPill, { backgroundColor: tone }]}>
+                    <Text style={[styles.ratingPillText, { fontFamily: fontSemi, color: C.ratingText }]}>
+                      {rating.toFixed(1)}
+                    </Text>
+                  </View>
+                  <TeamBadge
+                    name={match.opponentName || '—'}
+                    logo={match.opponentLogo || undefined}
+                    size={30}
+                    color="transparent"
+                  />
+                </View>
+                <View style={styles.matchMeta}>
+                  <Text style={[styles.matchDate, { fontFamily: fontSemi, color: C.muted }]}>
+                    {fmtMatchDate(match.startTime)}
+                  </Text>
+                  <Text
+                    style={[styles.matchOpponent, { fontFamily: fontSemi, color: C.ink }]}
+                    numberOfLines={1}
+                  >
+                    {shortOpponent(match.opponentName)}
+                  </Text>
+                </View>
+              </View>
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export function SectionHeader({
   icon,
   title,
@@ -671,409 +893,11 @@ export function SectionHeader({
   );
 }
 
-function DetailedStatsSection({
-  detailed,
-  C,
-  rtl,
-  cardShadow,
-  seasons,
-  seasonLabel,
-  selectedSeasonKey,
-  pickerOpen,
-  onTogglePicker,
-  onSelectSeason,
-}: {
-  detailed: PlayerDetailedStats | null;
-  C: PPColors;
-  rtl: boolean;
-  cardShadow: object;
-  seasons: { key: string; label: string }[];
-  seasonLabel: string | null;
-  selectedSeasonKey: string | null;
-  pickerOpen: boolean;
-  onTogglePicker: () => void;
-  onSelectSeason: (key: string) => void;
-}) {
-  const { t } = useTranslation();
-  const pc = t.playerCareer;
-  const fontBold = useAppFont(700);
-  const fontSemi = useAppFont(600);
-  const fontReg = useAppFont(400);
-
-  const items: {
-    key: string;
-    value: string;
-    label: string;
-    icon?: number;
-    chip?: 'yellow';
-  }[] = [];
-
-  if (detailed) {
-    if (detailed.passAccuracy != null) {
-      items.push({
-        key: 'pass',
-        value: fmtPct(detailed.passAccuracy),
-        label: pc.passAccuracy,
-        icon: PP_ICON.passChain,
-      });
-    }
-    if (detailed.shotsOnTarget != null) {
-      items.push({
-        key: 'sot',
-        value: fmtNum(detailed.shotsOnTarget),
-        label: pc.shotsOnTarget,
-        icon: PP_ICON.goalNet,
-      });
-    }
-    if (detailed.shots != null) {
-      items.push({
-        key: 'shots',
-        value: fmtNum(detailed.shots),
-        label: pc.shots,
-        icon: PP_ICON.shots,
-      });
-    }
-    if (detailed.yellowCards != null) {
-      items.push({
-        key: 'yc',
-        value: fmtNum(detailed.yellowCards),
-        label: pc.yellowCards,
-        chip: 'yellow',
-      });
-    }
-    if (detailed.chancesCreated != null) {
-      items.push({
-        key: 'cc',
-        value: fmtNum(detailed.chancesCreated),
-        label: pc.chancesCreated,
-        icon: PP_ICON.sparkle,
-      });
-    }
-    if (detailed.dribbles != null) {
-      items.push({
-        key: 'dr',
-        value: fmtNum(detailed.dribbles),
-        label: pc.successfulDribbles,
-        icon: PP_ICON.dribble,
-      });
-    }
-  }
-
-  const rows: typeof items[] = [];
-  for (let i = 0; i < items.length; i += 3) rows.push(items.slice(i, i + 3));
-
-  return (
-    <View style={{ gap: 16, alignSelf: 'stretch' }}>
-      {/* Figma 1857:2937 title + season dropdown beside it */}
-      <View style={[styles.sectionRow, { flexDirection: 'row', width: '100%' }]}>
-        <Pressable
-          onPress={() => seasons.length > 1 && onTogglePicker()}
-          hitSlop={8}
-          style={[styles.seasonDropdownPill, { backgroundColor: C.pale, borderColor: C.border }]}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: pickerOpen }}
-        >
-          <Text style={[styles.seasonLabel, { fontFamily: fontSemi, color: C.primary }]} numberOfLines={1}>
-            {seasonLabel ?? '—'}
-          </Text>
-          {seasons.length > 1 ? (
-            <Ionicons
-              name={pickerOpen ? 'chevron-up' : 'chevron-down'}
-              size={14}
-              color={C.primary}
-            />
-          ) : null}
-        </Pressable>
-        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
-          {pc.detailedStatsTitle}
-        </Text>
-      </View>
-
-      {pickerOpen ? (
-        <View
-          style={[
-            styles.seasonDropdown,
-            cardShadow,
-            { backgroundColor: C.card, borderColor: C.border, alignSelf: 'stretch' },
-          ]}
-        >
-          {seasons.map((season) => {
-            const active = season.key === selectedSeasonKey;
-            return (
-              <Pressable
-                key={season.key}
-                onPress={() => onSelectSeason(season.key)}
-                style={[styles.seasonOption, active && { backgroundColor: C.pale }]}
-              >
-                <Text
-                  style={{
-                    fontFamily: active ? fontBold : fontSemi,
-                    color: active ? C.primary : C.ink,
-                    fontSize: 14,
-                    textAlign: rtl ? 'right' : 'left',
-                  }}
-                >
-                  {season.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {rows.map((row, ri) => (
-        <View
-          key={`row-${ri}`}
-          style={[styles.detailRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}
-        >
-          {row.map((item) => (
-            <View
-              key={item.key}
-              style={[
-                styles.detailCard,
-                cardShadow,
-                {
-                  backgroundColor: C.card,
-                  borderWidth: 1,
-                  borderColor: C.border,
-                  flexDirection: rtl ? 'row' : 'row-reverse',
-                },
-              ]}
-            >
-              <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
-                <Text style={[styles.detailValue, { fontFamily: fontBold, color: C.ink }]}>
-                  {item.value}
-                </Text>
-                <Text
-                  style={[styles.detailLabel, { fontFamily: fontReg, color: C.muted }]}
-                  numberOfLines={2}
-                >
-                  {item.label}
-                </Text>
-              </View>
-              {item.chip === 'yellow' ? (
-                <View style={[styles.yellowChip, { backgroundColor: C.cardYellow }]} />
-              ) : item.icon ? (
-                <Image source={item.icon} style={styles.detailIcon} contentFit="contain" />
-              ) : null}
-            </View>
-          ))}
-          {row.length < 3
-            ? Array.from({ length: 3 - row.length }).map((_, i) => (
-                <View key={`pad-${i}`} style={{ flex: 1 }} />
-              ))
-            : null}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 function shortOpponent(name: string | null | undefined): string {
   if (!name) return '—';
   const parts = name.trim().split(/\s+/);
   if (parts.length <= 2) return name;
   return parts.slice(0, 2).join(' ');
-}
-
-function fmtRadar(n: number): string {
-  if (!Number.isFinite(n)) return '—';
-  return n >= 10 ? n.toFixed(1) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
-}
-
-/** Figma 1856:32 — radar under detailed stats, preferably from last 10 matches. */
-function PerformanceRadarSection({
-  matches,
-  per90,
-  C,
-  rtl,
-  cardShadow,
-  width,
-}: {
-  matches: Player365LastMatch[];
-  per90: PlayerPer90Stats | null;
-  C: PPColors;
-  rtl: boolean;
-  cardShadow: object;
-  width: number;
-}) {
-  const { t } = useTranslation();
-  const pc = t.playerCareer;
-  const fontBold = useAppFont(700);
-  const fontReg = useAppFont(400);
-
-  const plot = useMemo(() => {
-    type Axis = { key: string; label: string; value: number; display: string; max: number };
-    let axes: Axis[] = [];
-
-    // Figma 1856:32 axes (goals/assists/shots/…). Prefer per-90; fall back to last-10 ratings.
-    if (per90) {
-      const defs: { key: keyof PlayerPer90Stats; label: string; max: number }[] = [
-        { key: 'goals', label: pc.goals, max: 1.2 },
-        { key: 'assists', label: pc.assists, max: 0.8 },
-        { key: 'shots', label: pc.shots, max: 5 },
-        { key: 'keyPasses', label: pc.keyPasses, max: 3 },
-        { key: 'dribbles', label: pc.successfulDribbles, max: 3 },
-        { key: 'xG', label: 'xG', max: 1.2 },
-      ];
-      axes = defs
-        .filter((d) => per90[d.key] != null)
-        .map((d) => ({
-          key: d.key,
-          label: d.label,
-          value: per90[d.key] as number,
-          display: fmtRadar(per90[d.key] as number),
-          max: d.max,
-        }));
-    }
-    if (axes.length < 3) {
-      const rated = matches.filter((m) => m.played && m.rating != null).slice(0, 6);
-      if (rated.length >= 3) {
-        axes = rated.map((m, i) => ({
-          key: `m-${m.gameId}-${i}`,
-          label: shortOpponent(m.opponentName),
-          value: m.rating as number,
-          display: (m.rating as number).toFixed(1),
-          max: 10,
-        }));
-      }
-    }
-
-    if (axes.length < 3) return [] as Axis[];
-    const out = [...axes];
-    while (out.length < 6) {
-      out.push({
-        key: `pad-${out.length}`,
-        label: '—',
-        value: 0,
-        display: '—',
-        max: out[0].max,
-      });
-    }
-    return out.slice(0, 6);
-  }, [matches, per90, pc]);
-
-  if (plot.length < 3) return null;
-
-  const size = Math.min(190, width - 80);
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = size * 0.38;
-  const points = plot.map((a, i) => {
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / plot.length;
-    const norm = Math.min(1, Math.max(0, a.value / a.max));
-    return {
-      x: cx + Math.cos(angle) * r * norm,
-      y: cy + Math.sin(angle) * r * norm,
-      lx: cx + Math.cos(angle) * (r + 28),
-      ly: cy + Math.sin(angle) * (r + 28),
-      angle,
-      ox: cx + Math.cos(angle) * r,
-      oy: cy + Math.sin(angle) * r,
-    };
-  });
-
-  return (
-    <View style={{ gap: 12, alignSelf: 'stretch' }}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
-        ]}
-      >
-        {pc.performancePer90}
-      </Text>
-
-      {/* Figma 1856:32 — light card in light mode */}
-      <View
-        style={[
-          styles.radarCard,
-          cardShadow,
-          { backgroundColor: C.card, borderColor: C.border },
-        ]}
-      >
-        <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
-          <Text style={[styles.radarTitle, { fontFamily: fontBold, color: C.ink }]}>
-            {pc.radarTitle}
-          </Text>
-          <Text style={[styles.sectionDesc, { fontFamily: fontReg, color: C.muted }]}>
-            {pc.radarDesc}
-          </Text>
-        </View>
-
-        <View style={styles.radarChartWrap}>
-          <Svg width={size + 70} height={size + 56}>
-            {[1, 0.66, 0.33].map((scale) => (
-              <Circle
-                key={scale}
-                cx={cx + 35}
-                cy={cy + 28}
-                r={r * scale}
-                stroke={C.pale}
-                strokeWidth={1}
-                fill="none"
-              />
-            ))}
-            {points.map((p, i) => (
-              <Line
-                key={`axis-${i}`}
-                x1={cx + 35}
-                y1={cy + 28}
-                x2={p.ox + 35}
-                y2={p.oy + 28}
-                stroke={C.pale}
-                strokeWidth={1}
-              />
-            ))}
-            <Polygon
-              points={points.map((p) => `${p.x + 35},${p.y + 28}`).join(' ')}
-              fill={C.radarFill}
-              stroke={C.radarStroke}
-              strokeWidth={2}
-            />
-            {points.map((p, i) => (
-              <Circle
-                key={`dot-${i}`}
-                cx={p.x + 35}
-                cy={p.y + 28}
-                r={3.5}
-                fill={C.radarStroke}
-              />
-            ))}
-          </Svg>
-          {plot.map((a, i) => {
-            const p = points[i];
-            return (
-              <View
-                key={a.key}
-                style={[
-                  styles.radarLabel,
-                  {
-                    left: p.lx + 35 - 42,
-                    top: p.ly + 28 - 12,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontFamily: fontBold,
-                    fontSize: 10,
-                    color: C.ink,
-                    textAlign: 'center',
-                  }}
-                  numberOfLines={2}
-                >
-                  {a.label}
-                  {'\n'}
-                  {a.display}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    </View>
-  );
 }
 
 function TransferRow({
@@ -1142,7 +966,7 @@ function TransferRow({
               {tr.clubName}
             </Text>
             {tr.date ? (
-              <Text style={[styles.transferDate, { fontFamily: fontSemi, color: C.primary }]}>
+              <Text style={[styles.transferDate, { fontFamily: fontReg, color: C.muted }]}>
                 {tr.date}
               </Text>
             ) : null}
@@ -1175,101 +999,6 @@ function TransferRow({
   );
 }
 
-function SocialSection({
-  socials,
-  C,
-  rtl,
-  cardShadow,
-}: {
-  socials: { facebookUrl: string | null; instagramUrl: string | null };
-  C: PPColors;
-  rtl: boolean;
-  cardShadow: object;
-}) {
-  const { t } = useTranslation();
-  const pc = t.playerCareer;
-  const fontBold = useAppFont(700);
-  const fontSemi = useAppFont(600);
-  const fontReg = useAppFont(400);
-
-  const rows = [
-    socials.instagramUrl
-      ? {
-          key: 'ig',
-          url: socials.instagramUrl,
-          icon: PP_ICON.instagram,
-          handle: handleFromUrl(socials.instagramUrl) ?? '@instagram',
-        }
-      : null,
-    socials.facebookUrl
-      ? {
-          key: 'fb',
-          url: socials.facebookUrl,
-          icon: PP_ICON.facebook,
-          handle: handleFromUrl(socials.facebookUrl) ?? '@facebook',
-        }
-      : null,
-  ].filter(Boolean) as { key: string; url: string; icon: number; handle: string }[];
-
-  return (
-    <View style={{ gap: 12 }}>
-      <View style={[styles.sectionRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink, fontSize: 15 }]}>
-          {pc.socialMedia}
-        </Text>
-        <Text style={[styles.sectionDesc, { fontFamily: fontSemi, color: C.muted }]}>
-          {pc.officialAccounts}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.socialCard,
-          cardShadow,
-          { backgroundColor: C.card, borderColor: C.border },
-        ]}
-      >
-        {rows.map((row, idx) => (
-          <React.Fragment key={row.key}>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={row.handle}
-              onPress={() => Linking.openURL(row.url).catch(() => undefined)}
-              style={[styles.socialRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
-            >
-              <View
-                style={[styles.socialAccount, { flexDirection: rtl ? 'row-reverse' : 'row', flex: 1 }]}
-              >
-                <Image source={row.icon} style={styles.socialIcon} contentFit="contain" />
-                <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start' }}>
-                  <View
-                    style={{
-                      flexDirection: rtl ? 'row-reverse' : 'row',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                  >
-                    <Text style={{ fontFamily: fontSemi, color: C.ink, fontSize: 12.5 }}>
-                      {row.handle}
-                    </Text>
-                    <Image source={PP_ICON.verified} style={{ width: 14, height: 14 }} contentFit="contain" />
-                  </View>
-                  <Text style={{ fontFamily: fontReg, color: C.muted, fontSize: 10.5 }}>
-                    {pc.openProfile}
-                  </Text>
-                </View>
-              </View>
-              <Image source={PP_ICON.externalLink} style={{ width: 16, height: 16 }} contentFit="contain" />
-            </Pressable>
-            {idx < rows.length - 1 ? (
-              <View style={[styles.socialDivider, { backgroundColor: C.divider }]} />
-            ) : null}
-          </React.Fragment>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -1288,26 +1017,18 @@ const styles = StyleSheet.create({
   statusBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   statusBtnText: { color: '#fff', fontSize: 14 },
 
-  hero: { width: '100%', overflow: 'visible', zIndex: 1 },
-  heroSide: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: -3, height: 0 },
-    elevation: 4,
-  },
-  heroPhotoWrap: { position: 'absolute', zIndex: 3 },
+  hero: { width: '100%', overflow: 'hidden', zIndex: 1 },
   heroPhoto: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroIdentity: { position: 'absolute', zIndex: 4 },
-  jersey: { includeFontPadding: false },
-  nameFirst: { color: '#fff' },
-  nameLast: { color: '#fff', marginTop: -2 },
-  heroSub: { fontSize: 12, marginTop: 2 },
-  heroSocials: { marginTop: 0, alignItems: 'center', gap: 8 },
+  heroNationRow: { alignItems: 'center', gap: 9 },
+  heroNation: { fontSize: 16 },
+  heroNameRow: { alignItems: 'center', gap: 7, maxWidth: '100%' },
+  heroName: { flexShrink: 1 },
+  verifiedBadge: { width: 24, height: 24 },
+  heroClubRow: { alignItems: 'center', gap: 6 },
+  heroClub: { flexShrink: 1 },
+  heroSocials: { alignItems: 'center', gap: 8 },
   socialIcon: { width: 36, height: 36 },
 
   strip: {
@@ -1331,72 +1052,61 @@ const styles = StyleSheet.create({
 
   sectionRow: { alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   sectionTitle: { fontSize: 16 },
-  sectionDesc: { fontSize: 10 },
+  sectionTitleRow: { alignItems: 'center', gap: 8 },
+  sectionTitleLg: { fontSize: 18 },
+  sectionIcon: { width: 24, height: 24 },
   seasonTap: { alignItems: 'center' },
-  seasonLabel: { fontSize: 11, textAlign: 'right' },
-  seasonDropdownPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    maxWidth: '48%',
-  },
+  seasonLabelMuted: { fontSize: 13 },
   seasonDropdown: { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
   seasonOption: { paddingHorizontal: 14, paddingVertical: 12 },
 
-  keyStatsRow: { gap: 10 },
-  keyStatCard: {
-    flex: 1,
-    height: 76,
+  seasonCard: {
     borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 24,
+    gap: 16,
+    alignSelf: 'stretch',
+  },
+  seasonTopRow: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    minWidth: 0,
+    gap: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
-  keyStatValue: { fontSize: 19 },
-  keyStatLabel: { fontSize: 10 },
+  seasonBottomRow: { alignItems: 'center', justifyContent: 'center', gap: 4 },
+  seasonDivider: { width: 1, height: 36, alignSelf: 'center' },
+  seasonStatCell: { flex: 1, alignItems: 'center', gap: 4, minWidth: 0 },
+  seasonStatValue: { textAlign: 'center', width: '100%' },
+  seasonStatLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  seasonStatLabel: { textAlign: 'center', flexShrink: 1 },
+  seasonStatIcon: { width: 16, height: 16 },
+  cardPair: { width: 18, height: 16, position: 'relative' },
+  miniCard: { width: 10, height: 13, borderRadius: 2, position: 'absolute', left: 0, top: 1 },
+  miniCardOverlap: { left: 4 },
 
-  detailRow: { gap: 10 },
-  detailCard: {
-    flex: 1,
-    height: 68,
-    borderRadius: 14,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  detailValue: { fontSize: 16, height: 24 },
-  detailLabel: { fontSize: 10, minHeight: 20 },
-  detailIcon: { width: 21, height: 21 },
-  yellowChip: { width: 16, height: 21, borderRadius: 3 },
-
-  ratingCard: {
-    height: 82,
+  lastMatchesCard: {
     borderRadius: 16,
-    paddingHorizontal: 33,
+    minHeight: 141,
+    paddingHorizontal: 18,
+    paddingVertical: 21,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  matchCell: { flex: 1, alignItems: 'center', justifyContent: 'space-between', minHeight: 99, gap: 12 },
+  matchTop: { alignItems: 'flex-start', justifyContent: 'flex-end', gap: 8, width: '100%' },
+  ratingPill: {
+    width: 54,
+    height: 27,
+    borderRadius: 56,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
   },
-  ratingLabel: { fontSize: 11 },
-  ratingValueRow: { alignItems: 'center', gap: 8 },
-  ratingValue: { color: '#fff', fontSize: 26 },
-  starIcon: { width: 21, height: 21 },
-
-  radarCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 15,
-    paddingBottom: 20,
-    gap: 8,
-  },
-  radarTitle: { fontSize: 14 },
-  radarChartWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 250 },
-  radarLabel: { position: 'absolute', width: 85, alignItems: 'center' },
+  ratingPillText: { fontSize: 18 },
+  matchMeta: { alignItems: 'center', gap: 4, width: '100%' },
+  matchDate: { fontSize: 11, textAlign: 'center', width: '100%' },
+  matchOpponent: { fontSize: 17, textAlign: 'center', width: '100%' },
+  matchDivider: { width: 1, height: 81, alignSelf: 'center' },
 
   transferCard: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
   transferRow: { minHeight: 57, alignItems: 'stretch', gap: 10 },
@@ -1408,13 +1118,8 @@ const styles = StyleSheet.create({
   transferClub: { fontSize: 15 },
   transferDate: { fontSize: 11, marginTop: 4 },
   transferPrice: { fontSize: 15 },
-  transferFee: { fontSize: 8, marginTop: 4 },
+  transferFee: { fontSize: 10, marginTop: 4 },
   euroIcon: { width: 16, height: 16 },
-
-  socialCard: { borderRadius: 18, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
-  socialRow: { height: 56, alignItems: 'center', gap: 12 },
-  socialAccount: { alignItems: 'center', gap: 12 },
-  socialDivider: { height: 1, width: '100%' },
 
   legacySectionHeader: {
     alignItems: 'center',

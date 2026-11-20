@@ -25,6 +25,7 @@ export const PP_ICON = {
   externalLink: require('../../assets/images/player-profile/external-link.svg'),
   instagram: require('../../assets/images/player-profile/instagram.svg'),
   facebook: require('../../assets/images/player-profile/facebook.svg'),
+  twitter: require('../../assets/images/player-profile/twitter-x.svg'),
 } as const;
 
 export const PP_STADIUM = require('../../assets/images/player-profile/hero-bg.jpg');
