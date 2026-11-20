@@ -77,7 +77,7 @@ struct MatchLiveActivity: Widget {
       } compactTrailing: {
         IslandSide(slot: .trailing, attributes: attributes, state: state, crest: 18, compact: true)
       } minimal: {
-        Text("\(state.homeScore)-\(state.awayScore)")
+        Text("\(state.awayScore)-\(state.homeScore)")
           .font(.system(size: 12, weight: .bold))
           .monospacedDigit()
       }
@@ -106,7 +106,7 @@ private struct LockScreenMatchView: View {
           .foregroundStyle(ActivityPalette.purple)
       }
       HStack(spacing: 12) {
-        TeamBadge(name: attributes.homeName, logo: attributes.homeLogo, crest: 40)
+        TeamBadge(name: attributes.awayName, logo: attributes.awayLogo, crest: 40)
           .frame(maxWidth: .infinity)
         VStack(spacing: 6) {
           StatusPill(
@@ -116,19 +116,19 @@ private struct LockScreenMatchView: View {
           )
           ScoreLine(state: state, size: 30)
         }
-        TeamBadge(name: attributes.awayName, logo: attributes.awayLogo, crest: 40)
+        TeamBadge(name: attributes.homeName, logo: attributes.homeLogo, crest: 40)
           .frame(maxWidth: .infinity)
       }
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)
-    // Same orientation as the home-screen widget and the in-app header: home on the left.
+    // Home on the right. Left-to-right keeps the away digit beside the away crest.
     .environment(\.layoutDirection, .leftToRight)
   }
 }
 
-/// Dynamic Island swaps its leading edge to the right for an Arabic phone locale.
-/// Put home on the physical left anyway, and keep the score beside that crest.
+/// Dynamic Island swaps its leading edge on an Arabic phone.
+/// Home stays on the physical right, with its score beside that crest.
 private struct IslandSide: View {
   enum Slot { case leading, trailing }
 
@@ -140,7 +140,7 @@ private struct IslandSide: View {
 
   private var showsHome: Bool {
     let leadingIsLeft = Locale.current.language.characterDirection != .rightToLeft
-    return slot == .leading ? leadingIsLeft : !leadingIsLeft
+    return slot == .trailing ? leadingIsLeft : !leadingIsLeft
   }
 
   var body: some View {
@@ -162,13 +162,13 @@ private struct IslandSide: View {
   private var compactBody: some View {
     if showsHome {
       HStack(spacing: 4) {
-        CrestImage(logo: attributes.homeLogo, size: crest)
         Text("\(state.homeScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
+        CrestImage(logo: attributes.homeLogo, size: crest)
       }
     } else {
       HStack(spacing: 4) {
-        Text("\(state.awayScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
         CrestImage(logo: attributes.awayLogo, size: crest)
+        Text("\(state.awayScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
       }
     }
   }
@@ -218,9 +218,9 @@ private struct ScoreLine: View {
 
   var body: some View {
     HStack(spacing: size * 0.2) {
-      Text("\(state.homeScore)").contentTransition(.numericText())
-      Text("-")
       Text("\(state.awayScore)").contentTransition(.numericText())
+      Text("-")
+      Text("\(state.homeScore)").contentTransition(.numericText())
     }
     .font(.system(size: size, weight: .semibold))
     .monospacedDigit()

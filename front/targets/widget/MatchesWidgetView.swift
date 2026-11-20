@@ -32,9 +32,8 @@ struct MatchesWidgetView: View {
 
   var body: some View {
     content
-      // Home stays on the left, including on an Arabic iPhone. A right-to-left
-      // environment mirrors the wordmark, the score, and the page arrows apart
-      // from the crests, so the card no longer matches the app.
+      // Stay left-to-right so an Arabic iPhone cannot mirror the digits.
+      // Home is the right crest and the right-hand score, matching the app.
       .environment(\.layoutDirection, .leftToRight)
       .containerBackground(for: .widget) { GlassBackground() }
       .widgetURL(deepLink)
@@ -163,10 +162,11 @@ private struct ScoreText: View {
   let size: CGFloat
 
   var body: some View {
+    // Away on the left, home on the right. A single string would bidi-flip this.
     HStack(spacing: size * 0.18) {
-      Text("\(match.score?.home ?? 0)")
-      Text("-")
       Text("\(match.score?.away ?? 0)")
+      Text("-")
+      Text("\(match.score?.home ?? 0)")
     }
     .font(.system(size: size, weight: .semibold))
     .monospacedDigit()
@@ -420,9 +420,9 @@ private struct MatchCard: View {
       // Only the large family has room for scorers under the crests.
       if isLarge, !events.isEmpty {
         HStack(alignment: .top, spacing: 16) {
-          scorerColumn(scorerLines(events, side: "home"))
-          Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
           scorerColumn(scorerLines(events, side: "away"))
+          Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+          scorerColumn(scorerLines(events, side: "home"))
         }
         .environment(\.layoutDirection, .leftToRight)
       }
@@ -442,7 +442,7 @@ private struct MatchCard: View {
 
   private var teams: some View {
     HStack(spacing: 16) {
-      TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: crest, spacing: 9)
+      TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: crest, spacing: 11)
       VStack(spacing: 8) {
         StatusBadge(match: match, labels: entry.labels, arabic: entry.isArabic, goal: entry.hasFreshGoal(match))
         if match.score != nil {
@@ -456,7 +456,7 @@ private struct MatchCard: View {
         }
       }
       .frame(maxWidth: .infinity)
-      TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: crest, spacing: 11)
+      TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: crest, spacing: 9)
     }
     .environment(\.layoutDirection, .leftToRight)
   }
@@ -495,9 +495,9 @@ private struct MiniScoreHeader: View {
         .foregroundStyle(Palette.muted)
         .lineLimit(1)
       Spacer(minLength: 4)
-      Crest(image: entry.image(match.home.logo), size: 16)
-      ScoreText(match: match, size: 12)
       Crest(image: entry.image(match.away.logo), size: 16)
+      ScoreText(match: match, size: 12)
+      Crest(image: entry.image(match.home.logo), size: 16)
       StatusBadge(
         match: match, labels: entry.labels, arabic: entry.isArabic,
         fontSize: 9, goal: markGoal && entry.hasFreshGoal(match)
@@ -562,7 +562,7 @@ private struct EventRow: View {
   var body: some View {
     HStack(spacing: 6) {
       HStack(spacing: 4) {
-        if isHome {
+        if !isHome {
           Text(label).lineLimit(1)
           EventIcon(kind: event.kind)
         }
@@ -575,7 +575,7 @@ private struct EventRow: View {
         .frame(width: 42, height: 15)
         .background(Palette.ratingFill, in: Capsule())
       HStack(spacing: 4) {
-        if !isHome {
+        if isHome {
           EventIcon(kind: event.kind)
           Text(label).lineLimit(1)
         }
@@ -772,8 +772,8 @@ private struct LineupPage: View {
             .lineLimit(1)
         }
         HStack(alignment: .top, spacing: 8) {
-          nameColumn(lineup.home)
           nameColumn(lineup.away)
+          nameColumn(lineup.home)
         }
         .environment(\.layoutDirection, .leftToRight)
       }
@@ -870,12 +870,12 @@ private struct StatsPage: View {
     if let pair {
       VStack(spacing: 1) {
         HStack {
-          Text(format(pair.home, suffix: suffix, decimal: decimal))
+          Text(format(pair.away, suffix: suffix, decimal: decimal))
             .frame(maxWidth: .infinity, alignment: .trailing)
           Text(title)
             .foregroundStyle(Palette.rowTime)
             .frame(maxWidth: .infinity)
-          Text(format(pair.away, suffix: suffix, decimal: decimal))
+          Text(format(pair.home, suffix: suffix, decimal: decimal))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(size: 11, weight: .semibold))
@@ -886,14 +886,14 @@ private struct StatsPage: View {
     }
   }
 
-  /// Home share in purple from the left; the rest belongs to the away side.
+  /// Away share on the left; home share in purple on the right.
   private func shareBar(_ pair: FeedStatPair) -> some View {
     let total = pair.home + pair.away
     let share = total > 0 ? CGFloat(pair.home / total) : 0.5
     return GeometryReader { proxy in
       HStack(spacing: 0) {
+        Color.white.opacity(0.45).frame(width: proxy.size.width * (1 - share))
         Palette.purple.frame(width: proxy.size.width * share)
-        Color.white.opacity(0.45)
       }
     }
     .frame(height: 2)
@@ -1016,11 +1016,11 @@ private struct InfoPage: View {
       }
       if info.home.rank != nil || info.away.rank != nil {
         HStack(spacing: 6) {
-          Crest(image: entry.image(match.home.logo), size: 18)
-          tableText(info.home)
-          Spacer(minLength: 4)
-          tableText(info.away)
           Crest(image: entry.image(match.away.logo), size: 18)
+          tableText(info.away)
+          Spacer(minLength: 4)
+          tableText(info.home)
+          Crest(image: entry.image(match.home.logo), size: 18)
         }
         .padding(.top, 2)
       }
@@ -1059,24 +1059,24 @@ private struct FormPage: View {
       }
       if let h2h = info.h2h, h2h.total > 0 {
         HStack(spacing: 6) {
-          Crest(image: entry.image(match.home.logo), size: 14)
-          Text("\(h2h.homeWins)")
+          Crest(image: entry.image(match.away.logo), size: 14)
+          Text("\(h2h.awayWins)")
             .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(Palette.ratingText)
+            .foregroundStyle(.white)
           Spacer(minLength: 2)
           Text("\(entry.labels.draws) \(h2h.draws)")
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(Palette.vs)
           if let last = h2h.meetings.first {
-            Text("\u{00B7}  \(last.homeGoals)-\(last.awayGoals) \(meetingDate(last.ts))")
+            Text("\u{00B7}  \(last.awayGoals)-\(last.homeGoals) \(meetingDate(last.ts))")
               .font(.system(size: 10, weight: .medium))
               .foregroundStyle(Palette.rowTime)
           }
           Spacer(minLength: 2)
-          Text("\(h2h.awayWins)")
+          Text("\(h2h.homeWins)")
             .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(.white)
-          Crest(image: entry.image(match.away.logo), size: 14)
+            .foregroundStyle(Palette.ratingText)
+          Crest(image: entry.image(match.home.logo), size: 14)
         }
         .monospacedDigit()
         .padding(.horizontal, 8)
@@ -1200,9 +1200,9 @@ private struct SmallMatchCard: View {
     VStack(spacing: 6) {
       BrandMark(size: 11)
       HStack {
-        Crest(image: entry.image(match.home.logo), size: 38)
-        Spacer(minLength: 4)
         Crest(image: entry.image(match.away.logo), size: 38)
+        Spacer(minLength: 4)
+        Crest(image: entry.image(match.home.logo), size: 38)
       }
       .environment(\.layoutDirection, .leftToRight)
       if match.score != nil {
@@ -1236,9 +1236,9 @@ private func lockScreenLine(_ match: FeedMatch) -> String {
   let home = "\u{2068}\(match.home.name)\u{2069}"
   let away = "\u{2068}\(match.away.name)\u{2069}"
   if let score = match.score {
-    return "\u{200E}\(home) \(score.home)-\(score.away) \(away)"
+    return "\u{200E}\(away) \(score.away)-\(score.home) \(home)"
   }
-  return "\u{200E}\(home) vs \(away)"
+  return "\u{200E}\(away) vs \(home)"
 }
 
 private struct RectangularView: View {
