@@ -35,7 +35,6 @@ import type {
 
 const DESIGN_WIDTH = 430;
 const HERO_BODY = 398;
-const STRIP_OVERLAP = 10;
 const HEADER_BAR_HEIGHT = 44;
 
 function useRtl() {
