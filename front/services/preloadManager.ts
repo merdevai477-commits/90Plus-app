@@ -445,12 +445,6 @@ class PreloadManagerClass {
       return;
     }
 
-    // iOS: never warm HLS streams in parallel — only one AVPlayer may be active.
-    if (Platform.OS === 'ios') {
-      logger.debug('[PreloadManager] Skipping initial video preload on iOS');
-      return;
-    }
-
     const videosToPreload = reels
       .slice(0, VIDEO_PRELOAD_CONFIG.initialReelsCount)
       .map(reel => reel.videoUrl)
@@ -499,7 +493,6 @@ class PreloadManagerClass {
     const THUMB_LOOKAHEAD = 4;
     const VIDEO_LOOKAHEAD = Platform.OS === 'android' ? 3 : 1;
 
-    // Thumbnails only on iOS — no parallel HLS fetch (AVPlayer crash risk).
     for (let i = 1; i <= THUMB_LOOKAHEAD; i++) {
       const nextIndex = currentIndex + i;
       if (nextIndex < reels.length) {

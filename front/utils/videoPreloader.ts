@@ -9,6 +9,7 @@
 
 import { Platform } from 'react-native';
 import { logger } from '../services/logger';
+import { optimizeReelPlaybackUrl } from './reelPlaybackUrl';
 
 // Track preloaded video URLs
 const preloadedUrls = new Set<string>();
@@ -22,7 +23,8 @@ const preloadQueue: string[] = [];
 
 /**
  * Preload a video URL for faster playback.
- * Uses a fetch HEAD / range request to warm the CDN connection.
+ * Warms the CDN connection. iOS fetches the HLS playlist only; Android
+ * uses a short range request. Neither path creates a native player.
  * (Video.createAsync was removed in expo-av 15 / Expo SDK 52)
  */
 export async function preloadVideo(videoUrl: string): Promise<boolean> {
@@ -36,25 +38,31 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
     return false;
   }
 
-  // iOS: never open parallel HLS connections — reels use a single AVPlayer.
-  if (Platform.OS === 'ios') {
-    return false;
-  }
-
   preloadingUrls.add(videoUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
 
   try {
-    // Warm the CDN connection with a range request (first 1 KB only).
-    // This primes the TCP connection and CDN cache without downloading the whole video.
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout
+    const requestUrl = optimizeReelPlaybackUrl(videoUrl);
 
-    await fetch(videoUrl, {
-      method: 'GET',
-      headers: { Range: 'bytes=0-65535' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    if (Platform.OS === 'ios') {
+      // Playlist only. The paused next-cell player downloads the segments,
+      // so this fetch does not pull the opening of the reel a second time.
+      const response = await fetch(requestUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/vnd.apple.mpegurl, application/x-mpegURL, */*' },
+        signal: controller.signal,
+      });
+      await response.text();
+      if (!response.ok) return false;
+    } else {
+      // Warm the CDN connection with a range request (first 64 KB only).
+      await fetch(requestUrl, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-65535' },
+        signal: controller.signal,
+      });
+    }
 
     // Mark as preloaded
     preloadedUrls.add(videoUrl);
@@ -74,6 +82,7 @@ export async function preloadVideo(videoUrl: string): Promise<boolean> {
     // Silent fail — preloading is best-effort and must never crash the app
     return false;
   } finally {
+    clearTimeout(timeout);
     preloadingUrls.delete(videoUrl);
   }
 }

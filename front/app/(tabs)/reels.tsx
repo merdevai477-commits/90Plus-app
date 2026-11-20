@@ -64,17 +64,17 @@ import { navigateUserProfile } from '../../utils/navigateUserProfile';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-/** iOS: mount one inline AVPlayer with a brief swap gap on scroll. */
-const USE_IOS_PLAYER_SWAP = Platform.OS === 'ios';
-// Gap between unmounting the old AVPlayer and mounting the next one. 280ms was
-// long enough to read as a visible freeze on every swipe; 110ms still lets the
-// native player tear down cleanly while feeling near-instant.
-const IOS_PLAYER_SWAP_MS = 110;
-/** Android keeps the next cell's player warm. Both platforms only mount three cells. */
-const REEL_PLAYER_MOUNT_DISTANCE = USE_IOS_PLAYER_SWAP ? 0 : 1;
+/**
+ * Keep the next cell's player mounted and paused so a swipe is not a cold HLS
+ * start. Only the active cell calls play(). iOS used to mount a single player
+ * and tear it down on every swipe, which is why the spinner showed each time.
+ */
+const REEL_PLAYER_MOUNT_DISTANCE = 1;
+/** Give the active iOS reel the network before creating the next AVPlayer. */
+const IOS_NEXT_PLAYER_DELAY_MS = 400;
 const REEL_LIST_WINDOW_SIZE = 3;
-const REEL_INITIAL_RENDER = 1;
-const REEL_MAX_BATCH = 1;
+const REEL_INITIAL_RENDER = 2;
+const REEL_MAX_BATCH = 2;
 const REELS_FEED_MUTED_KEY = '@reels_feed_muted';
 
 function prefetchReelThumbnails(items: Array<{ thumbnail?: string }>, from = 0, count = 6) {
@@ -368,9 +368,9 @@ const ReelsFeed: React.FC = () => {
   const [playerGeneration, setPlayerGeneration] = useState(0);
   const [feedMuted, setFeedMuted] = useState(false);
   const wasPlayingBeforeCommentsRef = useRef(false);
-  // We introduce a tiny "gap" where no player is mounted, then mount the next one.
   const [safePlayerIndex, setSafePlayerIndex] = useState(0);
-  const safeIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Index whose next cell is allowed to mount a paused player. -1 until the delay elapses on iOS. */
+  const [nextPlayerReadyIndex, setNextPlayerReadyIndex] = useState(-1);
   const currentIndexRef = useRef(0);
   /** Measured feed height — must match item height or the next reel peeks through */
   const [viewportHeight, setViewportHeight] = useState(() => Math.round(SCREEN_HEIGHT));
@@ -667,33 +667,34 @@ const ReelsFeed: React.FC = () => {
   const isRefreshingRef = useRef(false);
 
   const scheduleSafePlayerMount = useCallback((index: number, reason = 'scroll') => {
-    if (safeIndexTimerRef.current) {
-      clearTimeout(safeIndexTimerRef.current);
-      safeIndexTimerRef.current = null;
+    setSafePlayerIndex(index);
+    if (Platform.OS !== 'ios') return;
+    const reel = reelsRef.current[index];
+    if (reel?.id) {
+      addReelsBreadcrumb('reel_active', {
+        reelId: reel.id,
+        index,
+        player: 'ios-warm-next',
+        reason,
+      });
     }
-
-    if (!USE_IOS_PLAYER_SWAP) {
-      setSafePlayerIndex(index);
-      return;
-    }
-
-    setSafePlayerIndex(-1);
-    safeIndexTimerRef.current = setTimeout(() => {
-      setSafePlayerIndex(index);
-      safeIndexTimerRef.current = null;
-      const reel = reelsRef.current[index];
-      if (reel?.id) {
-        addReelsBreadcrumb('reel_active', {
-          reelId: reel.id,
-          index,
-          player: 'ios-single',
-          reason,
-        });
-      }
-    }, IOS_PLAYER_SWAP_MS);
   }, []);
 
-  // Tear down the single iOS player when leaving the tab; remount on tab return.
+  // On iOS, wait until the active reel has started before creating the next
+  // AVPlayer. Android mounts the next cell on the same frame.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    if (safePlayerIndex < 0) {
+      setNextPlayerReadyIndex(-1);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setNextPlayerReadyIndex(safePlayerIndex);
+    }, IOS_NEXT_PLAYER_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [safePlayerIndex]);
+
+  // Tear players down when leaving the tab so a quick return cannot resume a released AVPlayer.
   useFocusEffect(
     useCallback(() => {
       setIsReelsScreenFocused(true);
@@ -702,10 +703,7 @@ const ReelsFeed: React.FC = () => {
       return () => {
         setIsReelsScreenFocused(false);
         setSafePlayerIndex(-1);
-        if (safeIndexTimerRef.current) {
-          clearTimeout(safeIndexTimerRef.current);
-          safeIndexTimerRef.current = null;
-        }
+        setNextPlayerReadyIndex(-1);
         pauseAllVideos();
         videoRefs.current.clear();
         clearLoadedVideos();
@@ -1083,16 +1081,10 @@ const ReelsFeed: React.FC = () => {
   activeReelIdRef.current = activeReelId ?? null;
   currentIndexRef.current = currentIndex;
 
-  // Keep a "safe" index used for mounting/playing the native player.
-  // On iOS we briefly unmount on index changes to prevent AVPlayer overlap crashes.
+  // Mount/play the native player for the visible reel. The next cell stays
+  // paused and buffered so the following swipe does not cold-start HLS.
   useEffect(() => {
     scheduleSafePlayerMount(currentIndex, 'scroll');
-    return () => {
-      if (safeIndexTimerRef.current) {
-        clearTimeout(safeIndexTimerRef.current);
-        safeIndexTimerRef.current = null;
-      }
-    };
   }, [currentIndex, scheduleSafePlayerMount]);
 
   const handleWsLike = useCallback((payload: { reelId: string; likesCount: number }) => {
@@ -1509,12 +1501,14 @@ const ReelsFeed: React.FC = () => {
 
   const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => {
     const isActiveCell = index === safePlayerIndex;
+    const warmNext = Platform.OS !== 'ios' || nextPlayerReadyIndex === safePlayerIndex;
     const shouldMount =
       isReelsScreenFocused &&
       safePlayerIndex >= 0 &&
       (index === safePlayerIndex ||
-        // Android: warm the next reel so the swipe starts instantly
-        (REEL_PLAYER_MOUNT_DISTANCE > 0 && index === safePlayerIndex + 1));
+        (warmNext &&
+          REEL_PLAYER_MOUNT_DISTANCE > 0 &&
+          index === safePlayerIndex + 1));
     return (
     <ReelItem
       reel={item}
@@ -1540,7 +1534,7 @@ const ReelsFeed: React.FC = () => {
       onEditReel={handleEditReel}
     />
   );
-  }, [safePlayerIndex, viewportHeight, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  }, [safePlayerIndex, nextPlayerReadyIndex, viewportHeight, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({

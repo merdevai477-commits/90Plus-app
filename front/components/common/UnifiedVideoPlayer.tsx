@@ -44,6 +44,7 @@ import { useAuth } from '@clerk/clerk-expo';
 
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useVideoReplayLimit, MAX_AUTO_REPLAYS } from '../../hooks/useVideoReplayLimit';
+import { optimizeReelPlaybackUrl } from '../../utils/reelPlaybackUrl';
 import { VIDEO_DEFAULTS } from '../../utils/videoConfig';
 import { VideoErrorBoundary } from './VideoErrorBoundary';
 import { logger } from '../../utils/logger';
@@ -106,9 +107,10 @@ const COLORS = {
  * the right loader.
  */
 function buildVideoSource(url: string): VideoSource {
-  const isHls = url.includes('stream.mux.com') || url.includes('.m3u8');
+  const uri = optimizeReelPlaybackUrl(url);
+  const isHls = uri.includes('stream.mux.com') || uri.includes('.m3u8');
   return {
-    uri: url,
+    uri,
     ...(isHls ? { contentType: 'hls' as const } : {}),
     useCaching: true,
   };
@@ -194,11 +196,19 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
         p.audioMixingMode = 'auto';
         Object.assign(p, {
-          bufferOptions: {
-            preferredForwardBufferDuration: 6,
-            waitsToMinimizeStalling: false,
-            minBufferForPlayback: 0.4,
-          },
+          bufferOptions:
+            Platform.OS === 'ios'
+              ? {
+                  // Short forward buffer: AVPlayer reaches readyToPlay sooner,
+                  // and a paused "next" player does not download 6s in the background.
+                  preferredForwardBufferDuration: 2,
+                  waitsToMinimizeStalling: false,
+                }
+              : {
+                  preferredForwardBufferDuration: 6,
+                  waitsToMinimizeStalling: false,
+                  minBufferForPlayback: 0.4,
+                },
         });
       } catch (e) {
         logger.warn('[UnifiedVideoPlayer] Player init failed:', e);
