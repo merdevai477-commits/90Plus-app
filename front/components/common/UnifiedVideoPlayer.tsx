@@ -112,7 +112,8 @@ function buildVideoSource(url: string): VideoSource {
   return {
     uri,
     ...(isHls ? { contentType: 'hls' as const } : {}),
-    useCaching: true,
+    // HLS caching is unsupported on iOS AVPlayer and can stall Mux reels.
+    useCaching: !isHls,
   };
 }
 

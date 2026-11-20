@@ -36,6 +36,7 @@ import {
   resolveTimeoutReason,
   sanitizePlaybackUrlForDiagnostics,
   youtubeAllowsFullscreenVideo,
+  youtubeWebViewUserAgent,
   type HighlightUiPhase,
 } from '../../utils/highlightPlaybackLifecycle';
 import { preflightDirectMp4 } from '../../utils/highlightMp4Preflight';
@@ -406,9 +407,11 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               }}
               style={{ width: playerWidth, height: playerHeight, opacity: 0.99, backgroundColor: '#000000' }}
               androidLayerType="hardware"
+              userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
-                setYoutubeLoaded(true);
-                setUiPhase('ready');
+                // Keep the load watchdog armed until onLoadEnd — onLoadStart alone
+                // is too early and left iOS on a black embed with no timeout.
+                setUiPhase('loading');
               }}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
@@ -547,11 +550,18 @@ function DirectClipPlayer({
     instance.loop = false;
     try {
       Object.assign(instance, {
-        bufferOptions: {
-          preferredForwardBufferDuration: 6,
-          waitsToMinimizeStalling: true,
-          minBufferForPlayback: 0.5,
-        },
+        // iOS: start sooner like reels. Android: keep a slightly deeper buffer.
+        bufferOptions:
+          Platform.OS === 'ios'
+            ? {
+                preferredForwardBufferDuration: 2,
+                waitsToMinimizeStalling: false,
+              }
+            : {
+                preferredForwardBufferDuration: 6,
+                waitsToMinimizeStalling: true,
+                minBufferForPlayback: 0.5,
+              },
       });
     } catch {
       /* buffer options optional */
