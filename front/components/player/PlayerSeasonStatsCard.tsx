@@ -1,6 +1,6 @@
 /**
  * Player season / highlight stats — rings + bars.
- * Uses the new 90Plus purple palette and elevated card treatment.
+ * Light mode: white elevated cards. Dark mode: deep purple cards.
  */
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -25,7 +25,6 @@ export type PlayerStatBarItem = {
   label: string;
   value: number;
   display?: string;
-  /** Optional scale ceiling; defaults to max across all bars. */
   max?: number;
 };
 
@@ -47,6 +46,8 @@ function StatRing({
   display,
   track,
   fill,
+  valueColor,
+  labelColor,
 }: {
   value: number;
   max: number;
@@ -54,6 +55,8 @@ function StatRing({
   display?: string;
   track: string;
   fill: string;
+  valueColor: string;
+  labelColor: string;
 }) {
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
   const fillLen = pct * RING_C;
@@ -85,14 +88,14 @@ function StatRing({
           />
         </Svg>
         <View style={styles.ringCenter} pointerEvents="none">
-          <Text style={styles.ringValue} numberOfLines={1}>
+          <Text style={[styles.ringValue, { color: valueColor }]} numberOfLines={1}>
             {display ?? String(Math.round(value))}
           </Text>
         </View>
       </View>
       <View style={styles.ringLabelBox}>
         {lines.map((line) => (
-          <Text key={line} style={styles.ringLabel} numberOfLines={1}>
+          <Text key={line} style={[styles.ringLabel, { color: labelColor }]} numberOfLines={1}>
             {line}
           </Text>
         ))}
@@ -107,20 +110,26 @@ function StatBarRow({
   max,
   display,
   track,
+  textColor,
+  mutedColor,
 }: {
   label: string;
   value: number;
   max: number;
   display?: string;
   track: string;
+  textColor: string;
+  mutedColor: string;
 }) {
   const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
 
   return (
     <View style={styles.barBlock}>
-      <Text style={styles.barTitle}>{label}</Text>
+      <Text style={[styles.barTitle, { color: mutedColor }]}>{label}</Text>
       <View style={styles.barRow}>
-        <Text style={styles.barValue}>{display ?? String(Math.round(value))}</Text>
+        <Text style={[styles.barValue, { color: textColor }]}>
+          {display ?? String(Math.round(value))}
+        </Text>
         <View style={[styles.barTrack, { backgroundColor: track }]}>
           {pct > 0 ? (
             <LinearGradient
@@ -163,9 +172,11 @@ export function PlayerSeasonStatsCard({
 
   if (rings.length === 0 && bars.length === 0) return null;
 
-  const cardBg = isDark ? '#120a22' : '#1a0b33';
-  const border = isDark ? C.border : '#3b1d6e';
-  const track = isDark ? '#2a2040' : '#2c1548';
+  const cardBg = isDark ? '#120a22' : '#ffffff';
+  const border = isDark ? C.border : C.border;
+  const track = isDark ? '#2a2040' : C.pale;
+  const textColor = isDark ? '#FFFFFF' : C.ink;
+  const mutedColor = isDark ? 'rgba(255,255,255,0.75)' : C.muted;
 
   return (
     <View
@@ -175,10 +186,11 @@ export function PlayerSeasonStatsCard({
           backgroundColor: cardBg,
           borderColor: border,
           shadowColor: C.primaryDark,
+          shadowOpacity: isDark ? 0.35 : 0.18,
         },
       ]}
     >
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, { color: textColor }]}>{title}</Text>
 
       {rings.length > 0 ? (
         <View style={styles.ringsRow}>
@@ -190,7 +202,9 @@ export function PlayerSeasonStatsCard({
               label={r.label}
               display={r.display}
               track={track}
-              fill={C.primarySoft}
+              fill={C.primary}
+              valueColor={textColor}
+              labelColor={mutedColor}
             />
           ))}
         </View>
@@ -206,6 +220,8 @@ export function PlayerSeasonStatsCard({
               max={b.max != null && b.max > 0 ? b.max : barMax}
               display={b.display}
               track={track}
+              textColor={textColor}
+              mutedColor={mutedColor}
             />
           ))}
         </View>
@@ -222,13 +238,11 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 24,
     marginTop: 12,
-    shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
+    elevation: 8,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
@@ -256,7 +270,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ringValue: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -265,7 +278,6 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   ringLabel: {
-    color: 'rgba(255,255,255,0.88)',
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
@@ -277,7 +289,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   barTitle: {
-    color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
@@ -288,7 +299,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   barValue: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
     minWidth: 28,

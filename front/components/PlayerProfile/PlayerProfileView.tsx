@@ -15,6 +15,8 @@ import {
   type RefreshControlProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Line, Polygon } from 'react-native-svg';
+
 import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import type { Player365LastMatch } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
@@ -24,9 +26,10 @@ import { toFullscreenPhotoUrl } from '../../utils/scores365AthletePhoto';
 import ImageViewerModal from '../common/ImageViewerModal';
 import TeamBadge from '../common/TeamBadge';
 import { PP_ICON, PP_STADIUM } from './assets';
-import { getPPColors, ratingTone, type PPColors } from './theme';
+import { getPPColors, type PPColors } from './theme';
 import type {
   PlayerDetailedStats,
+  PlayerPer90Stats,
   PlayerProfileViewModel,
   PlayerTransferRow,
 } from './types';
@@ -219,6 +222,7 @@ export default function PlayerProfileView({
   const scale = Math.min(width / DESIGN_WIDTH, 1.08);
   const heroHeight = Math.round(HERO_BODY * scale);
   const pad = 20;
+  const contentW = width - pad * 2;
   const { first, last } = splitName(vm.name);
   const photoUri = vm.photoCandidates[photoIndex];
   const photoFailed = photoIndex >= vm.photoCandidates.length;
@@ -501,10 +505,7 @@ export default function PlayerProfileView({
             }}
           />
 
-          {/* Deep stats: comparison rings, trend, competitions */}
-          {statsContent ? <View style={{ marginTop: 4 }}>{statsContent}</View> : null}
-
-          {/* Average rating */}
+          {/* Average rating — Figma order after detailed stats */}
           {vm.averageRating != null ? (
             <LinearGradient
               colors={['#5422ae', '#230e48']}
@@ -524,8 +525,18 @@ export default function PlayerProfileView({
             </LinearGradient>
           ) : null}
 
-          {/* Last 10 matches average (replaces per-90 radar) */}
-          <Last10AverageSection matches={vm.lastMatches} C={C} rtl={rtl} cardShadow={cardShadow} />
+          {/* Figma 1856:32 performance radar — drawn from last 10 matches (+ per90 fallback) */}
+          <PerformanceRadarSection
+            matches={vm.lastMatches}
+            per90={vm.per90}
+            C={C}
+            rtl={rtl}
+            cardShadow={cardShadow}
+            width={contentW}
+          />
+
+          {/* Deep stats: comparison / trend / competitions (light cards in light mode) */}
+          {statsContent ? <View style={{ marginTop: 4 }}>{statsContent}</View> : null}
 
           {/* Transfers */}
           {vm.transfers.length > 0 ? (
@@ -842,93 +853,204 @@ function DetailedStatsSection({
   );
 }
 
-function Last10AverageSection({
+function shortOpponent(name: string | null | undefined): string {
+  if (!name) return '—';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 2) return name;
+  return parts.slice(0, 2).join(' ');
+}
+
+function fmtRadar(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  return n >= 10 ? n.toFixed(1) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Figma 1856:32 — radar under detailed stats, preferably from last 10 matches. */
+function PerformanceRadarSection({
   matches,
+  per90,
   C,
   rtl,
   cardShadow,
+  width,
 }: {
   matches: Player365LastMatch[];
+  per90: PlayerPer90Stats | null;
   C: PPColors;
   rtl: boolean;
   cardShadow: object;
+  width: number;
 }) {
   const { t } = useTranslation();
   const pc = t.playerCareer;
   const fontBold = useAppFont(700);
-  const fontSemi = useAppFont(600);
   const fontReg = useAppFont(400);
 
-  const last10 = useMemo(() => {
-    const played = matches.filter((m) => m.played && m.rating != null);
-    return played.slice(0, 10);
-  }, [matches]);
+  const plot = useMemo(() => {
+    type Axis = { key: string; label: string; value: number; display: string; max: number };
+    let axes: Axis[] = [];
 
-  if (last10.length === 0) return null;
+    // Figma 1856:32 axes (goals/assists/shots/…). Prefer per-90; fall back to last-10 ratings.
+    if (per90) {
+      const defs: { key: keyof PlayerPer90Stats; label: string; max: number }[] = [
+        { key: 'goals', label: pc.goals, max: 1.2 },
+        { key: 'assists', label: pc.assists, max: 0.8 },
+        { key: 'shots', label: pc.shots, max: 5 },
+        { key: 'keyPasses', label: pc.keyPasses, max: 3 },
+        { key: 'dribbles', label: pc.successfulDribbles, max: 3 },
+        { key: 'xG', label: 'xG', max: 1.2 },
+      ];
+      axes = defs
+        .filter((d) => per90[d.key] != null)
+        .map((d) => ({
+          key: d.key,
+          label: d.label,
+          value: per90[d.key] as number,
+          display: fmtRadar(per90[d.key] as number),
+          max: d.max,
+        }));
+    }
+    if (axes.length < 3) {
+      const rated = matches.filter((m) => m.played && m.rating != null).slice(0, 6);
+      if (rated.length >= 3) {
+        axes = rated.map((m, i) => ({
+          key: `m-${m.gameId}-${i}`,
+          label: shortOpponent(m.opponentName),
+          value: m.rating as number,
+          display: (m.rating as number).toFixed(1),
+          max: 10,
+        }));
+      }
+    }
 
-  const avg = last10.reduce((a, m) => a + (m.rating as number), 0) / last10.length;
+    if (axes.length < 3) return [] as Axis[];
+    const out = [...axes];
+    while (out.length < 6) {
+      out.push({
+        key: `pad-${out.length}`,
+        label: '—',
+        value: 0,
+        display: '—',
+        max: out[0].max,
+      });
+    }
+    return out.slice(0, 6);
+  }, [matches, per90, pc]);
+
+  if (plot.length < 3) return null;
+
+  const size = Math.min(190, width - 80);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.38;
+  const points = plot.map((a, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / plot.length;
+    const norm = Math.min(1, Math.max(0, a.value / a.max));
+    return {
+      x: cx + Math.cos(angle) * r * norm,
+      y: cy + Math.sin(angle) * r * norm,
+      lx: cx + Math.cos(angle) * (r + 28),
+      ly: cy + Math.sin(angle) * (r + 28),
+      angle,
+      ox: cx + Math.cos(angle) * r,
+      oy: cy + Math.sin(angle) * r,
+    };
+  });
 
   return (
     <View style={{ gap: 12, alignSelf: 'stretch' }}>
-      <View style={{ gap: 3, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
-        <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: C.ink }]}>
-          {pc.last10Average}
-        </Text>
-        <Text style={[styles.sectionDesc, { fontFamily: fontReg, color: C.muted }]}>
-          {pc.last10Desc}
-        </Text>
-      </View>
+      <Text
+        style={[
+          styles.sectionTitle,
+          { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
+        ]}
+      >
+        {pc.performancePer90}
+      </Text>
 
+      {/* Figma 1856:32 — light card in light mode */}
       <View
         style={[
-          styles.last10Card,
+          styles.radarCard,
           cardShadow,
           { backgroundColor: C.card, borderColor: C.border },
         ]}
       >
-        <LinearGradient
-          colors={['#5422ae', '#230e48']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.last10Hero, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
-        >
-          <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start', flex: 1 }}>
-            <Text style={[styles.last10HeroLabel, { fontFamily: fontSemi }]}>{pc.averageRating}</Text>
-            <View style={[styles.ratingValueRow, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
-              <Image source={PP_ICON.star} style={styles.starIcon} contentFit="contain" />
-              <Text style={[styles.ratingValue, { fontFamily: fontBold }]}>{avg.toFixed(1)}</Text>
-            </View>
-          </View>
-          <Text style={[styles.last10Count, { fontFamily: fontSemi }]}>
-            {last10.length}/10
+        <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
+          <Text style={[styles.radarTitle, { fontFamily: fontBold, color: C.ink }]}>
+            {pc.radarTitle}
           </Text>
-        </LinearGradient>
+          <Text style={[styles.sectionDesc, { fontFamily: fontReg, color: C.muted }]}>
+            {pc.radarDesc}
+          </Text>
+        </View>
 
-        <Text
-          style={[
-            styles.last10FormTitle,
-            { fontFamily: fontBold, color: C.ink, textAlign: rtl ? 'right' : 'left' },
-          ]}
-        >
-          {pc.last10Form}
-        </Text>
-
-        <View style={[styles.last10Row, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-          {last10.map((m) => {
-            const rating = m.rating as number;
+        <View style={styles.radarChartWrap}>
+          <Svg width={size + 70} height={size + 56}>
+            {[1, 0.66, 0.33].map((scale) => (
+              <Circle
+                key={scale}
+                cx={cx + 35}
+                cy={cy + 28}
+                r={r * scale}
+                stroke={C.pale}
+                strokeWidth={1}
+                fill="none"
+              />
+            ))}
+            {points.map((p, i) => (
+              <Line
+                key={`axis-${i}`}
+                x1={cx + 35}
+                y1={cy + 28}
+                x2={p.ox + 35}
+                y2={p.oy + 28}
+                stroke={C.pale}
+                strokeWidth={1}
+              />
+            ))}
+            <Polygon
+              points={points.map((p) => `${p.x + 35},${p.y + 28}`).join(' ')}
+              fill={C.radarFill}
+              stroke={C.radarStroke}
+              strokeWidth={2}
+            />
+            {points.map((p, i) => (
+              <Circle
+                key={`dot-${i}`}
+                cx={p.x + 35}
+                cy={p.y + 28}
+                r={3.5}
+                fill={C.radarStroke}
+              />
+            ))}
+          </Svg>
+          {plot.map((a, i) => {
+            const p = points[i];
             return (
-              <View key={m.gameId} style={styles.last10PillWrap}>
-                <TeamBadge
-                  name={m.opponentName || '—'}
-                  logo={m.opponentLogo || undefined}
-                  size={22}
-                  color="transparent"
-                />
-                <View style={[styles.last10Pill, { backgroundColor: ratingTone(rating) }]}>
-                  <Text style={[styles.last10PillText, { fontFamily: fontSemi, color: C.ratingText }]}>
-                    {rating.toFixed(1)}
-                  </Text>
-                </View>
+              <View
+                key={a.key}
+                style={[
+                  styles.radarLabel,
+                  {
+                    left: p.lx + 35 - 42,
+                    top: p.ly + 28 - 12,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontFamily: fontBold,
+                    fontSize: 10,
+                    color: C.ink,
+                    textAlign: 'center',
+                  }}
+                  numberOfLines={2}
+                >
+                  {a.label}
+                  {'\n'}
+                  {a.display}
+                </Text>
               </View>
             );
           })}
@@ -1248,36 +1370,16 @@ const styles = StyleSheet.create({
   ratingValue: { color: '#fff', fontSize: 26 },
   starIcon: { width: 21, height: 21 },
 
-  last10Card: {
+  radarCard: {
     borderRadius: 18,
     borderWidth: 1,
-    padding: 14,
-    gap: 12,
+    padding: 15,
+    paddingBottom: 20,
+    gap: 8,
   },
-  last10Hero: {
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  last10HeroLabel: { color: '#e9d5ff', fontSize: 11, marginBottom: 4 },
-  last10Count: { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
-  last10FormTitle: { fontSize: 14 },
-  last10Row: {
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'flex-start',
-  },
-  last10PillWrap: { alignItems: 'center', gap: 6, width: 52 },
-  last10Pill: {
-    minWidth: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  last10PillText: { fontSize: 12 },
+  radarTitle: { fontSize: 14 },
+  radarChartWrap: { alignItems: 'center', justifyContent: 'center', minHeight: 250 },
+  radarLabel: { position: 'absolute', width: 85, alignItems: 'center' },
 
   transferCard: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
   transferRow: { minHeight: 57, alignItems: 'stretch', gap: 10 },

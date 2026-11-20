@@ -37,16 +37,16 @@ import {
     careerSeasonSummary,
     careerTransferRows,
 } from '../components/PlayerProfile/viewModel';
+import { useResolvedAppScheme } from '../hooks/useResolvedAppScheme';
+import { getPPColors } from '../components/PlayerProfile/theme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName } from '../utils/i18nHelpers';
 import { logger } from '../utils/logger';
 
-const CARD_BG = '#1a0b33';
-const CARD_BORDER = '#3b1d6e';
 const CARD_SHADOW = {
     shadowColor: '#4b1fa3',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
 } as const;
@@ -70,6 +70,16 @@ export default function PlayerCareerScreen() {
     const router = useRouter();
     const { t, language } = useTranslation();
     const pc = t.playerCareer;
+    const { isDark } = useResolvedAppScheme();
+    const C = useMemo(() => getPPColors(isDark), [isDark]);
+    const surface = {
+        bg: C.card,
+        border: C.border,
+        text: isDark ? '#FFFFFF' : C.ink,
+        muted: C.muted,
+        grid: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(36,16,78,0.08)',
+        axis: isDark ? 'rgba(255,255,255,0.55)' : C.muted,
+    };
     const params = useLocalSearchParams() as {
         athleteId?: string | string[];
         id?: string | string[];
@@ -253,8 +263,8 @@ export default function PlayerCareerScreen() {
             {(career.currentSeasonHighlights?.length ?? 0) > 0 && activeHighlight && (
                 <>
                     <View style={styles.sectionLabelRow}>
-                        <View style={styles.sectionAccent} />
-                        <Text style={styles.sectionLabel}>{pc.currentSeason}</Text>
+                        <View style={[styles.sectionAccent, { backgroundColor: C.primary }]} />
+                        <Text style={[styles.sectionLabel, { color: C.muted }]}>{pc.currentSeason}</Text>
                     </View>
                     <ScrollView
                         horizontal
@@ -267,7 +277,13 @@ export default function PlayerCareerScreen() {
                             return (
                                 <TouchableOpacity
                                     key={h.competitionId}
-                                    style={[styles.compTab, active && styles.compTabActive]}
+                                    style={[
+                                        styles.compTab,
+                                        {
+                                            backgroundColor: active ? C.pale : C.card,
+                                            borderColor: active ? C.primary : C.border,
+                                        },
+                                    ]}
                                     onPress={() => setHighlightCompId(h.competitionId)}
                                     activeOpacity={0.85}
                                 >
@@ -282,10 +298,14 @@ export default function PlayerCareerScreen() {
                                             transition={0}
                                         />
                                     ) : (
-                                        <Ionicons name="trophy-outline" size={16} color="#6b7387" />
+                                        <Ionicons name="trophy-outline" size={16} color={C.muted} />
                                     )}
                                     <Text
-                                        style={[styles.compTabText, active && styles.compTabTextActive]}
+                                        style={[
+                                            styles.compTabText,
+                                            { color: active ? C.ink : C.muted },
+                                            active && { fontWeight: '700' },
+                                        ]}
                                         numberOfLines={1}
                                     >
                                         {h.competitionName}
@@ -377,18 +397,22 @@ export default function PlayerCareerScreen() {
 
             {career.trend.length > 1 && (
                 <>
-                    <Text style={styles.heading}>{pc.goalsAssistsTrend}</Text>
-                    <TrendChart career={career} labels={pc} />
+                    <Text style={[styles.heading, { color: C.ink }]}>{pc.goalsAssistsTrend}</Text>
+                    <TrendChart career={career} labels={pc} surface={surface} />
                 </>
             )}
 
             {selectedSeason && selectedSeason.competitions.length > 0 && (
                 <>
-                    <Text style={styles.heading}>{pc.perCompetition}</Text>
+                    <Text style={[styles.heading, { color: C.ink }]}>{pc.perCompetition}</Text>
                     {selectedSeason.competitions.map((c, idx) => (
                         <View
                             key={`${c.competitionId ?? c.competitionName}-${idx}`}
-                            style={[styles.compCard, CARD_SHADOW]}
+                            style={[
+                                styles.compCard,
+                                CARD_SHADOW,
+                                { backgroundColor: surface.bg, borderColor: surface.border },
+                            ]}
                         >
                             <View style={styles.compHeader}>
                                 {c.competitionLogo ? (
@@ -402,11 +426,11 @@ export default function PlayerCareerScreen() {
                                         transition={0}
                                     />
                                 ) : (
-                                    <View style={styles.compLogoFallback}>
-                                        <Ionicons name="trophy-outline" size={14} color="#a78bfa" />
+                                    <View style={[styles.compLogoFallback, { backgroundColor: C.pale }]}>
+                                        <Ionicons name="trophy-outline" size={14} color={C.primary} />
                                     </View>
                                 )}
-                                <Text style={styles.compName} numberOfLines={1}>
+                                <Text style={[styles.compName, { color: surface.text }]} numberOfLines={1}>
                                     {c.competitionName}
                                 </Text>
                                 {c.rating != null && (
@@ -416,11 +440,31 @@ export default function PlayerCareerScreen() {
                                 )}
                             </View>
                             <View style={styles.compStatsRow}>
-                                <CompStat value={fmt(c.appearances)} label={pc.appearances} />
-                                <CompStat value={fmt(c.goals)} label={pc.goals} />
-                                <CompStat value={fmt(c.assists)} label={pc.assists} />
+                                <CompStat
+                                    value={fmt(c.appearances)}
+                                    label={pc.appearances}
+                                    text={surface.text}
+                                    muted={surface.muted}
+                                />
+                                <CompStat
+                                    value={fmt(c.goals)}
+                                    label={pc.goals}
+                                    text={surface.text}
+                                    muted={surface.muted}
+                                />
+                                <CompStat
+                                    value={fmt(c.assists)}
+                                    label={pc.assists}
+                                    text={surface.text}
+                                    muted={surface.muted}
+                                />
                                 {c.minutes != null && (
-                                    <CompStat value={fmt(c.minutes)} label={pc.minutes} />
+                                    <CompStat
+                                        value={fmt(c.minutes)}
+                                        label={pc.minutes}
+                                        text={surface.text}
+                                        muted={surface.muted}
+                                    />
                                 )}
                             </View>
                         </View>
@@ -445,11 +489,21 @@ function sumStat(season: Player365CareerSeason, key: 'yellowCards' | 'redCards')
     return season.competitions.reduce((acc, c) => acc + (c[key] ?? 0), 0);
 }
 
-function CompStat({ value, label }: { value: string; label: string }) {
+function CompStat({
+    value,
+    label,
+    text,
+    muted,
+}: {
+    value: string;
+    label: string;
+    text: string;
+    muted: string;
+}) {
     return (
         <View style={styles.compStat}>
-            <Text style={styles.compStatValue}>{value}</Text>
-            <Text style={styles.compStatLabel}>{label}</Text>
+            <Text style={[styles.compStatValue, { color: text }]}>{value}</Text>
+            <Text style={[styles.compStatLabel, { color: muted }]}>{label}</Text>
         </View>
     );
 }
@@ -457,9 +511,11 @@ function CompStat({ value, label }: { value: string; label: string }) {
 function TrendChart({
     career,
     labels,
+    surface,
 }: {
     career: Player365Career;
     labels: { goals: string; assists: string; allSeasons: string };
+    surface: { bg: string; border: string; text: string; muted: string; grid: string; axis: string };
 }) {
     const points = career.trend;
     const barGroupWidth = 46;
@@ -472,17 +528,23 @@ function TrendChart({
     const barW = 12;
 
     return (
-        <View style={styles.chartCard}>
+        <View
+            style={[
+                styles.chartCard,
+                CARD_SHADOW,
+                { backgroundColor: surface.bg, borderColor: surface.border },
+            ]}
+        >
             <View style={styles.legendRow}>
                 <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: '#8b5cf6' }]} />
-                    <Text style={styles.legendText}>{labels.goals}</Text>
+                    <Text style={[styles.legendText, { color: surface.muted }]}>{labels.goals}</Text>
                 </View>
                 <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: '#38bdf8' }]} />
-                    <Text style={styles.legendText}>{labels.assists}</Text>
+                    <Text style={[styles.legendText, { color: surface.muted }]}>{labels.assists}</Text>
                 </View>
-                <Text style={styles.legendAll}>{labels.allSeasons}</Text>
+                <Text style={[styles.legendAll, { color: surface.muted }]}>{labels.allSeasons}</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <Svg width={chartWidth} height={chartHeight}>
@@ -493,7 +555,7 @@ function TrendChart({
                             y1={topPad + usableH * (1 - g)}
                             x2={chartWidth}
                             y2={topPad + usableH * (1 - g)}
-                            stroke="rgba(255,255,255,0.08)"
+                            stroke={surface.grid}
                             strokeWidth={1}
                         />
                     ))}
@@ -534,7 +596,7 @@ function TrendChart({
                                 key={`t-${i}`}
                                 x={cx}
                                 y={chartHeight - 8}
-                                fill="rgba(255,255,255,0.55)"
+                                fill={surface.axis}
                                 fontSize={9}
                                 textAnchor="middle"
                             >
@@ -558,10 +620,9 @@ const styles = StyleSheet.create({
         borderRadius: 2,
         backgroundColor: '#6a2bd9',
     },
-    sectionLabel: { color: '#6b7387', fontSize: 13, fontWeight: '600' },
+    sectionLabel: { fontSize: 13, fontWeight: '600' },
 
     heading: {
-        color: '#24104e',
         fontSize: 16,
         fontWeight: '800',
         marginTop: 20,
@@ -570,24 +631,19 @@ const styles = StyleSheet.create({
     },
 
     chartCard: {
-        backgroundColor: CARD_BG,
         borderRadius: 18,
         borderWidth: 1,
-        borderColor: CARD_BORDER,
         padding: 14,
-        ...CARD_SHADOW,
     },
     legendRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 10 },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
-    legendText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
-    legendAll: { marginLeft: 'auto', color: 'rgba(255,255,255,0.45)', fontSize: 11 },
+    legendText: { fontSize: 12 },
+    legendAll: { marginLeft: 'auto', fontSize: 11 },
 
     compCard: {
-        backgroundColor: CARD_BG,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: CARD_BORDER,
         padding: 14,
         marginBottom: 10,
     },
@@ -597,11 +653,10 @@ const styles = StyleSheet.create({
         width: 24,
         height: 24,
         borderRadius: 6,
-        backgroundColor: 'rgba(167,139,250,0.15)',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    compName: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
+    compName: { fontSize: 14, fontWeight: '700', flex: 1 },
     ratingPill: {
         paddingHorizontal: 8,
         paddingVertical: 3,
@@ -611,8 +666,8 @@ const styles = StyleSheet.create({
     ratingPillText: { color: '#272727', fontSize: 12, fontWeight: '800' },
     compStatsRow: { flexDirection: 'row', justifyContent: 'space-between' },
     compStat: { alignItems: 'center', flex: 1 },
-    compStatValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
-    compStatLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 },
+    compStatValue: { fontSize: 16, fontWeight: '800' },
+    compStatLabel: { fontSize: 11, marginTop: 2 },
 
     compTabScroll: { marginBottom: 12, marginHorizontal: -4 },
     compTabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },
@@ -624,18 +679,11 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: '#e8e0f5',
-        backgroundColor: '#fff',
         maxWidth: 180,
         ...CARD_SHADOW,
         shadowOpacity: 0.12,
         elevation: 3,
     },
-    compTabActive: {
-        borderColor: '#6a2bd9',
-        backgroundColor: '#f3edff',
-    },
     compTabLogo: { width: 20, height: 20 },
-    compTabText: { color: '#6b7387', fontSize: 12, fontWeight: '600', flexShrink: 1 },
-    compTabTextActive: { color: '#24104e', fontWeight: '700' },
+    compTabText: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
 });
