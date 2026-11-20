@@ -159,4 +159,6 @@ Not ready to declare production playback SLAs until the device matrix above is e
 
 ## Commit Information
 
-See git history after push for the P1 implementation commit hash (recorded below once pushed).
+- **Implementation:** `d9bcb70d7e78d09cef20c4d0a119d91672d7a9a4` — Stabilize highlight playback with timeouts, retry, and diagnostics.
+- **Pushed:** `origin/main`
+- **P0 preserved:** `fe27f82c3` / `f7a02d065`
