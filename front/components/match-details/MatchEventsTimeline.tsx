@@ -8,6 +8,7 @@ import type { FixtureEvent } from '../../services/apiFootball';
 import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
+import { buildGoalClipPlaybackCandidates } from '../../utils/goalClipPlaybackCandidates';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
@@ -34,7 +35,8 @@ type Props = {
   goalClips?: GoalClipMedia[];
   goalClipScorerLabel?: string;
   goalClipPlayLabel?: string;
-  onPlayClip?: (url: string) => void;
+  /** Ordered candidate URLs for the selected goal (same fixture / same event). */
+  onPlayClip?: (urls: string[]) => void;
 };
 
 function formatMinute(event: FixtureEvent): string {
@@ -183,7 +185,9 @@ export function MatchEventsTimeline({
                     accessibilityRole="button"
                     accessibilityLabel={goalClipPlayLabel.replace('{player}', scorerName || event.team.name)}
                     onPress={() => {
-                      if (playUrl) onPlayClip?.(playUrl);
+                      const candidates = buildGoalClipPlaybackCandidates(events, index, goalClips);
+                      const urls = candidates.length ? candidates : playUrl ? [playUrl] : [];
+                      if (urls.length) onPlayClip?.(urls);
                     }}
                     style={styles.clipMedia}
                   >

@@ -2142,7 +2142,7 @@ const MatchDetailsScreen = () => {
               goalClips={goalClips}
               goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
               goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
-              onPlayClip={(url) => setHighlightVideoUrls([url])}
+              onPlayClip={(urls) => setHighlightVideoUrls(urls)}
             />
           )}
         </View>

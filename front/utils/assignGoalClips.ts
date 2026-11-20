@@ -24,14 +24,14 @@ function clipText(clip: GoalClipMedia): string {
   return `${clip.title} ${clip.description ?? ''}`;
 }
 
-function clipMinute(clip: GoalClipMedia): number | null {
+export function clipMinute(clip: GoalClipMedia): number | null {
   const matches = clipText(clip).match(/\b(\d{1,3})\b/g);
   if (!matches?.length) return null;
   const minute = Number(matches[matches.length - 1]);
   return minute >= 1 && minute <= 130 ? minute : null;
 }
 
-function clipMatchesPlayer(clip: GoalClipMedia, playerName: string): boolean {
+export function clipMatchesPlayer(clip: GoalClipMedia, playerName: string): boolean {
   const haystack = foldName(clipText(clip));
   if (!haystack) return false;
   const tokens = playerName
@@ -41,7 +41,7 @@ function clipMatchesPlayer(clip: GoalClipMedia, playerName: string): boolean {
   return tokens.some((token) => haystack.includes(token));
 }
 
-function minuteAgrees(clip: GoalClipMedia, elapsed: number | null | undefined): boolean {
+export function minuteAgrees(clip: GoalClipMedia, elapsed: number | null | undefined): boolean {
   const minute = clipMinute(clip);
   if (minute == null || elapsed == null) return true;
   return minute === elapsed;
