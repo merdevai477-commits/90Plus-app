@@ -18,9 +18,6 @@ interface ProfileMetricStripProps {
   variant?: 'social' | 'performance';
 }
 
-const FONT_BOLD = 'Inter_700Bold';
-const FONT_MEDIUM = 'Inter_500Medium';
-
 const ProfileMetricStrip = memo(function ProfileMetricStrip({
   items,
   variant = 'social',
@@ -31,32 +28,40 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
           {index > 0 && <View style={[styles.divider, isPerf && styles.perfDivider]} />}
-          <MetricCell item={item} compact={isPerf} />
+          <MetricCell item={item} compact={isPerf} social={!isPerf} />
         </React.Fragment>
       ))}
     </View>
   );
 
   if (variant === 'performance') {
-    return (
-      <View style={[styles.card, styles.performanceCard]}>
-        {inner}
-      </View>
-    );
+    return <View style={[styles.card, styles.performanceCard]}>{inner}</View>;
   }
 
   return <View style={[styles.card, styles.socialCard]}>{inner}</View>;
 });
 
-function MetricCell({ item, compact }: { item: ProfileMetricItem; compact: boolean }) {
+function MetricCell({
+  item,
+  compact,
+  social,
+}: {
+  item: ProfileMetricItem;
+  compact: boolean;
+  social: boolean;
+}) {
   const body = (
-    <View style={[styles.cell, compact && styles.perfCell]}>
-      <View style={styles.iconBox}>
-        <Image source={item.icon} style={styles.icon} contentFit="contain" />
+    <View style={[styles.cell, compact && styles.perfCell, social && styles.socialCell]}>
+      <View style={[styles.iconBox, social && styles.socialIconBox]}>
+        <Image
+          source={item.icon}
+          style={[styles.icon, social && styles.socialIcon]}
+          contentFit="contain"
+        />
       </View>
       <View style={styles.copy}>
         <Text
-          style={styles.value}
+          style={[styles.value, social && styles.socialValue]}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.75}
@@ -65,7 +70,7 @@ function MetricCell({ item, compact }: { item: ProfileMetricItem; compact: boole
           {formatProfileStat(item.value)}
         </Text>
         <Text
-          style={[styles.label, compact && styles.perfLabel]}
+          style={[styles.label, compact && styles.perfLabel, social && styles.socialLabel]}
           numberOfLines={compact ? 2 : 1}
           maxFontSizeMultiplier={1.15}
         >
@@ -97,29 +102,30 @@ export default ProfileMetricStrip;
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 22,
-    borderRadius: 16,
-    paddingVertical: 13,
-    paddingHorizontal: 12,
+    marginHorizontal: 20,
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   socialCard: {
-    marginTop: -72,
+    marginTop: 14,
+    height: 90,
   },
   performanceCard: {
     marginTop: 12,
     paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
     width: '100%',
   },
   perfRow: {
@@ -127,9 +133,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   divider: {
-    width: 1.5,
-    height: 47,
-    backgroundColor: ProfileTheme.colors.profileCardBorder,
+    width: 1,
+    height: 44,
+    backgroundColor: ProfileTheme.colors.divider,
   },
   perfDivider: {
     height: 52,
@@ -140,6 +146,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  socialCell: {
+    width: 116,
+    gap: 1,
   },
   perfCell: {
     width: '100%',
@@ -155,9 +165,18 @@ const styles = StyleSheet.create({
     height: 28,
     overflow: 'hidden',
   },
+  socialIconBox: {
+    width: 23,
+    height: 22,
+  },
   icon: {
     width: 28,
     height: 28,
+  },
+  socialIcon: {
+    width: 22,
+    height: 22,
+    tintColor: ProfileTheme.colors.profilePrimary,
   },
   copy: {
     alignItems: 'center',
@@ -168,16 +187,22 @@ const styles = StyleSheet.create({
   value: {
     color: ProfileTheme.colors.textPrimary,
     fontSize: 16,
-    fontFamily: FONT_BOLD,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  socialValue: {
+    fontSize: 23,
   },
   label: {
     color: ProfileTheme.colors.profileMuted,
     fontSize: 9,
-    fontFamily: FONT_MEDIUM,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  socialLabel: {
+    color: ProfileTheme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '400',
   },
   perfLabel: {
     fontSize: 9,

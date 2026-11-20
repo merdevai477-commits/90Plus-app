@@ -16,9 +16,8 @@ import VideoGrid from '../../components/profile/VideoGrid';
 import { ProfileGridScrollProvider, useGridScrollReporter } from '../../components/profile/profileGridScroll';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileAffiliationBar from '../../components/profile/ProfileAffiliationBar';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
-import ProfileBioCard from '../../components/profile/ProfileBioCard';
-import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
@@ -28,10 +27,9 @@ import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../con
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useXp } from '../../contexts/XpContext';
-import { useCoins } from '../../contexts/CoinsContext';
-import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
 import { LevelInfoModal } from '../../components/common/LevelInfoModal';
 import { StreakInfoModal } from '../../components/common/StreakInfoModal';
+import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import * as ImagePicker from 'expo-image-picker';
@@ -158,13 +156,9 @@ const styles = StyleSheet.create({
   },
   contentPanel: {
     marginHorizontal: 20,
-    marginTop: -1,
+    marginTop: 8,
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderColor: ProfileTheme.colors.profileTabBorder,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    borderRadius: 19,
     overflow: 'hidden',
     minHeight: 120,
     marginBottom: 8,
@@ -342,22 +336,12 @@ function OwnProfileScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const gridScroll = useGridScrollReporter();
   const tabsOffsetY = useRef(0);
-  const openTabAndScroll = useCallback((tab: string) => {
-    setActiveTab(tab);
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, tabsOffsetY.current - 10),
-        animated: true,
-      });
-    }, 80);
-  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const { user: clerkUser } = useUser();
-  const { streak: loginStreak, refresh: refreshXp, level, xp, nextLevelXp, progressPct } = useXp();
-  const { coins } = useCoins();
+  const { refresh: refreshXp, level, xp, nextLevelXp, progressPct } = useXp();
   
   // Optimistic Profile Updates
   const { 
@@ -811,7 +795,6 @@ function OwnProfileScreen() {
   }, [localImage, cachedUserData?.avatar]);
 
   // Predictions store — hydrate from cache on mount for instant analytics
-  const predictionStats = usePredictionsStore((s) => s.stats);
   const hydratePredictionsCache = usePredictionsStore((s) => s.hydrateFromCache);
 
   const PREDICTIONS_REFRESH_MS = 30_000;
@@ -1769,31 +1752,38 @@ function OwnProfileScreen() {
           avatarUri={localImage || userData?.avatar || null}
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
+          bio={userData?.bio}
+          socialLinks={socialLinks}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
           userId={userData?.id}
           isOwnProfile
+          isAvatarUploading={isAvatarUploading}
+          onAvatarPress={handleAvatarPress}
+          onSharePress={handleSharePress}
+          onSettingsPress={() => router.push('/(tabs)/settings')}
+          onMorePress={handleMorePress}
+          onEditPress={handleEditProfile}
+          onBioPress={handleEditProfile}
+          onAddSocialPress={() => setAddLinkPlatform(true)}
+          addBioLabel={t.profile.addBio}
+        />
+
+        <ProfileAffiliationBar
           level={level || userData?.level || 1}
           xp={xp || userData?.xp || 0}
           nextLevelXp={nextLevelXp || ((level || userData?.level || 1) + 1) * 100}
           progressPct={progressPct || 0}
-          energyValue={coins}
           countryFlag={isMeaningfulCountryFlag(userData?.countryFlag) ? userData?.countryFlag : null}
           countryLabel={resolveCountryDisplayName(displayLocation, userData?.countryFlag)}
           clubLogo={displayClubLogo}
           clubName={userData?.favoriteTeam || null}
-          isAvatarUploading={isAvatarUploading}
-          onAvatarPress={handleAvatarPress}
+          isOwnProfile
+          onLevelPress={() => setShowLevelInfo(true)}
           onCountryPress={() => setIsCountryModalVisible(true)}
           onClubPress={() => setIsClubModalVisible(true)}
-          onSharePress={handleSharePress}
-          onSettingsPress={() => router.push('/(tabs)/settings')}
-          onMorePress={handleMorePress}
-          onLevelPress={() => setShowLevelInfo(true)}
-          onEnergyPress={() => setShowCoinsInfo(true)}
           chooseCountryLabel={t.profile.chooseCountry}
           addClubLabel={t.profile.addYourClub}
-          energyLabel={t.profile.energy}
         />
 
         <ProfileMetricStrip
@@ -1813,68 +1803,12 @@ function OwnProfileScreen() {
               onPress: handleFollowingPress,
             },
             {
-              key: 'videos',
-              icon: PROFILE_ICONS.video,
-              value: followStats.reelsCount || myVideos.length,
-              label: t.profile.videos,
-              onPress: () => setActiveTab('videos'),
-            },
-            {
               key: 'likes',
               icon: PROFILE_ICONS.heart,
               value: analytics?.totalLikes ?? 0,
-              label: t.profile.likes,
+              label: t.profile.likesShort || t.profile.likes,
             },
           ]}
-        />
-
-        <ProfileBioCard
-          bio={userData?.bio}
-          isOwnProfile
-          addLabel={t.profile.addBio}
-          aboutLabel={t.profile.aboutMe}
-          onPress={handleEditProfile}
-        />
-
-        <ProfileMetricStrip
-          variant="performance"
-          items={[
-            {
-              key: 'xp',
-              icon: PROFILE_ICONS.shield,
-              value: xp || userData?.xp || 0,
-              label: t.profile.totalXp,
-              onPress: () => setShowLevelInfo(true),
-            },
-            {
-              key: 'streak',
-              icon: PROFILE_ICONS.fire,
-              value: Math.max(loginStreak.longest, userData?.consecutiveLoginDays || 0),
-              label: t.profile.longestStreak,
-              onPress: () => setShowStreakInfo(true),
-            },
-            {
-              key: 'rate',
-              icon: PROFILE_ICONS.bullseye,
-              value: `${(predictionStats?.accuracy ?? 0) <= 1 && (predictionStats?.accuracy ?? 0) > 0 ? Math.round((predictionStats?.accuracy ?? 0) * 100) : Math.round(predictionStats?.accuracy || 0)}%`,
-              label: t.profile.predictionRate,
-              onPress: () => openTabAndScroll('posts'),
-            },
-            {
-              key: 'achievements',
-              icon: PROFILE_ICONS.trophy,
-              value: 0,
-              label: t.profile.achievements,
-              onPress: () => openTabAndScroll('achievements'),
-            },
-          ]}
-        />
-
-        <ProfileConnectCard
-          links={socialLinks}
-          isOwnProfile
-          title={t.profile.connectWithMe}
-          onAddLink={setAddLinkPlatform}
         />
 
         <View

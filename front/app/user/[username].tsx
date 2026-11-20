@@ -21,11 +21,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 
 import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileAffiliationBar from '../../components/profile/ProfileAffiliationBar';
 import { ProfileCollapsedBar, bindProfileScroll } from '../../components/profile/ProfileCollapsedBar';
 import { ProfilePostsPane } from '../../components/profile/ProfilePostsPane';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
-import ProfileBioCard from '../../components/profile/ProfileBioCard';
-import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import VideoGrid from '../../components/profile/VideoGrid';
@@ -130,15 +129,6 @@ function UserProfileScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const gridScroll = useGridScrollReporter();
   const tabsOffsetY = useRef(0);
-  const openTabAndScroll = useCallback((tab: string) => {
-    setActiveTab(tab);
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, tabsOffsetY.current - 10),
-        animated: true,
-      });
-    }, 80);
-  }, []);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -148,10 +138,11 @@ function UserProfileScreen() {
   const { follow, unfollow } = useFollowStore();
 
   const canViewPredictions = !!user && !blockedMe && !isBlocked;
-  const {
-    stats: publicPredictionStats,
-    refresh: refreshPublicPredictions,
-  } = usePublicUserPredictions(username, getToken, canViewPredictions);
+  const { refresh: refreshPublicPredictions } = usePublicUserPredictions(
+    username,
+    getToken,
+    canViewPredictions,
+  );
 
   // ── Data loading (cache-first for instant render) ──────────────────────────
   const loadUserProfile = useCallback(async (skipCache = false) => {
@@ -628,28 +619,16 @@ function UserProfileScreen() {
           avatarUri={user.avatar}
           name={user.displayName || user.username}
           username={user.username}
+          bio={showFullProfile ? user.bio : null}
+          socialLinks={showFullProfile ? socialLinks : []}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}
           userId={user.id}
           isOwnProfile={false}
-          level={userLevel}
-          xp={userXp}
-          nextLevelXp={(userLevel + 1) * 100}
-          progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
-          energyValue={user.coins ?? 0}
-          countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
-          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
-          clubLogo={showFullProfile ? user.clubLogo : null}
-          clubName={showFullProfile ? user.favoriteTeam : null}
           onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
           onSharePress={handleShareProfilePress}
           onBackPress={() => router.back()}
           onMorePress={() => setShowMoreMenu(true)}
-          onLevelPress={() => setShowLevelInfo(true)}
-          onEnergyPress={() => setShowCoinsInfo(true)}
-          chooseCountryLabel={t.profile.chooseCountry}
-          addClubLabel={t.profile.addYourClub}
-          energyLabel={t.profile.energy}
           actionBelowName={
             !blockedMe ? (
               <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
@@ -664,7 +643,7 @@ function UserProfileScreen() {
                     </View>
                   ) : (
                     <LinearGradient
-                      colors={['#4E0DE4', '#2B077E']}
+                      colors={['#6A2BD9', '#4B1FA3']}
                       style={s.followBtn}
                       start={{ x: 0.5, y: 0 }}
                       end={{ x: 0.5, y: 1 }}
@@ -700,6 +679,21 @@ function UserProfileScreen() {
           </View>
         )}
 
+        <ProfileAffiliationBar
+          level={userLevel}
+          xp={userXp}
+          nextLevelXp={(userLevel + 1) * 100}
+          progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
+          countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
+          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
+          clubLogo={showFullProfile ? user.clubLogo : null}
+          clubName={showFullProfile ? user.favoriteTeam : null}
+          isOwnProfile={false}
+          onLevelPress={() => setShowLevelInfo(true)}
+          chooseCountryLabel={t.profile.chooseCountry}
+          addClubLabel={t.profile.addYourClub}
+        />
+
         <ProfileMetricStrip
           items={[
             {
@@ -717,67 +711,16 @@ function UserProfileScreen() {
               onPress: showFullProfile && user.id ? () => openFollowersModal('following') : undefined,
             },
             {
-              key: 'videos',
-              icon: PROFILE_ICONS.video,
-              value: user.reelsCount || 0,
-              label: t.profile.videos,
-              onPress: () => setActiveTab('videos'),
-            },
-            {
               key: 'likes',
               icon: PROFILE_ICONS.heart,
               value: user.totalLikes ?? userVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
-              label: t.profile.likes,
+              label: t.profile.likesShort || t.profile.likes,
             },
           ]}
         />
 
         {showFullProfile && (
           <>
-        <ProfileBioCard
-          bio={user.bio}
-          isOwnProfile={false}
-          addLabel={t.profile.addBio}
-          aboutLabel={t.profile.aboutMe}
-        />
-        <ProfileMetricStrip
-          variant="performance"
-          items={[
-            {
-              key: 'xp',
-              icon: PROFILE_ICONS.shield,
-              value: userXp,
-              label: t.profile.totalXp,
-              onPress: () => setShowLevelInfo(true),
-            },
-            {
-              key: 'streak',
-              icon: PROFILE_ICONS.fire,
-              value: user.consecutiveLoginDays || 0,
-              label: t.profile.longestStreak,
-              onPress: () => setShowStreakInfo(true),
-            },
-            {
-              key: 'rate',
-              icon: PROFILE_ICONS.bullseye,
-              value: `${Math.round(publicPredictionStats.accuracy <= 1 && publicPredictionStats.accuracy > 0 ? publicPredictionStats.accuracy * 100 : publicPredictionStats.accuracy || 0)}%`,
-              label: t.profile.predictionRate,
-              onPress: () => openTabAndScroll('posts'),
-            },
-            {
-              key: 'achievements',
-              icon: PROFILE_ICONS.trophy,
-              value: 0,
-              label: t.profile.achievements,
-              onPress: () => openTabAndScroll('achievements'),
-            },
-          ]}
-        />
-        <ProfileConnectCard
-          links={socialLinks}
-          isOwnProfile={false}
-          title={t.profile.connectWithMe}
-        />
 
         <View
           onLayout={(e) => {
@@ -1019,13 +962,9 @@ const s = StyleSheet.create({
 
   contentPanel: {
     marginHorizontal: 20,
-    marginTop: -1,
+    marginTop: 8,
     backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderColor: ProfileTheme.colors.profileTabBorder,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    borderRadius: 19,
     overflow: 'hidden',
     minHeight: 120,
     marginBottom: 8,

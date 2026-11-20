@@ -1,7 +1,6 @@
 import React, { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_ICONS } from './profileV2Assets';
@@ -49,20 +48,12 @@ const ContentTabs = memo(function ContentTabs({
           return (
             <TouchableOpacity
               key={tab.id}
-              style={styles.tab}
+              style={[styles.tab, isActive && styles.tabActive]}
               onPress={() => onTabChange(tab.id)}
               activeOpacity={0.78}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
             >
-              {isActive ? (
-                <LinearGradient
-                  colors={['rgba(124,58,237,0.14)', 'rgba(124,58,237,0.04)']}
-                  start={{ x: 0.5, y: 0 }}
-                  end={{ x: 0.5, y: 1 }}
-                  style={styles.activePill}
-                />
-              ) : null}
               <Text
                 style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelIdle]}
                 numberOfLines={1}
@@ -71,7 +62,7 @@ const ContentTabs = memo(function ContentTabs({
               </Text>
               <Image
                 source={isActive ? tab.iconActive : tab.icon}
-                style={styles.tabIcon}
+                style={[styles.tabIcon, !isActive && styles.tabIconIdle]}
                 contentFit="contain"
               />
               {isActive ? <View style={styles.activeUnderline} /> : null}
@@ -92,20 +83,17 @@ const RTL_ROW = { direction: 'rtl' } as const;
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 20,
-    marginTop: 22,
+    marginTop: 18,
   },
   tabsWrapper: {
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
     backgroundColor: ProfileTheme.colors.profileTabBar,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileTabBorder,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    height: 52,
+    borderRadius: 19,
+    height: 51,
     overflow: 'hidden',
-    paddingHorizontal: 4,
+    paddingHorizontal: 10,
   },
   tab: {
     flex: 1,
@@ -118,36 +106,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     position: 'relative',
   },
-  activePill: {
-    ...StyleSheet.absoluteFillObject,
-    marginHorizontal: 2,
-    marginVertical: 6,
-    borderRadius: 10,
-  },
+  tabActive: {},
   activeUnderline: {
     position: 'absolute',
-    left: 10,
-    right: 10,
+    left: 0,
+    right: 0,
     bottom: 0,
-    height: 2.5,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
+    height: 4,
+    borderRadius: 4,
     backgroundColor: ProfileTheme.colors.profilePrimary,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     flexShrink: 1,
   },
   tabLabelActive: {
-    color: ProfileTheme.colors.profilePrimary,
+    color: '#7125DE',
+    fontWeight: '700',
   },
   tabLabelIdle: {
-    color: ProfileTheme.colors.profileMuted,
+    color: '#85809A',
+    fontWeight: '400',
   },
   tabIcon: {
     width: 18,
     height: 18,
     flexShrink: 0,
+  },
+  tabIconIdle: {
+    opacity: 0.72,
   },
 });

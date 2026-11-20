@@ -2,46 +2,53 @@
  * ProfileTheme
  *
  * Shared color palette + spacing tokens for the profile-related UI.
- * Light mode with strong borders so cards and chips stay clearly visible.
+ * Tuned to the 90plus Figma profile (lavender surfaces, soft purple accents).
  */
 
 export const ProfileTheme = {
   colors: {
-    // Base surfaces — gray page so white cards read with clear edges
+    // Base surfaces
     deepBlack: '#FFFFFF',
     surface: '#FFFFFF',
-    surfaceElevated: '#F2F2F5',
+    surfaceElevated: '#F3EDFF',
 
     // Text
-    textPrimary: '#0F0F12',
-    textSecondary: 'rgba(15, 15, 18, 0.72)',
-    textTertiary: 'rgba(15, 15, 18, 0.52)',
-    textDisabled: 'rgba(15, 15, 18, 0.36)',
+    textPrimary: '#23133C',
+    textSecondary: 'rgba(35, 19, 60, 0.72)',
+    textTertiary: 'rgba(35, 19, 60, 0.52)',
+    textDisabled: 'rgba(35, 19, 60, 0.36)',
 
-    // Borders / dividers — high-contrast strokes on white cards
-    border: 'rgba(15, 15, 18, 0.42)',
-    borderSoft: 'rgba(15, 15, 18, 0.24)',
+    // Borders / dividers
+    border: 'rgba(35, 19, 60, 0.16)',
+    borderSoft: 'rgba(35, 19, 60, 0.1)',
 
     // Brand accents
     neonGreen: '#22A822',
     neonBlue: '#0090C8',
-    neonPurple: '#7C3AED',
+    neonPurple: '#6A2BD9',
     neonRed: '#E11D48',
     gold: '#D4A017',
 
-    // Profile v2 — light mode, defined edges
-    profileBg: '#E8E8EE',
+    // Profile v3 — Figma 90plus
+    profileBg: '#F9F6FE',
     profileCard: '#FFFFFF',
-    profileCardBorder: '#3A3A44',
+    profileCardBorder: '#E8E2F0',
     profileChip: '#FFFFFF',
     profileFilledChip: '#FFFFFF',
-    profileEmptyChip: '#F5F5F8',
-    profileMuted: '#55555F',
-    profileHandle: '#4A4A54',
+    profileEmptyChip: '#F5F0FF',
+    profileMuted: '#827C94',
+    profileHandle: '#6B7280',
     profileTabBar: '#FFFFFF',
-    profileTabBorder: '#3A3A44',
-    profilePrimary: '#7C3AED',
-    avatarRing: '#7C3AED',
+    profileTabBorder: '#EDE7F6',
+    profilePrimary: '#6A2BD9',
+    profilePrimarySoft: '#F2ECFF',
+    profileSheet: '#F9F6FE',
+    avatarRing: '#FFFFFF',
+    avatarGlow: 'rgba(106, 43, 217, 0.46)',
+    divider: '#E0D9EC',
+    xpTrack: '#E0D3F7',
+    achievementsCard: '#F1E9FF',
+    achievementsIconBg: '#DECDF7',
 
     // Semantic
     success: '#34C759',
@@ -49,18 +56,18 @@ export const ProfileTheme = {
     error: '#FF3B30',
     info: '#2196F3',
 
-    // Glass overlays (light surfaces)
-    glass: 'rgba(15, 15, 18, 0.05)',
-    glassMedium: 'rgba(15, 15, 18, 0.09)',
-    glassDark: 'rgba(15, 15, 18, 0.04)',
+    // Glass overlays
+    glass: 'rgba(35, 19, 60, 0.05)',
+    glassMedium: 'rgba(35, 19, 60, 0.09)',
+    glassDark: 'rgba(35, 19, 60, 0.04)',
     glassWhite: 'rgba(255, 255, 255, 0.94)',
     glassBlack: 'rgba(255, 255, 255, 0.9)',
-    glassBorder: 'rgba(15, 15, 18, 0.22)',
+    glassBorder: 'rgba(35, 19, 60, 0.12)',
   },
 
   gradients: {
-    primary: ['#7C3AED', '#5B21B6'] as const,
-    cover: ['rgba(232,232,238,0)', 'rgba(232,232,238,1)'] as const,
+    primary: ['#6A2BD9', '#4B1FA3'] as const,
+    cover: ['rgba(249,246,254,0)', 'rgba(249,246,254,1)'] as const,
     darkOverlay: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.18)'] as const,
     gold: ['#FFD700', '#FFA500'] as const,
     highlight: ['#F5576C', '#8E54E9'] as const,
@@ -82,6 +89,7 @@ export const ProfileTheme = {
     md: 12,
     lg: 16,
     xl: 20,
+    sheet: 33,
     pill: 999,
   },
 

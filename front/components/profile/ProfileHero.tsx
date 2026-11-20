@@ -5,81 +5,48 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  ImageSourcePropType,
-  PixelRatio,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { PROFILE_STADIUM_COVER, PROFILE_ICONS } from './profileV2Assets';
+import { useTranslation } from '../../src/i18n';
+import { PROFILE_STADIUM_COVER, PROFILE_AVATAR_PLACEHOLDER } from './profileV2Assets';
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 import ProfileEliteMarks from './ProfileEliteMarks';
-import { formatProfileStat } from './formatProfileStat';
-import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
-import { getCountryFlagUri } from '../../utils/countryFlagUri';
+import { getSocialBrandIcon } from './socialBrandIcons';
+import { logger } from '../../utils/logger';
 
-const COVER_HEIGHT = 420;
-const AVATAR_SIZE = 101;
-const OVERLAY_PADDING_X = 8;
-const ROW_GAP = 6;
-const WING_GAP = 4;
-const LEVEL_CHIP_WIDTH = 74;
-const SIDE_SLOT_WIDTH = 58;
-const ENERGY_CHIP_WIDTH = 68;
-const WING_WIDTH = Math.max(LEVEL_CHIP_WIDTH + SIDE_SLOT_WIDTH, SIDE_SLOT_WIDTH + ENERGY_CHIP_WIDTH) + WING_GAP;
-// Full-size identity row needs ~395pt; iPhones are 375–393pt wide, so the row scales down to fit.
-const ROW_DESIGN_WIDTH = WING_WIDTH * 2 + AVATAR_SIZE + ROW_GAP * 2;
-// The social metric card overlaps the hero bottom by 72pt (see ProfileMetricStrip socialCard).
-const HERO_BOTTOM_SPACE = 100;
+const COVER_HEIGHT = 222;
+const AVATAR_SIZE = 129;
+const AVATAR_GLOW_SIZE = 154;
+const SHEET_OVERLAP = 48;
 
-function buildScaledStyles(scale: number) {
-  const px = (n: number) => PixelRatio.roundToNearestPixel(n * scale);
-  return {
-    scale,
-    avatarSize: px(AVATAR_SIZE),
-    rowGap: px(ROW_GAP),
-    wingGap: px(WING_GAP),
-    levelChip: { width: px(LEVEL_CHIP_WIDTH), height: px(75), gap: px(10) },
-    levelPill: { width: px(58), height: px(24), paddingHorizontal: px(10) },
-    lvlWord: { fontSize: px(10) },
-    lvlNum: { fontSize: px(14) },
-    xpTrack: { width: px(56) },
-    xpCaption: { fontSize: px(8) },
-    sideSlot: { width: px(SIDE_SLOT_WIDTH), height: px(77) },
-    flagImage: { width: px(41), height: px(23) },
-    clubLogo: { width: px(27), height: px(48) },
-    slotCaption: { fontSize: px(9) },
-    emptySlotLabel: { fontSize: px(10) },
-    addIcon: px(24),
-    energyChip: { width: px(ENERGY_CHIP_WIDTH), height: px(60) },
-    energyIcon: { width: px(20), height: px(20) },
-    energyValue: { fontSize: px(13) },
-    energyLine: { width: px(49) },
-    energyLabel: { fontSize: px(11) },
-    editBadge: { width: px(26), height: px(26), borderRadius: px(13) },
-    editIcon: Math.max(10, px(12)),
-    cameraIcon: px(36),
-  };
+export interface ProfileSocialLink {
+  platform: string;
+  url: string;
+  username?: string;
 }
-
-type ScaledStyles = ReturnType<typeof buildScaledStyles>;
 
 export interface ProfileHeroProps {
   topInset: number;
   avatarUri?: string | null;
   name: string;
   username: string;
+  bio?: string | null;
+  socialLinks?: ProfileSocialLink[];
   isVerified?: boolean;
   isDeveloper?: boolean;
   userId?: string | null;
   isOwnProfile?: boolean;
-  level: number;
-  xp: number;
-  nextLevelXp: number;
-  progressPct: number;
+  /** Kept for callers; affiliation bar renders level/country/club. */
+  level?: number;
+  xp?: number;
+  nextLevelXp?: number;
+  progressPct?: number;
   energyValue?: number | null;
   countryFlag?: string | null;
   countryLabel?: string | null;
@@ -95,10 +62,14 @@ export interface ProfileHeroProps {
   onBackPress?: () => void;
   onLevelPress?: () => void;
   onEnergyPress?: () => void;
-  chooseCountryLabel: string;
-  addClubLabel: string;
-  energyLabel: string;
-  /** Optional CTA under the name (e.g. Follow on public profiles). */
+  onEditPress?: () => void;
+  onBioPress?: () => void;
+  onAddSocialPress?: () => void;
+  chooseCountryLabel?: string;
+  addClubLabel?: string;
+  energyLabel?: string;
+  addBioLabel?: string;
+  /** Optional CTA under the bio (e.g. Follow on public profiles). */
   actionBelowName?: React.ReactNode;
 }
 
@@ -107,48 +78,45 @@ const ProfileHero = memo(function ProfileHero({
   avatarUri,
   name,
   username,
+  bio,
+  socialLinks = [],
   isVerified = false,
   isDeveloper = false,
   userId = null,
   isOwnProfile = false,
-  level,
-  xp,
-  nextLevelXp,
-  progressPct,
-  energyValue,
-  countryFlag,
-  countryLabel,
-  clubLogo,
-  clubName,
   isAvatarUploading = false,
   onAvatarPress,
-  onCountryPress,
-  onClubPress,
   onSharePress,
   onSettingsPress,
   onMorePress,
   onBackPress,
-  onLevelPress,
-  onEnergyPress,
-  chooseCountryLabel,
-  addClubLabel,
-  energyLabel,
+  onEditPress,
+  onBioPress,
+  onAddSocialPress,
+  addBioLabel,
   actionBelowName,
 }: ProfileHeroProps) {
+  const { language } = useTranslation();
+  const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
-  const sz = useMemo(() => {
-    const available = windowWidth - OVERLAY_PADDING_X * 2 - 4;
-    return buildScaledStyles(Math.max(0.75, Math.min(1, available / ROW_DESIGN_WIDTH)));
-  }, [windowWidth]);
-  const avatarSize = sz.avatarSize;
-  const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
-  const hasClub = !!(clubLogo || clubName?.trim());
-  const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
-  const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
-  const minHeight = actionBelowName ? COVER_HEIGHT + 72 : COVER_HEIGHT;
+  const sheetWidth = Math.min(windowWidth, 456);
+  const filledLinks = useMemo(
+    () => socialLinks.filter((l) => !!l.url?.trim()).slice(0, 3),
+    [socialLinks],
+  );
+  const trimmedBio = bio?.trim() ?? '';
+
+  const openSocial = async (url: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) await Linking.openURL(url);
+    } catch (error) {
+      logger.error('Error opening social link from profile hero', { url, error });
+    }
+  };
 
   return (
-    <View style={[styles.wrap, { minHeight }]} testID="profile-hero">
+    <View style={styles.wrap} testID="profile-hero">
       <View style={styles.coverHit} pointerEvents="none" testID="profile-cover">
         <Image
           source={PROFILE_STADIUM_COVER}
@@ -157,574 +125,374 @@ const ProfileHero = memo(function ProfileHero({
           cachePolicy="memory-disk"
           priority="high"
         />
-        {/* Clean bottom fade only — no mid-cover fog/shadow */}
         <LinearGradient
-          colors={['rgba(232,232,238,0)', 'rgba(232,232,238,0.2)', ProfileTheme.colors.profileBg]}
-          locations={[0, 0.78, 1]}
+          colors={['rgba(249,246,254,0)', 'rgba(249,246,254,0.35)', ProfileTheme.colors.profileBg]}
+          locations={[0.55, 0.82, 1]}
           style={StyleSheet.absoluteFill}
         />
       </View>
 
-      <View style={[styles.overlay, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
-        <View style={styles.nav}>
-          {onBackPress ? (
-            <TouchableOpacity onPress={onBackPress} hitSlop={10} style={styles.navIcon}>
-              <Ionicons name="chevron-back" size={24} color={ProfileTheme.colors.textPrimary} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.navIcon} />
-          )}
-          <View style={styles.navRight}>
-            {onSharePress ? (
-              <TouchableOpacity
-                onPress={onSharePress}
-                activeOpacity={0.8}
-                style={styles.navCircleBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Share profile"
-              >
-                <View style={styles.navCircleIcon}>
-                  <Ionicons name="share-outline" size={24} color={ProfileTheme.colors.textPrimary} />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-            {onSettingsPress ? (
-              <TouchableOpacity
-                onPress={onSettingsPress}
-                activeOpacity={0.8}
-                style={styles.navCircleBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Settings"
-              >
-                <View style={styles.navCircleIcon}>
-                  <Ionicons name="settings-outline" size={24} color={ProfileTheme.colors.textPrimary} />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-            {onMorePress ? (
-              <TouchableOpacity
-                onPress={onMorePress}
-                activeOpacity={0.8}
-                style={styles.navCircleBtn}
-                accessibilityRole="button"
-              >
-                <View style={styles.navCircleIcon}>
-                  <Ionicons name="ellipsis-horizontal" size={24} color={ProfileTheme.colors.textPrimary} />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </View>
-
-        <View style={[styles.identityRow, { gap: sz.rowGap }]}>
-          <View style={[styles.identityWing, { gap: sz.wingGap }]}>
-            <TouchableOpacity
-              style={[styles.levelChip, sz.levelChip]}
-              onPress={onLevelPress}
-              disabled={!onLevelPress}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.levelPill, sz.levelPill]}>
-                <Text style={[styles.lvlWord, sz.lvlWord]} allowFontScaling={false}>LVL</Text>
-                <Text style={[styles.lvlNum, sz.lvlNum]} allowFontScaling={false}>{level}</Text>
-              </View>
-              <View style={styles.xpBlock}>
-                <View style={[styles.xpTrack, sz.xpTrack]}>
-                  <LinearGradient
-                    colors={['#5E2990', '#A047F6']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]}
-                  />
-                </View>
-                <Text
-                  style={[styles.xpCaption, sz.xpCaption]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                  allowFontScaling={false}
-                >
-                  {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <SideSlot
-              emptyLabel={chooseCountryLabel}
-              filled={hasCountry}
-              editable={isOwnProfile}
-              onPress={onCountryPress}
-              sz={sz}
-            >
-              {hasCountry ? (
-                <>
-                  {countryFlagUri ? (
-                    <Image
-                      source={{ uri: countryFlagUri }}
-                      style={sz.flagImage}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
-                  )}
-                  {!!countryLabel?.trim() && (
-                    <Text
-                      style={[styles.slotCaption, sz.slotCaption]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
-                      allowFontScaling={false}
-                    >
-                      {countryLabel}
-                    </Text>
-                  )}
-                </>
-              ) : null}
-            </SideSlot>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}
-            onPress={onAvatarPress}
-            activeOpacity={0.9}
-            disabled={!onAvatarPress}
-          >
-            {avatarUri ? (
-              <Image
-                source={{ uri: avatarUri }}
-                style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize }]}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                priority="high"
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder, { width: avatarSize, height: avatarSize, borderRadius: avatarSize }]}>
-                <Ionicons name="camera-outline" size={sz.cameraIcon} color="rgba(216,174,255,0.85)" />
-              </View>
-            )}
-            <LinearGradient
-              colors={['rgba(74,7,138,0.18)', 'rgba(19,2,36,0.18)']}
-              style={[styles.avatarSheen, { borderRadius: avatarSize }]}
-            />
-            {isOwnProfile && (
-              <LinearGradient
-                colors={['rgba(126,21,226,0.92)', 'rgba(69,11,124,0.92)']}
-                style={[styles.editBadge, sz.editBadge]}
-              >
-                <Ionicons name="pencil" size={sz.editIcon} color="#fff" />
-              </LinearGradient>
-            )}
-            {isAvatarUploading && (
-              <View style={styles.avatarBusy}>
-                <ActivityIndicator color={ProfileTheme.colors.profilePrimary} />
-              </View>
-            )}
+      <View style={[styles.topBar, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
+        {onBackPress ? (
+          <TouchableOpacity onPress={onBackPress} hitSlop={10} style={styles.navCircleBtn}>
+            <Ionicons name="chevron-back" size={22} color={ProfileTheme.colors.textPrimary} />
           </TouchableOpacity>
-
-          <View style={[styles.identityWing, styles.identityWingEnd, { gap: sz.wingGap }]}>
-            <SideSlot
-              emptyLabel={addClubLabel}
-              filled={hasClub}
-              editable={isOwnProfile}
-              onPress={onClubPress}
-              sz={sz}
+        ) : (
+          <View style={styles.navSpacer} />
+        )}
+        <View style={styles.navRight}>
+          {onSharePress ? (
+            <TouchableOpacity
+              onPress={onSharePress}
+              activeOpacity={0.85}
+              style={styles.navCircleBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Share profile"
             >
-              {hasClub ? (
-                <>
-                  {clubLogo ? (
-                    <Image
-                      source={{ uri: clubLogo } as ImageSourcePropType}
-                      style={sz.clubLogo}
-                      contentFit="contain"
-                    />
-                  ) : (
-                    <Ionicons name="football-outline" size={22} color={ProfileTheme.colors.profilePrimary} />
-                  )}
-                  {!!clubName?.trim() && (
-                    <Text
-                      style={[styles.slotCaption, sz.slotCaption]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
-                      allowFontScaling={false}
-                    >
-                      {clubName}
-                    </Text>
-                  )}
-                </>
-              ) : null}
-            </SideSlot>
-
-            {energyValue != null ? (
-              <TouchableOpacity
-                style={[styles.energyChip, sz.energyChip]}
-                onPress={onEnergyPress}
-                disabled={!onEnergyPress}
-                activeOpacity={0.85}
-              >
-                <View style={styles.energyRow}>
-                  <Image source={PROFILE_ICONS.energy} style={sz.energyIcon} />
-                  <Text
-                    style={[styles.energyValue, sz.energyValue]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                    allowFontScaling={false}
-                  >
-                    {formatProfileStat(energyValue)}
-                  </Text>
-                </View>
-                <Image
-                  source={PROFILE_ICONS.energyLine}
-                  style={[styles.energyLine, sz.energyLine]}
-                  contentFit="fill"
-                />
-                <Text
-                  style={[styles.energyLabel, sz.energyLabel]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                  allowFontScaling={false}
-                >
-                  {energyLabel}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+              <Ionicons name="share-outline" size={22} color={ProfileTheme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : null}
+          {onSettingsPress ? (
+            <TouchableOpacity
+              onPress={onSettingsPress}
+              activeOpacity={0.85}
+              style={styles.navCircleBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
+              <Ionicons name="notifications-outline" size={22} color={ProfileTheme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : null}
+          {onMorePress ? (
+            <TouchableOpacity
+              onPress={onMorePress}
+              activeOpacity={0.85}
+              style={styles.navCircleBtn}
+              accessibilityRole="button"
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={ProfileTheme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
+      </View>
 
-        <TouchableOpacity
-          style={styles.nameBlock}
-          onPress={onMorePress}
-          disabled={!onMorePress || !isOwnProfile}
-          activeOpacity={onMorePress && isOwnProfile ? 0.75 : 1}
-          accessibilityRole={onMorePress && isOwnProfile ? 'button' : undefined}
-        >
-          <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-              {name}
-            </Text>
-            {isVerified && <VerifiedBadge size={18} />}
-            {isDeveloper && <DeveloperBadge size={18} />}
-            <ProfileEliteMarks userId={userId} />
+      <View style={[styles.sheet, { width: sheetWidth, marginTop: COVER_HEIGHT - SHEET_OVERLAP }]}>
+        <View style={styles.identityBlock}>
+          <View style={[styles.identityRow, isAr ? styles.identityRowRtl : styles.identityRowLtr]}>
+            <View style={styles.avatarColumn}>
+              <TouchableOpacity
+                style={styles.avatarWrap}
+                onPress={onAvatarPress}
+                activeOpacity={0.9}
+                disabled={!onAvatarPress}
+                accessibilityRole={onAvatarPress ? 'button' : undefined}
+              >
+                {avatarUri ? (
+                  <View style={styles.avatarGlow}>
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={styles.avatar}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      priority="high"
+                    />
+                  </View>
+                ) : (
+                  <Image
+                    source={PROFILE_AVATAR_PLACEHOLDER}
+                    style={styles.avatarPlaceholder}
+                    contentFit="contain"
+                  />
+                )}
+                {isAvatarUploading ? (
+                  <View style={styles.avatarBusy}>
+                    <ActivityIndicator color={ProfileTheme.colors.profilePrimary} />
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.metaColumn, isAr ? styles.alignEnd : styles.alignStart]}>
+              <View style={[styles.nameBlock, isAr ? styles.alignEnd : styles.alignStart]}>
+                <View style={[styles.nameRow, isAr ? styles.rowEnd : styles.rowStart]}>
+                  <Text
+                    style={[styles.name, { textAlign: isAr ? 'right' : 'left' }]}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.2}
+                  >
+                    {name}
+                  </Text>
+                  {isVerified ? <VerifiedBadge size={16} /> : null}
+                  {isDeveloper ? <DeveloperBadge size={16} /> : null}
+                  <ProfileEliteMarks userId={userId} />
+                </View>
+                <Text
+                  style={[styles.handle, { textAlign: isAr ? 'right' : 'left' }]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={1.2}
+                >
+                  @{username}
+                </Text>
+              </View>
+
+              <View style={styles.socialRow}>
+                {filledLinks.map((link) => {
+                  const brand = getSocialBrandIcon(link.platform);
+                  return (
+                    <TouchableOpacity
+                      key={`${link.platform}-${link.url}`}
+                      style={styles.socialBtn}
+                      onPress={() => openSocial(link.url)}
+                      activeOpacity={0.85}
+                    >
+                      <Image
+                        source={brand.source}
+                        style={{ width: brand.width, height: brand.height }}
+                        contentFit="contain"
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+                {isOwnProfile && filledLinks.length < 3 ? (
+                  <TouchableOpacity
+                    style={[styles.socialBtn, styles.socialBtnEmpty]}
+                    onPress={onAddSocialPress}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="add" size={18} color={ProfileTheme.colors.profilePrimary} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+
+            {isOwnProfile && onEditPress ? (
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={onEditPress}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Edit profile"
+              >
+                <Ionicons name="pencil" size={20} color={ProfileTheme.colors.profilePrimary} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.editBtnSpacer} />
+            )}
           </View>
-          <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-            @{username}
-          </Text>
-        </TouchableOpacity>
 
-        {actionBelowName ? <View style={styles.actionBelowName}>{actionBelowName}</View> : null}
+          {trimmedBio || isOwnProfile ? (
+            <TouchableOpacity
+              style={styles.bioWrap}
+              onPress={onBioPress}
+              disabled={!onBioPress}
+              activeOpacity={onBioPress ? 0.8 : 1}
+            >
+              <Text style={[styles.bio, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={3}>
+                {trimmedBio || addBioLabel || ''}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {actionBelowName ? <View style={styles.actionBelowName}>{actionBelowName}</View> : null}
+        </View>
       </View>
     </View>
   );
 });
 
-function SideSlot({
-  emptyLabel,
-  filled,
-  editable,
-  onPress,
-  sz,
-  children,
-}: {
-  emptyLabel: string;
-  filled: boolean;
-  editable: boolean;
-  onPress?: () => void;
-  sz: ScaledStyles;
-  children: React.ReactNode;
-}) {
-  if (!filled && !editable) return null;
-  return (
-    <TouchableOpacity
-      style={[styles.sideSlot, sz.sideSlot, filled ? styles.sideSlotFilled : styles.sideSlotEmpty]}
-      onPress={onPress}
-      disabled={!onPress}
-      activeOpacity={0.85}
-    >
-      {filled ? (
-        children
-      ) : (
-        <>
-          <Ionicons name="add" size={sz.addIcon} color="#9E9E9E" />
-          <Text
-            style={[styles.emptySlotLabel, sz.emptySlotLabel]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-            allowFontScaling={false}
-          >
-            {emptyLabel}
-          </Text>
-        </>
-      )}
-    </TouchableOpacity>
-  );
-}
-
 export default ProfileHero;
 
 const styles = StyleSheet.create({
   wrap: {
-    minHeight: COVER_HEIGHT,
     backgroundColor: ProfileTheme.colors.profileBg,
   },
   coverHit: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: COVER_HEIGHT + 40,
   },
   cover: {
     width: '100%',
     height: '100%',
   },
-  overlay: {
-    flexGrow: 1,
-    paddingHorizontal: OVERLAY_PADDING_X,
-    paddingBottom: HERO_BOTTOM_SPACE,
-  },
-  nav: {
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 4,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 55,
   },
   navRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
+  navSpacer: {
+    width: 45,
+    height: 45,
+  },
   navCircleBtn: {
-    width: 37,
-    height: 37,
-    borderRadius: 40,
-    paddingVertical: 4,
-    paddingHorizontal: 5,
+    width: 45,
+    height: 45,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navCircleIcon: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+  sheet: {
+    alignSelf: 'center',
+    backgroundColor: ProfileTheme.colors.profileSheet,
+    borderTopLeftRadius: ProfileTheme.radius.sheet,
+    borderTopRightRadius: ProfileTheme.radius.sheet,
+    paddingTop: 12,
+    paddingBottom: 8,
+    minHeight: 210,
   },
-  navIcon: {
-    width: 37,
-    height: 37,
-    alignItems: 'center',
-    justifyContent: 'center',
+  identityBlock: {
+    paddingHorizontal: 20,
+    gap: 16,
   },
   identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: ROW_GAP,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: -56,
   },
-  identityWing: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: WING_GAP,
+  identityRowRtl: {
+    flexDirection: 'row-reverse',
   },
-  identityWingEnd: {
+  identityRowLtr: {
+    flexDirection: 'row',
+  },
+  alignEnd: {
+    alignItems: 'flex-end',
+  },
+  alignStart: {
+    alignItems: 'flex-start',
+  },
+  rowEnd: {
     justifyContent: 'flex-end',
   },
-  levelChip: {
-    width: 74,
-    height: 75,
-    borderRadius: 11,
-    backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
+  rowStart: {
+    justifyContent: 'flex-start',
+  },
+  avatarColumn: {
+    width: AVATAR_GLOW_SIZE,
+    height: AVATAR_GLOW_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-  },
-  levelPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 58,
-    height: 24,
-    backgroundColor: '#F5F0FF',
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profilePrimary,
-    borderRadius: 42,
-    paddingHorizontal: 10,
-    gap: 3,
-  },
-  lvlWord: {
-    color: ProfileTheme.colors.profilePrimary,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  lvlNum: {
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  xpBlock: {
-    width: '100%',
-    alignItems: 'center',
-    gap: 3,
-  },
-  xpTrack: {
-    width: 56,
-    height: 6,
-    borderRadius: 53,
-    backgroundColor: '#E6E6EA',
-    overflow: 'hidden',
-  },
-  xpFill: {
-    height: '100%',
-    borderRadius: 53,
-  },
-  xpCaption: {
-    color: ProfileTheme.colors.profileMuted,
-    fontSize: 8,
-    fontWeight: '500',
-  },
-  sideSlot: {
-    width: 58,
-    height: 77,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
-  },
-  sideSlotFilled: {
-    backgroundColor: ProfileTheme.colors.profileFilledChip,
-    gap: 9,
-  },
-  sideSlotEmpty: {
-    backgroundColor: ProfileTheme.colors.profileEmptyChip,
-    borderStyle: 'dashed',
-    gap: 6,
-  },
-  slotSpacer: {
-    width: 0,
-    height: 0,
-  },
-  flag: {
-    fontSize: 22,
-    lineHeight: 26,
-  },
-  slotCaption: {
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 9,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptySlotLabel: {
-    color: ProfileTheme.colors.profileMuted,
-    fontSize: 10,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   avatarWrap: {
+    width: AVATAR_GLOW_SIZE,
+    height: AVATAR_GLOW_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarGlow: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#6A2BD9',
+    shadowOpacity: 0.46,
+    shadowRadius: 12.4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+    backgroundColor: '#FAF5FF',
   },
   avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: 118,
-    borderWidth: 3,
-    borderColor: ProfileTheme.colors.avatarRing,
+    width: '100%',
+    height: '100%',
   },
   avatarPlaceholder: {
-    backgroundColor: ProfileTheme.colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarSheen: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 118,
-  },
-  editBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: AVATAR_GLOW_SIZE,
+    height: AVATAR_GLOW_SIZE,
   },
   avatarBusy: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 118,
+    borderRadius: AVATAR_GLOW_SIZE / 2,
     backgroundColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  energyChip: {
-    width: 68,
-    height: 60,
-    flexShrink: 0,
-    borderRadius: 11,
-    backgroundColor: ProfileTheme.colors.profileChip,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  energySpacer: {
-    width: 0,
-    height: 0,
-  },
-  energyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 21,
-  },
-  energyValue: {
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  energyLine: {
-    width: 49,
-    height: 1,
-  },
-  energyLabel: {
-    color: ProfileTheme.colors.profileMuted,
-    fontSize: 11,
+  metaColumn: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 70,
+    gap: 12,
   },
   nameBlock: {
-    alignItems: 'center',
-    marginTop: 14,
-  },
-  actionBelowName: {
-    marginTop: 14,
-    paddingHorizontal: 10,
     width: '100%',
+    gap: 6,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    maxWidth: '90%',
+    gap: 6,
+    maxWidth: '100%',
   },
   name: {
     flexShrink: 1,
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
+    color: '#000000',
+    fontSize: 20,
+    fontWeight: '600',
   },
   handle: {
     color: ProfileTheme.colors.profileHandle,
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  socialBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  socialBtnEmpty: {
+    backgroundColor: ProfileTheme.colors.profilePrimarySoft,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
+    borderStyle: 'dashed',
+  },
+  editBtn: {
+    width: 45,
+    height: 45,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 70,
+  },
+  editBtnSpacer: {
+    width: 12,
+    marginTop: 70,
+  },
+  bioWrap: {
+    width: '100%',
+  },
+  bio: {
+    color: '#434343',
     fontSize: 16,
     fontWeight: '600',
-    marginTop: 6,
+    textAlign: 'right',
+    lineHeight: 22,
+  },
+  actionBelowName: {
+    width: '100%',
+    marginTop: 4,
   },
 });

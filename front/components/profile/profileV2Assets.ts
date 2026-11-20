@@ -1,5 +1,9 @@
-export const PROFILE_STADIUM_COVER = require('../../assets/images/profile-v2/stadium-cover.jpg');
+/** Fixed stadium cover from Figma 2383:940 — users cannot change it. */
+export const PROFILE_STADIUM_COVER = require('../../assets/images/profile-v2/stadium-cover-figma.jpg');
 export const PROFILE_BIO_BALL = require('../../assets/images/profile-v2/bio-ball.jpg');
+/** Empty avatar state from Figma 2408:4782 (includes purple glow). */
+export const PROFILE_AVATAR_PLACEHOLDER = require('../../assets/images/profile-v2/avatar-placeholder.svg');
+export const PROFILE_RANK_ICON = require('../../assets/images/profile-v2/rank-icon.svg');
 
 export const PROFILE_ICONS = {
   shield: require('../../assets/images/profile-v2/icon-shield.png'),
@@ -33,4 +37,6 @@ export const PROFILE_ICONS = {
   lineChart: require('../../assets/images/profile-v2/icon-line-chart.svg'),
   predictionDivider: require('../../assets/images/profile-v2/prediction-divider.svg'),
   chevronDownPurple: require('../../assets/images/profile-v2/icon-chevron-down-purple.svg'),
+  avatarPlaceholder: PROFILE_AVATAR_PLACEHOLDER,
+  rankIcon: PROFILE_RANK_ICON,
 } as const;
