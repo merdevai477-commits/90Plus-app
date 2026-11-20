@@ -105,7 +105,6 @@ export function PlayerProfileHeader({
         styles.header,
         { paddingTop: Math.max(insets.top, 10), height: Math.max(insets.top, 10) + HEADER_BAR_HEIGHT },
         scrollY ? styles.headerOverlay : null,
-        { flexDirection: rtl ? 'row' : 'row-reverse' },
       ]}
     >
       {scrollY ? (
@@ -115,14 +114,16 @@ export function PlayerProfileHeader({
         />
       ) : null}
 
-      <View style={[styles.headerTrailing, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
-        <Text
-          style={[styles.headerTitle, { fontFamily: fontBold, color: C.softLilac }]}
-          numberOfLines={1}
-          allowFontScaling={false}
-        >
-          {pageTitle}
-        </Text>
+      {/* RTL: back on the right pointing right; LTR: back on the left pointing left */}
+      <View
+        style={[
+          styles.headerTrailing,
+          {
+            flexDirection: rtl ? 'row-reverse' : 'row',
+            alignSelf: rtl ? 'flex-end' : 'flex-start',
+          },
+        ]}
+      >
         <Pressable
           onPress={onBack}
           hitSlop={12}
@@ -132,10 +133,17 @@ export function PlayerProfileHeader({
         >
           <Image
             source={PP_ICON.arrowBack}
-            style={[styles.backIcon, !rtl && { transform: [{ scaleX: -1 }] }]}
+            style={[styles.backIcon, rtl && { transform: [{ scaleX: -1 }] }]}
             contentFit="contain"
           />
         </Pressable>
+        <Text
+          style={[styles.headerTitle, { fontFamily: fontBold, color: C.softLilac }]}
+          numberOfLines={1}
+          allowFontScaling={false}
+        >
+          {pageTitle}
+        </Text>
       </View>
     </View>
   );
@@ -1256,7 +1264,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    alignItems: 'center',
     justifyContent: 'flex-end',
   },
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
