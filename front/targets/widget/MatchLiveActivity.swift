@@ -31,9 +31,7 @@ private struct ActivityCopy {
 }
 
 private extension MatchActivityAttributes {
-  var isArabic: Bool { language.hasPrefix("ar") }
   var deepLink: URL? { URL(string: "ninetyplus://match-details?fixtureId=\(fixtureId)") }
-  var direction: LayoutDirection { isArabic ? .rightToLeft : .leftToRight }
 }
 
 struct MatchLiveActivity: Widget {
@@ -52,12 +50,10 @@ struct MatchLiveActivity: Widget {
       let state = context.state
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          TeamBadge(name: attributes.homeName, logo: attributes.homeLogo, crest: 34)
-            .environment(\.layoutDirection, attributes.direction)
+          IslandSide(slot: .leading, attributes: attributes, state: state, crest: 34)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          TeamBadge(name: attributes.awayName, logo: attributes.awayLogo, crest: 34)
-            .environment(\.layoutDirection, attributes.direction)
+          IslandSide(slot: .trailing, attributes: attributes, state: state, crest: 34)
         }
         DynamicIslandExpandedRegion(.center) {
           VStack(spacing: 4) {
@@ -68,7 +64,7 @@ struct MatchLiveActivity: Widget {
               isStale: context.isStale
             )
           }
-          .environment(\.layoutDirection, attributes.direction)
+          .environment(\.layoutDirection, .leftToRight)
         }
         DynamicIslandExpandedRegion(.bottom) {
           Text(attributes.league)
@@ -77,15 +73,9 @@ struct MatchLiveActivity: Widget {
             .lineLimit(1)
         }
       } compactLeading: {
-        HStack(spacing: 4) {
-          CrestImage(logo: attributes.homeLogo, size: 18)
-          Text("\(state.homeScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
-        }
+        IslandSide(slot: .leading, attributes: attributes, state: state, crest: 18, compact: true)
       } compactTrailing: {
-        HStack(spacing: 4) {
-          Text("\(state.awayScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
-          CrestImage(logo: attributes.awayLogo, size: 18)
-        }
+        IslandSide(slot: .trailing, attributes: attributes, state: state, crest: 18, compact: true)
       } minimal: {
         Text("\(state.homeScore)-\(state.awayScore)")
           .font(.system(size: 12, weight: .bold))
@@ -132,7 +122,55 @@ private struct LockScreenMatchView: View {
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)
-    .environment(\.layoutDirection, attributes.direction)
+    // Same orientation as the home-screen widget and the in-app header: home on the left.
+    .environment(\.layoutDirection, .leftToRight)
+  }
+}
+
+/// Dynamic Island swaps its leading edge to the right for an Arabic phone locale.
+/// Put home on the physical left anyway, and keep the score beside that crest.
+private struct IslandSide: View {
+  enum Slot { case leading, trailing }
+
+  let slot: Slot
+  let attributes: MatchActivityAttributes
+  let state: MatchActivityAttributes.ContentState
+  let crest: CGFloat
+  var compact = false
+
+  private var showsHome: Bool {
+    let leadingIsLeft = Locale.current.language.characterDirection != .rightToLeft
+    return slot == .leading ? leadingIsLeft : !leadingIsLeft
+  }
+
+  var body: some View {
+    Group {
+      if compact {
+        compactBody
+      } else {
+        TeamBadge(
+          name: showsHome ? attributes.homeName : attributes.awayName,
+          logo: showsHome ? attributes.homeLogo : attributes.awayLogo,
+          crest: crest
+        )
+      }
+    }
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  @ViewBuilder
+  private var compactBody: some View {
+    if showsHome {
+      HStack(spacing: 4) {
+        CrestImage(logo: attributes.homeLogo, size: crest)
+        Text("\(state.homeScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
+      }
+    } else {
+      HStack(spacing: 4) {
+        Text("\(state.awayScore)").font(.system(size: 14, weight: .bold)).monospacedDigit()
+        CrestImage(logo: attributes.awayLogo, size: crest)
+      }
+    }
   }
 }
 
@@ -173,7 +211,7 @@ private struct TeamBadge: View {
   }
 }
 
-/// An HStack (not one string) so the home score sits next to the home crest in RTL too.
+/// An HStack (not one string) so the home score stays next to the home crest.
 private struct ScoreLine: View {
   let state: MatchActivityAttributes.ContentState
   let size: CGFloat

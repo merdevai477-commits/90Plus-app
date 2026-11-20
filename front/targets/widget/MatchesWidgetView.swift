@@ -32,7 +32,10 @@ struct MatchesWidgetView: View {
 
   var body: some View {
     content
-      .environment(\.layoutDirection, entry.isArabic ? .rightToLeft : .leftToRight)
+      // Home stays on the left, including on an Arabic iPhone. A right-to-left
+      // environment mirrors the wordmark, the score, and the page arrows apart
+      // from the crests, so the card no longer matches the app.
+      .environment(\.layoutDirection, .leftToRight)
       .containerBackground(for: .widget) { GlassBackground() }
       .widgetURL(deepLink)
   }
@@ -131,6 +134,7 @@ private struct BrandMark: View {
     }
     .font(.system(size: size, weight: .heavy))
     .widgetAccentable()
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 
@@ -370,17 +374,18 @@ private struct PagerBar: View {
         .font(.system(size: 11, weight: .bold))
         .monospacedDigit()
         .foregroundStyle(Color.white.opacity(0.25))
-        .environment(\.layoutDirection, .leftToRight)
       Spacer(minLength: 0)
       Button(intent: ChangePageIntent(step: -1)) {
-        Image(systemName: "chevron.backward")
+        Image(systemName: "chevron.left")
+          .flipsForRightToLeftLayoutDirection(false)
           .font(.system(size: 10, weight: .bold))
           .frame(width: 26, height: 18)
           .glassCapsule()
       }
       .buttonStyle(.plain)
       Button(intent: ChangePageIntent(step: 1)) {
-        Image(systemName: "chevron.forward")
+        Image(systemName: "chevron.right")
+          .flipsForRightToLeftLayoutDirection(false)
           .font(.system(size: 10, weight: .bold))
           .frame(width: 26, height: 18)
           .glassCapsule()
@@ -388,6 +393,7 @@ private struct PagerBar: View {
       .buttonStyle(.plain)
     }
     .foregroundStyle(Color.white.opacity(0.8))
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 
@@ -1225,10 +1231,14 @@ private func lockScreenMatch(_ entry: MatchesEntry) -> FeedMatch? {
 }
 
 private func lockScreenLine(_ match: FeedMatch) -> String {
+  // Isolate each name and pin the line LTR. An Arabic home name otherwise
+  // becomes the paragraph direction and the score renders backwards.
+  let home = "\u{2068}\(match.home.name)\u{2069}"
+  let away = "\u{2068}\(match.away.name)\u{2069}"
   if let score = match.score {
-    return "\(match.home.name) \(score.home)-\(score.away) \(match.away.name)"
+    return "\u{200E}\(home) \(score.home)-\(score.away) \(away)"
   }
-  return "\(match.home.name) vs \(match.away.name)"
+  return "\u{200E}\(home) vs \(away)"
 }
 
 private struct RectangularView: View {
