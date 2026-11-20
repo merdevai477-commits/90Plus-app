@@ -314,10 +314,12 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   }, [youtubeLoaded]);
 
   useEffect(() => {
-    if (!visible || failed || !embedUrl || !showSurface) return;
     setYoutubeLoaded(false);
     youtubeLoadedRef.current = false;
-    setUiPhase('loading');
+  }, [embedUrl, index, sessionNonce]);
+
+  useEffect(() => {
+    if (!visible || failed || !embedUrl || !showSurface) return;
     const timer = setTimeout(() => {
       if (!youtubeLoadedRef.current) {
         skipWithReason(resolveTimeoutReason('youtube_load'));
@@ -365,10 +367,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const showLoadingChrome =
     visible &&
     !failed &&
-    (uiPhase === 'initializing' ||
-      uiPhase === 'loading' ||
-      (direct && !directReady) ||
-      (Boolean(embedUrl) && !youtubeLoaded));
+    ((Boolean(embedUrl) && !youtubeLoaded) || (direct && !directReady) || uiPhase === 'initializing');
 
   return (
     <Modal
@@ -423,7 +422,14 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               }}
               onHttpError={(event) => {
                 const status = event.nativeEvent.statusCode;
+                const failedUrl = event.nativeEvent.url || '';
                 if (status < 400) return;
+                const mainDocument =
+                  !failedUrl ||
+                  failedUrl.startsWith(embedUrl) ||
+                  (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`));
+                // YouTube loads ads and thumbnails that 403/404. Those are not a failed video.
+                if (!mainDocument) return;
                 if (status === 404) skipWithReason('SOURCE_NOT_FOUND');
                 else if (status === 410) skipWithReason('SOURCE_EXPIRED');
                 else if (status >= 500) skipWithReason('NETWORK_ERROR');
