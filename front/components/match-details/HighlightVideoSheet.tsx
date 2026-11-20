@@ -9,6 +9,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -130,6 +131,9 @@ function resetSessionRefs(refs: {
 /** Plays highlight / goal clips with typed failures, timeouts, and URL fallback. */
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const { t } = useTranslation();
+  const { width: screenWidth } = useWindowDimensions();
+  const playerWidth = Math.max(280, screenWidth - 24);
+  const playerHeight = Math.round(playerWidth * 9 / 16);
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const [failureReason, setFailureReason] = useState<PlaybackFailureReason | null>(null);
@@ -385,7 +389,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   return (
     <Modal
       visible={visible && urls.length > 0}
-      transparent
+      transparent={false}
       animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
@@ -393,15 +397,14 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
         {showSurface && embedUrl && !failed ? (
-          <View style={styles.player}>
-            <View pointerEvents="none" style={styles.playerPlate} />
+          <View style={[styles.player, { width: playerWidth, height: playerHeight }]}>
             <WebView
               key={`${listKey}:${embedUrl}:${sessionNonce}`}
               source={{
                 html: youtubeEmbedDocument(videoId || ''),
                 baseUrl: 'https://90plus.pro',
               }}
-              style={styles.webView}
+              style={{ width: playerWidth, height: playerHeight, opacity: 0.99, backgroundColor: '#000000' }}
               androidLayerType="hardware"
               onLoadStart={() => {
                 setYoutubeLoaded(true);
@@ -460,6 +463,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           <DirectClipPlayer
             key={`${playableDirectUrl || fileUrl}:${sessionNonce}`}
             url={playableDirectUrl || fileUrl}
+            width={playerWidth}
+            height={playerHeight}
             sessionId={sessionId.current}
             retryCount={retryCount}
             startedAt={sessionStartedAt.current}
@@ -476,7 +481,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           </View>
         ) : null}
         {visible && failed ? (
-          <View style={styles.player}>
+          <View style={[styles.player, { width: playerWidth, height: playerHeight }]}>
             <View pointerEvents="none" style={styles.playerPlate} />
             <Text style={styles.error}>{messageFor(failureReason ?? 'UNKNOWN_ERROR')}</Text>
             {showRetry ? (
@@ -515,6 +520,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
 
 function DirectClipPlayer({
   url,
+  width,
+  height,
   sessionId,
   retryCount,
   startedAt,
@@ -524,6 +531,8 @@ function DirectClipPlayer({
   onPhase,
 }: {
   url: string;
+  width: number;
+  height: number;
   sessionId: string;
   retryCount: number;
   startedAt: number;
@@ -738,7 +747,7 @@ function DirectClipPlayer({
   }, [sessionId, sourceType, url, retryCount]);
 
   return (
-    <View style={styles.player}>
+    <View style={[styles.player, { width, height }]}>
       <View pointerEvents="none" style={styles.playerPlate} />
       <VideoView
         player={player}
@@ -770,7 +779,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+    backgroundColor: '#000000',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
