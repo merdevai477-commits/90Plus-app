@@ -157,4 +157,7 @@ Covered: unsupported/404/410/403≠geo, YouTube 150/geo/embed, preflight 206/200
 
 ## Git
 
-See commit message after push for hash. Diff focuses on the files listed in section 2.
+- **Commit:** `fe27f82c360418b9bf73f3351e3f7e4a2558ad93`
+- **Message:** Fix false geo labels and add highlight playback fallbacks.
+- **Pushed:** `origin/main`
+- Diff focuses on the files listed in section 2.
