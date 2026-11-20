@@ -106,9 +106,24 @@ export default function PlayerCareerScreen() {
     useEffect(() => {
         if (athleteId <= 0) return;
         let active = true;
-        ApiFootballService.get365PlayerSocials(athleteId).then((links) => {
-            if (active) setSocials(links);
-        });
+        setSocials(null);
+        ApiFootballService.get365PlayerSocials(athleteId)
+            .then((links) => {
+                if (!active) return;
+                // Normalize so the hero can show only platforms that have a URL.
+                setSocials(
+                    links
+                        ? {
+                              athleteId: links.athleteId ?? athleteId,
+                              facebookUrl: links.facebookUrl || null,
+                              instagramUrl: links.instagramUrl || null,
+                          }
+                        : { athleteId, facebookUrl: null, instagramUrl: null },
+                );
+            })
+            .catch(() => {
+                if (active) setSocials({ athleteId, facebookUrl: null, instagramUrl: null });
+            });
         return () => {
             active = false;
         };

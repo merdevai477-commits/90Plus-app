@@ -261,18 +261,18 @@ export default function PlayerProfileView({
             />
           </View>
 
-          {/* Cutout fills ~left half, tucks under the attributes strip */}
+          {/* Cutout stays on the photo edge so he faces the identity panel with a clear gap */}
           <Pressable
             style={[
               styles.heroCutoutWrap,
               {
-                width: Math.round(Math.min(width * 0.58, 268 * scale)),
-                height: Math.round(heroHeight * 1.14),
-                bottom: Math.round(-36 * scale),
+                width: Math.round(Math.min(width * 0.4, 176 * scale)),
+                height: Math.round(heroHeight * 1.08),
+                bottom: Math.round(-26 * scale),
               },
               rtl
-                ? { left: Math.round(-4 * scale) }
-                : { right: Math.round(-4 * scale) },
+                ? { left: Math.round(4 * scale) }
+                : { right: Math.round(4 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
@@ -281,8 +281,8 @@ export default function PlayerProfileView({
               <Image
                 source={{ uri: photoUri }}
                 style={styles.heroCutout}
-                contentFit="cover"
-                contentPosition={rtl ? { bottom: 0, right: '8%' } : { bottom: 0, left: '8%' }}
+                contentFit="contain"
+                contentPosition="bottom"
                 cachePolicy="memory-disk"
                 priority="high"
                 transition={280}
@@ -304,14 +304,15 @@ export default function PlayerProfileView({
             style={[
               styles.heroIdentity,
               {
-                top: Math.max(insets.top, 10) + Math.round(28 * scale),
-                width: Math.round(210 * scale),
-                gap: Math.round(12 * scale),
+                top: Math.max(insets.top, 10) + Math.round(22 * scale),
+                // Keep identity clear of the cutout (~40% photo + ~12% air + ~42% text)
+                width: Math.round(Math.min(width * 0.42, 188 * scale)),
+                gap: Math.round(10 * scale),
                 alignItems: 'flex-end',
               },
               rtl
-                ? { right: Math.round(20 * scale) }
-                : { left: Math.round(20 * scale) },
+                ? { right: Math.round(14 * scale) }
+                : { left: Math.round(14 * scale) },
             ]}
           >
             <View
@@ -707,10 +708,11 @@ function SeasonStatsCard({
       ) : null}
 
       <View style={[styles.seasonCard, cardShadow, { backgroundColor: C.card }]}>
+        {/* RTL: first cell sits on the right — matches / goals / assists */}
         <View style={[styles.seasonTopRow, { flexDirection: rowDir, borderBottomColor: C.pale }]}>
           <SeasonStatCell
-            value={fmtNum(season.assists)}
-            label={pc.statAssists}
+            value={fmtNum(season.matches)}
+            label={pc.statMatches}
             icon={PP_ICON.court}
             C={C}
           />
@@ -718,26 +720,18 @@ function SeasonStatsCard({
           <SeasonStatCell value={fmtNum(season.goals)} label={pc.statGoals} icon={PP_ICON.goals} C={C} />
           <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
           <SeasonStatCell
-            value={fmtNum(season.matches)}
-            label={pc.statMatches}
+            value={fmtNum(season.assists)}
+            label={pc.statAssists}
             icon={PP_ICON.court}
             C={C}
           />
         </View>
+        {/* RTL right→left: minutes / shots / chances / cards */}
         <View style={[styles.seasonBottomRow, { flexDirection: rowDir }]}>
           <SeasonStatCell
-            value={cardsValue}
-            label={pc.cardsYellowRed}
-            cards
-            C={C}
-            valueSize={18}
-            labelSize={10}
-          />
-          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
-          <SeasonStatCell
-            value={fmtNum(season.chancesCreated)}
-            label={pc.chancesCreated}
-            icon={PP_ICON.sneaker}
+            value={fmtNum(season.minutes)}
+            label={pc.minutesPlayed}
+            icon={PP_ICON.time}
             C={C}
             valueSize={18}
             labelSize={10}
@@ -753,9 +747,18 @@ function SeasonStatsCard({
           />
           <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
           <SeasonStatCell
-            value={fmtNum(season.minutes)}
-            label={pc.minutesPlayed}
-            icon={PP_ICON.time}
+            value={fmtNum(season.chancesCreated)}
+            label={pc.chancesCreated}
+            icon={PP_ICON.sneaker}
+            C={C}
+            valueSize={18}
+            labelSize={10}
+          />
+          <View style={[styles.seasonDivider, { backgroundColor: C.pale }]} />
+          <SeasonStatCell
+            value={cardsValue}
+            label={pc.cardsYellowRed}
+            cards
             C={C}
             valueSize={18}
             labelSize={10}
