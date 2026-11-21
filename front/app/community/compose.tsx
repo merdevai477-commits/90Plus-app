@@ -305,7 +305,7 @@ function ComposeScreenInner() {
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.screen }]}>
       <StatusBar barStyle={colors.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
-      <View style={[styles.topBar, { flexDirection: isAr ? 'row-reverse' : 'row', backgroundColor: colors.header }]}>
+      <View style={[styles.topBar, { flexDirection: 'row', backgroundColor: colors.header }]}>
         <Pressable
           onPress={confirmLeave}
           style={[

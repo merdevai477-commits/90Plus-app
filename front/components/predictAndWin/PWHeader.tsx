@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { glassProps } from '../../constants/ui';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { IconBell } from './icons';
-import { PW_HEADER, usePWDirection, usePWScale, usePWTheme } from './theme';
+import { PW_HEADER, usePWScale, usePWTheme } from './theme';
 
 const PLUS_ACCENT = '#A855F7';
 
@@ -34,7 +34,6 @@ export function PWHeader({
   onBell?: () => void;
 }) {
   const theme = usePWTheme();
-  const { isRTL, row } = usePWDirection();
   const { s, f } = usePWScale();
   const insets = useSafeAreaInsets();
   const padTop = Math.max(insets.top, 10) + (theme.isDark ? 10 : 8);
@@ -55,7 +54,7 @@ export function PWHeader({
       ]}
     >
       <Ionicons
-        name={isRTL ? 'arrow-forward' : 'arrow-back'}
+        name="arrow-back"
         size={theme.isDark ? 22 : 20}
         color={theme.isDark ? '#fff' : theme.primary}
       />
@@ -90,7 +89,7 @@ export function PWHeader({
   );
 
   const content = theme.isDark ? (
-    <View style={[styles.row, { flexDirection: row }]}>
+    <View style={[styles.row, { flexDirection: 'row' }]}>
       {backButton}
       {titleBlock}
       <View style={{ flex: 1 }} />
@@ -106,7 +105,7 @@ export function PWHeader({
       </Pressable>
     </View>
   ) : (
-    <View style={[styles.row, { flexDirection: row }]}>
+    <View style={[styles.row, { flexDirection: 'row' }]}>
       {backButton}
       {titleBlock}
       <View style={{ flex: 1 }} />

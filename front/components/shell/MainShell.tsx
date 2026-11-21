@@ -38,9 +38,8 @@ export function MainShell({
   headerRight,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isDark } = useResolvedAppScheme();
-  const isRtl = language === 'ar';
   const titleColor = isDark ? TEXT_PRIMARY : '#24104E';
   const mutedColor = isDark ? TEXT_MUTED : '#6B7280';
   const bottomPad = Math.max(insets.bottom, 16) + TAB_BAR_HEIGHT + 56;
@@ -77,7 +76,7 @@ export function MainShell({
                 onPress={onBackPress}
                 hitSlop={12}
                 activeOpacity={0.75}
-                style={[styles.backRow, isRtl && styles.backRowRtl]}
+                style={styles.backRow}
                 accessibilityRole="button"
                 accessibilityLabel={label}
                 testID={backTestID}
@@ -86,7 +85,6 @@ export function MainShell({
                   color={mutedColor}
                   size={22}
                   strokeWidth={2.2}
-                  style={isRtl ? { transform: [{ scaleX: -1 }] } : undefined}
                 />
                 <Text style={[styles.backTxt, { color: mutedColor }]}>{label}</Text>
               </TouchableOpacity>
@@ -129,13 +127,6 @@ const styles = StyleSheet.create({
     marginLeft: -4,
     paddingVertical: 4,
     paddingRight: 12,
-  },
-  backRowRtl: {
-    flexDirection: 'row-reverse',
-    marginLeft: 0,
-    marginRight: -4,
-    paddingRight: 0,
-    paddingLeft: 12,
   },
   backTxt: {
     fontSize: 15,

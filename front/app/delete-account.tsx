@@ -152,14 +152,14 @@ export default function DeleteAccountScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.header, isRTL && styles.rowRtl]}>
+        <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
             accessibilityRole="button"
           >
             <Ionicons
-              name={isRTL ? 'arrow-forward' : 'arrow-back'}
+              name="arrow-back"
               size={22}
               color="#fff"
             />

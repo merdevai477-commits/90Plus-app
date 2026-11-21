@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
-import { I18nManager, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
@@ -40,7 +40,7 @@ export const CommunityHeader = memo(function CommunityHeader({
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useCommunityTheme();
   const topPad = Math.max(insets.top, 10) + 10;
-  const BackIcon = I18nManager.isRTL ? ChevronRight : ChevronLeft;
+  const BackIcon = ChevronLeft;
 
   return (
     <View

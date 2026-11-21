@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassRim, GlassSheen } from '../navigation/glass';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
-import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import DeveloperBadge from './DeveloperBadge';
 import ProfileEliteMarks from './ProfileEliteMarks';
@@ -70,7 +69,6 @@ export function ProfileCollapsedBar({
   onBack?: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { isRTL } = useTranslation();
   const { colors: C, isDark } = useProfileTheme();
   const nameFont = useAppFont(700);
   const [shown, setShown] = useState(false);
@@ -89,8 +87,6 @@ export function ProfileCollapsedBar({
     outputRange: [0.96, 1],
     extrapolate: 'clamp',
   });
-  const rowDirection = isRTL ? 'row-reverse' : 'row';
-
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
       const next = value > REVEAL_START + 16;
@@ -105,19 +101,6 @@ export function ProfileCollapsedBar({
     shadowColor: C.embossShadow,
     isDark,
   };
-
-  const back = onBack ? (
-    <Pressable
-      onPress={onBack}
-      hitSlop={4}
-      accessibilityRole="button"
-      style={({ pressed }) => pressed && styles.pressed}
-    >
-      <GlassIsland style={styles.roundIsland} {...islandProps}>
-        <Ionicons name="chevron-back" size={22} color={C.textPrimary} />
-      </GlassIsland>
-    </Pressable>
-  ) : null;
 
   return (
     <Animated.View
@@ -137,8 +120,19 @@ export function ProfileCollapsedBar({
         locations={[0, 0.72, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <View pointerEvents="box-none" style={[styles.row, { flexDirection: rowDirection }]}>
-        {isRTL ? null : back}
+      <View pointerEvents="box-none" style={[styles.row, { flexDirection: 'row' }]}>
+        {onBack ? (
+          <Pressable
+            onPress={onBack}
+            hitSlop={4}
+            accessibilityRole="button"
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <GlassIsland style={styles.roundIsland} {...islandProps}>
+              <Ionicons name="chevron-back" size={22} color={C.textPrimary} />
+            </GlassIsland>
+          </Pressable>
+        ) : null}
         <GlassIsland style={styles.titleIsland} {...islandProps}>
           <View style={styles.identity}>
             <View style={styles.avatarSlot}>
@@ -172,7 +166,6 @@ export function ProfileCollapsedBar({
             </View>
           </View>
         </GlassIsland>
-        {isRTL ? back : null}
       </View>
     </Animated.View>
   );

@@ -143,11 +143,7 @@ const ProfileHero = memo(function ProfileHero({
       </View>
 
       <View
-        style={[
-          styles.topBar,
-          isAr ? styles.rowReverse : styles.rowForward,
-          { paddingTop: topInset + 8 },
-        ]}
+        style={[styles.topBar, styles.rowForward, { paddingTop: topInset + 8 }]}
         pointerEvents="box-none"
       >
         {onBackPress ? (
@@ -156,16 +152,12 @@ const ProfileHero = memo(function ProfileHero({
             hitSlop={10}
             style={[styles.navCircleBtn, { backgroundColor: C.navBtnBg, shadowColor: C.embossShadow }]}
           >
-            <Ionicons
-              name={isAr ? 'chevron-forward' : 'chevron-back'}
-              size={18}
-              color={C.navBtnIcon}
-            />
+            <Ionicons name="chevron-back" size={18} color={C.navBtnIcon} />
           </TouchableOpacity>
         ) : (
           <View style={styles.navSpacer} />
         )}
-        <View style={[styles.navRight, isAr ? styles.rowReverse : styles.rowForward]}>
+        <View style={[styles.navRight, styles.rowForward]}>
           {onSettingsPress ? (
             <TouchableOpacity
               onPress={onSettingsPress}

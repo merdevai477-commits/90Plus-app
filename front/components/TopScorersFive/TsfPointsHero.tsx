@@ -80,9 +80,9 @@ export function TsfIslandBack({
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      style={[styles.island, rtl ? styles.islandEnd : styles.islandStart, light && styles.islandOnDark]}
+      style={[styles.island, styles.islandStart, light && styles.islandOnDark]}
     >
-      <Ionicons name={rtl ? 'chevron-forward' : 'chevron-back'} size={22} color={light ? '#FFFFFF' : '#24104E'} />
+      <Ionicons name="chevron-back" size={22} color={light ? '#FFFFFF' : '#24104E'} />
     </TouchableOpacity>
   );
 }

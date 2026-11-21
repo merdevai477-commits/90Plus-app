@@ -89,14 +89,13 @@ export function PlayerProfileHeader({
         />
       ) : null}
 
-      {/* Keep back on the photo side so it never covers the Figma identity panel */}
+      {/* Back always on the physical left */}
       <View
         style={[
           styles.headerTrailing,
           {
             flexDirection: 'row',
-            // Identity sits on the end (right in RTL / left in LTR) — back goes opposite.
-            alignSelf: rtl ? 'flex-start' : 'flex-end',
+            alignSelf: 'flex-start',
             backgroundColor: 'rgba(35,14,72,0.4)',
             borderRadius: 20,
             paddingHorizontal: 8,
@@ -113,7 +112,7 @@ export function PlayerProfileHeader({
         >
           <Image
             source={PP_ICON.arrowBack}
-            style={[styles.backIcon, rtl && { transform: [{ scaleX: -1 }] }]}
+            style={styles.backIcon}
             contentFit="contain"
           />
         </Pressable>
@@ -266,12 +265,12 @@ export default function PlayerProfileView({
             style={[
               styles.heroCutoutWrap,
               {
-                width: Math.round(Math.min(width * 0.4, 176 * scale)),
-                height: Math.round(heroHeight * 1.08),
-                bottom: Math.round(-26 * scale),
+                width: Math.round(Math.min(width * 1.0, 270 * scale)),
+                height: Math.round(heroHeight * 1.18),
+                bottom: Math.round(-1 * scale),
               },
               rtl
-                ? { left: Math.round(4 * scale) }
+                ? { left: Math.round(9 * scale) }
                 : { right: Math.round(4 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
