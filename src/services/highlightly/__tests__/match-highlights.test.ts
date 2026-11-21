@@ -201,7 +201,7 @@ describe('highlight schedule and quota', () => {
       foundSummary: false,
       matchDate: kickoff,
       attempts: 4,
-      now: new Date(kickoff.getTime() + 50 * 60 * 60 * 1000 + 1),
+      now: new Date(kickoff.getTime() + 96 * 60 * 60 * 1000 + 1),
     });
     expect(expired.status).toBe('unavailable');
   });
@@ -528,13 +528,13 @@ describe('highlight sync and read path', () => {
     );
   });
 
-  it('fetches a second page only while a due match is still uncovered', async () => {
+  it('pages through a busy date until the request budget is spent', async () => {
     process.env.HIGHLIGHTLY_API_KEY = 'test-key';
     const now = new Date('2026-11-16T20:00:00.000Z');
     resetHighlightQuotaForTests({ day: utcDayKey(now), used: 0, lastTickMs: null });
     mockPrisma.cachedFixture.findMany.mockResolvedValue([
-      { fixtureId: 1, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff },
-      { fixtureId: 2, homeTeamName: 'Sevilla', awayTeamName: 'Betis', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff },
+      { fixtureId: 1, homeTeamName: 'Barcelona', awayTeamName: 'Real Madrid', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff, leagueId: 140 },
+      { fixtureId: 2, homeTeamName: 'Sevilla', awayTeamName: 'Betis', leagueName: 'La Liga', leagueCountry: 'Spain', matchDate: kickoff, leagueId: 140 },
     ]);
     mockPrisma.fixtureHighlightSync.findMany.mockResolvedValue([]);
     mockPrisma.matchHighlight.findMany.mockResolvedValue([]);
@@ -580,13 +580,22 @@ describe('highlight sync and read path', () => {
 
     const outcome = await runMatchHighlightsSync({ fetchPage, now });
 
+    // BASIC: paginate La Liga (offset 0 then 40) within the 2-request tick budget.
     expect(outcome.requests).toBe(2);
+    expect(fetchPage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        date: highlightDateKey(kickoff),
+        leagueName: 'La Liga',
+        offset: 0,
+      }),
+    );
     expect(fetchPage).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         date: highlightDateKey(kickoff),
-        homeTeamName: 'Sevilla',
-        awayTeamName: 'Betis',
+        leagueName: 'La Liga',
+        offset: 40,
       }),
     );
   });

@@ -3,35 +3,73 @@ import { teamNamesLooselyMatch } from '../../utils/team-name-match.util';
 export const FINISHED_HIGHLIGHT_STATUSES = ['FT', 'AET', 'PEN'] as const;
 export const HIGHLIGHT_TIMEZONE = 'Africa/Cairo';
 export const KICKOFF_WINDOW_MS = 6 * 60 * 60 * 1000;
-/** 48h after full time. Two hours covers a normal match after kickoff. */
-export const HIGHLIGHT_WINDOW_MS = 50 * 60 * 60 * 1000;
+/**
+ * How long after kickoff we keep polling Highlightly.
+ * Verified recaps can land up to ~48h after FT; give ~4 days from kickoff.
+ */
+export const HIGHLIGHT_WINDOW_MS = 96 * 60 * 60 * 1000;
 export const MAX_REQUESTS_PER_TICK = 2;
-/** Pro/Ultra: more date + league pulls per tick (still capped by daily budget). */
-export const MAX_REQUESTS_PER_TICK_PAID = 8;
+/** Pro: higher throughput — still capped by HIGHLIGHTLY_DAILY_BUDGET (5000). */
+export const MAX_REQUESTS_PER_TICK_PAID = 16;
 export const MAX_DATES_PER_TICK = 2;
-export const MAX_DATES_PER_TICK_PAID = 4;
+export const MAX_DATES_PER_TICK_PAID = 8;
+/** Extra pages after the first (40 clips/page) for busy dates. */
+export const MAX_HIGHLIGHT_PAGES_PER_QUERY = 5;
 export const FREE_TICK_MS = 30 * 60 * 1000;
 export const PAID_TICK_MS = 5 * 60 * 1000;
-export const PAID_REMAINING_FLOOR = 1000;
+export const PAID_REMAINING_FLOOR = 500;
 
-/** Highlightly `leagueName` query values for Big 5 top flights. */
-export const BIG5_HIGHLIGHT_LEAGUE_QUERIES = [
-  'Premier League',
-  'La Liga',
-  'Serie A',
-  'Bundesliga',
-  'Ligue 1',
-] as const;
-
-/** Map API-Football / Scores365 Big 5 ids → Highlightly leagueName filter. */
+/** Map API-Football / known Scores365 synthetic ids → Highlightly leagueName filter. */
 export function highlightlyLeagueQueryForId(leagueId: number | null | undefined): string | null {
   if (leagueId == null) return null;
-  if (leagueId === 39 || leagueId === 7_000_007) return 'Premier League';
-  if (leagueId === 140 || leagueId === 7_000_011) return 'La Liga';
-  if (leagueId === 135 || leagueId === 7_000_017) return 'Serie A';
-  if (leagueId === 78 || leagueId === 7_000_025) return 'Bundesliga';
-  if (leagueId === 61 || leagueId === 7_000_035) return 'Ligue 1';
-  return null;
+  switch (leagueId) {
+    case 39:
+    case 7_000_007:
+      return 'Premier League';
+    case 140:
+    case 7_000_011:
+      return 'La Liga';
+    case 135:
+    case 7_000_017:
+      return 'Serie A';
+    case 78:
+    case 7_000_025:
+      return 'Bundesliga';
+    case 61:
+    case 7_000_035:
+      return 'Ligue 1';
+    case 2:
+      return 'UEFA Champions League';
+    case 3:
+      return 'UEFA Europa League';
+    case 848:
+      return 'UEFA Europa Conference League';
+    case 88:
+      return 'Eredivisie';
+    case 94:
+      return 'Primeira Liga';
+    case 203:
+      return 'Süper Lig';
+    case 253:
+      return 'Major League Soccer';
+    case 307:
+      return 'Pro League';
+    case 40:
+      return 'Championship';
+    case 79:
+    case 7_000_026:
+      return '2. Bundesliga';
+    case 141:
+    case 7_000_012:
+      return 'Segunda División';
+    case 5:
+      return 'UEFA Nations League';
+    case 6:
+    case 7_000_588:
+      return 'Africa Cup of Nations';
+    default:
+      return null;
+  }
 }
 export const HIGHLIGHT_PAGE_LIMIT = 40;
 export const SUMMARY_CATEGORY = 'match-highlights';
