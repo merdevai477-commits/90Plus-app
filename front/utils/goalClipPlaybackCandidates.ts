@@ -7,6 +7,7 @@ import {
 } from './assignGoalClips';
 import {
   isDirectHighlightFile,
+  preferDirectHighlightUrls,
   resolveHighlightPlaybackUrl,
   youtubeVideoId,
 } from './highlightPlaybackUrl';
@@ -102,5 +103,5 @@ export function buildGoalClipPlaybackCandidates(
   for (const clip of supported) pushUrl(clipPlayUrl(clip), false);
   for (const clip of unsupported) pushUrl(clipPlayUrl(clip), false);
 
-  return urls;
+  return preferDirectHighlightUrls(urls);
 }

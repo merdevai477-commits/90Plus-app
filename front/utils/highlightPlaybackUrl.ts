@@ -74,6 +74,8 @@ export function youtubeVideoId(pageUrl: string): string | null {
   return null;
 }
 
+const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
+
 /** Player-only embed. No watch-page title, share row, or recommendations. */
 export function youtubeEmbedUrl(pageUrl: string): string | null {
   const id = youtubeVideoId(pageUrl);
@@ -86,19 +88,25 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
     controls: '1',
     iv_load_policy: '3',
     enablejsapi: '1',
-    origin: 'https://90plus.pro',
+    origin: YOUTUBE_EMBED_ORIGIN,
+    widget_referrer: YOUTUBE_EMBED_ORIGIN,
   });
-  return `https://www.youtube.com/embed/${id}?${params.toString()}`;
+  // youtube-nocookie reduces some embed/claim edge cases in WKWebView.
+  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
 }
 
 /**
  * Local page so the WebView sends a Referer and the embed is allowed to paint.
  * Uses the IFrame API so iOS can report PLAYER_READY / PLAYING / typed errors
  * instead of treating the wrapper HTML load as "video ready".
+ *
+ * Important: rights-claimed clips often show a *false* "unavailable in your country"
+ * inside WKWebView when eurl/referer is missing. base + origin + widget_referrer
+ * mitigate that; failures still fall through to Open in YouTube.
  */
 export function youtubeEmbedDocument(videoId: string): string {
   const id = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#player{position:absolute;inset:0;width:100%;height:100%}</style></head><body><div id="player"></div><script>
+  return `<!DOCTYPE html><html><head><base href="${YOUTUBE_EMBED_ORIGIN}/"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#player{position:absolute;inset:0;width:100%;height:100%}</style></head><body><div id="player"></div><script>
 var tag=document.createElement('script');
 tag.src='https://www.youtube.com/iframe_api';
 document.head.appendChild(tag);
@@ -107,7 +115,8 @@ function onYouTubeIframeAPIReady(){
   try{
     new YT.Player('player',{
       width:'100%',height:'100%',videoId:'${id}',
-      playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,controls:1,iv_load_policy:3,enablejsapi:1,origin:'https://90plus.pro'},
+      host:'https://www.youtube-nocookie.com',
+      playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,controls:1,iv_load_policy:3,enablejsapi:1,origin:'${YOUTUBE_EMBED_ORIGIN}',widget_referrer:'${YOUTUBE_EMBED_ORIGIN}'},
       events:{
         onReady:function(e){try{e.target.playVideo();}catch(x){}post('PLAYER_READY');},
         onStateChange:function(e){if(e&&e.data===1)post('PLAYING');},

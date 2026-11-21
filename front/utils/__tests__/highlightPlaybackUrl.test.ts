@@ -23,14 +23,17 @@ describe('resolveHighlightPlaybackUrl', () => {
   });
 
   it('builds a player-only YouTube embed from a watch link', () => {
-    expect(youtubeEmbedUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo')).toBe(
-      'https://www.youtube.com/embed/qjEXEEBQgqo?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&enablejsapi=1&origin=https%3A%2F%2F90plus.pro',
-    );
+    const embed = youtubeEmbedUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo');
+    expect(embed).toContain('youtube-nocookie.com/embed/qjEXEEBQgqo?');
+    expect(embed).toContain('origin=https%3A%2F%2F90plus.pro');
+    expect(embed).toContain('widget_referrer=https%3A%2F%2F90plus.pro');
     expect(youtubeEmbedUrl('https://youtu.be/6Nk3FShw4XM')).toContain('/embed/6Nk3FShw4XM?');
     const doc = youtubeEmbedDocument('_jxHAw-yH3E');
     expect(doc).toContain("videoId:'_jxHAw-yH3E'");
     expect(doc).toContain('iframe_api');
     expect(doc).toContain("post('PLAYER_READY')");
+    expect(doc).toContain('<base href="https://90plus.pro/">');
+    expect(doc).toContain("host:'https://www.youtube-nocookie.com'");
   });
 
   it('orders direct MP4 ahead of YouTube', () => {

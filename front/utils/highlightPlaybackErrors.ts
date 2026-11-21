@@ -82,6 +82,8 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
   const reasonPrefix = text.match(/^reason:([A-Z_]+):/i);
   if (reasonPrefix) {
     const code = reasonPrefix[1].toUpperCase() as PlaybackFailureReason;
+    // Legacy probes sent GEO_RESTRICTED for YouTube's fake country banner.
+    if (code === 'GEO_RESTRICTED') return 'EMBED_UNAVAILABLE';
     if ((PLAYBACK_FAILURE_REASONS as readonly string[]).includes(code)) return code;
   }
 
@@ -105,7 +107,11 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
     return 'SOURCE_NOT_FOUND';
   }
 
-  const geoEvidence =
+  // YouTube embeds (esp. iOS WKWebView + rights-claimed clips) often show a
+  // *fake* "unavailable in your country" banner for embed/eurl failures while
+  // the same watch URL plays fine. Treat as embed-unavailable so we offer
+  // Open in YouTube instead of a misleading geo message.
+  const youtubeFakeCountryOrEmbed =
     /not made this video available in your country/i.test(text) ||
     /unavailable in your country/i.test(text) ||
     /isn't available in your country/i.test(text) ||
@@ -114,7 +120,7 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
     /غير متاح في بلدكم/i.test(text) ||
     (/video unavailable/i.test(text) && /country|region|بلد/i.test(text));
 
-  if (geoEvidence) return 'GEO_RESTRICTED';
+  if (youtubeFakeCountryOrEmbed) return 'EMBED_UNAVAILABLE';
 
   if (/onError/i.test(text) && /150|101/.test(text)) return 'EMBED_UNAVAILABLE';
   if (/onError/i.test(text) && /100/.test(text)) return 'SOURCE_NOT_FOUND';

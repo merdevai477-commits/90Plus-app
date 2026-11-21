@@ -76,12 +76,14 @@ const PLAYBACK_PROBE = `
       send('EMBED_UNAVAILABLE', location.href);
       return;
     }
+    // Fake country copy is common for embed/rights failures in WKWebView.
+    // Do not label as GEO_RESTRICTED — watch page often still plays.
     if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(text)) {
-      send('GEO_RESTRICTED', location.href);
+      send('EMBED_UNAVAILABLE', location.href);
       return;
     }
     if (/video unavailable/i.test(text) && /country|region|بلد/i.test(text)) {
-      send('GEO_RESTRICTED', location.href);
+      send('EMBED_UNAVAILABLE', location.href);
       return;
     }
   }
@@ -105,13 +107,13 @@ true;
 `;
 
 const FALLBACK_MESSAGES: Record<string, string> = {
-  playbackGeoRestricted: 'In-app playback is blocked — try Open in YouTube.',
+  playbackGeoRestricted: 'This video cannot play inside the app — open it in YouTube.',
   playbackSourceUnavailable: 'This video is currently unavailable.',
   playbackSourceExpired: 'This video is currently unavailable.',
   playbackUnsupportedProvider: 'This video source is not supported.',
   playbackNetworkError: 'Unable to load the video. Please try again.',
   playbackPlayerFailed: 'Unable to play this video.',
-  playbackEmbedUnavailable: 'This video cannot play inside the app.',
+  playbackEmbedUnavailable: 'This video cannot play inside the app — open it in YouTube.',
   playbackTimeout: 'Unable to load the video. Please try again.',
   playbackUnknownError: 'Something went wrong. Please try again.',
   openInYouTube: 'Open in YouTube',

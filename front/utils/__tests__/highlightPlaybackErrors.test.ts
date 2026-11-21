@@ -29,17 +29,17 @@ describe('highlightPlaybackErrors', () => {
   });
 
   describe('classifyYouTubeProbeSignal', () => {
-    it('maps confirmed geo evidence to GEO_RESTRICTED', () => {
+    it('maps YouTube fake-country / legacy GEO probes to EMBED_UNAVAILABLE', () => {
       expect(
         classifyYouTubeProbeSignal(
           'reason:GEO_RESTRICTED:https://www.youtube-nocookie.com/embed/abc',
         ),
-      ).toBe('GEO_RESTRICTED');
+      ).toBe('EMBED_UNAVAILABLE');
       expect(
         classifyYouTubeProbeSignal(
           'The owner has not made this video available in your country',
         ),
-      ).toBe('GEO_RESTRICTED');
+      ).toBe('EMBED_UNAVAILABLE');
     });
 
     it('maps embed-disabled and error 150 to EMBED_UNAVAILABLE', () => {
