@@ -84,19 +84,29 @@ function FeatureChip({
   row: FlexStyle['flexDirection'];
   tone: 'delivery' | 'neutral';
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { medium } = usePWFonts();
+  const delivery = tone === 'delivery';
   return (
     <View
       style={{
         flex: 1,
         minWidth: 0,
-        backgroundColor: tone === 'delivery' ? '#040F03' : '#160C2D',
+        backgroundColor: delivery
+          ? theme.isDark
+            ? '#040F03'
+            : theme.badgeDeliveryBg
+          : theme.isDark
+            ? '#160C2D'
+            : theme.pale,
         borderRadius: 12,
         paddingHorizontal: 12,
         paddingVertical: 9,
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: theme.isDark ? 0 : StyleSheet.hairlineWidth,
+        borderColor: delivery ? theme.badgeDeliveryBorder : theme.spPillBorder,
       }}
     >
       <View style={{ flexDirection: row, alignItems: 'center', gap: 4 }}>
@@ -104,7 +114,13 @@ function FeatureChip({
           style={{
             fontFamily: medium,
             fontSize: f(12),
-            color: tone === 'delivery' ? '#3DA437' : '#D7D7D7',
+            color: delivery
+              ? theme.isDark
+                ? '#3DA437'
+                : theme.badgeDeliveryText
+              : theme.isDark
+                ? '#D7D7D7'
+                : theme.spAction,
             textAlign: 'right',
           }}
           numberOfLines={1}
@@ -128,6 +144,7 @@ function SocialSquare({
   children: React.ReactNode;
   width: number;
 }) {
+  const theme = usePWTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -138,13 +155,20 @@ function SocialSquare({
         height: 42,
         borderRadius: 8,
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: '#250A3F',
+        borderColor: theme.isDark ? '#250A3F' : theme.spPillBorder,
         overflow: 'hidden',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <LinearGradient colors={['#200D44', '#170D2B']} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={
+          theme.isDark
+            ? ['#200D44', '#170D2B']
+            : [theme.pale, theme.surface]
+        }
+        style={StyleSheet.absoluteFill}
+      />
       {children}
     </Pressable>
   );
@@ -247,11 +271,15 @@ export function SponsorStorePage({
 
   return (
     <View style={{ width, alignSelf: 'center' }}>
-      {/* Hero */}
+      {/* Hero — fade into screen bg so light mode identity text stays readable */}
       <View style={{ height: c(371), marginHorizontal: c(-22), overflow: 'hidden' }}>
         <Image source={STORE_HERO} style={StyleSheet.absoluteFillObject} contentFit="cover" />
         <LinearGradient
-          colors={['rgba(233,233,233,0)', '#030303']}
+          colors={
+            theme.isDark
+              ? ['rgba(233,233,233,0)', '#030303']
+              : ['rgba(249,246,254,0)', theme.screen]
+          }
           locations={[0, 0.77]}
           style={StyleSheet.absoluteFill}
         />
@@ -305,22 +333,30 @@ export function SponsorStorePage({
                   paddingHorizontal: c(10),
                   borderRadius: 91,
                   borderWidth: StyleSheet.hairlineWidth,
-                  borderColor: 'rgba(79,48,143,0.39)',
+                  borderColor: theme.spPillBorder,
                   overflow: 'hidden',
                 }}
               >
                 <LinearGradient
-                  colors={['rgba(139,92,246,0.14)', 'rgba(62,12,176,0.14)']}
+                  colors={
+                    theme.isDark
+                      ? ['rgba(139,92,246,0.14)', 'rgba(62,12,176,0.14)']
+                      : ['rgba(139,92,246,0.12)', 'rgba(106,43,217,0.08)']
+                  }
                   style={StyleSheet.absoluteFill}
                 />
-                <Text style={{ fontFamily: medium, fontSize: f(12), color: '#C58BFC' }}>{store.categoryBadge}</Text>
+                <Text style={{ fontFamily: medium, fontSize: f(12), color: theme.spPillText }}>
+                  {store.categoryBadge}
+                </Text>
                 <IconStoreShoes width={c(16)} height={c(16)} />
               </View>
             </View>
 
             <View style={{ alignItems: dir.alignStart, gap: c(8) }}>
               <View style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(4) }}>
-                <Text style={{ fontFamily: medium, fontSize: f(14), color: '#CECECE' }}>{store.ratingLabel}</Text>
+                <Text style={{ fontFamily: medium, fontSize: f(14), color: theme.textOnCardMuted }}>
+                  {store.ratingLabel}
+                </Text>
                 <Text style={{ fontFamily: medium, fontSize: f(15), color: theme.text }}>(4.5)</Text>
                 <IconStoreStar width={c(16)} height={c(16)} />
               </View>
@@ -334,7 +370,7 @@ export function SponsorStorePage({
                     style={{
                       fontFamily: regular,
                       fontSize: f(14),
-                      color: '#D7AFFE',
+                      color: theme.spChipText,
                       textAlign: dir.textAlign,
                       flexShrink: 1,
                     }}
@@ -379,10 +415,18 @@ export function SponsorStorePage({
             }}
           >
             <LinearGradient
-              colors={following ? ['#2E146A', '#170D2B'] : ['#8B5CF6', '#2E146A']}
+              colors={
+                following
+                  ? theme.isDark
+                    ? ['#2E146A', '#170D2B']
+                    : [theme.darkPrimary, theme.ctaBottom]
+                  : theme.isDark
+                    ? ['#8B5CF6', '#2E146A']
+                    : [theme.ctaTop, theme.darkPrimary]
+              }
               style={StyleSheet.absoluteFill}
             />
-            <Text style={{ fontFamily: bold, fontSize: f(12), color: theme.text }}>{followLabel}</Text>
+            <Text style={{ fontFamily: bold, fontSize: f(12), color: '#FFFFFF' }}>{followLabel}</Text>
             <IconStoreFollow width={c(16)} height={c(16)} />
           </Pressable>
 
@@ -430,7 +474,7 @@ export function SponsorStorePage({
                   flex: 1,
                   fontFamily: semibold,
                   fontSize: f(20),
-                  color: '#D7D7D7',
+                  color: theme.spAction,
                   textAlign: dir.textAlign,
                 }}
               >
@@ -444,7 +488,7 @@ export function SponsorStorePage({
                   fontFamily: regular,
                   fontSize: f(15),
                   lineHeight: f(15) * 1.56,
-                  color: '#ADADAD',
+                  color: theme.spStoreDesc,
                   textAlign: dir.textAlign,
                 }}
               >
@@ -488,7 +532,7 @@ export function SponsorStorePage({
                 flex: 1,
                 fontFamily: semibold,
                 fontSize: f(20),
-                color: '#D7D7D7',
+                color: theme.spAction,
                 textAlign: dir.textAlign,
               }}
             >
@@ -503,7 +547,9 @@ export function SponsorStorePage({
                 onPress={() => openTel(phone)}
                 style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(4) }}
               >
-                <Text style={{ fontFamily: regular, fontSize: f(14), color: '#B46CF9' }}>{phone}</Text>
+                <Text style={{ fontFamily: regular, fontSize: f(14), color: theme.spChipText }}>
+                  {phone}
+                </Text>
                 <IconStorePhone width={c(22)} height={c(18)} />
               </Pressable>
             ) : null}
@@ -517,7 +563,7 @@ export function SponsorStorePage({
                   style={{
                     fontFamily: regular,
                     fontSize: f(14),
-                    color: '#B46CF9',
+                    color: theme.spChipText,
                     textAlign: dir.textAlign,
                     flexShrink: 1,
                   }}
@@ -529,7 +575,7 @@ export function SponsorStorePage({
               </Pressable>
             ) : null}
             <View style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(4) }}>
-              <Text style={{ fontFamily: regular, fontSize: f(14), color: '#B46CF9' }}>
+              <Text style={{ fontFamily: regular, fontSize: f(14), color: theme.spChipText }}>
                 {store.hoursLabel}
               </Text>
               <IconStoreTime width={c(18)} height={c(18)} />
@@ -555,7 +601,14 @@ export function SponsorStorePage({
         }}
       >
         <Image source={STORE_MAP_PREVIEW} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14,2,25,0.66)' }]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: theme.isDark ? 'rgba(14,2,25,0.66)' : 'rgba(36,16,78,0.45)',
+            },
+          ]}
+        />
         <View style={{ width: c(251), alignItems: 'center', gap: c(15) }}>
           <IconStoreMapPinLg width={c(44)} height={c(44)} />
           <View
@@ -567,10 +620,12 @@ export function SponsorStorePage({
               gap: c(10),
               padding: c(10),
               borderRadius: 65,
-              backgroundColor: 'rgba(139,92,246,0.33)',
+              backgroundColor: theme.isDark ? 'rgba(139,92,246,0.33)' : 'rgba(106,43,217,0.55)',
             }}
           >
-            <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#B798FE' }}>{store.showOnMap}</Text>
+            <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#FFFFFF' }}>
+              {store.showOnMap}
+            </Text>
             <IconStoreMapBtn width={c(22)} height={c(20)} />
           </View>
         </View>
