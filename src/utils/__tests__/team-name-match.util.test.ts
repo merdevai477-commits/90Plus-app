@@ -15,4 +15,9 @@ describe('teamNamesLooselyMatch', () => {
   it('does not treat Shabab Al Ahli as Al Ahly', () => {
     expect(teamNamesLooselyMatch('الأهلي', 'شباب الأهلي')).toBe(false);
   });
+
+  it('matches 1. FC Köln with Highlightly FC Koln', () => {
+    expect(teamNamesLooselyMatch('1. FC Köln', 'FC Koln')).toBe(true);
+    expect(teamNamesLooselyMatch('Bayern Munich', 'Bayern Munich')).toBe(true);
+  });
 });

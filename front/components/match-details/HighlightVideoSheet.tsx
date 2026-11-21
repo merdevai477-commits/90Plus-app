@@ -105,7 +105,7 @@ true;
 `;
 
 const FALLBACK_MESSAGES: Record<string, string> = {
-  playbackGeoRestricted: 'This video is unavailable in your region.',
+  playbackGeoRestricted: 'In-app playback is blocked — try Open in YouTube.',
   playbackSourceUnavailable: 'This video is currently unavailable.',
   playbackSourceExpired: 'This video is currently unavailable.',
   playbackUnsupportedProvider: 'This video source is not supported.',
@@ -371,9 +371,10 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate)) ||
     (videoId ? url : '');
 
+  // YouTube watch often works when the in-app embed reports geo or embed-disabled.
   const showOpenInYouTube =
     failed &&
-    failureReason === 'EMBED_UNAVAILABLE' &&
+    (failureReason === 'EMBED_UNAVAILABLE' || failureReason === 'GEO_RESTRICTED') &&
     Boolean(lastYouTubeUrl && youtubeVideoId(lastYouTubeUrl));
 
   const showRetry = failed && failureReason != null && isRecoverablePlaybackFailure(failureReason);

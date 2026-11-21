@@ -61,6 +61,7 @@ const RECOVERABLE: ReadonlySet<PlaybackFailureReason> = new Set([
   'DECODER_ERROR',
   'UNKNOWN_ERROR',
   'EMBED_UNAVAILABLE',
+  'GEO_RESTRICTED',
 ]);
 
 export function isRecoverablePlaybackFailure(reason: PlaybackFailureReason): boolean {

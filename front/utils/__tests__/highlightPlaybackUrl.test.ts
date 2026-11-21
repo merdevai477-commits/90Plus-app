@@ -1,4 +1,10 @@
-import { isDirectHighlightFile, resolveHighlightPlaybackUrl, youtubeEmbedDocument, youtubeEmbedUrl } from '../highlightPlaybackUrl';
+import {
+  isDirectHighlightFile,
+  preferDirectHighlightUrls,
+  resolveHighlightPlaybackUrl,
+  youtubeEmbedDocument,
+  youtubeEmbedUrl,
+} from '../highlightPlaybackUrl';
 
 describe('resolveHighlightPlaybackUrl', () => {
   it('turns a Streamin watch page into the mp4 file', () => {
@@ -25,5 +31,17 @@ describe('resolveHighlightPlaybackUrl', () => {
     expect(doc).toContain("videoId:'_jxHAw-yH3E'");
     expect(doc).toContain('iframe_api');
     expect(doc).toContain("post('PLAYER_READY')");
+  });
+
+  it('orders direct MP4 ahead of YouTube', () => {
+    expect(
+      preferDirectHighlightUrls([
+        'https://www.youtube.com/watch?v=abc1234',
+        'https://w-cdn.streamin.top/uploads/aa.mp4',
+      ]),
+    ).toEqual([
+      'https://w-cdn.streamin.top/uploads/aa.mp4',
+      'https://www.youtube.com/watch?v=abc1234',
+    ]);
   });
 });

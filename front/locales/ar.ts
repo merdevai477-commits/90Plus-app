@@ -842,7 +842,7 @@ export const ar = {
     goalClipScorer: 'سجل الهدف: {player}',
     goalClipPlay: 'تشغيل هدف {player}',
     matchSummaryPlay: 'تشغيل ملخص المباراة',
-    playbackGeoRestricted: 'الفيديو مش متاح في البلد دي',
+    playbackGeoRestricted: 'التضمين مش متاح هنا — جرّب فتحه على يوتيوب',
     playbackSourceUnavailable: 'الفيديو غير متاح حالياً',
     playbackSourceExpired: 'الفيديو غير متاح حالياً',
     playbackUnsupportedProvider: 'مصدر الفيديو ده مش مدعوم',

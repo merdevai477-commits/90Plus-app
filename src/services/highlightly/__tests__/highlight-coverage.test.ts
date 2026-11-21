@@ -26,6 +26,31 @@ describe('highlight coverage', () => {
     expect(match('Africa Cup of Nations', 'Egypt', 'Morocco')).toBe(true);
   });
 
+  it('covers Scores365 country-prefixed Big 5 names and league ids', () => {
+    expect(match('Germany, Bundesliga', 'Bayern Munich', '1. FC Köln', 'Germany')).toBe(true);
+    expect(match('Spain, LaLiga', 'Athletic Bilbao', 'Espanyol', 'Spain')).toBe(true);
+    expect(match('الدوري الألماني', 'بايرن', 'كولن', 'ألمانيا')).toBe(true);
+    expect(match('الدوري الإسباني', 'برشلونة', 'مدريد', 'إسبانيا')).toBe(true);
+    expect(
+      isHighlightCoverageFixture({
+        leagueId: 7000025,
+        leagueName: 'Germany, Bundesliga',
+        leagueCountry: 'Germany',
+        homeTeamName: 'Bayern Munich',
+        awayTeamName: '1. FC Köln',
+      }),
+    ).toBe(true);
+    expect(
+      isHighlightCoverageFixture({
+        leagueId: 7000011,
+        leagueName: 'Spain, LaLiga',
+        leagueCountry: 'Spain',
+        homeTeamName: 'Athletic Bilbao',
+        awayTeamName: 'Espanyol',
+      }),
+    ).toBe(true);
+  });
+
   it('follows only Ahly, Zamalek and Pyramids in Egypt, plus the named clubs elsewhere', () => {
     expect(match('Egyptian Premier League', 'Al Ahly', 'ENPPI', 'Egypt')).toBe(true);
     expect(match('Egyptian Premier League', 'Pyramids FC', 'Ceramica Cleopatra', 'Egypt')).toBe(true);
@@ -51,5 +76,11 @@ describe('highlight coverage', () => {
     expect(match('Serie A', 'Cuiaba', 'Vitoria', 'Brazil')).toBe(false);
     expect(match('2. Bundesliga', 'Hamburg', 'Schalke', 'Germany')).toBe(false);
     expect(match('FA Cup', 'Brentford', 'Bournemouth', 'England')).toBe(false);
+    expect(match('كأس العالم تحت 17', 'مصر تحت 17', 'اليونان تحت 17')).toBe(false);
+    expect(match('دولي, كأس العالم تحت 17', 'السنغال تحت 17', 'كرواتيا تحت 17')).toBe(false);
+    expect(match('ألمانيا, الدوري الألماني الدرجة الثانية', 'بيليفيلت', 'ماغديبورغ', 'Germany')).toBe(
+      false,
+    );
+    expect(match('إسبانيا, الدوري الاسباني الدرجة الثانية', 'أندورا', 'ليجانيس', 'Spain')).toBe(false);
   });
 });

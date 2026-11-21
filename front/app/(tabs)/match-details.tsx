@@ -71,6 +71,7 @@ import type { GoalClipMedia } from '../../utils/assignGoalClips';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchSummaryVideo } from '../../components/match-details/MatchSummaryVideo';
 import { HighlightVideoSheet } from '../../components/match-details/HighlightVideoSheet';
+import { preferDirectHighlightUrls } from '../../utils/highlightPlaybackUrl';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
@@ -525,16 +526,18 @@ const MatchDetailsScreen = () => {
     ApiFootballService.getFixtureHighlights(fixtureId)
       .then((payload) => {
         if (cancelled) return;
-        const clips = (payload.summaries?.length
-          ? payload.summaries
-          : payload.summary
-            ? [payload.summary]
-            : []
-        ).flatMap((clip) => {
-          const ordered = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
-          const fallback = (clip.url || clip.embedUrl || '').trim();
-          return [...ordered, fallback].filter((url, index, all) => url && all.indexOf(url) === index);
-        });
+        const clips = preferDirectHighlightUrls(
+          (payload.summaries?.length
+            ? payload.summaries
+            : payload.summary
+              ? [payload.summary]
+              : []
+          ).flatMap((clip) => {
+            const ordered = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
+            const fallback = (clip.url || clip.embedUrl || '').trim();
+            return [...ordered, fallback].filter((url, index, all) => url && all.indexOf(url) === index);
+          }),
+        );
         setGoalClips(payload.goals ?? []);
         setMatchSummary(payload.summary);
         setSummaryUrls(clips);

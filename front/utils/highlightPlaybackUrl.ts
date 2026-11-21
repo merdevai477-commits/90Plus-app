@@ -41,6 +41,16 @@ export function isDirectHighlightFile(url: string): boolean {
   return /\.(mp4|m3u8)(?:$|\?)/i.test(url);
 }
 
+/** Prefer owned CDN / direct MP4 before YouTube embeds (fewer false geo blocks). */
+export function preferDirectHighlightUrls(urls: string[]): string[] {
+  const score = (url: string): number => {
+    if (/\.mp4(?:$|\?)|streamin\.|media\.90plus|r2\.cloudflarestorage/i.test(url)) return 0;
+    if (youtubeVideoId(url)) return 2;
+    return 1;
+  };
+  return [...urls].sort((a, b) => score(a) - score(b));
+}
+
 /** YouTube watch, share, shorts, and embed links. */
 export function youtubeVideoId(pageUrl: string): string | null {
   try {

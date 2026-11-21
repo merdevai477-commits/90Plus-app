@@ -137,9 +137,11 @@ export function pickFinalPlaybackReason(
   reasons: PlaybackFailureReason[],
 ): PlaybackFailureReason {
   if (!reasons.length) return 'UNKNOWN_ERROR';
+  // Prefer EMBED_UNAVAILABLE over GEO: YouTube often labels embed blocks as
+  // "unavailable in your country" while the same watch URL still plays.
   const priority: PlaybackFailureReason[] = [
-    'GEO_RESTRICTED',
     'EMBED_UNAVAILABLE',
+    'GEO_RESTRICTED',
     'SOURCE_EXPIRED',
     'SOURCE_NOT_FOUND',
     'UNSUPPORTED_PROVIDER',

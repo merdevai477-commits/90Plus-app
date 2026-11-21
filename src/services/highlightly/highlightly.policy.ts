@@ -6,10 +6,33 @@ export const KICKOFF_WINDOW_MS = 6 * 60 * 60 * 1000;
 /** 48h after full time. Two hours covers a normal match after kickoff. */
 export const HIGHLIGHT_WINDOW_MS = 50 * 60 * 60 * 1000;
 export const MAX_REQUESTS_PER_TICK = 2;
+/** Pro/Ultra: more date + league pulls per tick (still capped by daily budget). */
+export const MAX_REQUESTS_PER_TICK_PAID = 8;
 export const MAX_DATES_PER_TICK = 2;
+export const MAX_DATES_PER_TICK_PAID = 4;
 export const FREE_TICK_MS = 30 * 60 * 1000;
 export const PAID_TICK_MS = 5 * 60 * 1000;
 export const PAID_REMAINING_FLOOR = 1000;
+
+/** Highlightly `leagueName` query values for Big 5 top flights. */
+export const BIG5_HIGHLIGHT_LEAGUE_QUERIES = [
+  'Premier League',
+  'La Liga',
+  'Serie A',
+  'Bundesliga',
+  'Ligue 1',
+] as const;
+
+/** Map API-Football / Scores365 Big 5 ids → Highlightly leagueName filter. */
+export function highlightlyLeagueQueryForId(leagueId: number | null | undefined): string | null {
+  if (leagueId == null) return null;
+  if (leagueId === 39 || leagueId === 7_000_007) return 'Premier League';
+  if (leagueId === 140 || leagueId === 7_000_011) return 'La Liga';
+  if (leagueId === 135 || leagueId === 7_000_017) return 'Serie A';
+  if (leagueId === 78 || leagueId === 7_000_025) return 'Bundesliga';
+  if (leagueId === 61 || leagueId === 7_000_035) return 'Ligue 1';
+  return null;
+}
 export const HIGHLIGHT_PAGE_LIMIT = 40;
 export const SUMMARY_CATEGORY = 'match-highlights';
 export const GOAL_CATEGORY = 'goal-clip';
@@ -68,6 +91,8 @@ export interface SyncDateFixture {
   matchDate: Date;
   due: boolean;
   priority: boolean;
+  /** Prefer these dates when Pro budget allows Big 5 pulls. */
+  big5?: boolean;
 }
 
 export function isFinishedHighlightStatus(status: string | null | undefined): boolean {
@@ -258,20 +283,26 @@ export function syncTickGapMs(tier: string | null, upstreamRemaining: number | n
 }
 
 export function selectSyncDates(fixtures: SyncDateFixture[], limit = MAX_DATES_PER_TICK): string[] {
-  const groups = new Map<string, { priority: boolean; dueCount: number; newest: number }>();
+  const groups = new Map<
+    string,
+    { priority: boolean; big5Due: number; dueCount: number; newest: number }
+  >();
   for (const fixture of fixtures) {
     if (!fixture.due) continue;
     const key = highlightDateKey(fixture.matchDate);
+    const big5 = Boolean(fixture.big5);
     const current = groups.get(key);
     if (!current) {
       groups.set(key, {
         priority: fixture.priority,
+        big5Due: big5 ? 1 : 0,
         dueCount: 1,
         newest: fixture.matchDate.getTime(),
       });
       continue;
     }
     current.priority = current.priority || fixture.priority;
+    current.big5Due += big5 ? 1 : 0;
     current.dueCount += 1;
     current.newest = Math.max(current.newest, fixture.matchDate.getTime());
   }
@@ -279,11 +310,22 @@ export function selectSyncDates(fixtures: SyncDateFixture[], limit = MAX_DATES_P
   return [...groups.entries()]
     .sort((left, right) => {
       if (left[1].priority !== right[1].priority) return left[1].priority ? -1 : 1;
+      if (left[1].big5Due !== right[1].big5Due) return right[1].big5Due - left[1].big5Due;
       if (left[1].dueCount !== right[1].dueCount) return right[1].dueCount - left[1].dueCount;
       return right[1].newest - left[1].newest;
     })
     .slice(0, limit)
     .map(([key]) => key);
+}
+
+export function syncRequestBudget(tier: string | null, upstreamRemaining: number | null): {
+  maxRequests: number;
+  maxDates: number;
+} {
+  if (isFastSyncTier(tier, upstreamRemaining)) {
+    return { maxRequests: MAX_REQUESTS_PER_TICK_PAID, maxDates: MAX_DATES_PER_TICK_PAID };
+  }
+  return { maxRequests: MAX_REQUESTS_PER_TICK, maxDates: MAX_DATES_PER_TICK };
 }
 
 export function isFixtureDue(

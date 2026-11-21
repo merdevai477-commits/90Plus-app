@@ -20,6 +20,7 @@ import {
   recordHighlightRequest,
   type HighlightAllowance,
 } from './highlightly.quota';
+import { isBig5LeagueId } from '../../utils/fixture-importance';
 import { isHighlightCoverageFixture } from './highlight-coverage';
 import {
   FINISHED_HIGHLIGHT_STATUSES,
@@ -27,13 +28,14 @@ import {
   HIGHLIGHT_PAGE_LIMIT,
   HIGHLIGHT_TIMEZONE,
   HIGHLIGHT_WINDOW_MS,
-  MAX_REQUESTS_PER_TICK,
   SUMMARY_CATEGORY,
   highlightDateKey,
+  highlightlyLeagueQueryForId,
   isFixtureDue,
   linkHighlightToFixture,
   planNextCheck,
   selectSyncDates,
+  syncRequestBudget,
   syncTickGapMs,
   type HighlightFixtureCandidate,
 } from './highlightly.policy';
@@ -53,6 +55,8 @@ type FetchPage = typeof fetchHighlightPage;
 interface DueFixture extends HighlightFixtureCandidate {
   attempts: number;
   priority: boolean;
+  leagueId: number | null;
+  big5: boolean;
 }
 
 let started = false;
@@ -119,6 +123,7 @@ async function syncUnderLease(
     },
     select: {
       fixtureId: true,
+      leagueId: true,
       homeTeamName: true,
       awayTeamName: true,
       leagueName: true,
@@ -143,6 +148,7 @@ async function syncUnderLease(
   const datePlanInput = covered.map((fixture) => {
     const state = syncByFixture.get(fixture.fixtureId);
     const isDue = isFixtureDue(state, now);
+    const big5 = isBig5LeagueId(fixture.leagueId);
     if (isDue) {
       due.push({
         fixtureId: fixture.fixtureId,
@@ -150,18 +156,23 @@ async function syncUnderLease(
         awayTeamName: fixture.awayTeamName,
         matchDate: fixture.matchDate,
         attempts: state?.attempts ?? 0,
-        priority: state?.priority ?? false,
+        priority: (state?.priority ?? false) || big5,
+        leagueId: fixture.leagueId,
+        big5,
       });
     }
     return {
       fixtureId: fixture.fixtureId,
       matchDate: fixture.matchDate,
       due: isDue,
-      priority: state?.priority ?? false,
+      priority: (state?.priority ?? false) || big5,
+      big5,
     };
   });
 
-  const dates = selectSyncDates(datePlanInput);
+  let allowance = await readHighlightAllowance(now);
+  const budget = syncRequestBudget(allowance.tier, allowance.upstreamRemaining);
+  const dates = selectSyncDates(datePlanInput, budget.maxDates);
   if (!dates.length) return { skipped: null, requests: 0, dates: [] };
 
   const candidates: HighlightFixtureCandidate[] = covered.map((fixture) => ({
@@ -172,34 +183,63 @@ async function syncUnderLease(
   }));
 
   let requests = 0;
-  let allowance = await readHighlightAllowance(now);
   for (const date of dates) {
-    if (requests >= MAX_REQUESTS_PER_TICK || isLost() || signal.aborted) break;
+    if (requests >= budget.maxRequests || isLost() || signal.aborted) break;
     if (!allowanceAllows(allowance, now)) break;
 
     const dueOnDate = due.filter((fixture) => highlightDateKey(fixture.matchDate) === date);
-    let page: HighlightlyPage;
-    try {
-      page = await pullPage(fetchPage, { date, offset: 0, signal }, now);
-    } catch (error) {
-      logPullFailure(date, error);
-      break;
-    }
-    requests += 1;
-    allowance = await readHighlightAllowance(now);
+    const summaries = new Set<number>();
+    const linked = new Set<number>();
 
-    const firstPass = await persistClips(page.clips, candidates);
-    const summaries = new Set(firstPass.summaryFixtureIds);
-    const linked = new Set(firstPass.linkedFixtureIds);
-    const missed = dueOnDate.filter((fixture) => !linked.has(fixture.fixtureId));
+    const big5Due = dueOnDate.some((fixture) => fixture.big5);
+    const leagueQueries = [
+      ...new Set(
+        dueOnDate
+          .map((fixture) => highlightlyLeagueQueryForId(fixture.leagueId))
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ];
+    for (const leagueName of leagueQueries) {
+      if (requests >= budget.maxRequests || isLost() || signal.aborted) break;
+      if (!allowanceAllows(allowance, now)) break;
+      try {
+        const page = await pullPage(fetchPage, { date, offset: 0, leagueName, signal }, now);
+        requests += 1;
+        allowance = await readHighlightAllowance(now);
+        const pass = await persistClips(page.clips, candidates);
+        for (const fixtureId of pass.summaryFixtureIds) summaries.add(fixtureId);
+        for (const fixtureId of pass.linkedFixtureIds) linked.add(fixtureId);
+      } catch (error) {
+        logPullFailure(`${date}/${leagueName}`, error);
+        break;
+      }
+    }
+
     if (
-      missed.length > 0 &&
-      requests < MAX_REQUESTS_PER_TICK &&
+      requests < budget.maxRequests &&
       allowanceAllows(allowance, now) &&
       !isLost() &&
       !signal.aborted
     ) {
-      const target = missed[0];
+      try {
+        const page = await pullPage(fetchPage, { date, offset: 0, signal }, now);
+        requests += 1;
+        allowance = await readHighlightAllowance(now);
+        const firstPass = await persistClips(page.clips, candidates);
+        for (const fixtureId of firstPass.summaryFixtureIds) summaries.add(fixtureId);
+        for (const fixtureId of firstPass.linkedFixtureIds) linked.add(fixtureId);
+      } catch (error) {
+        logPullFailure(date, error);
+        break;
+      }
+    }
+
+    const missed = dueOnDate
+      .filter((fixture) => !linked.has(fixture.fixtureId))
+      .sort((a, b) => Number(b.big5) - Number(a.big5) || Number(b.priority) - Number(a.priority));
+    for (const target of missed.slice(0, big5Due ? 3 : 1)) {
+      if (requests >= budget.maxRequests || isLost() || signal.aborted) break;
+      if (!allowanceAllows(allowance, now)) break;
       try {
         const focused = await pullPage(
           fetchPage,
@@ -219,14 +259,13 @@ async function syncUnderLease(
         for (const fixtureId of extra.linkedFixtureIds) linked.add(fixtureId);
       } catch (error) {
         logPullFailure(date, error);
-        await markDateChecked(dueOnDate, summaries, now);
         break;
       }
     }
 
     await markDateChecked(dueOnDate, summaries, now);
     logger.info(
-      `[Highlightly] date=${date} requests=${requests} linked=${linked.size} due=${dueOnDate.length}`,
+      `[Highlightly] date=${date} requests=${requests} linked=${linked.size} due=${dueOnDate.length} big5=${dueOnDate.filter((f) => f.big5).length}`,
     );
   }
 
@@ -241,6 +280,7 @@ async function pullPage(
     signal: AbortSignal;
     homeTeamName?: string;
     awayTeamName?: string;
+    leagueName?: string;
   },
   now: Date,
 ): Promise<HighlightlyPage> {
@@ -252,6 +292,7 @@ async function pullPage(
       timezone: HIGHLIGHT_TIMEZONE,
       homeTeamName: params.homeTeamName,
       awayTeamName: params.awayTeamName,
+      leagueName: params.leagueName,
       signal: params.signal,
     });
     await noteHighlightUpstream(now, { remaining: page.upstreamRemaining, tier: page.tier });
@@ -344,7 +385,7 @@ async function markDateChecked(
       })
     : [];
   const found = new Set(summaryFixtureIds);
-  for (const row of prior) {
+  for (const row of Array.isArray(prior) ? prior : []) {
     if (row.fixtureId != null) found.add(row.fixtureId);
   }
 

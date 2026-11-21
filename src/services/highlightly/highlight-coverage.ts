@@ -1,6 +1,8 @@
+import { isBig5LeagueId } from '../../utils/fixture-importance';
 import { normalizeTeamNameKey } from '../../utils/team-name-match.util';
 
 export interface HighlightCoverageFixture {
+  leagueId?: number | null;
   leagueName?: string | null;
   leagueCountry?: string | null;
   homeTeamName?: string | null;
@@ -9,8 +11,12 @@ export interface HighlightCoverageFixture {
 
 const WOMEN =
   /women|woman|femenin|feminin|frauen|dames|ladies|\bnwsl\b|\bwsl\b|سيدات|نسائ|للسيدات/;
-const YOUTH = /\bu-?\d{2}\b|\byouth\b|\bjunior|\breserves?\b|primavera|ناشئ|شباب|رديف/;
+const YOUTH =
+  /\bu-?\d{2}\b|\byouth\b|\bjunior|\breserves?\b|primavera|ناشئ|شباب|رديف|تحت\s*\d{1,2}/;
 const FRIENDLY = /friendly|friendlies|ودي|وديات/;
+/** Second / third tiers that must never count as Big 5. */
+const LOWER_DIVISION =
+  /\b2\b|2\.|ligue 2|serie b|segunda|championship|درجة ثاني|درجه ثاني|الدرجة الثاني|الدرجه الثاني|درجة ثالث|درجه ثالث|الدرجة الثالث|الدرجه الثالث|relegation|promotion play/;
 
 /**
  * Men's competitions we follow in full.
@@ -62,6 +68,10 @@ export function isHighlightCoverageFixture(fixture: HighlightCoverageFixture): b
   const home = fixture.homeTeamName ?? '';
   const away = fixture.awayTeamName ?? '';
   if (isExcludedMatch(league, home, away)) return false;
+  if (isBig5LeagueId(fixture.leagueId)) {
+    // Keep youth/women out even when the numeric id is Big 5 (playoffs edge cases).
+    if (!LOWER_DIVISION.test(league)) return true;
+  }
   if (isBig5League(league, country)) return true;
   if (isEuropeanClubChampions(league)) return true;
   if (FULL_COMPETITIONS.some((pattern) => pattern.test(league))) return true;
@@ -79,21 +89,35 @@ function isEuropeanClubChampions(league: string): boolean {
   return !/caf|afc|concacaf|africa|افريق|اسيا|arab/.test(league);
 }
 
+/** "Germany, Bundesliga" / "Spain, LaLiga" → core token after the comma. */
+function leagueNameCore(league: string): string {
+  const comma = league.indexOf(',');
+  if (comma <= 0) return league;
+  return league.slice(comma + 1).trim();
+}
+
 function isBig5League(league: string, country: string): boolean {
   if (/egypt|مصر|ghana|scotland|russia|ukraine|israel/.test(league)) return false;
   if (/egypt|مصر/.test(country)) return false;
-  if (/\b2\b|ligue 2|serie b|segunda|championship/.test(league)) return false;
+  if (LOWER_DIVISION.test(league)) return false;
 
-  if (/^premier league$/.test(league)) return country === '' || /england|انجليز/.test(country);
-  if (/^(la ?liga|laliga)$/.test(league)) return country === '' || /spain|اسبان/.test(country);
-  if (/^serie a$/.test(league)) return /italy|ايطال/.test(country);
-  if (/^bundesliga$/.test(league)) return country === '' || /germany|المان/.test(country);
-  if (/^ligue 1$/.test(league)) return /france|فرنس/.test(country) || country === '';
+  const core = leagueNameCore(league);
+  const names = core === league ? [league] : [league, core];
+
+  for (const name of names) {
+    if (/^premier league$/.test(name)) return country === '' || /england|انجليز/.test(country);
+    if (/^(la ?liga|laliga)$/.test(name)) return country === '' || /spain|اسبان/.test(country);
+    if (/^serie a$/.test(name)) return /italy|ايطال/.test(country);
+    if (/^bundesliga$/.test(name)) return country === '' || /germany|المان/.test(country);
+    if (/^ligue 1$/.test(name)) return /france|فرنس/.test(country) || country === '';
+  }
+
   if (/الدوري الانجليزي|البريميرليج/.test(league) && !/مصر|egypt/.test(league)) return true;
-  if (/الدوري الاسباني/.test(league)) return true;
-  if (/الدوري الايطالي/.test(league)) return true;
-  if (/الدوري الالماني/.test(league)) return true;
-  if (/الدوري الفرنسي/.test(league)) return true;
+  // Arabic Big 5: require the domestic label and reject lower divisions (handled above).
+  if (/الدوري الاسباني/.test(league) && !LOWER_DIVISION.test(league)) return true;
+  if (/الدوري الايطالي/.test(league) && !LOWER_DIVISION.test(league)) return true;
+  if (/الدوري الالماني/.test(league) && !LOWER_DIVISION.test(league)) return true;
+  if (/الدوري الفرنسي/.test(league) && !LOWER_DIVISION.test(league)) return true;
   return false;
 }
 

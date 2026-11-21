@@ -606,7 +606,7 @@ export const en = {
     goalClipScorer: 'Scored by: {player}',
     goalClipPlay: 'Play {player} goal',
     matchSummaryPlay: 'Play match summary',
-    playbackGeoRestricted: 'This video is unavailable in your region.',
+    playbackGeoRestricted: 'In-app playback is blocked — try Open in YouTube.',
     playbackSourceUnavailable: 'This video is currently unavailable.',
     playbackSourceExpired: 'This video is currently unavailable.',
     playbackUnsupportedProvider: 'This video source is not supported.',

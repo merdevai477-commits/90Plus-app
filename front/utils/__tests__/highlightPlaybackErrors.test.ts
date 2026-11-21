@@ -83,6 +83,9 @@ describe('highlightPlaybackErrors', () => {
         pickFinalPlaybackReason(['UNSUPPORTED_PROVIDER', 'SOURCE_NOT_FOUND', 'NETWORK_ERROR']),
       ).toBe('SOURCE_NOT_FOUND');
       expect(pickFinalPlaybackReason(['NETWORK_ERROR', 'GEO_RESTRICTED'])).toBe('GEO_RESTRICTED');
+      expect(pickFinalPlaybackReason(['GEO_RESTRICTED', 'EMBED_UNAVAILABLE'])).toBe(
+        'EMBED_UNAVAILABLE',
+      );
       expect(pickFinalPlaybackReason([])).toBe('UNKNOWN_ERROR');
     });
   });

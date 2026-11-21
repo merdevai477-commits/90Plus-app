@@ -18,12 +18,14 @@ export function teamNamesLooselyMatch(a?: string | null, b?: string | null): boo
   if (!na || !nb) return false;
   if (na === nb) return true;
 
-  const stripTrailingClubNoise = (value: string): string =>
+  const stripClubNoise = (value: string): string =>
     value
       .replace(/(المصري|السعودي|الاماراتي|الإماراتي)$/u, '')
+      .replace(/^\d+/, '')
+      .replace(/^(sc|fc|cf|ac|afc|cfc)/i, '')
       .replace(/(sc|fc|cf|ac|afc|cfc)$/i, '');
 
-  const sa = stripTrailingClubNoise(na);
-  const sb = stripTrailingClubNoise(nb);
+  const sa = stripClubNoise(na);
+  const sb = stripClubNoise(nb);
   return sa.length >= 3 && sb.length >= 3 && sa === sb;
 }

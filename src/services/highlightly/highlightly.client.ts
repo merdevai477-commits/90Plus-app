@@ -55,6 +55,7 @@ export async function fetchHighlightPage(params: {
   signal?: AbortSignal;
   homeTeamName?: string;
   awayTeamName?: string;
+  leagueName?: string;
 }): Promise<HighlightlyPage> {
   const apiKey = process.env.HIGHLIGHTLY_API_KEY?.trim();
   if (!apiKey) throw new HighlightlyRequestError(0);
@@ -66,6 +67,7 @@ export async function fetchHighlightPage(params: {
   url.searchParams.set('offset', String(params.offset ?? 0));
   if (params.homeTeamName) url.searchParams.set('homeTeamName', params.homeTeamName);
   if (params.awayTeamName) url.searchParams.set('awayTeamName', params.awayTeamName);
+  if (params.leagueName) url.searchParams.set('leagueName', params.leagueName);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
