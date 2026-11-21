@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
-  ScrollView,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -307,6 +306,7 @@ const ProfileHero = memo(function ProfileHero({
             <View
               style={[
                 styles.socialIsland,
+                isAr ? styles.rowReverse : styles.rowForward,
                 {
                   backgroundColor: isDark
                     ? 'rgba(255,255,255,0.06)'
@@ -318,42 +318,32 @@ const ProfileHero = memo(function ProfileHero({
                 },
               ]}
             >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                bounces={false}
-                contentContainerStyle={[
-                  styles.socialIslandRow,
-                  isAr ? styles.rowReverse : styles.rowForward,
-                ]}
-              >
-                {filledLinks.map((link) => {
-                  const brand = getSocialBrandIcon(link.platform);
-                  return (
-                    <TouchableOpacity
-                      key={`${link.platform}-${link.url}`}
-                      style={[
-                        styles.socialBtn,
-                        {
-                          backgroundColor: isDark
-                            ? 'rgba(255,255,255,0.08)'
-                            : C.profileCard,
-                        },
-                      ]}
-                      onPress={() => openSocial(link.url)}
-                      activeOpacity={0.85}
-                      accessibilityRole="link"
-                      accessibilityLabel={link.platform}
-                    >
-                      <Image
-                        source={brand.source}
-                        style={{ width: brand.width, height: brand.height }}
-                        contentFit="contain"
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              {filledLinks.map((link) => {
+                const brand = getSocialBrandIcon(link.platform);
+                return (
+                  <TouchableOpacity
+                    key={`${link.platform}-${link.url}`}
+                    style={[
+                      styles.socialBtn,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(255,255,255,0.08)'
+                          : C.profileCard,
+                      },
+                    ]}
+                    onPress={() => openSocial(link.url)}
+                    activeOpacity={0.85}
+                    accessibilityRole="link"
+                    accessibilityLabel={link.platform}
+                  >
+                    <Image
+                      source={brand.source}
+                      style={{ width: Math.min(brand.width, 22), height: Math.min(brand.height, 22) }}
+                      contentFit="contain"
+                    />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
 
@@ -545,24 +535,25 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   socialIsland: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    alignContent: 'center',
+    gap: 8,
     maxWidth: '100%',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
+    height: 46,
+    paddingHorizontal: 10,
+    borderRadius: 16,
     borderWidth: 1,
   },
-  socialIslandRow: {
-    alignItems: 'center',
-    gap: 8,
-    flexGrow: 0,
-  },
   socialBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    flexShrink: 0,
   },
   sideActionBtn: {
     width: 40,
