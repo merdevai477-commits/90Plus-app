@@ -67,7 +67,6 @@ export function PlayerProfileHeader({
   const { t } = useTranslation();
   const { isDark } = useResolvedAppScheme();
   const C = colors ?? getPPColors(isDark);
-  const rtl = useRtl();
   void title; // optional scroll title — Figma hero keeps identity only
 
   const barOpacity = scrollY
