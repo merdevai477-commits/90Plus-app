@@ -89,6 +89,8 @@ export interface UnifiedVideoPlayerProps {
   style?: any;
   /** Called when the error boundary catches a playback/render failure. */
   onNativeError?: (error: Error) => void;
+  /** Fires once the native player reaches readyToPlay (used to warm the next reel). */
+  onReadyToPlay?: () => void;
 }
 
 // ─── Styling tokens ───────────────────────────────────────────────────────────
@@ -144,11 +146,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   showProgressBar = true,
   muted: overrideMuted,
   style,
+  onReadyToPlay,
 }) => {
   const { t } = useLanguage();
   const mountedRef = useRef(true);
   /** Skip player.replace on first mount — useVideoPlayer already loads the source; double-load crashes AVPlayer on iOS. */
   const loadedUrlRef = useRef<string | null>(null);
+  const readyNotifiedRef = useRef(false);
+  const [showBufferedSpinner, setShowBufferedSpinner] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -195,7 +200,10 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       try {
         p.muted = isMuted;
         p.loop = VIDEO_DEFAULTS.looping;
-        p.timeUpdateEventInterval = VIDEO_DEFAULTS.timeUpdateEventInterval;
+        // Reels feed hides the progress bar — disable 1Hz timeUpdate re-renders.
+        p.timeUpdateEventInterval = showProgressBar
+          ? VIDEO_DEFAULTS.timeUpdateEventInterval
+          : 0;
         p.audioMixingMode = 'auto';
         Object.assign(p, {
           bufferOptions:
@@ -276,12 +284,13 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
 
-  const { currentTime } = useEvent(player, 'timeUpdate', {
+  const timeUpdate = useEvent(player, 'timeUpdate', {
     currentTime: 0,
     bufferedPosition: 0,
     currentLiveTimestamp: null,
     currentOffsetFromLive: null,
   });
+  const currentTime = showProgressBar ? timeUpdate.currentTime : 0;
 
   // `playToEnd` fires once when the video hits the end — count replays off
   // that. We register a single listener via `addListener` below; the previous
@@ -342,12 +351,22 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
     attemptPlay();
   }, [attemptPlay]);
 
-  // AVPlayer on iOS often misses the first play() after mount, tab return, or foreground.
+  // Notify parent once so the feed can warm the next AVPlayer without a fixed 400ms gate.
+  useEffect(() => {
+    if (status !== 'readyToPlay') {
+      readyNotifiedRef.current = false;
+      return;
+    }
+    if (!isActive || readyNotifiedRef.current) return;
+    readyNotifiedRef.current = true;
+    onReadyToPlay?.();
+  }, [status, isActive, onReadyToPlay]);
+
+  // AVPlayer on iOS can miss the first play() after mount/tab return — one short retry is enough.
   useEffect(() => {
     if (!isActive || invalidSource) return;
-    const delays = Platform.OS === 'ios' ? [150, 400, 900] : [200];
-    const timers = delays.map((ms) => setTimeout(() => attemptPlay(), ms));
-    return () => timers.forEach(clearTimeout);
+    const timer = setTimeout(() => attemptPlay(), Platform.OS === 'ios' ? 180 : 200);
+    return () => clearTimeout(timer);
   }, [isActive, player, reel.id, invalidSource, attemptPlay]);
 
   useEffect(() => {
@@ -380,6 +399,16 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   const isLoading = !invalidSource && (status === 'loading' || status === 'idle');
   const isReady = status === 'readyToPlay';
   const hasError = !invalidSource && status === 'error';
+
+  // Keep the thumbnail as the primary loading UI; only flash a spinner if HLS is still slow.
+  useEffect(() => {
+    if (!isActive || !isLoading || isReady) {
+      setShowBufferedSpinner(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowBufferedSpinner(true), 450);
+    return () => clearTimeout(timer);
+  }, [isActive, isLoading, isReady]);
 
   // Load-timeout: show the retry screen if we're still loading after 15s.
   const [loadTimedOut, setLoadTimedOut] = useState(false);
@@ -597,7 +626,7 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       />
 
       {/* Loading / buffering — brand purple, not green */}
-      {isLoading && !hasError && isActive && !isPausedByLimit && (
+      {showBufferedSpinner && isLoading && !hasError && isActive && !isPausedByLimit && (
         <View style={styles.loadingContainer} pointerEvents="none">
           <View style={styles.loadingBadge}>
             <ActivityIndicator size="small" color={COLORS.primary} />

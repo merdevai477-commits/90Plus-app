@@ -90,9 +90,19 @@ interface ReelItemProps {
     isOwnReel?: boolean;
     /** Exact feed viewport height — must match FlatList snap interval */
     itemHeight?: number;
+    /** Active player reached readyToPlay — parent can warm the next reel. */
+    onPlayerReadyToPlay?: () => void;
 }
 
 const { width: SCREEN_WIDTH, height: FALLBACK_HEIGHT } = Dimensions.get('window');
+
+/** iOS BlurView is expensive per cell — solid glass fill keeps the look without GPU stall. */
+function SoftGlassFill({ intensity = 22 }: { intensity?: number }) {
+    if (Platform.OS === 'ios') {
+        return <View style={styles.iosSoftFill} pointerEvents="none" />;
+    }
+    return <BlurView intensity={intensity} tint="dark" style={StyleSheet.absoluteFill} />;
+}
 
 // Helper function to format numbers
 const formatCount = (count?: number): string => {
@@ -131,6 +141,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     onDeleteReel,
     onEditReel,
     itemHeight,
+    onPlayerReadyToPlay,
 }) => {
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
     const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
@@ -442,6 +453,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         showProgressBar={false}
                         isActive={isActive && !isPaused}
                         onVideoRef={onVideoRef}
+                        onReadyToPlay={onPlayerReadyToPlay}
                     />
                 ) : null}
 
@@ -483,11 +495,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             {/* User Info — compact frosted chip */}
             <View style={[styles.userInfoContainer, { top: topClearance }]}>
                 <View style={styles.glassCardShell}>
-                    <BlurView
-                        intensity={blurIntensity}
-                        tint="dark"
-                        style={StyleSheet.absoluteFill}
-                    />
+                    <SoftGlassFill intensity={blurIntensity} />
                     <LinearGradient
                         colors={GRADIENTS.glassCard}
                         style={styles.glassCard}
@@ -584,11 +592,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     ]}
                 >
                     <View style={styles.bioPanelShell}>
-                        <BlurView
-                            intensity={blurIntensity}
-                            tint="dark"
-                            style={StyleSheet.absoluteFill}
-                        />
+                        <SoftGlassFill intensity={blurIntensity} />
                         <LinearGradient
                             colors={GRADIENTS.bioPanel}
                             style={styles.bioPanel}
@@ -704,7 +708,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={[styles.buttonShell, reel.liked && styles.buttonActive]}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={reel.liked ? GRADIENTS.actionActive : GRADIENTS.actionIdle}
                             style={styles.buttonGlass}
@@ -733,7 +737,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={styles.buttonShell}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={GRADIENTS.actionIdle}
                             style={styles.buttonGlass}
@@ -755,7 +759,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={styles.buttonShell}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={GRADIENTS.actionIdle}
                             style={styles.buttonGlass}
@@ -777,7 +781,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={[styles.buttonShell, reel.saved && styles.buttonActive]}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={reel.saved ? GRADIENTS.actionActive : GRADIENTS.actionIdle}
                             style={styles.buttonGlass}
@@ -803,7 +807,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={[styles.buttonShell, !feedMuted && styles.buttonMuteLive]}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={feedMuted ? GRADIENTS.actionIdle : GRADIENTS.actionActive}
                             style={styles.buttonGlass}
@@ -825,7 +829,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={styles.buttonShell}>
-                        <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+                        <SoftGlassFill />
                         <LinearGradient
                             colors={GRADIENTS.actionIdle}
                             style={styles.buttonGlass}
@@ -1202,6 +1206,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 3,
     },
+    iosSoftFill: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(8, 4, 18, 0.55)',
+    },
     buttonShell: {
         width: ACTION_BTN,
         height: ACTION_BTN,
@@ -1356,7 +1364,7 @@ function reelItemPropsAreEqual(prev: ReelItemProps, next: ReelItemProps): boolea
     if (prev.reel.comments !== next.reel.comments) return false;
     if (prev.reel.saved !== next.reel.saved) return false;
     if (prev.reel.shares !== next.reel.shares) return false;
-    if (prev.reel.views !== next.reel.views) return false;
+    // Ignore views — feed used to bump views while scrolling and re-render every cell.
     if (prev.reel.videoUrl !== next.reel.videoUrl) return false;
     if (prev.reel.description !== next.reel.description) return false;
     if (prev.reel.user.isFollowing !== next.reel.user.isFollowing) return false;

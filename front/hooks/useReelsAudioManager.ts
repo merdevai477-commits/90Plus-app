@@ -4,7 +4,7 @@
  * Manages audio / playback cleanup for the reels page:
  *  - Stops all video audio when leaving the reels page (navigation)
  *  - Pauses playback when the app goes to background
- *  - On return, the reels feed remounts players (playerGeneration); we do not
+ *  - On return, the reels feed remounts players via focus (isReelsScreenFocused); we do not
  *    force play here to avoid AudioFocusNotAcquiredException / stale AVPlayer races
  *
  * SDK 55 migration:

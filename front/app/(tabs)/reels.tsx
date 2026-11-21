@@ -70,8 +70,11 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
  * and tear it down on every swipe, which is why the spinner showed each time.
  */
 const REEL_PLAYER_MOUNT_DISTANCE = 1;
-/** Give the active iOS reel the network before creating the next AVPlayer. */
-const IOS_NEXT_PLAYER_DELAY_MS = 400;
+/**
+ * Fallback only: prefer warming the next AVPlayer when the active reel reports
+ * readyToPlay. This short timeout covers cases where ready never fires.
+ */
+const IOS_NEXT_PLAYER_FALLBACK_MS = 80;
 const REEL_LIST_WINDOW_SIZE = 3;
 const REEL_INITIAL_RENDER = 2;
 const REEL_MAX_BATCH = 2;
@@ -680,8 +683,8 @@ const ReelsFeed: React.FC = () => {
     }
   }, []);
 
-  // On iOS, wait until the active reel has started before creating the next
-  // AVPlayer. Android mounts the next cell on the same frame.
+  // On iOS, warm the next AVPlayer once the active reel is ready (or after a
+  // short fallback). Android mounts the next cell on the same frame.
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     if (safePlayerIndex < 0) {
@@ -689,12 +692,19 @@ const ReelsFeed: React.FC = () => {
       return;
     }
     const timer = setTimeout(() => {
-      setNextPlayerReadyIndex(safePlayerIndex);
-    }, IOS_NEXT_PLAYER_DELAY_MS);
+      setNextPlayerReadyIndex((prev) => (prev === safePlayerIndex ? prev : safePlayerIndex));
+    }, IOS_NEXT_PLAYER_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [safePlayerIndex]);
 
-  // Tear players down when leaving the tab so a quick return cannot resume a released AVPlayer.
+  const handleActivePlayerReady = useCallback((index: number) => {
+    if (Platform.OS !== 'ios') return;
+    setNextPlayerReadyIndex((prev) => (prev === index ? prev : index));
+  }, []);
+
+  // Pause + unmount players on blur. Do NOT bump playerGeneration — remounting
+  // via isReelsScreenFocused already creates a fresh expo-video player, and
+  // bumping forced a second cold HLS handshake on every tab return.
   useFocusEffect(
     useCallback(() => {
       setIsReelsScreenFocused(true);
@@ -707,7 +717,6 @@ const ReelsFeed: React.FC = () => {
         pauseAllVideos();
         videoRefs.current.clear();
         clearLoadedVideos();
-        setPlayerGeneration((g) => g + 1);
       };
     }, [pauseAllVideos, scheduleSafePlayerMount]),
   );
@@ -1040,20 +1049,11 @@ const ReelsFeed: React.FC = () => {
       // coalesces many writes into one.
       persistViewedReels();
 
-      // Optimistic UI bump — only when the server actually counted.
-      if (result.counted) {
-        const bumpViews = (r: ReelData) =>
-          r.id === reelId
-            ? {
-                ...r,
-                views:
-                  typeof result.views === 'number'
-                    ? result.views
-                    : (r.views ?? 0) + 1,
-              }
-            : r;
-        setReels((prev) => prev.map(bumpViews));
-        setBackendReels((prev) => prev.map(bumpViews));
+      // Optimistic view bump is deferred: mutating the full feed arrays while
+      // the user is swiping re-renders every visible ReelItem on iPhone.
+      // The next natural feed refresh/WS merge will pick up the new count.
+      if (result.counted && typeof result.views === 'number') {
+        logger.debug('[ReelView] counted', { reelId, views: result.views });
       }
     } catch (error) {
       logger.warn('[ReelView] Unexpected error; will retry on next playback', {
@@ -1532,9 +1532,12 @@ const ReelsFeed: React.FC = () => {
       onVideoRef={handleVideoRef}
       onDeleteReel={handleDeleteReel}
       onEditReel={handleEditReel}
+      onPlayerReadyToPlay={
+        isActiveCell ? () => handleActivePlayerReady(index) : undefined
+      }
     />
   );
-  }, [safePlayerIndex, nextPlayerReadyIndex, viewportHeight, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  }, [safePlayerIndex, nextPlayerReadyIndex, viewportHeight, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel, handleActivePlayerReady]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({
@@ -1658,7 +1661,8 @@ const ReelsFeed: React.FC = () => {
           initialNumToRender={REEL_INITIAL_RENDER}
           maxToRenderPerBatch={REEL_MAX_BATCH}
           updateCellsBatchingPeriod={50}
-          removeClippedSubviews={false}
+          // Android: clip off-screen cells. iOS: keep false — clipping can blank VideoView.
+          removeClippedSubviews={Platform.OS === 'android'}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}
