@@ -439,6 +439,47 @@ function UserProfileScreen() {
     finally { setIsBlockLoading(false); }
   };
 
+  // Hooks must stay above early returns — never call useMemo after a conditional return.
+  const socialLinks = useMemo(
+    () =>
+      Array.isArray(user?.socialLinks)
+        ? user!.socialLinks
+            .filter((l): l is NonNullable<typeof l> => !!l && typeof l === 'object')
+            .map((l) => ({
+              platform: typeof l.platform === 'string' ? l.platform : 'website',
+              url: typeof l.url === 'string' ? l.url : '',
+              username: typeof l.username === 'string' ? l.username : undefined,
+            }))
+            .filter((l) => l.url.trim() !== '')
+        : [],
+    [user?.socialLinks],
+  );
+
+  const formattedVideos = useMemo(
+    () =>
+      userVideos
+        .filter((v) => v && v.id && v.uri)
+        .map((v) => ({
+          id: v.id,
+          thumbnail: v.thumbnail,
+          views: String(v.views ?? '0'),
+          duration: String((v as { duration?: number | string }).duration ?? '0'),
+        })),
+    [userVideos],
+  );
+
+  const openFollowersModal = (tab: 'followers' | 'following') => {
+    if (!user?.id) return;
+    setFollowersModalTab(tab);
+    setIsFollowersModalVisible(true);
+  };
+
+  const openPhotoViewer = (url?: string | null) => {
+    if (!url) return;
+    setViewerImageUrl(url);
+    setPhotoViewerOpen(true);
+  };
+
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading && !user) {
     return (
@@ -466,49 +507,7 @@ function UserProfileScreen() {
   // leaderboard's "All-time" board and the global XP rank.
   const userLevel = user.level ?? 1;
   const userXp = user.xp ?? 0;
-
-  // Social links — guard malformed API rows (memoized to avoid hero churn)
-  const socialLinks = useMemo(
-    () =>
-      Array.isArray(user.socialLinks)
-        ? user.socialLinks
-            .filter((l): l is NonNullable<typeof l> => !!l && typeof l === 'object')
-            .map((l) => ({
-              platform: typeof l.platform === 'string' ? l.platform : 'website',
-              url: typeof l.url === 'string' ? l.url : '',
-              username: typeof l.username === 'string' ? l.username : undefined,
-            }))
-            .filter((l) => l.url.trim() !== '')
-        : [],
-    [user.socialLinks],
-  );
-
   const showFullProfile = !blockedMe && !isBlocked;
-
-  const formattedVideos = useMemo(
-    () =>
-      userVideos
-        .filter((v) => v && v.id && v.uri)
-        .map((v) => ({
-          id: v.id,
-          thumbnail: v.thumbnail,
-          views: String(v.views ?? '0'),
-          duration: String((v as { duration?: number | string }).duration ?? '0'),
-        })),
-    [userVideos],
-  );
-
-  const openFollowersModal = (tab: 'followers' | 'following') => {
-    if (!user?.id) return;
-    setFollowersModalTab(tab);
-    setIsFollowersModalVisible(true);
-  };
-
-  const openPhotoViewer = (url?: string | null) => {
-    if (!url) return;
-    setViewerImageUrl(url);
-    setPhotoViewerOpen(true);
-  };
 
   return (
     <View style={[s.container, { backgroundColor: profileColors.profileBg }]}>
