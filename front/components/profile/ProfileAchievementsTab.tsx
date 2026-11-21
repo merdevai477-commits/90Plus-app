@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { PROFILE_ICONS, PROFILE_RANK_ICON } from './profileV2Assets';
 import { getApiUrl } from '../../config/api.config';
 import { getClerkBearerToken } from '../../utils/clerkAuthToken';
 import BadgeIcon from '../identity/BadgeIcon';
+import { logger } from '../../utils/logger';
 
 type AchievementsSubTab = 'titles' | 'ranks';
 type BadgeFilter = 'all' | 'done' | 'progress' | 'locked';
@@ -78,6 +79,8 @@ export function ProfileAchievementsTab({ userId }: Props) {
   const { t, language } = useTranslation();
   const { colors: C, isDark } = useProfileTheme();
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const isAr = language === 'ar';
   const [subTab, setSubTab] = useState<AchievementsSubTab>('titles');
   const [filter, setFilter] = useState<BadgeFilter>('all');
@@ -86,36 +89,49 @@ export function ProfileAchievementsTab({ userId }: Props) {
   const [titles, setTitles] = useState<ApiTitle[]>([]);
   const [stands, setStands] = useState<ApiStand[]>([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!userId || userId.startsWith('user_')) {
       setTitles([]);
       setStands([]);
       setLoading(false);
+      setError(false);
       return;
     }
     setLoading(true);
     setError(false);
     try {
-      const token = await getClerkBearerToken(getToken);
+      const token = await getClerkBearerToken(getTokenRef.current, {
+        retries: 3,
+        baseDelayMs: 150,
+      });
+      if (signal?.aborted) return;
       const res = await fetch(`${getApiUrl()}/profile/users/${userId}/achievements`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal,
       });
+      if (signal?.aborted) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      if (signal?.aborted) return;
       const data = json?.data;
       setTitles(Array.isArray(data?.titles) ? data.titles : []);
       setStands(Array.isArray(data?.stands) ? data.stands : []);
-    } catch {
+      setError(false);
+    } catch (err) {
+      if (signal?.aborted) return;
+      logger.warn('[ProfileAchievementsTab] load failed', err);
       setError(true);
       setTitles([]);
       setStands([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }, [userId, getToken]);
+  }, [userId]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   const competitionLabel = useCallback(

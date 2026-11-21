@@ -213,30 +213,59 @@ async function tsfStand(
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      logger.warn(`[profile-achievements] ${label} timed out after ${ms}ms`);
+      resolve(fallback);
+    }, ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        logger.warn(`[profile-achievements] ${label} failed`, err);
+        resolve(fallback);
+      });
+  });
+}
+
 async function buildStands(userId: string, clerkUserId: string | null): Promise<ProfileStandItem[]> {
   const empty = { rank: null as number | null, score: 0 };
+  const standTimeoutMs = 6_000;
   const [results, predictions, scorers, coach, shareCycle] = await Promise.all([
-    clerkUserId ? kingStand(clerkUserId, 'exact', 'week') : Promise.resolve(empty),
-    clerkUserId ? kingStand(clerkUserId, 'winner', 'week') : Promise.resolve(empty),
-    clerkUserId ? tsfStand(clerkUserId, 'all') : Promise.resolve(empty),
-    coachKingUserStanding(userId, 'week').catch((err) => {
-      logger.warn('[profile-achievements] coach stand failed', err);
-      return { rank: null as number | null, points: 0 };
-    }),
-    ensureCurrentCycle()
-      .then(async (cycle) => {
+    clerkUserId
+      ? withTimeout(kingStand(clerkUserId, 'exact', 'week'), standTimeoutMs, empty, 'king_exact')
+      : Promise.resolve(empty),
+    clerkUserId
+      ? withTimeout(kingStand(clerkUserId, 'winner', 'week'), standTimeoutMs, empty, 'king_winner')
+      : Promise.resolve(empty),
+    clerkUserId
+      ? withTimeout(tsfStand(clerkUserId, 'all'), standTimeoutMs, empty, 'tsf')
+      : Promise.resolve(empty),
+    withTimeout(
+      coachKingUserStanding(userId, 'week'),
+      standTimeoutMs,
+      { rank: null as number | null, points: 0 },
+      'coach_king',
+    ),
+    withTimeout(
+      ensureCurrentCycle().then(async (cycle) => {
         const standing = await getMyStanding(cycle.id, userId);
         const score = standing?.score ?? standing?.participants ?? 0;
-        const hasEntry = !!standing && (standing.score > 0 || standing.participants > 0 || standing.shares > 0);
+        const hasEntry =
+          !!standing && (standing.score > 0 || standing.participants > 0 || standing.shares > 0);
         return {
           rank: hasEntry ? standing.rank : null,
           score,
         };
-      })
-      .catch((err) => {
-        logger.warn('[profile-achievements] share-win stand failed', err);
-        return { rank: null as number | null, score: 0 };
       }),
+      standTimeoutMs,
+      { rank: null as number | null, score: 0 },
+      'share_win',
+    ),
   ]);
 
   return [
