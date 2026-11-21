@@ -5,14 +5,29 @@ jest.mock('../../globalState', () => ({
   },
 }));
 
+jest.mock('../../src/services/authService', () => ({
+  AuthService: {
+    getUserByUsername: jest.fn(() => Promise.resolve(null)),
+    getUserReels: jest.fn(() => Promise.resolve([])),
+  },
+}));
+
 import { globalState } from '../../globalState';
 import {
   isCurrentUserUsername,
   navigateUserProfile,
   normalizeProfileUsername,
+  prefetchPublicUserProfile,
 } from '../navigateUserProfile';
+import { AuthService } from '../../src/services/authService';
+import { clearPublicProfileMemory, peekPublicProfile } from '../../services/publicProfileCache';
 
 describe('navigateUserProfile', () => {
+  beforeEach(() => {
+    clearPublicProfileMemory();
+    jest.clearAllMocks();
+  });
+
   it('normalizes @mentions', () => {
     expect(normalizeProfileUsername('@Me_User')).toBe('Me_User');
   });
@@ -35,5 +50,22 @@ describe('navigateUserProfile', () => {
       pathname: '/user/[username]',
       params: { username: 'someone_else' },
     });
+    expect(AuthService.getUserByUsername).toHaveBeenCalled();
+  });
+
+  it('seeds memory when prefetch receives a SearchUserResult', () => {
+    const seed = {
+      id: '1',
+      username: 'seeded',
+      displayName: 'Seeded',
+      avatar: null,
+      bio: null,
+      isVerified: false,
+      isDeveloper: false,
+      level: 1,
+      favoriteTeam: null,
+    };
+    prefetchPublicUserProfile('seeded', seed);
+    expect(peekPublicProfile('seeded')?.displayName).toBe('Seeded');
   });
 });

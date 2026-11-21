@@ -31,10 +31,12 @@ export function runLogoutCleanup(clearVideos?: () => Promise<void>): void {
       const { AuthService } = await import('../src/services/authService');
       const { rankingsService } = await import('../services/rankingsService');
       const { cacheService } = await import('../services/cacheService');
+      const { clearPublicProfileMemory } = await import('../services/publicProfileCache');
 
       AuthService.clearMemoryCache();
       CoinsService.clearCurrentUser();
       rankingsService.clearMemoryCache();
+      clearPublicProfileMemory();
 
       await Promise.allSettled([
         globalState.logout(),

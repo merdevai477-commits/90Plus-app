@@ -47,7 +47,7 @@ import { isCurrentUserUsername } from '../../utils/navigateUserProfile';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import { useVideos, Comment } from '../../contexts/VideosContext';
 import { BlockService } from '../../services/blockService';
-import { cacheService, CACHE_TTL } from '../../services/cacheService';
+import { cacheService } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { ReportSystem } from '../../components/common/ReportSystem';
@@ -61,10 +61,19 @@ import { StreakInfoModal } from '../../components/common/StreakInfoModal';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { logger } from '../../utils/logger';
+import {
+  fetchPublicProfileCached,
+  fetchPublicVideosCached,
+  peekPublicProfile,
+  peekPublicVideos,
+  setPublicProfileMemory,
+  setPublicVideosMemory,
+} from '../../services/publicProfileCache';
+import { Image as ExpoImage } from 'expo-image';
 
-// Cache keys for the public-profile screen
+// Cache keys for the public-profile screen (durable AsyncStorage layer)
 const USER_PROFILE_CACHE = 'user_profile';
-const USER_VIDEOS_CACHE  = 'user_videos';
+const USER_VIDEOS_CACHE = 'user_videos';
 const REELS_PAGE_SIZE = 30;
 
 const ACCENT = '#A855F7';
@@ -98,13 +107,18 @@ function UserProfileScreen() {
     onSuccess: () => toast.showSuccess('', t.publicProfile.reportSubmitted),
   });
 
-  const [user, setUser] = useState<SearchUserResult | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialMemProfile = username ? peekPublicProfile(username) : null;
+  const initialMemVideos = username ? peekPublicVideos(username) : null;
+
+  const [user, setUser] = useState<SearchUserResult | null>(initialMemProfile);
+  const [isLoading, setIsLoading] = useState(!initialMemProfile);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [userVideos, setUserVideos] = useState<UserReel[]>([]);
-  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
-  const [hasMoreVideos, setHasMoreVideos] = useState(true);
+  const [userVideos, setUserVideos] = useState<UserReel[]>(initialMemVideos ?? []);
+  const [isLoadingVideos, setIsLoadingVideos] = useState(!initialMemVideos?.length);
+  const [hasMoreVideos, setHasMoreVideos] = useState(
+    () => (initialMemVideos?.length ?? 0) >= REELS_PAGE_SIZE || !initialMemVideos?.length,
+  );
   const [loadingMoreVideos, setLoadingMoreVideos] = useState(false);
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<UserReel | null>(null);
@@ -115,8 +129,8 @@ function UserProfileScreen() {
     shares: 0,
     views: 0,
   });
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [blockedMe, setBlockedMe] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(!!initialMemProfile?.blockStatus?.blockedByMe);
+  const [blockedMe, setBlockedMe] = useState(!!initialMemProfile?.blockStatus?.blockedMe);
   const [isBlockLoading, setIsBlockLoading] = useState(false);
   const [isBlockModalVisible, setIsBlockModalVisible] = useState(false);
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
@@ -146,79 +160,50 @@ function UserProfileScreen() {
     canViewPredictions,
   );
 
-  // ── Data loading (cache-first for instant render) ──────────────────────────
-  const loadUserProfile = useCallback(async (skipCache = false) => {
-    if (!username) {
-      setError(t.publicProfile.notFound);
-      setIsLoading(false);
-      return;
+  // ── Data loading (memory → disk → network, profile + videos in parallel) ──
+  const applyProfile = useCallback((userData: SearchUserResult) => {
+    setUser(userData);
+    setError(null);
+    const bs = userData.blockStatus;
+    setIsBlocked(!!bs?.blockedByMe);
+    setBlockedMe(!!bs?.blockedMe);
+    setIsLoading(false);
+    if (userData.avatar) {
+      ExpoImage.prefetch(userData.avatar).catch(() => undefined);
     }
-
-    if (isCurrentUserUsername(username)) {
-      router.replace('/(tabs)/profile');
-      return;
+    if (userData.coverImage) {
+      ExpoImage.prefetch(userData.coverImage).catch(() => undefined);
     }
-
-    // Cache-first: paint cached profile instantly while we revalidate.
-    const cacheKey = `${USER_PROFILE_CACHE}_${username.toLowerCase()}`;
-    if (!skipCache) {
-      try {
-        const cached = await cacheService.get<SearchUserResult>(cacheKey);
-        if (cached) {
-          setUser(cached);
-          setError(null);
-          const bs = cached.blockStatus;
-          setIsBlocked(!!bs?.blockedByMe);
-          setBlockedMe(!!bs?.blockedMe);
-          setIsLoading(false); // show cached profile NOW
-        }
-      } catch { /* silent */ }
-    }
-
-    try {
-      const token = await getTokenRef.current();
-      const userData = await AuthService.getUserByUsername(token, username);
-      if (userData) {
-        setUser(userData);
-        setError(null);
-        const bs = userData.blockStatus;
-        setIsBlocked(!!bs?.blockedByMe);
-        setBlockedMe(!!bs?.blockedMe);
-        cacheService.set(cacheKey, userData, 5 * 60 * 1000).catch(() => {});
-      } else {
-        setError(t.publicProfile.notFound);
-      }
-    } catch {
-      // Only surface error if we have nothing on screen at all.
-      setUser(prev => {
-        if (!prev) setError(t.errorCodes.unknown);
-        return prev;
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [username, t]);
+  }, []);
 
   const loadUserVideos = useCallback(async (skipCache = false, appendOffset?: number) => {
     if (!username) return;
 
-    const cacheKey = `${USER_VIDEOS_CACHE}_${username.toLowerCase()}`;
+    const diskKey = `${USER_VIDEOS_CACHE}_${username.toLowerCase()}`;
     const isAppend = appendOffset != null && appendOffset > 0;
     const offset = appendOffset ?? 0;
 
     if (!isAppend) {
       if (!skipCache) {
-        try {
-          const cached = await cacheService.get<UserReel[]>(cacheKey);
-          if (cached && cached.length > 0) {
-            setUserVideos(cached);
-            setHasMoreVideos(cached.length >= REELS_PAGE_SIZE);
-            setIsLoadingVideos(false);
-          } else {
+        const mem = peekPublicVideos(username);
+        if (mem && mem.length > 0) {
+          setUserVideos(mem);
+          setHasMoreVideos(mem.length >= REELS_PAGE_SIZE);
+          setIsLoadingVideos(false);
+        } else {
+          try {
+            const cached = await cacheService.get<UserReel[]>(diskKey);
+            if (cached && cached.length > 0) {
+              setUserVideos(cached);
+              setPublicVideosMemory(username, cached);
+              setHasMoreVideos(cached.length >= REELS_PAGE_SIZE);
+              setIsLoadingVideos(false);
+            } else {
+              setIsLoadingVideos(true);
+            }
+          } catch {
             setIsLoadingVideos(true);
           }
-        } catch {
-          setIsLoadingVideos(true);
         }
       } else {
         setIsLoadingVideos(true);
@@ -227,17 +212,18 @@ function UserProfileScreen() {
 
     try {
       const token = await getTokenRef.current();
-      const reels = await AuthService.getUserReels(
-        token,
-        username,
-        REELS_PAGE_SIZE,
-        offset,
-        skipCache,
-      );
+      const reels = isAppend
+        ? await AuthService.getUserReels(token, username, REELS_PAGE_SIZE, offset, skipCache)
+        : await fetchPublicVideosCached(
+            username,
+            () => AuthService.getUserReels(token, username, REELS_PAGE_SIZE, offset, skipCache),
+            { revalidate: true },
+          );
       setUserVideos((prev) => (isAppend ? [...prev, ...reels] : reels));
       setHasMoreVideos(reels.length >= REELS_PAGE_SIZE);
       if (!isAppend) {
-        cacheService.set(cacheKey, reels, 2 * 60 * 1000).catch(() => {});
+        setPublicVideosMemory(username, reels);
+        cacheService.set(diskKey, reels, 2 * 60 * 1000).catch(() => {});
       }
     } catch { /* silent */ }
     finally {
@@ -245,6 +231,61 @@ function UserProfileScreen() {
       setLoadingMoreVideos(false);
     }
   }, [username]);
+
+  const loadUserProfile = useCallback(async (skipCache = false) => {
+    if (!username) {
+      setError(t.publicProfile.notFound);
+      setIsLoading(false);
+      return null as SearchUserResult | null;
+    }
+
+    if (isCurrentUserUsername(username)) {
+      router.replace('/(tabs)/profile');
+      return null;
+    }
+
+    const diskKey = `${USER_PROFILE_CACHE}_${username.toLowerCase()}`;
+
+    if (!skipCache) {
+      const mem = peekPublicProfile(username);
+      if (mem) {
+        applyProfile(mem);
+      } else {
+        try {
+          const cached = await cacheService.get<SearchUserResult>(diskKey);
+          if (cached) {
+            setPublicProfileMemory(username, cached);
+            applyProfile(cached);
+          }
+        } catch { /* silent */ }
+      }
+    }
+
+    try {
+      const token = await getTokenRef.current();
+      const userData = await fetchPublicProfileCached(
+        username,
+        () => AuthService.getUserByUsername(token, username),
+        { revalidate: true },
+      );
+      if (userData) {
+        setPublicProfileMemory(username, userData);
+        applyProfile(userData);
+        cacheService.set(diskKey, userData, 5 * 60 * 1000).catch(() => {});
+        return userData;
+      }
+      setError(t.publicProfile.notFound);
+      return null;
+    } catch {
+      setUser((prev) => {
+        if (!prev) setError(t.errorCodes.unknown);
+        return prev;
+      });
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [username, t, applyProfile]);
 
   const recordProfileView = useCallback(async () => {
     if (!username || hasRecordedViewRef.current) return;
@@ -259,42 +300,77 @@ function UserProfileScreen() {
     if (!username) return;
 
     hasRecordedViewRef.current = false;
-    setUser(null);
-    setUserVideos([]);
     setError(null);
-    setIsLoading(true);
-    setIsBlocked(false);
-    setBlockedMe(false);
     setHasMoreVideos(true);
 
+    const memProfile = peekPublicProfile(username);
+    const memVideos = peekPublicVideos(username);
+
+    if (memProfile) {
+      applyProfile(memProfile);
+    } else {
+      setUser(null);
+      setIsBlocked(false);
+      setBlockedMe(false);
+      setIsLoading(true);
+    }
+
+    if (memVideos?.length) {
+      setUserVideos(memVideos);
+      setHasMoreVideos(memVideos.length >= REELS_PAGE_SIZE);
+      setIsLoadingVideos(false);
+    } else {
+      if (!memProfile) setUserVideos([]);
+      setIsLoadingVideos(true);
+    }
+
+    let cancelled = false;
+
     const bootstrap = async () => {
-      await loadUserProfile();
+      // Profile + videos in parallel (videos cleared later if blocked).
+      const profilePromise = loadUserProfile(false);
+      const videosPromise = loadUserVideos(false, 0);
+      const [fresh] = await Promise.all([profilePromise, videosPromise]);
+      if (cancelled) return;
+
+      const blocked =
+        !!fresh?.blockStatus?.blockedByMe || !!fresh?.blockStatus?.blockedMe;
+      if (blocked) {
+        setUserVideos([]);
+        setHasMoreVideos(false);
+      }
       recordProfileView();
     };
 
-    bootstrap();
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, [username]);
 
-  // Load reels only after profile is known and block status allows viewing.
+  // If block status flips after a refresh, drop videos.
   useEffect(() => {
-    if (!username || !user) return;
+    if (!user) return;
     if (blockedMe || isBlocked) {
       setUserVideos([]);
       setHasMoreVideos(false);
-      return;
     }
-    loadUserVideos();
-  }, [username, user?.id, blockedMe, isBlocked]);
+  }, [user?.id, blockedMe, isBlocked]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     setHasMoreVideos(true);
-    await loadUserProfile(true);
-    if (!blockedMe && !isBlocked) {
+    const fresh = await loadUserProfile(true);
+    const blocked =
+      !!fresh?.blockStatus?.blockedByMe || !!fresh?.blockStatus?.blockedMe;
+    if (!blocked) {
       await Promise.all([
         loadUserVideos(true, 0),
         refreshPublicPredictions(true),
       ]);
+    } else {
+      setUserVideos([]);
+      setHasMoreVideos(false);
     }
     setRefreshing(false);
   };
