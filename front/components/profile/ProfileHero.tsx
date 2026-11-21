@@ -91,19 +91,20 @@ const ProfileHero = memo(function ProfileHero({
   onSettingsPress,
   onMorePress,
   onBackPress,
+  onSharePress,
   onEditPress,
   viewAllBioLabel,
   showLessBioLabel,
   actionBelowName,
 }: ProfileHeroProps) {
   const { language, t } = useTranslation();
-  const { colors: C } = useProfileTheme();
+  const { colors: C, isDark } = useProfileTheme();
   const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
   const sheetWidth = Math.min(windowWidth, 456);
   const [bioExpanded, setBioExpanded] = useState(false);
   const filledLinks = useMemo(
-    () => socialLinks.filter((l) => !!l.url?.trim()).slice(0, 3),
+    () => socialLinks.filter((l) => !!l.url?.trim()).slice(0, 6),
     [socialLinks],
   );
   const trimmedBio = bio?.trim() ?? '';
@@ -137,19 +138,30 @@ const ProfileHero = memo(function ProfileHero({
         />
       </View>
 
-      <View style={[styles.topBar, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
+      <View
+        style={[
+          styles.topBar,
+          isAr ? styles.rowReverse : styles.rowForward,
+          { paddingTop: topInset + 8 },
+        ]}
+        pointerEvents="box-none"
+      >
         {onBackPress ? (
           <TouchableOpacity
             onPress={onBackPress}
             hitSlop={10}
             style={[styles.navCircleBtn, { backgroundColor: C.navBtnBg, shadowColor: C.embossShadow }]}
           >
-            <Ionicons name="chevron-back" size={18} color={C.navBtnIcon} />
+            <Ionicons
+              name={isAr ? 'chevron-forward' : 'chevron-back'}
+              size={18}
+              color={C.navBtnIcon}
+            />
           </TouchableOpacity>
         ) : (
           <View style={styles.navSpacer} />
         )}
-        <View style={styles.navRight}>
+        <View style={[styles.navRight, isAr ? styles.rowReverse : styles.rowForward]}>
           {onSettingsPress ? (
             <TouchableOpacity
               onPress={onSettingsPress}
@@ -248,15 +260,37 @@ const ProfileHero = memo(function ProfileHero({
               </View>
 
               {filledLinks.length > 0 ? (
-                <View style={styles.socialRow}>
+                <View
+                  style={[
+                    styles.socialIsland,
+                    isAr ? styles.rowEnd : styles.rowStart,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.06)'
+                        : 'rgba(106,43,217,0.06)',
+                      borderColor: isDark
+                        ? 'rgba(255,255,255,0.10)'
+                        : 'rgba(106,43,217,0.10)',
+                    },
+                  ]}
+                >
                   {filledLinks.map((link) => {
                     const brand = getSocialBrandIcon(link.platform);
                     return (
                       <TouchableOpacity
                         key={`${link.platform}-${link.url}`}
-                        style={styles.socialBtn}
+                        style={[
+                          styles.socialBtn,
+                          {
+                            backgroundColor: isDark
+                              ? 'rgba(255,255,255,0.08)'
+                              : '#FFFFFF',
+                          },
+                        ]}
                         onPress={() => openSocial(link.url)}
                         activeOpacity={0.85}
+                        accessibilityRole="link"
+                        accessibilityLabel={link.platform}
                       >
                         <Image
                           source={brand.source}
@@ -270,15 +304,37 @@ const ProfileHero = memo(function ProfileHero({
               ) : null}
             </View>
 
-            {isOwnProfile && onEditPress ? (
+            {onSharePress ? (
               <TouchableOpacity
-                style={styles.editBtn}
+                style={[
+                  styles.sideActionBtn,
+                  {
+                    backgroundColor: C.profilePrimarySoft,
+                    borderColor: C.embossBorder,
+                  },
+                ]}
+                onPress={onSharePress}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={t.profile.shareProfile}
+              >
+                <Ionicons name="share-social-outline" size={20} color={C.profilePrimary} />
+              </TouchableOpacity>
+            ) : isOwnProfile && onEditPress ? (
+              <TouchableOpacity
+                style={[
+                  styles.sideActionBtn,
+                  {
+                    backgroundColor: C.profilePrimarySoft,
+                    borderColor: C.embossBorder,
+                  },
+                ]}
                 onPress={onEditPress}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="Edit profile"
+                accessibilityLabel={t.profile.editProfile}
               >
-                <Ionicons name="pencil" size={20} color={C.profilePrimary} />
+                <Ionicons name="pencil" size={18} color={C.profilePrimary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.editBtnSpacer} />
@@ -338,12 +394,16 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 4,
     paddingHorizontal: 20,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  navRight: {
+  rowForward: {
     flexDirection: 'row',
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  navRight: {
     alignItems: 'center',
     gap: 12,
   },
@@ -468,25 +528,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
-  socialRow: {
+  socialIsland: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
   },
   socialBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  editBtn: {
+  sideActionBtn: {
     width: 40,
     height: 40,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
     marginTop: 70,
   },
   editBtnSpacer: {

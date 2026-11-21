@@ -20,24 +20,28 @@ const ContentTabs = memo(function ContentTabs({
 }: ContentTabsProps) {
   const { t, language } = useTranslation();
   const { colors: C } = useProfileTheme();
+  const isAr = language === 'ar';
   const tabs = [
     {
       id: 'posts',
       label: t.profile.postsTab,
-      icon: PROFILE_ICONS.tabBullseye,
-      iconActive: PROFILE_ICONS.tabBullseyeActive,
+      icon: PROFILE_ICONS.tabPosts,
+      iconActive: PROFILE_ICONS.tabPostsActive,
+      mirrorInRtl: true,
     },
     {
       id: 'videos',
       label: t.profile.reels,
       icon: PROFILE_ICONS.tabVideo,
       iconActive: PROFILE_ICONS.tabVideoActive,
+      mirrorInRtl: false,
     },
     {
       id: 'achievements',
       label: t.profile.achievements,
       icon: PROFILE_ICONS.tabTrophy,
       iconActive: PROFILE_ICONS.tabTrophyActive,
+      mirrorInRtl: false,
     },
   ];
 
@@ -46,7 +50,7 @@ const ContentTabs = memo(function ContentTabs({
       <View
         style={[
           styles.tabsWrapper,
-          language === 'ar' ? RTL_ROW : LTR_ROW,
+          isAr ? styles.rowRtl : styles.rowLtr,
           {
             backgroundColor: C.profileTabBar,
             borderColor: C.embossBorder,
@@ -59,7 +63,7 @@ const ContentTabs = memo(function ContentTabs({
           return (
             <TouchableOpacity
               key={tab.id}
-              style={styles.tab}
+              style={[styles.tab, isAr ? styles.tabRtl : styles.tabLtr]}
               onPress={() => onTabChange(tab.id)}
               activeOpacity={0.78}
               accessibilityRole="tab"
@@ -77,7 +81,11 @@ const ContentTabs = memo(function ContentTabs({
               </Text>
               <Image
                 source={isActive ? tab.iconActive : tab.icon}
-                style={[styles.tabIcon, !isActive && styles.tabIconIdle]}
+                style={[
+                  styles.tabIcon,
+                  !isActive && styles.tabIconIdle,
+                  tab.mirrorInRtl && isAr ? styles.iconMirror : null,
+                ]}
                 contentFit="contain"
               />
               {isActive ? (
@@ -93,16 +101,12 @@ const ContentTabs = memo(function ContentTabs({
 
 export default ContentTabs;
 
-const LTR_ROW = { direction: 'ltr' } as const;
-const RTL_ROW = { direction: 'rtl' } as const;
-
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 20,
     marginTop: 18,
   },
   tabsWrapper: {
-    flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
     borderRadius: 19,
@@ -115,16 +119,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
+  rowLtr: {
+    flexDirection: 'row',
+  },
+  rowRtl: {
+    flexDirection: 'row-reverse',
+  },
   tab: {
     flex: 1,
     minWidth: 0,
     height: '100%',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
     paddingHorizontal: 4,
     position: 'relative',
+  },
+  tabLtr: {
+    flexDirection: 'row',
+  },
+  tabRtl: {
+    flexDirection: 'row-reverse',
   },
   activeUnderline: {
     position: 'absolute',
@@ -149,5 +164,8 @@ const styles = StyleSheet.create({
   },
   tabIconIdle: {
     opacity: 0.72,
+  },
+  iconMirror: {
+    transform: [{ scaleX: -1 }],
   },
 });

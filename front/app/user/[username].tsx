@@ -83,7 +83,7 @@ function UserProfileScreen() {
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const toast = useToast();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const insets = useSafeAreaInsets();
   const { colors: profileColors } = useProfileTheme();
   const { reelComments, addComment, toggleCommentLike } = useVideos();
@@ -630,6 +630,7 @@ function UserProfileScreen() {
           onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
           onBackPress={() => router.back()}
           onMorePress={() => setShowMoreMenu(true)}
+          onSharePress={handleShareProfilePress}
           viewAllBioLabel={t.profile.viewAllBio}
           showLessBioLabel={t.profile.showLess}
           actionBelowName={
@@ -688,7 +689,7 @@ function UserProfileScreen() {
           nextLevelXp={(userLevel + 1) * 100}
           progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
           countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
-          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
+          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag, language === 'ar')}
           clubLogo={showFullProfile ? user.clubLogo : null}
           clubName={showFullProfile ? user.favoriteTeam : null}
           isOwnProfile={false}

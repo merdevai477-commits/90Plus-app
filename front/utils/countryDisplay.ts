@@ -7,29 +7,85 @@ const UNSET_FLAGS = new Set(['🏳️', '🏴']);
 /** Intentional global / app-world marker (shown as a globe, not a national flag). */
 export const WORLD_COUNTRY_FLAG = '🌍';
 
+const ARABIC_SCRIPT = /[\u0600-\u06FF]/;
+
+function normKey(value: string): string {
+  return value.trim().toLowerCase().replace(/_/g, '-').replace(/\s+/g, ' ');
+}
+
+type CountryHit = { nameAr: string; nameEn: string };
+
+const COUNTRY_LOOKUP = (() => {
+  const map = new Map<string, CountryHit>();
+  const put = (key: string, hit: CountryHit) => {
+    const k = normKey(key);
+    if (k) map.set(k, hit);
+  };
+
+  for (const c of COUNTRIES) {
+    const hit = { nameAr: c.name, nameEn: c.nameEn };
+    put(c.id, hit);
+    put(c.name, hit);
+    put(c.nameEn, hit);
+    put(c.flag, hit);
+  }
+
+  for (const c of ALL_COUNTRY_FLAGS) {
+    const hit = { nameAr: c.nameAr, nameEn: c.name };
+    put(c.id, hit);
+    put(c.code, hit);
+    put(c.name, hit);
+    put(c.nameAr, hit);
+    put(c.flag, hit);
+  }
+
+  return map;
+})();
+
+function lookupCountry(
+  country?: string | null,
+  countryFlag?: string | null,
+): CountryHit | null {
+  const trimmed = (country ?? '').trim();
+  if (trimmed) {
+    const byText = COUNTRY_LOOKUP.get(normKey(trimmed));
+    if (byText) return byText;
+  }
+  const flag = (countryFlag ?? '').trim();
+  if (flag && !UNSET_FLAGS.has(flag)) {
+    const byFlag = COUNTRY_LOOKUP.get(normKey(flag));
+    if (byFlag) return byFlag;
+  }
+  return null;
+}
+
 /**
  * Resolve a human-readable country label from stored profile fields.
- * Falls back to flag lookup when `country` text was never saved.
+ * Maps ISO codes (`eg`), English names, and flags to Arabic or English.
  */
 export function resolveCountryDisplayName(
   country?: string | null,
   countryFlag?: string | null,
   preferArabic = true,
 ): string {
-  const trimmed = (country ?? '').trim();
-  if (trimmed) return trimmed;
-
   const flag = (countryFlag ?? '').trim();
-  if (!flag || UNSET_FLAGS.has(flag)) return '';
   if (flag === WORLD_COUNTRY_FLAG) return preferArabic ? 'عالمي' : 'Global';
 
-  const fromLocal = ALL_COUNTRY_FLAGS.find((c) => c.flag === flag);
-  if (fromLocal) return preferArabic ? fromLocal.nameAr : fromLocal.name;
+  const hit = lookupCountry(country, countryFlag);
+  if (hit) return preferArabic ? hit.nameAr : hit.nameEn;
 
-  const fromList = COUNTRIES.find((c) => c.flag === flag);
-  if (fromList) return preferArabic ? fromList.name : fromList.nameEn;
+  const trimmed = (country ?? '').trim();
+  if (!trimmed) return '';
 
-  return '';
+  // Already Arabic copy — keep as-is.
+  if (ARABIC_SCRIPT.test(trimmed)) return trimmed;
+
+  // Prefer Arabic UI: never surface raw ISO codes like "eg".
+  if (preferArabic && /^[a-z]{2}(?:-[a-z]{2,3})?$/i.test(trimmed)) {
+    return '';
+  }
+
+  return trimmed;
 }
 
 /** True when the profile should show a country/globe slot (not blank / unset). */

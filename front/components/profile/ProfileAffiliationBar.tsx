@@ -10,6 +10,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
+import { useTranslation } from '../../src/i18n';
 import { formatProfileStat } from './formatProfileStat';
 import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
@@ -48,6 +49,8 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
   addClubLabel,
 }: ProfileAffiliationBarProps) {
   const { colors: C } = useProfileTheme();
+  const { language } = useTranslation();
+  const isAr = language === 'ar';
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
   const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
   const hasClub = !!(clubLogo || clubName?.trim());
@@ -57,6 +60,7 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
     <View
       style={[
         styles.wrap,
+        isAr ? styles.wrapRtl : styles.wrapLtr,
         {
           backgroundColor: C.profileCard,
           borderColor: C.embossBorder,
@@ -66,24 +70,30 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
       testID="profile-affiliation-bar"
     >
       <TouchableOpacity
-        style={styles.levelBlock}
+        style={[styles.levelBlock, isAr && styles.alignEnd]}
         onPress={onLevelPress}
         disabled={!onLevelPress}
         activeOpacity={0.85}
       >
-        <View style={styles.levelHeader}>
-          <Ionicons name="chevron-back" size={14} color={C.textPrimary} />
-          <Text style={[styles.levelLabel, { color: C.textPrimary }]}>LVL {level}</Text>
-        </View>
+        <Text style={[styles.levelLabel, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+          LVL {level}
+        </Text>
         <View style={[styles.xpTrack, { backgroundColor: C.xpTrack }]}>
           <View
             style={[
               styles.xpFill,
-              { width: `${Math.round(fillPct * 100)}%`, backgroundColor: C.profilePrimary },
+              {
+                width: `${Math.round(fillPct * 100)}%`,
+                backgroundColor: C.profilePrimary,
+                alignSelf: isAr ? 'flex-end' : 'flex-start',
+              },
             ]}
           />
         </View>
-        <Text style={[styles.xpCaption, { color: C.profileMuted }]} numberOfLines={1}>
+        <Text
+          style={[styles.xpCaption, { color: C.profileMuted, textAlign: isAr ? 'right' : 'left' }]}
+          numberOfLines={1}
+        >
           XP {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)}
         </Text>
       </TouchableOpacity>
@@ -91,14 +101,17 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
       <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
       <TouchableOpacity
-        style={styles.countryBlock}
+        style={[styles.countryBlock, isAr ? styles.rowReverse : styles.rowForward]}
         onPress={onCountryPress}
         disabled={!onCountryPress}
         activeOpacity={0.85}
       >
         {hasCountry ? (
           <>
-            <Text style={[styles.countryLabel, { color: C.textPrimary }]} numberOfLines={1}>
+            <Text
+              style={[styles.countryLabel, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}
+              numberOfLines={1}
+            >
               {countryLabel?.trim() || '—'}
             </Text>
             {countryFlagUri ? (
@@ -117,7 +130,7 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
       <View style={[styles.divider, { backgroundColor: C.divider }]} />
 
       <TouchableOpacity
-        style={styles.clubBlock}
+        style={[styles.clubBlock, isAr ? styles.rowReverse : styles.rowForward]}
         onPress={onClubPress}
         disabled={!onClubPress}
         activeOpacity={0.85}
@@ -133,7 +146,10 @@ const ProfileAffiliationBar = memo(function ProfileAffiliationBar({
             ) : (
               <Ionicons name="football-outline" size={22} color={C.profilePrimary} />
             )}
-            <Text style={[styles.clubName, { color: C.textPrimary }]} numberOfLines={2}>
+            <Text
+              style={[styles.clubName, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}
+              numberOfLines={2}
+            >
               {clubName}
             </Text>
           </>
@@ -153,12 +169,11 @@ const styles = StyleSheet.create({
   wrap: {
     marginHorizontal: 20,
     marginTop: 10,
-    height: 76,
+    minHeight: 76,
     borderRadius: 20,
     backgroundColor: ProfileTheme.colors.profileCard,
-    paddingLeft: 14,
-    paddingRight: 13,
-    flexDirection: 'row',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
@@ -169,22 +184,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
+  wrapRtl: {
+    flexDirection: 'row-reverse',
+  },
+  wrapLtr: {
+    flexDirection: 'row',
+  },
   levelBlock: {
     width: 105,
     gap: 3,
     alignItems: 'flex-start',
   },
-  levelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
+  alignEnd: {
+    alignItems: 'flex-end',
   },
   levelLabel: {
     color: ProfileTheme.colors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
-    textAlign: 'center',
-    width: 88,
+    width: 96,
   },
   xpTrack: {
     width: 96,
@@ -202,7 +220,6 @@ const styles = StyleSheet.create({
     color: '#85809A',
     fontSize: 10,
     fontWeight: '400',
-    textAlign: 'center',
     width: 105,
   },
   divider: {
@@ -211,16 +228,21 @@ const styles = StyleSheet.create({
     backgroundColor: ProfileTheme.colors.divider,
   },
   countryBlock: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    maxWidth: 96,
+    gap: 6,
+    maxWidth: 110,
+    flexShrink: 1,
+  },
+  rowForward: {
+    flexDirection: 'row',
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
   },
   countryLabel: {
     color: ProfileTheme.colors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
-    textAlign: 'right',
     flexShrink: 1,
   },
   flag: {
@@ -233,9 +255,8 @@ const styles = StyleSheet.create({
   },
   clubBlock: {
     width: 123,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 6,
   },
   clubLogo: {
     width: 31,

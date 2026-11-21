@@ -1763,6 +1763,7 @@ function OwnProfileScreen() {
           onAvatarPress={handleAvatarPress}
           onSettingsPress={() => router.push('/(tabs)/settings')}
           onMorePress={handleMorePress}
+          onSharePress={handleSharePress}
           onEditPress={handleEditProfile}
           viewAllBioLabel={t.profile.viewAllBio}
           showLessBioLabel={t.profile.showLess}
@@ -1774,7 +1775,7 @@ function OwnProfileScreen() {
           nextLevelXp={nextLevelXp || ((level || userData?.level || 1) + 1) * 100}
           progressPct={progressPct || 0}
           countryFlag={isMeaningfulCountryFlag(userData?.countryFlag) ? userData?.countryFlag : null}
-          countryLabel={resolveCountryDisplayName(displayLocation, userData?.countryFlag)}
+          countryLabel={resolveCountryDisplayName(displayLocation, userData?.countryFlag, language === 'ar')}
           clubLogo={displayClubLogo}
           clubName={userData?.favoriteTeam || null}
           isOwnProfile

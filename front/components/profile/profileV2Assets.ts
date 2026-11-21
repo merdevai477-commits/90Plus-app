@@ -32,6 +32,9 @@ export const PROFILE_ICONS = {
   tabTrophyActive: require('../../assets/images/profile-v2/tab-trophy-active.svg'),
   tabBullseye: require('../../assets/images/profile-v2/tab-bullseye.svg'),
   tabBullseyeActive: require('../../assets/images/profile-v2/tab-bullseye-active.svg'),
+  /** Figma 2417:6358 — posts / list tab icon */
+  tabPosts: require('../../assets/images/profile-v2/tab-posts-list.svg'),
+  tabPostsActive: require('../../assets/images/profile-v2/tab-posts-list-active.svg'),
   tabVideo: require('../../assets/images/profile-v2/tab-video-inactive.svg'),
   tabVideoActive: require('../../assets/images/profile-v2/tab-video.svg'),
   lineChart: require('../../assets/images/profile-v2/icon-line-chart.svg'),

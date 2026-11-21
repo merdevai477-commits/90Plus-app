@@ -78,6 +78,7 @@ export function ProfileAchievementsTab({ userId }: Props) {
   const { t, language } = useTranslation();
   const { colors: C, isDark } = useProfileTheme();
   const { getToken } = useAuth();
+  const isAr = language === 'ar';
   const [subTab, setSubTab] = useState<AchievementsSubTab>('titles');
   const [filter, setFilter] = useState<BadgeFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -243,88 +244,90 @@ export function ProfileAchievementsTab({ userId }: Props) {
     );
   }
 
+  const segmentItems = (
+    [
+      ['titles', t.profile.achievementsMyTitles],
+      ['ranks', t.profile.achievementsMyRanking],
+    ] as const
+  );
+
   return (
     <View style={styles.container}>
-      <View style={[styles.segment, { backgroundColor: C.profilePrimarySoft }]}>
-        <TouchableOpacity
-          style={[
-            styles.segmentBtn,
-            subTab === 'titles' && [styles.segmentBtnActive, { backgroundColor: C.profilePrimary }],
-          ]}
-          onPress={() => setSubTab('titles')}
-          activeOpacity={0.85}
-        >
-          <Text
+      <View
+        style={[
+          styles.segment,
+          isAr ? styles.rowReverse : styles.rowForward,
+          { backgroundColor: C.profilePrimarySoft },
+        ]}
+      >
+        {segmentItems.map(([id, label]) => (
+          <TouchableOpacity
+            key={id}
             style={[
-              styles.segmentText,
-              { color: C.profilePrimary },
-              subTab === 'titles' && styles.segmentTextActive,
+              styles.segmentBtn,
+              subTab === id && [styles.segmentBtnActive, { backgroundColor: C.profilePrimary }],
             ]}
+            onPress={() => setSubTab(id)}
+            activeOpacity={0.85}
           >
-            {t.profile.achievementsMyTitles}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.segmentBtn,
-            subTab === 'ranks' && [styles.segmentBtnActive, { backgroundColor: C.profilePrimary }],
-          ]}
-          onPress={() => setSubTab('ranks')}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              { color: C.profilePrimary },
-              subTab === 'ranks' && styles.segmentTextActive,
-            ]}
-          >
-            {t.profile.achievementsMyRanking}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.segmentText,
+                { color: C.profilePrimary },
+                subTab === id && styles.segmentTextActive,
+              ]}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {subTab === 'titles' ? (
         <>
           <View style={[styles.summaryCard, { backgroundColor: C.achievementsCard }]}>
-            <View style={styles.summaryTop}>
-              <View>
-                <Text style={[styles.summaryCount, { color: C.textPrimary }]}>
-                  {pad2(doneCount)} / {pad2(totalCount)}
-                </Text>
-                <Text style={[styles.summaryCountLabel, { color: C.profileMuted }]}>
-                  {t.profile.achievementsCompletedLabel}
-                </Text>
-              </View>
-              <View style={styles.summaryTitleRow}>
-                <View style={styles.summaryCopy}>
-                  <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
-                    {t.profile.myAchievements}
-                  </Text>
-                  <Text style={[styles.summarySub, { color: C.profileMuted }]}>
-                    {t.profile.achievementsTitlesTagline}
-                  </Text>
-                </View>
+            <View style={[styles.summaryTop, isAr ? styles.rowReverse : styles.rowForward]}>
+              <View style={[styles.summaryTitleRow, isAr ? styles.rowForward : styles.rowReverse]}>
                 <View style={[styles.trophyBubble, { backgroundColor: C.achievementsIconBg }]}>
                   <Image source={PROFILE_ICONS.trophy} style={styles.trophyIcon} contentFit="contain" />
                 </View>
+                <View style={[styles.summaryCopy, isAr ? styles.alignEnd : styles.alignStart]}>
+                  <Text style={[styles.summaryTitle, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+                    {t.profile.myAchievements}
+                  </Text>
+                  <Text style={[styles.summarySub, { color: C.profileMuted, textAlign: isAr ? 'right' : 'left' }]}>
+                    {t.profile.achievementsTitlesTagline}
+                  </Text>
+                </View>
+              </View>
+              <View style={isAr ? styles.alignStart : styles.alignEnd}>
+                <Text style={[styles.summaryCount, { color: C.textPrimary, textAlign: isAr ? 'left' : 'right' }]}>
+                  {pad2(doneCount)} / {pad2(totalCount)}
+                </Text>
+                <Text style={[styles.summaryCountLabel, { color: C.profileMuted, textAlign: isAr ? 'left' : 'right' }]}>
+                  {t.profile.achievementsCompletedLabel}
+                </Text>
               </View>
             </View>
-            <View style={styles.progressLabels}>
-              <Text style={[styles.progressPct, { color: C.profilePrimary }]}>{pct}%</Text>
+            <View style={[styles.progressLabels, isAr ? styles.rowReverse : styles.rowForward]}>
               <Text style={[styles.progressLabel, { color: C.profileMuted }]}>
                 {t.profile.achievementsProgressLabel}
               </Text>
+              <Text style={[styles.progressPct, { color: C.profilePrimary }]}>{pct}%</Text>
             </View>
-            <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#DED0F2' }]}>
+            <View style={[styles.progressTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : C.profilePrimarySoft }]}>
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${pct}%`, backgroundColor: C.profilePrimary },
+                  {
+                    width: `${pct}%`,
+                    backgroundColor: C.profilePrimary,
+                    alignSelf: isAr ? 'flex-end' : 'flex-start',
+                  },
                 ]}
               />
             </View>
-            <Text style={[styles.summaryHint, { color: C.profileMuted }]}>
+            <Text style={[styles.summaryHint, { color: C.profileMuted, textAlign: isAr ? 'right' : 'left' }]}>
               {t.profile.achievementsUnlockHint}
             </Text>
           </View>
@@ -332,7 +335,7 @@ export function ProfileAchievementsTab({ userId }: Props) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
+            contentContainerStyle={[styles.filters, isAr ? styles.rowReverse : styles.rowForward]}
           >
             {(
               [
@@ -381,19 +384,32 @@ export function ProfileAchievementsTab({ userId }: Props) {
                     styles.badgeCard,
                     {
                       backgroundColor: C.profileCard,
-                      borderColor: C.embossBorder,
-                      borderWidth: 1,
+                      borderColor: badge.status === 'done'
+                        ? (badge.accent || C.profilePrimary)
+                        : C.embossBorder,
+                      borderWidth: badge.status === 'done' ? 1.5 : 1,
+                      shadowColor: C.embossShadow,
                     },
                     badge.status === 'locked' && styles.badgeCardLocked,
                   ]}
                 >
-                  <View style={[styles.badgeIconWrap, { backgroundColor: C.profilePrimarySoft }]}>
+                  <View
+                    style={[
+                      styles.badgeIconWrap,
+                      {
+                        backgroundColor:
+                          badge.status === 'done'
+                            ? `${badge.accent || C.profilePrimary}22`
+                            : C.profilePrimarySoft,
+                      },
+                    ]}
+                  >
                     {badge.status === 'locked' ? (
                       <Ionicons name="lock-closed" size={22} color={C.profileMuted} />
                     ) : badge.badgeKey ? (
                       <BadgeIcon
                         badgeKey={badge.badgeKey}
-                        accent={badge.accent || '#f5b942'}
+                        accent={badge.accent || C.profilePrimary}
                         variant="card"
                         size={28}
                       />
@@ -464,17 +480,17 @@ export function ProfileAchievementsTab({ userId }: Props) {
       ) : (
         <>
           <View style={[styles.rankOverview, { backgroundColor: C.achievementsCard }]}>
-            <View style={styles.summaryTitleRow}>
-              <View style={styles.summaryCopy}>
-                <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
-                  {t.profile.myAchievements}
-                </Text>
-                <Text style={[styles.summarySub, { color: C.profileMuted }]}>
-                  {t.profile.achievementsRanksTagline}
-                </Text>
-              </View>
+            <View style={[styles.summaryTitleRow, isAr ? styles.rowForward : styles.rowReverse]}>
               <View style={[styles.trophyBubble, { backgroundColor: C.achievementsIconBg }]}>
                 <Image source={PROFILE_ICONS.trophy} style={styles.trophyIcon} contentFit="contain" />
+              </View>
+              <View style={[styles.summaryCopy, isAr ? styles.alignEnd : styles.alignStart]}>
+                <Text style={[styles.summaryTitle, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+                  {t.profile.myAchievements}
+                </Text>
+                <Text style={[styles.summarySub, { color: C.profileMuted, textAlign: isAr ? 'right' : 'left' }]}>
+                  {t.profile.achievementsRanksTagline}
+                </Text>
               </View>
             </View>
             <View style={styles.rankMetrics}>
@@ -498,12 +514,12 @@ export function ProfileAchievementsTab({ userId }: Props) {
             </View>
           </View>
 
-          <View style={styles.rankHeading}>
+          <View style={[styles.rankHeading, isAr ? styles.rowReverse : styles.rowForward]}>
+            <Text style={[styles.rankHeadingTitle, { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' }]}>
+              {t.profile.achievementsCompetitionRanks}
+            </Text>
             <Text style={[styles.rankHeadingHint, { color: C.profilePrimary }]}>
               {t.profile.achievementsCurrentRank}
-            </Text>
-            <Text style={[styles.rankHeadingTitle, { color: C.textPrimary }]}>
-              {t.profile.achievementsCompetitionRanks}
             </Text>
           </View>
 
@@ -513,25 +529,39 @@ export function ProfileAchievementsTab({ userId }: Props) {
                 key={row.id}
                 style={[
                   styles.rankRow,
+                  isAr ? styles.rowReverse : styles.rowForward,
                   {
                     backgroundColor: C.profileCard,
                     borderColor: C.embossBorder,
                     borderWidth: 1,
+                    shadowColor: C.embossShadow,
                   },
                 ]}
               >
+                <View style={[styles.rankIconBubble, { backgroundColor: C.profilePrimarySoft }]}>
+                  <Image source={PROFILE_RANK_ICON} style={styles.rankIcon} contentFit="contain" />
+                </View>
+                <View style={[styles.rankCopyCol, isAr ? styles.alignEnd : styles.alignStart]}>
+                  <Text
+                    style={[
+                      styles.rankCompetition,
+                      { color: C.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                    ]}
+                  >
+                    {row.competition}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.rankPeriod,
+                      { color: C.profileMuted, textAlign: isAr ? 'right' : 'left' },
+                    ]}
+                  >
+                    {row.period}
+                  </Text>
+                </View>
                 <View style={styles.rankScoreCol}>
                   <Text style={[styles.rankNumber, { color: C.profilePrimary }]}>{row.rank}</Text>
                   <Text style={[styles.rankScore, { color: C.profileMuted }]}>{row.score}</Text>
-                </View>
-                <View style={styles.rankCopyCol}>
-                  <Text style={[styles.rankCompetition, { color: C.textPrimary }]}>
-                    {row.competition}
-                  </Text>
-                  <Text style={[styles.rankPeriod, { color: C.profileMuted }]}>{row.period}</Text>
-                </View>
-                <View style={[styles.rankIconBubble, { backgroundColor: C.profilePrimarySoft }]}>
-                  <Image source={PROFILE_RANK_ICON} style={styles.rankIcon} contentFit="contain" />
                 </View>
               </View>
             ))}
@@ -567,13 +597,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingVertical: 20,
   },
+  rowForward: {
+    flexDirection: 'row',
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
+  alignStart: {
+    alignItems: 'flex-start',
+  },
+  alignEnd: {
+    alignItems: 'flex-end',
+  },
   segment: {
     height: 51,
     borderRadius: 24,
     backgroundColor: ProfileTheme.colors.profilePrimarySoft,
     paddingHorizontal: 9,
     paddingVertical: 5,
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
   },
@@ -710,14 +751,18 @@ const styles = StyleSheet.create({
   badgeCard: {
     width: '48%',
     minHeight: 148,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     padding: 12,
     alignItems: 'center',
     gap: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   badgeCardLocked: {
-    opacity: 0.72,
+    opacity: 0.68,
   },
   badgeIconWrap: {
     width: 48,
@@ -813,9 +858,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8E2F0',
   },
   rankHeading: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   rankHeadingHint: {
     color: '#6C27DE',
@@ -826,21 +871,23 @@ const styles = StyleSheet.create({
     color: '#24143F',
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'right',
     flex: 1,
   },
   rankList: {
     gap: 9,
   },
   rankRow: {
-    height: 82,
+    minHeight: 82,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   rankScoreCol: {
     width: 90,
@@ -859,7 +906,6 @@ const styles = StyleSheet.create({
   },
   rankCopyCol: {
     flex: 1,
-    alignItems: 'flex-end',
     gap: 4,
     paddingHorizontal: 10,
   },
@@ -867,12 +913,10 @@ const styles = StyleSheet.create({
     color: '#24143F',
     fontSize: 15,
     fontWeight: '700',
-    textAlign: 'right',
   },
   rankPeriod: {
     color: '#7F7A93',
     fontSize: 11.5,
-    textAlign: 'right',
   },
   rankIconBubble: {
     width: 45,

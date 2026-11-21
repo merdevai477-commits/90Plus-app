@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
+import { useTranslation } from '../../src/i18n';
 import { formatProfileStat } from './formatProfileStat';
 
 export interface ProfileMetricItem {
@@ -24,9 +25,17 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
   variant = 'social',
 }: ProfileMetricStripProps) {
   const { colors: C } = useProfileTheme();
+  const { language } = useTranslation();
+  const isAr = language === 'ar';
   const isPerf = variant === 'performance';
   const inner = (
-    <View style={[styles.row, isPerf && styles.perfRow]}>
+    <View
+      style={[
+        styles.row,
+        isPerf && styles.perfRow,
+        isAr ? styles.rowReverse : styles.rowForward,
+      ]}
+    >
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
           {index > 0 && (
@@ -145,6 +154,12 @@ function MetricCell({
 export default ProfileMetricStrip;
 
 const styles = StyleSheet.create({
+  rowForward: {
+    flexDirection: 'row',
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
+  },
   card: {
     marginHorizontal: 20,
     borderRadius: 18,
