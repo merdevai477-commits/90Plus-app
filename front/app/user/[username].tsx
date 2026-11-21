@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -85,7 +85,7 @@ function UserProfileScreen() {
   const toast = useToast();
   const { t, language } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { colors: profileColors } = useProfileTheme();
+  const { colors: profileColors, isDark: profileIsDark } = useProfileTheme();
   const { reelComments, addComment, toggleCommentLike } = useVideos();
   const {
     reportUser,
@@ -467,28 +467,36 @@ function UserProfileScreen() {
   const userLevel = user.level ?? 1;
   const userXp = user.xp ?? 0;
 
-  // Social links — guard malformed API rows
-  const socialLinks = Array.isArray(user.socialLinks)
-    ? user.socialLinks
-        .filter((l): l is NonNullable<typeof l> => !!l && typeof l === 'object')
-        .map((l) => ({
-          platform: typeof l.platform === 'string' ? l.platform : 'website',
-          url: typeof l.url === 'string' ? l.url : '',
-          username: typeof l.username === 'string' ? l.username : undefined,
-        }))
-        .filter((l) => l.url.trim() !== '')
-    : [];
+  // Social links — guard malformed API rows (memoized to avoid hero churn)
+  const socialLinks = useMemo(
+    () =>
+      Array.isArray(user.socialLinks)
+        ? user.socialLinks
+            .filter((l): l is NonNullable<typeof l> => !!l && typeof l === 'object')
+            .map((l) => ({
+              platform: typeof l.platform === 'string' ? l.platform : 'website',
+              url: typeof l.url === 'string' ? l.url : '',
+              username: typeof l.username === 'string' ? l.username : undefined,
+            }))
+            .filter((l) => l.url.trim() !== '')
+        : [],
+    [user.socialLinks],
+  );
 
   const showFullProfile = !blockedMe && !isBlocked;
 
-  const formattedVideos = userVideos
-    .filter((v) => v && v.id && v.uri)
-    .map((v) => ({
-      id: v.id,
-      thumbnail: v.thumbnail,
-      views: String(v.views ?? '0'),
-      duration: String((v as { duration?: number | string }).duration ?? '0'),
-    }));
+  const formattedVideos = useMemo(
+    () =>
+      userVideos
+        .filter((v) => v && v.id && v.uri)
+        .map((v) => ({
+          id: v.id,
+          thumbnail: v.thumbnail,
+          views: String(v.views ?? '0'),
+          duration: String((v as { duration?: number | string }).duration ?? '0'),
+        })),
+    [userVideos],
+  );
 
   const openFollowersModal = (tab: 'followers' | 'following') => {
     if (!user?.id) return;
@@ -642,12 +650,29 @@ function UserProfileScreen() {
                   style={s.followTouchable}
                 >
                   {user.isFollowing ? (
-                    <View style={s.unfollowBtn}>
-                      <Text style={s.unfollowTxt}>{t.publicProfile.unfollow}</Text>
+                    <View
+                      style={[
+                        s.unfollowBtn,
+                        {
+                          backgroundColor: profileIsDark
+                            ? 'rgba(139,92,246,0.16)'
+                            : profileColors.profilePrimarySoft,
+                          borderColor: profileColors.profilePrimary,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="person-remove-outline"
+                        size={20}
+                        color={profileColors.profilePrimary}
+                      />
+                      <Text style={[s.unfollowTxt, { color: profileColors.profilePrimary }]}>
+                        {t.publicProfile.unfollow}
+                      </Text>
                     </View>
                   ) : (
                     <LinearGradient
-                      colors={['#6A2BD9', '#4B1FA3']}
+                      colors={[profileColors.profilePrimary, '#4B1FA3']}
                       style={s.followBtn}
                       start={{ x: 0.5, y: 0 }}
                       end={{ x: 0.5, y: 1 }}
@@ -923,16 +948,18 @@ const s = StyleSheet.create({
     height: 54,
     borderRadius: 16,
     width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 2,
-    borderColor: ProfileTheme.colors.profileCardBorder,
+    gap: 8,
+    backgroundColor: ProfileTheme.colors.profilePrimarySoft,
+    borderWidth: 1.5,
+    borderColor: ProfileTheme.colors.profilePrimary,
   },
   unfollowTxt: {
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '600',
+    color: ProfileTheme.colors.profilePrimary,
+    fontSize: 17,
+    fontWeight: '700',
   },
 
   followingBtn: {

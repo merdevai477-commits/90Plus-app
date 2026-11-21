@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -18,7 +18,7 @@ interface Award {
   active: boolean;
 }
 
-export default function ProfileEliteMarks({ userId }: { userId?: string | null }) {
+function ProfileEliteMarks({ userId }: { userId?: string | null }) {
   const { t, language, isRTL } = useTranslation();
   const [rows, setRows] = useState<Award[]>([]);
   const [selected, setSelected] = useState<Award | null>(null);
@@ -124,3 +124,5 @@ const styles = StyleSheet.create({
   cta: { height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
   ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
+
+export default memo(ProfileEliteMarks);

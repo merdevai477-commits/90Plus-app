@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  ScrollView,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -104,7 +106,10 @@ const ProfileHero = memo(function ProfileHero({
   const sheetWidth = Math.min(windowWidth, 456);
   const [bioExpanded, setBioExpanded] = useState(false);
   const filledLinks = useMemo(
-    () => socialLinks.filter((l) => !!l.url?.trim()).slice(0, 6),
+    () =>
+      socialLinks
+        .filter((l) => typeof l.url === 'string' && l.url.trim().length > 0)
+        .slice(0, 8),
     [socialLinks],
   );
   const trimmedBio = bio?.trim() ?? '';
@@ -112,14 +117,14 @@ const ProfileHero = memo(function ProfileHero({
   const viewAllLabel = viewAllBioLabel || t.profile.showMore || 'View all';
   const showLessLabel = showLessBioLabel || t.profile.showLess || 'Show less';
 
-  const openSocial = async (url: string) => {
+  const openSocial = useCallback(async (url: string) => {
     try {
       const canOpen = await Linking.canOpenURL(url);
       if (canOpen) await Linking.openURL(url);
     } catch (error) {
       logger.error('Error opening social link from profile hero', { url, error });
     }
-  };
+  }, []);
 
   return (
     <View style={[styles.wrap, { backgroundColor: C.profileBg }]} testID="profile-hero">
@@ -259,49 +264,6 @@ const ProfileHero = memo(function ProfileHero({
                 </Text>
               </View>
 
-              {filledLinks.length > 0 ? (
-                <View
-                  style={[
-                    styles.socialIsland,
-                    isAr ? styles.rowEnd : styles.rowStart,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255,255,255,0.06)'
-                        : 'rgba(106,43,217,0.06)',
-                      borderColor: isDark
-                        ? 'rgba(255,255,255,0.10)'
-                        : 'rgba(106,43,217,0.10)',
-                    },
-                  ]}
-                >
-                  {filledLinks.map((link) => {
-                    const brand = getSocialBrandIcon(link.platform);
-                    return (
-                      <TouchableOpacity
-                        key={`${link.platform}-${link.url}`}
-                        style={[
-                          styles.socialBtn,
-                          {
-                            backgroundColor: isDark
-                              ? 'rgba(255,255,255,0.08)'
-                              : '#FFFFFF',
-                          },
-                        ]}
-                        onPress={() => openSocial(link.url)}
-                        activeOpacity={0.85}
-                        accessibilityRole="link"
-                        accessibilityLabel={link.platform}
-                      >
-                        <Image
-                          source={brand.source}
-                          style={{ width: brand.width, height: brand.height }}
-                          contentFit="contain"
-                        />
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
             </View>
 
             {isOwnProfile && onEditPress ? (
@@ -341,6 +303,60 @@ const ProfileHero = memo(function ProfileHero({
             )}
           </View>
 
+          {filledLinks.length > 0 ? (
+            <View
+              style={[
+                styles.socialIsland,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255,255,255,0.06)'
+                    : 'rgba(106,43,217,0.06)',
+                  borderColor: isDark
+                    ? 'rgba(255,255,255,0.10)'
+                    : 'rgba(106,43,217,0.10)',
+                  alignSelf: isAr ? 'flex-end' : 'flex-start',
+                },
+              ]}
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                bounces={false}
+                contentContainerStyle={[
+                  styles.socialIslandRow,
+                  isAr ? styles.rowReverse : styles.rowForward,
+                ]}
+              >
+                {filledLinks.map((link) => {
+                  const brand = getSocialBrandIcon(link.platform);
+                  return (
+                    <TouchableOpacity
+                      key={`${link.platform}-${link.url}`}
+                      style={[
+                        styles.socialBtn,
+                        {
+                          backgroundColor: isDark
+                            ? 'rgba(255,255,255,0.08)'
+                            : C.profileCard,
+                        },
+                      ]}
+                      onPress={() => openSocial(link.url)}
+                      activeOpacity={0.85}
+                      accessibilityRole="link"
+                      accessibilityLabel={link.platform}
+                    >
+                      <Image
+                        source={brand.source}
+                        style={{ width: brand.width, height: brand.height }}
+                        contentFit="contain"
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+
           {trimmedBio ? (
             <View style={styles.bioWrap}>
               <Text
@@ -353,7 +369,7 @@ const ProfileHero = memo(function ProfileHero({
                 <TouchableOpacity
                   onPress={() => setBioExpanded((v) => !v)}
                   hitSlop={8}
-                  style={styles.bioToggle}
+                  style={[styles.bioToggle, isAr ? styles.alignEnd : styles.alignStart]}
                 >
                   <Text style={[styles.bioToggleText, { color: C.profilePrimary }]}>
                     {bioExpanded ? showLessLabel : viewAllLabel}
@@ -480,10 +496,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     overflow: 'hidden',
     shadowColor: '#6A2BD9',
-    shadowOpacity: 0.46,
-    shadowRadius: 12.4,
+    shadowOpacity: Platform.OS === 'ios' ? 0.35 : 0.2,
+    shadowRadius: Platform.OS === 'ios' ? 10 : 6,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
+    elevation: Platform.OS === 'android' ? 4 : 8,
     backgroundColor: '#FAF5FF',
   },
   avatar: {
@@ -529,19 +545,20 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   socialIsland: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
     maxWidth: '100%',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
   },
+  socialIslandRow: {
+    alignItems: 'center',
+    gap: 8,
+    flexGrow: 0,
+  },
   socialBtn: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

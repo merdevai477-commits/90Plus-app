@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { type CommunityPost } from '../../services/community.api';
@@ -13,7 +13,7 @@ import { formatRelativeTime } from '../community/format';
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
 
-export function ProfilePostsPane({ username }: { username: string }) {
+function ProfilePostsPaneComponent({ username }: { username: string }) {
   const { colors } = useCommunityTheme();
   const { colors: profileColors, isDark } = useProfileTheme();
   const actions = usePostActions();
@@ -105,13 +105,15 @@ const styles = StyleSheet.create({
   elevatedCard: {
     borderRadius: 22,
     borderWidth: 1,
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
     overflow: 'hidden',
   },
   pad: { marginVertical: 28 },
   empty: { textAlign: 'center', marginVertical: 28, paddingHorizontal: 24 },
   more: { textAlign: 'center', fontWeight: '700', paddingVertical: 12 },
 });
+
+export const ProfilePostsPane = memo(ProfilePostsPaneComponent);
