@@ -80,6 +80,7 @@ import {
 import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
 import { matchCardToApiFixture } from '../../utils/matchCardToApiFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
+import { formatUpcomingMatchDayLabel } from '../../utils/safeDate';
 import { logger } from '../../utils/logger';
 import { isDiagnosticsCapableBuild } from '../../services/diagnostics/diagnosticsConfig';
 import { diagFlags, monoNow } from '../../services/diagnostics/diagnosticsState';
@@ -503,6 +504,12 @@ const MatchRow = memo(function MatchRow({
     isNotPlayedStatus || isSuspendedStatus
       ? getLocalizedMatchStatus(shortStatus, language)
       : null;
+  const upcomingDayLabel =
+    fixture.status === 'UPCOMING'
+      ? formatUpcomingMatchDayLabel(fixture.matchDate, language)
+      : null;
+  const upcomingStatusLabel =
+    upcomingDayLabel || t('matches.status.upcoming');
 
   const rowContent = (
     <>
@@ -541,7 +548,16 @@ const MatchRow = memo(function MatchRow({
                 <Text style={styles.specialBadge} numberOfLines={1}>{specialStatusLabel}</Text>
               </View>
             ) : fixture.status === 'UPCOMING' ? (
-              <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
+              <View style={[styles.upcomingBadgeWrap, upcomingDayLabel ? styles.upcomingDayBadgeWrap : null]}>
+                <Text
+                  style={[styles.upcomingBadge, upcomingDayLabel ? styles.upcomingDayBadge : null]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {upcomingStatusLabel}
+                </Text>
+              </View>
             ) : isHalfTimeStatus ? (
               <Text style={styles.ftBadge}>
                 {shortUpper === 'BT' ? 'BT' : 'HT'}

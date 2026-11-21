@@ -427,8 +427,17 @@ export function createMatchesStyles(c: MatchesThemeColors) {
       paddingHorizontal: 7,
       paddingVertical: 2,
       borderRadius: 6,
+      maxWidth: '100%',
     },
-    upcomingBadge: { color: c.textSecondary, fontSize: 10, fontWeight: '700' },
+    upcomingDayBadgeWrap: {
+      paddingHorizontal: 6,
+    },
+    upcomingBadge: { color: c.textSecondary, fontSize: 10, fontWeight: '700', textAlign: 'center' },
+    upcomingDayBadge: {
+      fontSize: 9,
+      fontWeight: '800',
+      letterSpacing: 0.1,
+    },
     specialBadgeWrap: {
       backgroundColor: 'rgba(148,163,184,0.16)',
       borderWidth: 0.5,

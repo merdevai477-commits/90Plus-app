@@ -20,6 +20,7 @@ import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelper
 import { resolveLiveMinuteLabel } from './leagueApiUtils';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
+import { formatUpcomingMatchDayLabel } from '../../utils/safeDate';
 import {
   Match,
   getGradientColors,
@@ -170,6 +171,9 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
 
   const isLive = match.status === 'live';
   const isUpcoming = match.status === 'upcoming';
+  const upcomingDayLabel = isUpcoming
+    ? formatUpcomingMatchDayLabel(match.fixtureDate, language)
+    : null;
   const canPredict = showPrediction && isUpcoming && !userPrediction && onPredictionSubmit;
 
   const getPredictionLabel = (type: string) => {
@@ -258,7 +262,14 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                 {/* Center - Score/Time */}
                 <View style={styles.centerArea}>
                   {isUpcoming ? (
-                    <Text style={styles.matchTime}>{match.time || 'TBD'}</Text>
+                    <>
+                      {upcomingDayLabel ? (
+                        <Text style={styles.matchDayLabel} numberOfLines={1}>
+                          {upcomingDayLabel}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.matchTime}>{match.time || 'TBD'}</Text>
+                    </>
                   ) : (
                     <Text style={styles.score}>
                       {match.score?.home ?? '-'} : {match.score?.away ?? '-'}
@@ -602,6 +613,13 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
       }),
+  },
+  matchDayLabel: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 2,
+    textAlign: 'center',
   },
   matchTime: {
     color: '#FFFFFF',
