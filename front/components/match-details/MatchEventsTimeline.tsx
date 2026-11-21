@@ -15,7 +15,13 @@ import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 const SWAP_ICON = require('../../assets/images/match-events/swap.svg');
 const SUB_IN_ICON = require('../../assets/images/match-events/sub-in.svg');
 const SUB_OUT_ICON = require('../../assets/images/match-events/sub-out.svg');
-const GOAL_BALL = require('../../assets/images/match-events/goal-ball.svg');
+const GOAL_BALL = require('../../assets/images/match-events/legend-goal.svg');
+const OWN_GOAL_BALL = require('../../assets/images/match-events/legend-own-goal.svg');
+const PENALTY_BALL = require('../../assets/images/match-events/legend-penalty.svg');
+const MISSED_PENALTY_BALL = require('../../assets/images/match-events/legend-missed-penalty.svg');
+const CORNER_ICON = require('../../assets/images/match-events/legend-corner.svg');
+const VAR_ICON = require('../../assets/images/match-events/legend-var.svg');
+const INJURY_SUB_ICON = require('../../assets/images/match-events/legend-injury-sub.svg');
 const GOAL_PLAY = require('../../assets/images/match-events/goal-play.svg');
 
 const GOAL_MINUTE = '#A20000';
@@ -60,14 +66,50 @@ function isHomeEvent(
 
 function EventGlyph({ event }: { event: FixtureEvent }) {
   if (event.type === 'Goal') {
+    const detail = event.detail || '';
+    if (/missed/i.test(detail)) {
+      return <ExpoImage source={MISSED_PENALTY_BALL} style={styles.icon16} contentFit="contain" />;
+    }
+    if (/own/i.test(detail)) {
+      return <ExpoImage source={OWN_GOAL_BALL} style={styles.icon16} contentFit="contain" />;
+    }
+    if (/penalty/i.test(detail)) {
+      return <ExpoImage source={PENALTY_BALL} style={styles.icon16} contentFit="contain" />;
+    }
     return <ExpoImage source={GOAL_BALL} style={styles.icon16} contentFit="contain" />;
   }
   if (event.type === 'Card') {
+    const isSecondYellow = /second/i.test(event.detail);
     const isRed = /red/i.test(event.detail);
+    if (isSecondYellow) {
+      return (
+        <View style={styles.secondYellowWrap}>
+          <View style={styles.secondYellowRed} />
+          <View style={styles.secondYellowFront} />
+        </View>
+      );
+    }
     return <View style={[styles.cardGlyph, isRed && styles.cardGlyphRed]} />;
   }
   if (event.type === 'subst') {
-    return <ExpoImage source={SWAP_ICON} style={styles.icon16} contentFit="contain" />;
+    const injured = /injur/i.test(event.detail || '') || /injur/i.test(event.comments || '');
+    return (
+      <ExpoImage
+        source={injured ? INJURY_SUB_ICON : SWAP_ICON}
+        style={styles.icon16}
+        contentFit="contain"
+      />
+    );
+  }
+  if (event.type === 'Var') {
+    return (
+      <View style={styles.icon16}>
+        <ExpoImage source={VAR_ICON} style={{ width: 12.3333, height: 11.6667 }} contentFit="contain" />
+      </View>
+    );
+  }
+  if (/corner/i.test(event.type) || /corner/i.test(event.detail || '')) {
+    return <ExpoImage source={CORNER_ICON} style={styles.icon16} contentFit="contain" />;
   }
   return <MatchEventIcon type={event.type} detail={event.detail} size={ICON} />;
 }
@@ -224,7 +266,6 @@ export function MatchEventsTimeline({
 }: Props) {
   const { colors, isDark } = useMatchDetailsTheme();
   const clipsByEvent = assignGoalClips(events, goalClips);
-  const lineColor = isDark ? 'rgba(255,255,255,0.18)' : '#D1D5DB';
 
   return (
     <View
@@ -247,7 +288,12 @@ export function MatchEventsTimeline({
       ]}
     >
       <View style={styles.list}>
-        <View pointerEvents="none" style={[styles.centerLine, { backgroundColor: lineColor }]} />
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(139,92,246,0)', '#2C253D', '#422F6E', 'rgba(139,92,246,0)']}
+          locations={[0, 0.490385, 0.788607, 1]}
+          style={styles.centerLine}
+        />
         {events.map((event, index) => {
           const homeSide = isHomeEvent(event, homeTeamId, awayTeamId);
           // Scoreboard is away | home, so away events sit left and home sit right.
@@ -326,8 +372,32 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: '50%',
-    width: 1.5,
-    marginLeft: -0.75,
+    width: 1,
+    marginLeft: -0.5,
+  },
+  secondYellowWrap: {
+    width: 16,
+    height: 16,
+    position: 'relative',
+  },
+  secondYellowRed: {
+    position: 'absolute',
+    top: 0,
+    left: 2,
+    width: 10.233,
+    height: 13.302,
+    borderRadius: 2,
+    backgroundColor: '#B60606',
+    transform: [{ rotate: '20deg' }],
+  },
+  secondYellowFront: {
+    position: 'absolute',
+    top: 1.53,
+    left: 0,
+    width: 10.233,
+    height: 13.302,
+    borderRadius: 2,
+    backgroundColor: '#FDAC0C',
   },
   row: {
     flexDirection: 'row',

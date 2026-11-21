@@ -67,6 +67,7 @@ import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDra
 import { LineupBelowSections } from '../../components/match-details/LineupBelowSections';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventsTimeline } from '../../components/match-details/MatchEventsTimeline';
+import { MatchEventsLegend } from '../../components/match-details/MatchEventsLegend';
 import type { GoalClipMedia } from '../../utils/assignGoalClips';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchSummaryVideo } from '../../components/match-details/MatchSummaryVideo';
@@ -2148,18 +2149,35 @@ const MatchDetailsScreen = () => {
               <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
             </View>
           ) : (
-            <MatchEventsTimeline
-              events={sortedEvents}
-              language={language}
-              homeTeamId={fixture?.teams?.home?.id}
-              awayTeamId={fixture?.teams?.away?.id}
-              goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
-              detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
-              goalClips={goalClips}
-              goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
-              goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
-              onPlayClip={(urls) => setHighlightVideoUrls(urls)}
-            />
+            <>
+              <MatchEventsTimeline
+                events={sortedEvents}
+                language={language}
+                homeTeamId={fixture?.teams?.home?.id}
+                awayTeamId={fixture?.teams?.away?.id}
+                goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
+                detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
+                goalClips={goalClips}
+                goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
+                goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
+                onPlayClip={(urls) => setHighlightVideoUrls(urls)}
+              />
+              <MatchEventsLegend
+                language={language}
+                labels={{
+                  goal: t.matchDetails.goal || 'هدف',
+                  ownGoal: t.matchDetails.ownGoal || 'هدف في مرماه',
+                  substitution: t.matchDetails.substitution || 'تبديل',
+                  injurySubstitution: t.matchDetails.injurySubstitution || 'تبديل بسبب إصابة',
+                  penalty: t.matchDetails.penalty || 'ضربة جزاء',
+                  corner: t.matchDetails.cornerKick || 'ضربة ركنيه',
+                  var: t.matchDetails.varReview || 'VAR',
+                  missedPenalty: t.matchDetails.missedPenalty || 'ضربة جزاء ضائعة',
+                  secondYellow: t.matchDetails.secondYellow || 'إنذار ثانٍ',
+                  assist: t.matchDetails.assist || 'تمريره حاسمه',
+                }}
+              />
+            </>
           )}
         </View>
         <HighlightVideoSheet

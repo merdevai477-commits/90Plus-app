@@ -636,7 +636,13 @@ export const en = {
     yellowCard: 'Yellow Card',
     redCard: 'Red Card',
     substitution: 'Substitution',
+    injurySubstitution: 'Injury substitution',
     assist: 'Assist',
+    penalty: 'Penalty',
+    missedPenalty: 'Missed penalty',
+    cornerKick: 'Corner',
+    secondYellow: 'Second yellow',
+    varReview: 'VAR',
 
     // Stats
     shots: 'Shots',
