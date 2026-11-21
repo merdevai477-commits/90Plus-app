@@ -4,15 +4,22 @@
 # Use explicit `front/...` paths — `**/dist` is unreliable on Windows.
 
 # Never upload git metadata (can double archive size).
-# `.git/` alone still leaked objects/pack (~22MB) on Windows.
+# On Windows EAS still sometimes packs `.git/objects` (~27MB) — cover every form.
+.git
 .git/
 .git/**
+**/.git
+**/.git/
+**/.git/**
 .git/objects/
 .git/objects/**
+.git/objects/pack/
+.git/objects/pack/**
 .git/hooks/
 .git/logs/
 .git/refs/
 .eas-archive-check/
+.eas-archive-check/**
 
 # ── Backend / monorepo (not needed for Expo) ────────────────────────────────
 /src/
@@ -29,12 +36,17 @@
 /.cursor/
 /.kiro/
 /.vscode/
+/tmp/
+/tmp/**
 /tmp-validation/
 /tmp-validation_health.json
 /tmp-validation_metrics.json
 /today-check.json
 /artifacts/
 /scratch/
+# Local POC dumps (gemini video verification etc.) — was ~105MB of the 153MB upload
+/poc/
+/poc/**
 
 # Local binaries must never ride along in the EAS upload (a preview APK alone was ~160MB).
 *.apk
