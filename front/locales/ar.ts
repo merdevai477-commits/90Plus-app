@@ -2523,6 +2523,11 @@ export const ar = {
     achievementsCurrentRank: 'الترتيب الحالي',
     achievementsCompetitionRanks: 'ترتيبي في المسابقات',
     achievementsRankFooter: 'الترتيب يُحدث حسب فترة كل مسابقة',
+    achievementsUnranked: '—',
+    achievementsLoading: 'جاري تحميل الإنجازات...',
+    achievementsLoadError: 'تعذر تحميل الإنجازات',
+    achievementsXp: '{count} XP',
+    achievementsParticipants: '{count} مشارك',
 
     emailCopied: 'تم نسخ الإيميل',
     emailCopiedMessage: 'تم نسخ عنوان الإيميل.',

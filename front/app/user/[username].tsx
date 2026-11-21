@@ -789,7 +789,7 @@ function UserProfileScreen() {
         )}
 
         {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
-          <ProfileAchievementsTab analytics={null} />
+          <ProfileAchievementsTab userId={String(user.id)} />
         )}
         </View>
         )}

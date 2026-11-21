@@ -913,6 +913,23 @@ export async function coachKingLeaderboard(period: 'week' | 'all', limit = 50, n
   });
 }
 
+/** Global rank for a user even when they fall outside the public leaderboard slice. */
+export async function coachKingUserStanding(
+  userId: string,
+  period: 'week' | 'all' = 'week',
+  now: Date = new Date(),
+): Promise<{ rank: number | null; points: number }> {
+  const board = await cachedBoard(now);
+  const rows = period === 'week' ? board.week : board.all;
+  const idx = rows.findIndex((row) => row.userId === userId);
+  if (idx < 0) return { rank: null, points: 0 };
+  const row = rows[idx]!;
+  return {
+    rank: idx + 1,
+    points: period === 'week' ? row.weekPoints : row.points,
+  };
+}
+
 async function buildBoard(now: Date): Promise<{ all: CoachKingBoardEntry[]; week: CoachKingBoardEntry[] }> {
   await ensureCoachKingSchema();
   const current = await ensureCoachKingGameweek(now);

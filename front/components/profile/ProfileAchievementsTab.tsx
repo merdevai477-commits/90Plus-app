@@ -1,18 +1,22 @@
-import React, { memo, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_ICONS, PROFILE_RANK_ICON } from './profileV2Assets';
-
-interface ProfileAnalytics {
-  totalViews?: number;
-  totalLikes?: number;
-  totalComments?: number;
-  recentFollowers?: number;
-}
+import { getApiUrl } from '../../config/api.config';
+import { getClerkBearerToken } from '../../utils/clerkAuthToken';
+import BadgeIcon from '../identity/BadgeIcon';
 
 type AchievementsSubTab = 'titles' | 'ranks';
 type BadgeFilter = 'all' | 'done' | 'progress' | 'locked';
@@ -23,6 +27,9 @@ interface BadgeItem {
   status: 'done' | 'progress' | 'locked';
   progress?: string;
   progressPct?: number;
+  badgeKey?: string;
+  accent?: string | null;
+  kind?: 'elite' | 'milestone';
 }
 
 interface RankRow {
@@ -30,86 +37,167 @@ interface RankRow {
   competition: string;
   period: string;
   rank: string;
+  rankNumber: number | null;
   score: string;
 }
 
+interface ApiTitle {
+  id: string;
+  kind: 'elite' | 'milestone';
+  key: string;
+  titleAr: string;
+  titleEn: string;
+  accent?: string | null;
+  status: 'done' | 'progress' | 'locked';
+  progress?: string | null;
+  progressPct?: number | null;
+}
+
+interface ApiStand {
+  id: string;
+  competitionKey: 'king_results' | 'king_predictions' | 'top_scorers' | 'coach_king' | 'share_win';
+  periodKey: 'week' | 'season' | 'round' | 'month';
+  rank: number | null;
+  score: number;
+  scoreLabel: 'xp' | 'points' | 'participants';
+}
+
 interface Props {
-  analytics: ProfileAnalytics | null;
+  userId: string;
 }
 
 function pad2(n: number): string {
   return String(Math.max(0, n)).padStart(2, '0');
 }
 
-export function ProfileAchievementsTab({ analytics }: Props) {
-  const { t } = useTranslation();
+function formatCount(n: number): string {
+  return n.toLocaleString();
+}
+
+export function ProfileAchievementsTab({ userId }: Props) {
+  const { t, language } = useTranslation();
   const { colors: C, isDark } = useProfileTheme();
+  const { getToken } = useAuth();
   const [subTab, setSubTab] = useState<AchievementsSubTab>('titles');
   const [filter, setFilter] = useState<BadgeFilter>('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [titles, setTitles] = useState<ApiTitle[]>([]);
+  const [stands, setStands] = useState<ApiStand[]>([]);
 
-  const badges = useMemo<BadgeItem[]>(
-    () => [
-      { id: 'first', title: t.profile.firstPrediction, status: 'done' },
-      { id: 'active', title: t.profile.achievementsFanActive, status: 'done' },
-      {
-        id: 'expert',
-        title: t.profile.achievementsPredictionsExpert,
-        status: 'progress',
-        progress: '7/10',
-        progressPct: 0.7,
-      },
-      {
-        id: 'star',
-        title: t.profile.achievementsCommunityStar,
-        status: 'progress',
-        progress: '3/5',
-        progressPct: 0.6,
-      },
-      { id: 'results', title: t.profile.achievementsResultsKing, status: 'locked' },
-      { id: 'legend', title: t.profile.achievementsLegend, status: 'locked' },
-    ],
+  const load = useCallback(async () => {
+    if (!userId || userId.startsWith('user_')) {
+      setTitles([]);
+      setStands([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(false);
+    try {
+      const token = await getClerkBearerToken(getToken);
+      const res = await fetch(`${getApiUrl()}/profile/users/${userId}/achievements`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const data = json?.data;
+      setTitles(Array.isArray(data?.titles) ? data.titles : []);
+      setStands(Array.isArray(data?.stands) ? data.stands : []);
+    } catch {
+      setError(true);
+      setTitles([]);
+      setStands([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, getToken]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const competitionLabel = useCallback(
+    (key: ApiStand['competitionKey']) => {
+      switch (key) {
+        case 'king_results':
+          return t.profile.achievementsResultsKing;
+        case 'king_predictions':
+          return t.profile.achievementsPredictionsKing;
+        case 'top_scorers':
+          return t.profile.achievementsScorersCup;
+        case 'coach_king':
+          return t.profile.achievementsCoachKing;
+        case 'share_win':
+          return t.profile.achievementsShareWin;
+        default:
+          return key;
+      }
+    },
     [t],
   );
 
-  const ranks = useMemo<RankRow[]>(
-    () => [
-      {
-        id: 'results',
-        competition: t.profile.achievementsResultsKing,
-        period: t.profile.achievementsPeriodWeek,
-        rank: '#06',
-        score: t.profile.achievementsPoints.replace('{count}', '670'),
-      },
-      {
-        id: 'scorers',
-        competition: t.profile.achievementsScorersCup,
-        period: t.profile.achievementsPeriodSeason,
-        rank: '#08',
-        score: t.profile.achievementsPoints.replace('{count}', '2,450'),
-      },
-      {
-        id: 'predictions',
-        competition: t.profile.achievementsPredictionsKing,
-        period: t.profile.achievementsPeriodWeek,
-        rank: '#12',
-        score: t.profile.achievementsPoints.replace('{count}', '840'),
-      },
-      {
-        id: 'coach',
-        competition: t.profile.achievementsCoachKing,
-        period: t.profile.achievementsPeriodRound,
-        rank: '#15',
-        score: t.profile.achievementsPoints.replace('{count}', '1,120'),
-      },
-      {
-        id: 'share',
-        competition: t.profile.achievementsShareWin,
-        period: t.profile.achievementsPeriodMonth,
-        rank: '#24',
-        score: t.profile.achievementsPoints.replace('{count}', '12,320'),
-      },
-    ],
+  const periodLabel = useCallback(
+    (key: ApiStand['periodKey']) => {
+      switch (key) {
+        case 'week':
+          return t.profile.achievementsPeriodWeek;
+        case 'season':
+          return t.profile.achievementsPeriodSeason;
+        case 'round':
+          return t.profile.achievementsPeriodRound;
+        case 'month':
+          return t.profile.achievementsPeriodMonth;
+        default:
+          return key;
+      }
+    },
     [t],
+  );
+
+  const scoreLabel = useCallback(
+    (row: ApiStand) => {
+      const count = formatCount(row.score);
+      if (row.scoreLabel === 'xp') {
+        return (t.profile.achievementsXp || '{count} XP').replace('{count}', count);
+      }
+      if (row.scoreLabel === 'participants') {
+        return (t.profile.achievementsParticipants || '{count}').replace('{count}', count);
+      }
+      return t.profile.achievementsPoints.replace('{count}', count);
+    },
+    [t],
+  );
+
+  const badges = useMemo<BadgeItem[]>(
+    () =>
+      titles.map((row) => ({
+        id: row.id,
+        title: language === 'ar' ? row.titleAr : row.titleEn,
+        status: row.status,
+        progress: row.progress ?? undefined,
+        progressPct: row.progressPct ?? undefined,
+        badgeKey: row.kind === 'elite' ? row.key : undefined,
+        accent: row.accent,
+        kind: row.kind,
+      })),
+    [titles, language],
+  );
+
+  const ranks = useMemo<RankRow[]>(
+    () =>
+      stands.map((row) => ({
+        id: row.id,
+        competition: competitionLabel(row.competitionKey),
+        period: periodLabel(row.periodKey),
+        rank:
+          row.rank != null && row.rank > 0
+            ? `#${pad2(row.rank)}`
+            : t.profile.achievementsUnranked || '—',
+        rankNumber: row.rank != null && row.rank > 0 ? row.rank : null,
+        score: scoreLabel(row),
+      })),
+    [stands, competitionLabel, periodLabel, scoreLabel, t],
   );
 
   const doneCount = badges.filter((b) => b.status === 'done').length;
@@ -124,11 +212,36 @@ export function ProfileAchievementsTab({ analytics }: Props) {
   });
 
   const bestRank = ranks.reduce((best, row) => {
-    const n = Number(row.rank.replace('#', ''));
-    return Number.isFinite(n) && n < best ? n : best;
-  }, 99);
+    if (row.rankNumber == null) return best;
+    return row.rankNumber < best ? row.rankNumber : best;
+  }, Number.POSITIVE_INFINITY);
+  const bestRankDisplay = Number.isFinite(bestRank) ? bestRank : null;
 
-  void analytics;
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={C.profilePrimary} />
+        <Text style={[styles.loadingText, { color: C.profileMuted }]}>
+          {t.profile.achievementsLoading || t.profile.achievements}
+        </Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={[styles.loadingText, { color: C.profileMuted }]}>
+          {t.profile.achievementsLoadError || t.profile.noAchievements}
+        </Text>
+        <TouchableOpacity onPress={() => void load()} activeOpacity={0.85}>
+          <Text style={{ color: C.profilePrimary, fontWeight: '700' }}>
+            {t.common.retry}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -255,85 +368,98 @@ export function ProfileAchievementsTab({ analytics }: Props) {
             ))}
           </ScrollView>
 
-          <View style={styles.badgeGrid}>
-            {filteredBadges.map((badge) => (
-              <View
-                key={badge.id}
-                style={[
-                  styles.badgeCard,
-                  {
-                    backgroundColor: C.profileCard,
-                    borderColor: C.embossBorder,
-                    borderWidth: 1,
-                  },
-                  badge.status === 'locked' && styles.badgeCardLocked,
-                ]}
-              >
-                <View style={[styles.badgeIconWrap, { backgroundColor: C.profilePrimarySoft }]}>
-                  {badge.status === 'locked' ? (
-                    <Ionicons name="lock-closed" size={22} color={C.profileMuted} />
-                  ) : (
-                    <Image source={PROFILE_ICONS.trophy} style={styles.badgeIcon} contentFit="contain" />
-                  )}
-                </View>
-                <Text style={[styles.badgeTitle, { color: C.textPrimary }]} numberOfLines={2}>
-                  {badge.title}
-                </Text>
-                {badge.status === 'progress' ? (
-                  <>
-                    <View
-                      style={[
-                        styles.badgeProgressTrack,
-                        { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#E8E2F0' },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.badgeProgressFill,
-                          {
-                            width: `${Math.round((badge.progressPct || 0) * 100)}%`,
-                            backgroundColor: C.profilePrimary,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={[styles.badgeProgressText, { color: C.profileMuted }]}>
-                      {badge.progress}
-                    </Text>
-                  </>
-                ) : null}
+          {filteredBadges.length === 0 ? (
+            <Text style={[styles.emptyText, { color: C.profileMuted }]}>
+              {t.profile.noAchievements}
+            </Text>
+          ) : (
+            <View style={styles.badgeGrid}>
+              {filteredBadges.map((badge) => (
                 <View
+                  key={badge.id}
                   style={[
-                    styles.statusTag,
-                    badge.status === 'done' && styles.statusDone,
-                    badge.status === 'progress' && styles.statusProgress,
-                    badge.status === 'locked' && [
-                      styles.statusLocked,
-                      isDark && { backgroundColor: 'rgba(255,255,255,0.08)' },
-                    ],
+                    styles.badgeCard,
+                    {
+                      backgroundColor: C.profileCard,
+                      borderColor: C.embossBorder,
+                      borderWidth: 1,
+                    },
+                    badge.status === 'locked' && styles.badgeCardLocked,
                   ]}
                 >
-                  <Text
+                  <View style={[styles.badgeIconWrap, { backgroundColor: C.profilePrimarySoft }]}>
+                    {badge.status === 'locked' ? (
+                      <Ionicons name="lock-closed" size={22} color={C.profileMuted} />
+                    ) : badge.badgeKey ? (
+                      <BadgeIcon
+                        badgeKey={badge.badgeKey}
+                        accent={badge.accent || '#f5b942'}
+                        variant="card"
+                        size={28}
+                      />
+                    ) : (
+                      <Image source={PROFILE_ICONS.trophy} style={styles.badgeIcon} contentFit="contain" />
+                    )}
+                  </View>
+                  <Text style={[styles.badgeTitle, { color: C.textPrimary }]} numberOfLines={2}>
+                    {badge.title}
+                  </Text>
+                  {badge.status === 'progress' ? (
+                    <>
+                      <View
+                        style={[
+                          styles.badgeProgressTrack,
+                          { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#E8E2F0' },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.badgeProgressFill,
+                            {
+                              width: `${Math.round((badge.progressPct || 0) * 100)}%`,
+                              backgroundColor: C.profilePrimary,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.badgeProgressText, { color: C.profileMuted }]}>
+                        {badge.progress}
+                      </Text>
+                    </>
+                  ) : null}
+                  <View
                     style={[
-                      styles.statusText,
-                      badge.status === 'done' && styles.statusTextDone,
-                      badge.status === 'progress' && styles.statusTextProgress,
+                      styles.statusTag,
+                      badge.status === 'done' && styles.statusDone,
+                      badge.status === 'progress' && styles.statusProgress,
                       badge.status === 'locked' && [
-                        styles.statusTextLocked,
-                        { color: C.profileMuted },
+                        styles.statusLocked,
+                        isDark && { backgroundColor: 'rgba(255,255,255,0.08)' },
                       ],
                     ]}
                   >
-                    {badge.status === 'done'
-                      ? t.profile.achievementsFilterDone
-                      : badge.status === 'progress'
-                        ? t.profile.achievementsFilterProgress
-                        : t.profile.achievementsFilterLocked}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        badge.status === 'done' && styles.statusTextDone,
+                        badge.status === 'progress' && styles.statusTextProgress,
+                        badge.status === 'locked' && [
+                          styles.statusTextLocked,
+                          { color: C.profileMuted },
+                        ],
+                      ]}
+                    >
+                      {badge.status === 'done'
+                        ? t.profile.achievementsFilterDone
+                        : badge.status === 'progress'
+                          ? t.profile.achievementsFilterProgress
+                          : t.profile.achievementsFilterLocked}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </>
       ) : (
         <>
@@ -363,7 +489,7 @@ export function ProfileAchievementsTab({ analytics }: Props) {
               <View style={[styles.rankMetricDivider, { backgroundColor: C.divider }]} />
               <View style={styles.rankMetric}>
                 <Text style={[styles.rankMetricValue, { color: C.textPrimary }]}>
-                  #{pad2(bestRank)}
+                  {bestRankDisplay != null ? `#${pad2(bestRankDisplay)}` : t.profile.achievementsUnranked || '—'}
                 </Text>
                 <Text style={[styles.rankMetricLabel, { color: C.profileMuted }]}>
                   {t.profile.achievementsBestRank}
@@ -425,6 +551,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 14,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 180,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 13,
+    paddingVertical: 20,
   },
   segment: {
     height: 51,
@@ -551,10 +692,6 @@ const styles = StyleSheet.create({
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  filterChipActive: {
-    backgroundColor: ProfileTheme.colors.profilePrimary,
-    borderColor: ProfileTheme.colors.profilePrimary,
   },
   filterText: {
     color: ProfileTheme.colors.profileMuted,

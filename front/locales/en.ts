@@ -2567,6 +2567,11 @@ export const en = {
     achievementsCurrentRank: 'Current ranking',
     achievementsCompetitionRanks: 'My competition ranks',
     achievementsRankFooter: 'Ranks update based on each competition period',
+    achievementsUnranked: '—',
+    achievementsLoading: 'Loading achievements...',
+    achievementsLoadError: 'Could not load achievements',
+    achievementsXp: '{count} XP',
+    achievementsParticipants: '{count} joined',
 
     emailCopied: 'Email copied',
     emailCopiedMessage: 'The email address was copied to your clipboard.',

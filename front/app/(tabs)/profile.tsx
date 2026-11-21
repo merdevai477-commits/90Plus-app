@@ -1853,7 +1853,7 @@ function OwnProfileScreen() {
           )}
 
           {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
-            <ProfileAchievementsTab analytics={analytics} />
+            <ProfileAchievementsTab userId={String(userData.id)} />
           )}
         </View>
         )}

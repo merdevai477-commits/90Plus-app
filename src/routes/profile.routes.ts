@@ -544,6 +544,31 @@ router.get('/cooldowns', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }
 });
 
 /**
+ * GET /api/profile/users/:userId/achievements
+ * Titles (milestones + elite badges) and live competition ranks for a profile.
+ */
+router.get('/users/:userId/achievements', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
+        if (!userId) {
+            sendError(req, res, ErrorCode.VALIDATION, 'User id is required');
+            return;
+        }
+        const { getProfileAchievementsBundle } = await import('../services/profile-achievements.service');
+        const data = await getProfileAchievementsBundle(userId);
+        if (!data) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+        res.set('Cache-Control', 'private, max-age=30');
+        res.json({ status: 'SUCCESS', data });
+    } catch (error) {
+        logger.error('Get profile achievements error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load achievements');
+    }
+});
+
+/**
  * GET /api/profile/:username
  * Get profile by username
  * MUST be last to avoid matching /analytics, /cooldowns, etc.
