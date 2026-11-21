@@ -178,7 +178,8 @@ export async function listMuxUploads(limit = 100): Promise<MuxUploadSummary[]> {
 /**
  * Create a Mux direct upload URL.
  * The caller PUTs the raw video buffer to `uploadUrl`.
- * On free-tier asset cap, prunes stale assets, then the oldest live reels, and retries.
+ * On free-tier asset cap, prunes only stale/orphan assets and retries.
+ * Live READY reels are never deleted to free a slot.
  */
 export async function createUploadUrl(
   userId: string,
@@ -191,13 +192,14 @@ export async function createUploadUrl(
       throw toMuxServiceError(firstErr);
     }
 
-    logger.warn('[Mux] Asset limit hit — attempting cleanup before retry', {
+    logger.warn('[Mux] Asset limit hit — attempting safe cleanup before retry', {
       reelId,
       userId,
     });
 
     const { freeMuxAssetSlots } = await import('./mux-cleanup.service');
-    const freed = await freeMuxAssetSlots(3);
+    // Free at most one safe slot per retry — never retire live READY reels.
+    const freed = await freeMuxAssetSlots(1);
     if (freed < 1) {
       throw new MuxServiceError(
         'MUX_ASSET_LIMIT',

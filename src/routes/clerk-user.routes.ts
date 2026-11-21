@@ -1064,8 +1064,8 @@ router.get('/user/:username/reels', optionalAuth, async (req: Request, res: Resp
         // empty videoUrl).
         const isOwner = !!requestingClerkUserId && user.clerkUserId === requestingClerkUserId;
         const reelsWhere = isOwner
-            ? { userId: user.id, status: { in: ['READY', 'PROCESSING'] as any } }
-            : { userId: user.id, status: 'READY' as const, videoUrl: { not: '' } };
+            ? { userId: user.id, isDeleted: false, status: { in: ['READY', 'PROCESSING'] as any } }
+            : { userId: user.id, isDeleted: false, status: 'READY' as const, videoUrl: { not: '' } };
 
         // Get user's reels.
         const reels = await prisma.reel.findMany({
