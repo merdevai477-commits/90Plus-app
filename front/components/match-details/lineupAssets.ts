@@ -1,4 +1,4 @@
-/** Figma "90plus" lineup artboard (node 1344:17434). */
+/** Figma "90plus" lineup pitch (Football Pitch 1814:22856 / outline 1814:22879). */
 export const LINEUP_ART = {
   stadium: require('../../assets/images/match-lineup/stadium-bg.webp'),
   stripe31: require('../../assets/images/match-lineup/stripe-31.svg'),

@@ -22,15 +22,14 @@ import {
 import { shortPlayerName } from '../../utils/lineupMatchState';
 import { useLocalizedName } from '../../hooks/useLocalizedName';
 import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
-import { LineupRatingBadge } from './LineupRatingBadge';
 
 /** Figma artboard width — every number below is in artboard units, scaled to the screen. */
 const DESIGN_W = 448;
 const MAX_CANVAS_W = 520;
 /** Artboard y where the lineup section starts; Figma `top` values are offset by this. */
 const ORIGIN_Y = 383;
-/** The bench card starts here, overlapping the faded end of the pitch. */
-const SECTION_BOTTOM_Y = 996;
+/** Fades out just below the GK row (Figma Football Pitch 1814:22856 ends ~970). */
+const SECTION_BOTTOM_Y = 940;
 const SECTION_BG = '#030303';
 
 const CARD_W = 97;
@@ -40,9 +39,9 @@ const AVATAR_RISE = 31;
 const CARD_GAP = 8;
 /** Card plus the avatar that sticks out above it. */
 const CARD_STACK = 104;
-const PLAYERS_SPAN = 432;
-const PITCH_CENTER_X = 224;
-const KEEPER_TOP = 889;
+const PLAYERS_SPAN = 412;
+const PITCH_CENTER_X = 215;
+const KEEPER_TOP = 833;
 /** Absolute depth (0–100) gap that starts a new row. */
 const DEPTH_ROW_GAP = 8;
 
@@ -90,28 +89,28 @@ type PitchLayer = {
   flip?: 'x' | 'y';
 };
 
-/** Perspective pitch from node 1347:19132, in artboard coordinates (SVG boxes incl. stroke bleed). */
+/** Perspective pitch from Figma 1814:22856 (outline Vector 44 = 1814:22879). */
 const PITCH_LAYERS: PitchLayer[] = [
-  { key: 's31', source: LINEUP_ART.stripe31, left: -36, top: 929.46, width: 519.458, height: 49.111 },
-  { key: 's32a', source: LINEUP_ART.stripe32, left: -35.49, top: 891.49, width: 518.193, height: 38.225 },
-  { key: 's32b', source: LINEUP_ART.stripe32, left: -35.49, top: 820.61, width: 518.193, height: 38.225 },
-  { key: 's37', source: LINEUP_ART.stripe37, left: -32.2, top: 750.99, width: 506.548, height: 37.466 },
-  { key: 's39', source: LINEUP_ART.stripe39, left: -13.47, top: 682.39, width: 469.842, height: 36.2 },
-  { key: 's41', source: LINEUP_ART.stripe41, left: 6.02, top: 613.03, width: 432.629, height: 35.947 },
-  { key: 's43', source: LINEUP_ART.stripe43, left: 24.5, top: 544.17, width: 396.429, height: 35.947 },
-  { key: 's34', source: LINEUP_ART.stripe34, left: -36, top: 858.58, width: 519.458, height: 33.669 },
-  { key: 's36', source: LINEUP_ART.stripe36, left: -35.49, top: 787.7, width: 518.193, height: 34.175 },
-  { key: 's38', source: LINEUP_ART.stripe38, left: -22.33, top: 718.08, width: 487.058, height: 33.922 },
-  { key: 's40', source: LINEUP_ART.stripe40, left: -3.34, top: 648.72, width: 450.349, height: 33.669 },
-  { key: 's42', source: LINEUP_ART.stripe42, left: 15.89, top: 579.61, width: 413.509, height: 33.415 },
-  { key: 'boxNear', source: LINEUP_ART.boxNear, left: 51.64, top: 844, width: 344.963, height: 182.266 },
-  { key: 'boxFar', source: LINEUP_ART.boxFar, left: 96.4, top: 460, width: 255.92, height: 182.266, flip: 'y' },
-  { key: 'halfway', source: LINEUP_ART.halfwayLine, left: 3.28, top: 717.34, width: 437.395, height: 3 },
-  { key: 'circle', source: LINEUP_ART.centerCircle, left: 157.91, top: 683.4, width: 132.143, height: 70.375 },
-  { key: 'outline', source: LINEUP_ART.outline, left: -37.02, top: 554.01, width: 522, height: 402 },
-  { key: 'spot', source: LINEUP_ART.centerSpot, left: 218.16, top: 713.27, width: 12.151, height: 10.126 },
-  { key: 'cornerL', source: LINEUP_ART.cornerLeft, left: 46.84, top: 556.7, width: 21.63, height: 13.936 },
-  { key: 'cornerR', source: LINEUP_ART.cornerRight, left: 380.53, top: 556.7, width: 21.63, height: 13.936, flip: 'x' },
+  { key: 's31', source: LINEUP_ART.stripe31, left: -45, top: 873.46, width: 519.458, height: 49.111 },
+  { key: 's32a', source: LINEUP_ART.stripe32, left: -44, top: 835.49, width: 518.193, height: 38.225 },
+  { key: 's32b', source: LINEUP_ART.stripe32, left: -44, top: 764.61, width: 518.193, height: 38.225 },
+  { key: 's37', source: LINEUP_ART.stripe37, left: -39, top: 694.99, width: 506.548, height: 37.466 },
+  { key: 's39', source: LINEUP_ART.stripe39, left: -20, top: 626.39, width: 469.842, height: 36.2 },
+  { key: 's41', source: LINEUP_ART.stripe41, left: -2, top: 557.03, width: 432.629, height: 35.947 },
+  { key: 's43', source: LINEUP_ART.stripe43, left: 17, top: 488.17, width: 396.429, height: 35.947 },
+  { key: 's34', source: LINEUP_ART.stripe34, left: -45, top: 802.58, width: 519.458, height: 33.669 },
+  { key: 's36', source: LINEUP_ART.stripe36, left: -44, top: 731.7, width: 518.193, height: 34.175 },
+  { key: 's38', source: LINEUP_ART.stripe38, left: -29, top: 662.08, width: 487.058, height: 33.922 },
+  { key: 's40', source: LINEUP_ART.stripe40, left: -10, top: 592.72, width: 450.349, height: 33.669 },
+  { key: 's42', source: LINEUP_ART.stripe42, left: 8, top: 523.61, width: 413.509, height: 33.415 },
+  { key: 'boxNear', source: LINEUP_ART.boxNear, left: 44, top: 788, width: 342.002, height: 182.266 },
+  { key: 'boxFar', source: LINEUP_ART.boxFar, left: 89, top: 404, width: 252.388, height: 182.266, flip: 'y' },
+  { key: 'halfway', source: LINEUP_ART.halfwayLine, left: -4, top: 661.84, width: 437.395, height: 3 },
+  { key: 'circle', source: LINEUP_ART.centerCircle, left: 149, top: 627.4, width: 132.143, height: 70.375 },
+  { key: 'outline', source: LINEUP_ART.outline, left: -46, top: 498, width: 522, height: 402 },
+  { key: 'spot', source: LINEUP_ART.centerSpot, left: 209, top: 657.27, width: 12.151, height: 10.126 },
+  { key: 'cornerL', source: LINEUP_ART.cornerLeft, left: 38, top: 502, width: 21.63, height: 13.936 },
+  { key: 'cornerR', source: LINEUP_ART.cornerRight, left: 372, top: 502, width: 21.63, height: 13.936, flip: 'x' },
 ];
 
 type Slot = { player: Player; cx: number; top: number };
@@ -165,9 +164,10 @@ function layoutPitchRows(rows: Player[][]): { slots: Slot[]; k: number } {
   const [keeperRow, ...outfield] = rows.length > 1 ? rows : [[], ...rows];
   const lines = outfield.length;
   const dense = lines >= 4;
-  const attackTop = dense ? 536 : 550;
-  const defenceTop = dense ? 800 : 766;
-  const tops = lines === 1 ? [658] : spread(lines, defenceTop, attackTop);
+  /** Figma Player Formation 1814:22883 — attack 494 / mid 602 / defence 710 / GK 833. */
+  const attackTop = dense ? 480 : 494;
+  const defenceTop = dense ? 744 : 710;
+  const tops = lines === 1 ? [602] : spread(lines, defenceTop, attackTop);
   const spacing = lines > 1 ? (defenceTop - attackTop) / (lines - 1) : CARD_STACK;
   const widest = Math.max(1, ...rows.map((row) => row.length));
   const kV = Math.min(1, spacing / CARD_STACK);
@@ -207,14 +207,13 @@ function PitchPlayerCard({
 }) {
   const goals = player.goals ?? 0;
   const assists = player.assists ?? 0;
-  const hasRating = player.rating != null && player.rating > 0;
   const displayName = useLocalizedName(player.name);
   const borderWidth = Math.max(1, 2 * u);
   const rise = AVATAR_RISE * u;
   const avatar = AVATAR * u;
   const mini = 14 * u;
-  // Badges were placed inside the card's border box in Figma; the wrapper adds the avatar rise above it.
-  const badgeTop = rise + borderWidth + 10 * u;
+  // Figma 1814:22885 — number badge at left 18 / top 10 inside the card body.
+  const badgeTop = rise + 10 * u;
 
   // The avatar must stay inside the touchable's bounds: Android's BlurTargetView clips overflow.
   return (
@@ -233,7 +232,7 @@ function PitchPlayerCard({
             height: CARD_H * u,
             borderRadius: 16 * u,
             borderWidth,
-            paddingBottom: 5 * u,
+            paddingBottom: 16 * u,
             gap: 7 * u,
           },
         ]}
@@ -245,7 +244,6 @@ function PitchPlayerCard({
         >
           {shortPlayerName(displayName)}
         </Text>
-        {hasRating ? <LineupRatingBadge rating={player.rating as number} scale={u} /> : null}
       </View>
 
       <View
@@ -273,7 +271,7 @@ function PitchPlayerCard({
           style={[
             styles.numberBadge,
             {
-              left: borderWidth + 18 * u,
+              left: 18 * u,
               top: badgeTop,
               width: 20 * u,
               height: 20 * u,
@@ -289,7 +287,7 @@ function PitchPlayerCard({
 
       {goals > 0 || assists > 0 || player.subbedIn != null ? (
         <View
-          style={[styles.eventBadges, { right: borderWidth + 16 * u, top: badgeTop, gap: 2 * u }]}
+          style={[styles.eventBadges, { right: 16 * u, top: badgeTop, gap: 2 * u }]}
         >
           {goals > 0 ? (
             <View style={[styles.mini, { width: mini, height: mini, borderRadius: mini / 2 }]}>
@@ -386,7 +384,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
         <LinearGradient
           colors={['rgba(3,3,3,0)', SECTION_BG]}
           locations={[0.0065, 0.813]}
-          style={[styles.abs, { left: -1 * s, top: y(857), width: 451 * s, height: 145 * s }]}
+          style={[styles.abs, { left: -11 * s, top: y(804), width: 451 * s, height: 145 * s }]}
           pointerEvents="none"
         />
 
@@ -433,7 +431,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
             style={[
               styles.abs,
               styles.benchButton,
-              { left: 388.5 * s, top: y(904.5), width: 45 * s, height: 45 * s },
+              { left: 388.5 * s, top: y(848.5), width: 45 * s, height: 45 * s },
             ]}
             onPress={onBenchPress}
             activeOpacity={0.8}
@@ -512,7 +510,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00081B',
+    backgroundColor: '#4B1FA3',
   },
   numberText: {
     color: '#FFFFFF',
