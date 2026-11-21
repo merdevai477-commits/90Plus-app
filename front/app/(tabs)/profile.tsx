@@ -2428,7 +2428,6 @@ function OwnProfileScreen() {
             toastManager.showInfo(t.profile.noChanges, t.profile.noProfileChanges);
           }
         }}
-        usernameCooldown={cooldowns?.username}
       />
 
       <ReelUploadModal
