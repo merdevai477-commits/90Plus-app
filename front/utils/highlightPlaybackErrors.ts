@@ -65,11 +65,19 @@ export function classifyHttpStatusForDirectSource(status: number): PlaybackFailu
  * Classify YouTube embed probe payloads.
  * Only confirmed country/region phrasing becomes GEO_RESTRICTED.
  */
-/** Positive YouTube IFrame API signals — not failures. */
+/** Player iframe constructed — NOT proof the clip can play (errors often follow). */
+export function isYouTubePlayerReadySignal(raw: string): boolean {
+  return /^reason:PLAYER_READY:/i.test(raw.trim());
+}
+
+/** Actual playback started (YT.PlayerState.PLAYING = 1). */
+export function isYouTubePlayingSignal(raw: string): boolean {
+  return /^reason:PLAYING:/i.test(raw.trim());
+}
+
+/** @deprecated Prefer isYouTubePlayingSignal — READY alone used to clear watchdogs too early. */
 export function isYouTubePlaybackProgressSignal(raw: string): boolean {
-  const text = raw.trim();
-  const match = text.match(/^reason:(PLAYER_READY|PLAYING):/i);
-  return Boolean(match);
+  return isYouTubePlayingSignal(raw) || isYouTubePlayerReadySignal(raw);
 }
 
 export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason | null {

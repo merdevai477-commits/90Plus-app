@@ -32,8 +32,10 @@ describe('resolveHighlightPlaybackUrl', () => {
     expect(doc).toContain("videoId:'_jxHAw-yH3E'");
     expect(doc).toContain('iframe_api');
     expect(doc).toContain("post('PLAYER_READY')");
+    expect(doc).toContain("window.__HL_VID='_jxHAw-yH3E'");
     expect(doc).toContain('<base href="https://90plus.pro/">');
     expect(doc).toContain("host:'https://www.youtube-nocookie.com'");
+    expect(doc).toContain("reason:'+reason+':_jxHAw-yH3E:");
   });
 
   it('orders direct MP4 ahead of YouTube', () => {

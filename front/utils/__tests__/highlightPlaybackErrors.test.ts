@@ -3,6 +3,8 @@ import {
   classifyYouTubeErrorCode,
   classifyYouTubeProbeSignal,
   isYouTubePlaybackProgressSignal,
+  isYouTubePlayerReadySignal,
+  isYouTubePlayingSignal,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
 } from '../highlightPlaybackErrors';
@@ -64,10 +66,18 @@ describe('highlightPlaybackErrors', () => {
     });
 
     it('treats PLAYER_READY / PLAYING as progress, not failure', () => {
+      expect(isYouTubePlayerReadySignal('reason:PLAYER_READY:abc:https://90plus.pro/')).toBe(true);
+      expect(isYouTubePlayingSignal('reason:PLAYING:abc:https://90plus.pro/')).toBe(true);
+      expect(isYouTubePlayingSignal('reason:PLAYER_READY:abc:https://90plus.pro/')).toBe(false);
       expect(isYouTubePlaybackProgressSignal('reason:PLAYER_READY:https://90plus.pro/')).toBe(true);
-      expect(isYouTubePlaybackProgressSignal('reason:PLAYING:https://90plus.pro/')).toBe(true);
       expect(classifyYouTubeProbeSignal('reason:PLAYER_READY:https://90plus.pro/')).toBeNull();
       expect(classifyYouTubeProbeSignal('reason:PLAYING:https://90plus.pro/')).toBeNull();
+    });
+
+    it('accepts embed failures posted with video id but 90plus location', () => {
+      expect(
+        classifyYouTubeProbeSignal('reason:EMBED_UNAVAILABLE:qjEXEEBQgqo:https://90plus.pro/'),
+      ).toBe('EMBED_UNAVAILABLE');
     });
   });
 

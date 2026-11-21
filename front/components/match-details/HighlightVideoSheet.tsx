@@ -20,7 +20,8 @@ import { holdHighlightReplay, releaseHighlightReplay } from '../../services/sent
 import { useTranslation } from '../../src/i18n';
 import {
   classifyYouTubeProbeSignal,
-  isYouTubePlaybackProgressSignal,
+  isYouTubePlayerReadySignal,
+  isYouTubePlayingSignal,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
   type PlaybackFailureReason,
@@ -57,12 +58,15 @@ type Props = {
   closeLabel?: string;
 };
 
-/** Reports typed reasons — geo only when country/region evidence is present. */
+/**
+ * Secondary DOM probe for YouTube error banners inside the iframe wrapper.
+ * Must include video id so RN does not drop the message (location is 90plus.pro).
+ */
 const PLAYBACK_PROBE = `
 (function () {
-  function send(reason, href) {
+  function send(reason) {
     if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (href || location.href));
+      window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
     }
   }
   function pageText(doc) {
@@ -73,18 +77,15 @@ const PLAYBACK_PROBE = `
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) text += ' ' + pageText(frames[i].contentDocument);
     if (/playback on other websites has been disabled/i.test(text)) {
-      send('EMBED_UNAVAILABLE', location.href);
+      send('EMBED_UNAVAILABLE');
       return;
     }
-    // Fake country copy is common for embed/rights failures in WKWebView.
-    // Do not label as GEO_RESTRICTED — watch page often still plays.
     if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(text)) {
-      send('EMBED_UNAVAILABLE', location.href);
+      send('EMBED_UNAVAILABLE');
       return;
     }
     if (/video unavailable/i.test(text) && /country|region|بلد/i.test(text)) {
-      send('EMBED_UNAVAILABLE', location.href);
-      return;
+      send('EMBED_UNAVAILABLE');
     }
   }
   window.addEventListener('message', function (event) {
@@ -92,16 +93,16 @@ const PLAYBACK_PROBE = `
     var info = raw.match(/"info"\\s*:\\s*(100|101|150)/);
     if (info) {
       var code = info[1];
-      if (code === '100') send('SOURCE_NOT_FOUND', location.href);
-      else send('EMBED_UNAVAILABLE', location.href);
+      if (code === '100') send('SOURCE_NOT_FOUND');
+      else send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/onError/.test(raw) && /150|101/.test(raw)) send('EMBED_UNAVAILABLE', location.href);
-    else if (/onError/.test(raw) && /100/.test(raw)) send('SOURCE_NOT_FOUND', location.href);
+    if (/onError/.test(raw) && /150|101/.test(raw)) send('EMBED_UNAVAILABLE');
+    else if (/onError/.test(raw) && /100/.test(raw)) send('SOURCE_NOT_FOUND');
   });
   setTimeout(check, 800);
   setTimeout(check, 2000);
-  setTimeout(check, 4000);
+  setTimeout(check, 4500);
 })();
 true;
 `;
@@ -427,7 +428,20 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
-                if (isYouTubePlaybackProgressSignal(data)) {
+                // READY = iframe constructed only. Errors often follow; keep the load watchdog.
+                if (isYouTubePlayerReadySignal(data)) {
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYER_INITIALIZING',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl),
+                    retryCount,
+                  });
+                  return;
+                }
+                // PLAYING = real playback — only then clear the YouTube load timeout.
+                if (isYouTubePlayingSignal(data)) {
                   setYoutubeLoaded(true);
                   setUiPhase('ready');
                   emitHighlightPlaybackDiagnostic({
@@ -443,7 +457,9 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 }
                 const reason = classifyYouTubeProbeSignal(data);
                 if (!reason) return;
-                if (videoId && !data.includes(videoId) && !data.includes(embedUrl)) return;
+                // Accept bridge messages even when href is 90plus.pro (no videoId in URL).
+                // Drop only clearly unrelated noise that is not a reason: payload.
+                if (!/^reason:/i.test(data.trim()) && videoId && !data.includes(videoId)) return;
                 skipWithReason(reason);
               }}
               onHttpError={(event) => {

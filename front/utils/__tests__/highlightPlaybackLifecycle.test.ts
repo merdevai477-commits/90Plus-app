@@ -23,7 +23,7 @@ describe('highlightPlaybackLifecycle', () => {
   it('exposes configurable timeout constants', () => {
     expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.INITIALIZATION_MS).toBe(12_000);
     expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.PLAYBACK_START_MS).toBe(15_000);
-    expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS).toBe(15_000);
+    expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS).toBe(20_000);
   });
 
   it('classifies media types without inventing geo', () => {
@@ -50,12 +50,14 @@ describe('highlightPlaybackLifecycle', () => {
   it('maps recoverable vs unrecoverable failures and timeouts', () => {
     expect(isRecoverablePlaybackFailure('NETWORK_ERROR')).toBe(true);
     expect(isRecoverablePlaybackFailure('PLAYBACK_TIMEOUT')).toBe(true);
-    expect(isRecoverablePlaybackFailure('GEO_RESTRICTED')).toBe(false);
+    expect(isRecoverablePlaybackFailure('GEO_RESTRICTED')).toBe(true);
+    expect(isRecoverablePlaybackFailure('EMBED_UNAVAILABLE')).toBe(true);
     expect(isRecoverablePlaybackFailure('SOURCE_NOT_FOUND')).toBe(false);
     expect(isRecoverablePlaybackFailure('UNSUPPORTED_PROVIDER')).toBe(false);
     expect(highlightUiPhaseForFailure('PLAYBACK_TIMEOUT')).toBe('timed_out');
     expect(highlightUiPhaseForFailure('NETWORK_ERROR')).toBe('error_recoverable');
-    expect(highlightUiPhaseForFailure('GEO_RESTRICTED')).toBe('error_unrecoverable');
+    expect(highlightUiPhaseForFailure('GEO_RESTRICTED')).toBe('error_recoverable');
+    expect(highlightUiPhaseForFailure('EMBED_UNAVAILABLE')).toBe('error_recoverable');
     expect(resolveTimeoutReason('initialization')).toBe('PLAYBACK_TIMEOUT');
   });
 

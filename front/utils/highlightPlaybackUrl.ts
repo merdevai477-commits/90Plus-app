@@ -107,10 +107,11 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
 export function youtubeEmbedDocument(videoId: string): string {
   const id = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
   return `<!DOCTYPE html><html><head><base href="${YOUTUBE_EMBED_ORIGIN}/"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#player{position:absolute;inset:0;width:100%;height:100%}</style></head><body><div id="player"></div><script>
+window.__HL_VID='${id}';
 var tag=document.createElement('script');
 tag.src='https://www.youtube.com/iframe_api';
 document.head.appendChild(tag);
-function post(reason){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('reason:'+reason+':'+location.href);}catch(e){}}
+function post(reason){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('reason:'+reason+':${id}:'+location.href);}catch(e){}}
 function onYouTubeIframeAPIReady(){
   try{
     new YT.Player('player',{

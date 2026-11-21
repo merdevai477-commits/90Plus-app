@@ -8,7 +8,8 @@ import { isDirectHighlightFile, youtubeVideoId } from './highlightPlaybackUrl';
 export const HIGHLIGHT_PLAYBACK_TIMEOUTS = {
   INITIALIZATION_MS: 12_000,
   PLAYBACK_START_MS: 15_000,
-  YOUTUBE_LOAD_MS: 15_000,
+  /** Wait for PLAYING (not just iframe READY) before declaring YouTube success. */
+  YOUTUBE_LOAD_MS: 20_000,
 } as const;
 
 export type HighlightUiPhase =
