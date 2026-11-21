@@ -2151,6 +2151,8 @@ const MatchDetailsScreen = () => {
             <MatchEventsTimeline
               events={sortedEvents}
               language={language}
+              homeTeamId={fixture?.teams?.home?.id}
+              awayTeamId={fixture?.teams?.away?.id}
               goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
               detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
               goalClips={goalClips}
