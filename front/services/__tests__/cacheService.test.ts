@@ -305,4 +305,39 @@ describe('CacheService Property Tests', () => {
       expect(leftover['@cache_other_key']).toBeUndefined();
     });
   });
+
+  describe('disk payload cap and emergency purge', () => {
+    it('skips AsyncStorage for oversized payloads but serves from memory', async () => {
+      mockStorage.__resetStore();
+      const huge = Array.from({ length: 5000 }, (_, i) => ({
+        id: i,
+        name: `Team ${i} with a long padding string ________`,
+      }));
+      await cacheService.set('matches_2099-01-01', huge, 60_000);
+
+      const store = mockStorage.__getStore();
+      expect(store['@cache_matches_2099-01-01']).toBeUndefined();
+
+      const fromMem = await cacheService.get<typeof huge>('matches_2099-01-01');
+      expect(fromMem?.length).toBe(5000);
+    });
+
+    it('recoverFromStorageFull removes cache, offline, and archive keys', async () => {
+      mockStorage.__resetStore();
+      mockStorage.__setStore({
+        '@cache_foo': JSON.stringify({ data: 1, timestamp: Date.now(), ttl: 9999 }),
+        '@offline_match_1': '{"data":{}}',
+        '@match_archive_abc': '{"matchId":"abc"}',
+        '@keep_me': 'user-pref',
+      });
+
+      await cacheService.recoverFromStorageFull();
+
+      const leftover = mockStorage.__getStore();
+      expect(leftover['@cache_foo']).toBeUndefined();
+      expect(leftover['@offline_match_1']).toBeUndefined();
+      expect(leftover['@match_archive_abc']).toBeUndefined();
+      expect(leftover['@keep_me']).toBe('user-pref');
+    });
+  });
 });

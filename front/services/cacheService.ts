@@ -12,12 +12,30 @@ import { calendarStorageKey } from '../utils/calendarTimezone';
 // Cache key prefix to identify cache entries
 const CACHE_PREFIX = '@cache_';
 
+/** Other AsyncStorage namespaces that bloat the shared SQLite DB. */
+const OFFLINE_PREFIX = '@offline_';
+const ARCHIVE_PREFIX = '@match_archive_';
+
 // Default TTL: 5 minutes
 const DEFAULT_TTL = 5 * 60 * 1000;
 
 // Maximum number of cache entries (for LRU eviction)
 // ✅ Reduced to prevent SQLITE_FULL errors on low-storage devices
-const MAX_CACHE_ENTRIES = 50;
+const MAX_CACHE_ENTRIES = 40;
+
+/** Cap how many match-day calendars stay on disk (each can be hundreds of KB). */
+const MAX_PINNED_MATCH_DAYS = 3;
+
+/**
+ * Skip AsyncStorage when a single entry is this large.
+ * A full day calendar (~800 fixtures) routinely exceeds this; memory + network refetch is safer.
+ */
+const MAX_DISK_PAYLOAD_BYTES = 180_000;
+
+function isStorageFullError(error: unknown): boolean {
+  const msg = String((error as any)?.message ?? error ?? '');
+  return msg.includes('SQLITE_FULL') || msg.includes('database or disk is full');
+}
 
 /** Keep the matches calendar on disk across app kills — scores overlay separately. */
 export const MATCHES_CALENDAR_DISK_TTL_MS = 6 * 60 * 60 * 1000;
@@ -145,18 +163,18 @@ class CacheService {
    * @param allowStale - If true, return stale data even if expired
    */
   async get<T>(key: string, allowStale: boolean = false): Promise<T | null> {
+    // Session memory (oversized disk-skipped entries + memory-first keys)
+    const memHit = memoryStore.get(key);
+    if (memHit) {
+      const age = Date.now() - memHit.timestamp;
+      if (age <= memHit.ttl || allowStale) {
+        return memHit.data as T;
+      }
+      memoryStore.delete(key);
+    }
+
     // ── Memory-first path for large object caches ──────────────────────────
     if (MEMORY_FIRST_KEYS.has(key)) {
-      const mem = memoryStore.get(key);
-      if (mem) {
-        const age = Date.now() - mem.timestamp;
-        if (age <= mem.ttl || allowStale) {
-          return mem.data as T;
-        }
-        // Expired in memory — fall through to AsyncStorage rehydration below
-        memoryStore.delete(key);
-      }
-
       // Try to rehydrate from AsyncStorage slim entry
       try {
         const cacheKey = this.getCacheKey(key);
@@ -243,59 +261,95 @@ class CacheService {
         }
 
         const slim: SlimCacheEntry = { ids, timestamp: now, ttl, meta };
-        await AsyncStorage.setItem(cacheKey, JSON.stringify(slim));
-        writeTimestampIndex.set(cacheKey, now);
+        const slimJson = JSON.stringify(slim);
+        await this.writeToDisk(cacheKey, slimJson, now);
         await this.evictIfNeeded();
       } catch (error: any) {
         // Storage errors are non-critical — data is already in memory
-        console.warn(`[CacheService] AsyncStorage slim-write failed for "${key}":`, error?.message);
+        if (isStorageFullError(error)) {
+          await this.recoverFromStorageFull();
+        } else {
+          console.warn(`[CacheService] AsyncStorage slim-write failed for "${key}":`, error?.message);
+        }
       }
       return;
     }
     // ── Standard AsyncStorage path ─────────────────────────────────────────
+    const cacheKey = this.getCacheKey(key);
+    const now = Date.now();
+    const entry: CacheEntry<T> = {
+      data,
+      timestamp: now,
+      ttl,
+      lastUpdated: now,
+    };
+    const serialized = JSON.stringify(entry);
+
+    // Oversized calendars (e.g. 800+ fixtures) fill SQLite; keep session memory only.
+    if (serialized.length > MAX_DISK_PAYLOAD_BYTES) {
+      memoryStore.set(key, { data, timestamp: now, ttl });
+      console.warn(
+        `[CacheService] Skipping disk for "${key}" (${serialized.length} bytes > ${MAX_DISK_PAYLOAD_BYTES})`,
+      );
+      return;
+    }
+
     try {
-      const cacheKey = this.getCacheKey(key);
-      const now = Date.now();
-      const entry: CacheEntry<T> = {
-        data,
-        timestamp: now,
-        ttl,
-        lastUpdated: now, // Track when data was last updated
-      };
-
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
-      writeTimestampIndex.set(cacheKey, now);
-
+      await this.writeToDisk(cacheKey, serialized, now);
       await this.evictIfNeeded();
     } catch (error: any) {
-      // ✅ FIX: Define cacheKey here for retry
-      const cacheKey = this.getCacheKey(key);
-      const now = Date.now();
-      const entry: CacheEntry<T> = {
-        data,
-        timestamp: now,
-        ttl,
-        lastUpdated: now,
-      };
-      
-      // ✅ FIX: Handle SQLITE_FULL error
-      if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
-        console.warn(`[CacheService] ⚠️ Storage full! Aggressive cleanup...`);
-        // Aggressive cleanup: Remove more entries
-        await this.evictIfNeeded(30); // Keep only 30 newest entries
-        // Retry once after cleanup
+      if (isStorageFullError(error)) {
+        console.warn(`[CacheService] ⚠️ Storage full! Emergency purge...`);
+        await this.recoverFromStorageFull();
         try {
-          await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
-          console.log(`[CacheService] ✅ Retry successful after cleanup`);
+          await this.writeToDisk(cacheKey, serialized, now);
+          console.log(`[CacheService] ✅ Retry successful after emergency purge`);
         } catch (retryError) {
-          console.error(`[CacheService] ❌ Retry failed, silently ignoring:`, retryError);
-          // Silent fail - don't crash the app
+          // Keep in memory so the current session still works
+          memoryStore.set(key, { data, timestamp: now, ttl });
+          console.warn(
+            `[CacheService] Disk write skipped after purge for "${key}":`,
+            (retryError as any)?.message ?? retryError,
+          );
         }
       } else {
         console.error(`[CacheService] Error setting cache for key "${key}":`, error);
-        // Silent fail for cache errors - don't crash the app
       }
     }
+  }
+
+  /**
+   * Wipe cache / offline / archive namespaces that share AsyncStorage's SQLite DB.
+   * Safe to call on SQLITE_FULL — data can be refetched.
+   */
+  async recoverFromStorageFull(): Promise<void> {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const toRemove = allKeys.filter(
+        (k) =>
+          k.startsWith(CACHE_PREFIX) ||
+          k.startsWith(OFFLINE_PREFIX) ||
+          k.startsWith(ARCHIVE_PREFIX),
+      );
+      if (toRemove.length > 0) {
+        // Chunk removals — multiRemove of huge lists can itself stress SQLite
+        const chunkSize = 50;
+        for (let i = 0; i < toRemove.length; i += chunkSize) {
+          await AsyncStorage.multiRemove(toRemove.slice(i, i + chunkSize));
+        }
+        console.log(`[CacheService] Emergency purged ${toRemove.length} storage keys`);
+      }
+      writeTimestampIndex.clear();
+      lastEvictionAt = 0;
+    } catch (error) {
+      console.error('[CacheService] Emergency purge failed:', error);
+    }
+  }
+
+  /** Write one key; on SQLITE_FULL rethrow so callers can purge + retry. */
+  private async writeToDisk(cacheKey: string, serialized: string, timestamp: number): Promise<void> {
+    await AsyncStorage.setItem(cacheKey, serialized);
+    writeTimestampIndex.set(cacheKey, timestamp);
   }
 
   /**
@@ -342,7 +396,7 @@ class CacheService {
   }
 
   /**
-   * Clean up all expired cache entries.
+   * Clean up all expired / oversized cache entries.
    * Should be called on app start.
    */
   async cleanup(): Promise<void> {
@@ -352,17 +406,31 @@ class CacheService {
       
       const now = Date.now();
       const keysToRemove: string[] = [];
+      const pinnedKept: Array<{ key: string; timestamp: number }> = [];
 
       for (const cacheKey of cacheKeys) {
         try {
           const raw = await AsyncStorage.getItem(cacheKey);
-          if (raw) {
-            const entry: CacheEntry<unknown> = JSON.parse(raw);
-            const age = now - entry.timestamp;
-            
-            if (age > entry.ttl && !isPinnedLogicalKey(logicalKeyFromStorageKey(cacheKey))) {
-              keysToRemove.push(cacheKey);
-            }
+          if (!raw) continue;
+
+          // Drop blobs that already blow the SQLite budget
+          if (raw.length > MAX_DISK_PAYLOAD_BYTES) {
+            keysToRemove.push(cacheKey);
+            continue;
+          }
+
+          const entry: CacheEntry<unknown> = JSON.parse(raw);
+          const age = now - entry.timestamp;
+          const logical = logicalKeyFromStorageKey(cacheKey);
+          const pinned = isPinnedLogicalKey(logical);
+
+          if (age > entry.ttl && !pinned) {
+            keysToRemove.push(cacheKey);
+          } else if (pinned) {
+            pinnedKept.push({
+              key: cacheKey,
+              timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : 0,
+            });
           }
         } catch {
           // If we can't parse the entry, remove it
@@ -370,9 +438,19 @@ class CacheService {
         }
       }
 
+      // Keep only the newest match calendars on disk
+      if (pinnedKept.length > MAX_PINNED_MATCH_DAYS) {
+        pinnedKept.sort((a, b) => a.timestamp - b.timestamp);
+        for (const e of pinnedKept.slice(0, pinnedKept.length - MAX_PINNED_MATCH_DAYS)) {
+          keysToRemove.push(e.key);
+        }
+      }
+
       if (keysToRemove.length > 0) {
-        await AsyncStorage.multiRemove(keysToRemove);
-        console.log(`[CacheService] Cleaned up ${keysToRemove.length} expired cache entries`);
+        const unique = [...new Set(keysToRemove)];
+        await AsyncStorage.multiRemove(unique);
+        for (const k of unique) writeTimestampIndex.delete(k);
+        console.log(`[CacheService] Cleaned up ${unique.length} cache entries`);
       }
     } catch (error) {
       console.error('[CacheService] Error during cleanup:', error);
@@ -444,6 +522,7 @@ class CacheService {
   async clearAll(): Promise<void> {
     // Clear memory store
     memoryStore.clear();
+    writeTimestampIndex.clear();
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(key => key.startsWith(CACHE_PREFIX));
@@ -490,7 +569,7 @@ class CacheService {
    * Requirement 4.4: Remove oldest entries first when cache exceeds limits
    */
   private async evictIfNeeded(maxEntries: number = MAX_CACHE_ENTRIES): Promise<void> {
-    // Routine writes evict at most once a minute; the storage-full paths pass a
+    // Routine writes evict at most once a minute; emergency paths pass a
     // smaller cap and must run immediately.
     const routine = maxEntries === MAX_CACHE_ENTRIES;
     const now = Date.now();
@@ -499,10 +578,6 @@ class CacheService {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(key => key.startsWith(CACHE_PREFIX));
-      
-      if (cacheKeys.length <= maxEntries) {
-        return; // No eviction needed
-      }
 
       const entriesWithTimestamp: Array<{ key: string; timestamp: number }> = [];
       const unindexed: string[] = [];
@@ -530,25 +605,38 @@ class CacheService {
         }
       }
 
-      // Sort by timestamp (oldest first). Never evict pinned match calendars
-      // unless they are the only keys over the cap (SQLITE_FULL path).
-      entriesWithTimestamp.sort((a, b) => {
-        const aPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(a.key));
-        const bPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(b.key));
-        if (aPinned !== bPinned) return aPinned ? 1 : -1;
-        return a.timestamp - b.timestamp;
-      });
+      const keysToRemove = new Set<string>();
 
-      const entriesToRemove = entriesWithTimestamp.length - maxEntries;
-      
-      if (entriesToRemove > 0) {
-        const keysToRemove = entriesWithTimestamp
-          .slice(0, entriesToRemove)
-          .map(entry => entry.key);
-        
-        await AsyncStorage.multiRemove(keysToRemove);
-        for (const k of keysToRemove) writeTimestampIndex.delete(k);
-        console.log(`[CacheService] Evicted ${keysToRemove.length} oldest cache entries`);
+      // Always trim excess match calendars — they dominate disk usage.
+      const pinned = entriesWithTimestamp
+        .filter((e) => isPinnedLogicalKey(logicalKeyFromStorageKey(e.key)))
+        .sort((a, b) => a.timestamp - b.timestamp);
+      if (pinned.length > MAX_PINNED_MATCH_DAYS) {
+        for (const e of pinned.slice(0, pinned.length - MAX_PINNED_MATCH_DAYS)) {
+          keysToRemove.add(e.key);
+        }
+      }
+
+      const remaining = entriesWithTimestamp.filter((e) => !keysToRemove.has(e.key));
+      if (remaining.length > maxEntries) {
+        // Prefer evicting non-pinned first; then oldest pinned if still over cap.
+        remaining.sort((a, b) => {
+          const aPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(a.key));
+          const bPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(b.key));
+          if (aPinned !== bPinned) return aPinned ? 1 : -1;
+          return a.timestamp - b.timestamp;
+        });
+        const over = remaining.length - maxEntries;
+        for (const e of remaining.slice(0, over)) {
+          keysToRemove.add(e.key);
+        }
+      }
+
+      if (keysToRemove.size > 0) {
+        const list = [...keysToRemove];
+        await AsyncStorage.multiRemove(list);
+        for (const k of list) writeTimestampIndex.delete(k);
+        console.log(`[CacheService] Evicted ${list.length} oldest cache entries`);
       }
     } catch (error) {
       console.error('[CacheService] Error during eviction:', error);
@@ -756,15 +844,24 @@ class CacheService {
     // Evict BEFORE inserting to prevent SQLITE_FULL
     await this.evictIfNeeded();
 
-    const entries: [string, string][] = items.map(item => {
+    const entries: [string, string][] = [];
+    for (const item of items) {
       const cacheKey = this.getCacheKey(item.key);
+      const now = Date.now();
       const entry: CacheEntry<any> = {
         data: item.data,
-        timestamp: Date.now(),
+        timestamp: now,
         ttl: item.ttl || DEFAULT_TTL,
       };
-      return [cacheKey, JSON.stringify(entry)];
-    });
+      const serialized = JSON.stringify(entry);
+      if (serialized.length > MAX_DISK_PAYLOAD_BYTES) {
+        memoryStore.set(item.key, { data: item.data, timestamp: now, ttl: entry.ttl });
+        continue;
+      }
+      entries.push([cacheKey, serialized]);
+    }
+
+    if (entries.length === 0) return;
 
     try {
       // Limit batch size to avoid overwhelming storage
@@ -772,12 +869,14 @@ class CacheService {
       for (let i = 0; i < entries.length; i += maxBatchSize) {
         const chunk = entries.slice(i, i + maxBatchSize);
         await AsyncStorage.multiSet(chunk);
+        for (const [cacheKey] of chunk) {
+          writeTimestampIndex.set(cacheKey, Date.now());
+        }
       }
     } catch (error: any) {
-      if (error?.message?.includes('SQLITE_FULL') || error?.message?.includes('database or disk is full')) {
-        console.warn(`[CacheService] ⚠️ Storage full in batch! Aggressive cleanup...`);
-        await this.evictIfNeeded(15);
-        // Silent fail — cache miss is better than crash
+      if (isStorageFullError(error)) {
+        console.warn(`[CacheService] ⚠️ Storage full in batch! Emergency purge...`);
+        await this.recoverFromStorageFull();
       } else {
         console.warn('[CacheService] Error in batch cache:', error?.message);
       }

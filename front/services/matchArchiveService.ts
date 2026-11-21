@@ -371,7 +371,21 @@ class MatchArchiveService {
         archivedAt: safeToISOString(archive.archivedAt),
       });
       await AsyncStorage.setItem(key, data);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = String(error?.message ?? error ?? '');
+      const storageFull =
+        msg.includes('SQLITE_FULL') || msg.includes('database or disk is full');
+      if (storageFull) {
+        console.warn('[MatchArchiveService] Storage full — clearing local archives');
+        try {
+          await this.clearAllLocalArchives();
+          const { cacheService } = await import('./cacheService');
+          await cacheService.recoverFromStorageFull();
+        } catch {
+          // best-effort
+        }
+        return; // do not throw — archive is best-effort; backend sync still runs
+      }
       console.error('[MatchArchiveService] Error saving to local storage:', error);
       throw error;
     }

@@ -146,11 +146,22 @@ class OfflineDataService {
         timestamp: Date.now(),
         source: 'api',
       };
-      await AsyncStorage.setItem(key, JSON.stringify(entry));
+      const serialized = JSON.stringify(entry);
+      // Full match packs (lineups/events) are large — skip disk when oversized
+      if (serialized.length > 180_000) {
+        await cacheService.cacheMatch(fixtureId, matchData);
+        return;
+      }
+      await AsyncStorage.setItem(key, serialized);
       
       // Also store in cacheService with permanent TTL
       await cacheService.cacheMatch(fixtureId, matchData);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = String(error?.message ?? error ?? '');
+      if (msg.includes('SQLITE_FULL') || msg.includes('database or disk is full')) {
+        await cacheService.recoverFromStorageFull().catch(() => undefined);
+        return;
+      }
       logger.error(`Failed to store match ${fixtureId}:`, error);
     }
   }
@@ -347,7 +358,12 @@ class OfflineDataService {
       });
 
       await AsyncStorage.multiSet(entries);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = String(error?.message ?? error ?? '');
+      if (msg.includes('SQLITE_FULL') || msg.includes('database or disk is full')) {
+        await cacheService.recoverFromStorageFull().catch(() => undefined);
+        return;
+      }
       logger.error('Failed to batch store offline data:', error);
     }
   }
