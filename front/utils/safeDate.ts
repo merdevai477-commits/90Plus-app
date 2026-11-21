@@ -3,6 +3,8 @@
  * `RangeError: Date value out of bounds` on toISOString / toLocale*.
  */
 
+import * as Localization from 'expo-localization';
+
 export function safeParseDate(
   input: string | number | Date | null | undefined,
 ): Date | null {
@@ -25,14 +27,37 @@ export function safeToISOString(
   return new Date().toISOString();
 }
 
+/**
+ * Follow the device's 12/24-hour clock setting (not the app language locale).
+ * Arabic locales often default to 24h in Intl even when the phone is set to 12h.
+ */
+export function deviceUses12HourClock(): boolean {
+  try {
+    const uses24 = Localization.getCalendars()[0]?.uses24hourClock;
+    if (typeof uses24 === 'boolean') return !uses24;
+  } catch {
+    /* fall through */
+  }
+  try {
+    const opts = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions();
+    if (typeof opts.hour12 === 'boolean') return opts.hour12;
+    if (opts.hourCycle === 'h11' || opts.hourCycle === 'h12') return true;
+    if (opts.hourCycle === 'h23' || opts.hourCycle === 'h24') return false;
+  } catch {
+    /* fall through */
+  }
+  return false;
+}
+
+/** Kickoff / wall-clock time using the user's device 12/24h preference. */
 export function safeFormatMatchTime(fixtureDate: string | null | undefined): string {
   const date = safeParseDate(fixtureDate);
   if (!date) return '--:--';
   try {
     return date.toLocaleTimeString(undefined, {
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
-      hour12: false,
+      hour12: deviceUses12HourClock(),
     });
   } catch {
     return '--:--';

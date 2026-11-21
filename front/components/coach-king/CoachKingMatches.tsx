@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { CkFixture } from '../../services/coachKing.service';
 import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
 import { useAppFont } from '../../utils/fontSetup';
+import { deviceUses12HourClock } from '../../utils/safeDate';
 import { getCoachKingTheme, type CoachKingTheme } from './theme';
 
 type Props = {
@@ -178,9 +179,9 @@ function formatKickoff(iso: string, language: string): string {
     month: 'short',
   });
   const time = date.toLocaleTimeString(locale, {
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: language === 'ar',
+    hour12: deviceUses12HourClock(),
   });
   return `${day} · ${time}`;
 }

@@ -27,6 +27,7 @@ import { topScorersFiveService, type TsfApiMyFixtures } from '../../services/top
 import { localeWithLatinNumerals, useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { logger } from '../../utils/logger';
+import { deviceUses12HourClock } from '../../utils/safeDate';
 import { KingEmptyState } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
@@ -420,9 +421,9 @@ function formatKickoff(iso: string, language: string): string {
     month: 'short',
   });
   const time = date.toLocaleTimeString(locale, {
-    hour: '2-digit',
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: false,
+    hour12: deviceUses12HourClock(),
   });
   return `${day} ${time}`;
 }

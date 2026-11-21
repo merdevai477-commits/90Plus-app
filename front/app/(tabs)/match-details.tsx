@@ -126,7 +126,7 @@ import {
   standingRowMatchesTeam,
 } from '../../utils/standingsHelpers';
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
-import { safeParseDate, safeToISOString } from '../../utils/safeDate';
+import { safeFormatMatchTime, safeParseDate, safeToISOString } from '../../utils/safeDate';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
 import { summarizeRecentTeamAverages, type RecentFormAveragesPayload } from '../../utils/recentTeamFormStats';
@@ -427,19 +427,7 @@ const MatchDetailsScreen = () => {
   const kickoffMoment = fixture?.fixture?.date ? safeParseDate(fixture.fixture.date) : null;
   const kickoffValid = kickoffMoment != null;
   const kickoffDate = kickoffValid ? safeToISOString(kickoffMoment).split('T')[0] : '';
-  const kickoffTime = kickoffValid
-    ? (() => {
-        try {
-          return kickoffMoment!.toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          });
-        } catch {
-          return '';
-        }
-      })()
-    : '';
+  const kickoffTime = kickoffValid ? safeFormatMatchTime(fixture!.fixture.date) : '';
 
   const [loading, setLoading] = useState(true);
   const [detailsFetching, setDetailsFetching] = useState(false);

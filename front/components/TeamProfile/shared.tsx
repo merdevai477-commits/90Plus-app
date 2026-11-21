@@ -24,6 +24,7 @@ import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } fro
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { getMatchPhase, MatchPhase, formatMatchCardDate } from './utils';
 import { useProfileSurface } from './profileSurface';
+import { safeFormatMatchTime } from '../../utils/safeDate';
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -397,7 +398,7 @@ export function RemoteLogo({ uri, size = 24 }: { uri?: string | null; size?: num
 
 export function formatTime(date: Date | null): string {
     if (!date || Number.isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    return safeFormatMatchTime(date.toISOString());
 }
 
 export function formatShortDate(date: Date | null): string {
