@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Competitor365Matches, Fixture as ApiFixture } from '../services/apiFootball';
 import { formatLiveMinuteDisplay } from '../utils/formatLiveMinuteDisplay';
+import { safeFormatMatchTime } from '../utils/safeDate';
 import { useFavoriteTeam } from './useFavoriteTeam';
 import {
     MatchFavoritesStorage,
@@ -58,11 +59,8 @@ function mapApiStatus(short?: string | null): 'LIVE' | 'FT' | 'UPCOMING' {
 export function apiFixtureToListFixture(f: ApiFixture): FavoritesListFixture {
     const short = f.fixture?.status?.short ?? '';
     const status = mapApiStatus(short);
-    const date = f.fixture?.date ? new Date(f.fixture.date) : null;
-    const time =
-        date && !Number.isNaN(date.getTime())
-            ? `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-            : undefined;
+    const kickoffIso = f.fixture?.date;
+    const time = kickoffIso ? safeFormatMatchTime(kickoffIso) : undefined;
     return {
         id: String(f.fixture?.id ?? ''),
         home: f.teams?.home?.name || 'Home',
@@ -78,7 +76,7 @@ export function apiFixtureToListFixture(f: ApiFixture): FavoritesListFixture {
         leagueId: f.league?.id,
         leagueCountry: f.league?.country,
         leagueLogo: f.league?.logo,
-        matchDate: f.fixture?.date,
+        matchDate: kickoffIso,
         statusShort: short || undefined,
         elapsed: f.fixture?.status?.elapsed ?? null,
         extra: f.fixture?.status?.extra ?? null,
@@ -93,11 +91,7 @@ export function apiFixtureToListFixture(f: ApiFixture): FavoritesListFixture {
 
 export function storedMatchToListFixture(m: StoredFavoriteMatch): FavoritesListFixture {
     const status = mapApiStatus(m.statusShort || m.status);
-    const date = m.matchDate ? new Date(m.matchDate) : null;
-    const time =
-        date && !Number.isNaN(date.getTime())
-            ? `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-            : undefined;
+    const time = m.matchDate ? safeFormatMatchTime(m.matchDate) : undefined;
     return {
         id: m.id,
         home: m.homeTeam,
