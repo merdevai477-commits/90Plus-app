@@ -263,6 +263,65 @@ const ProfileHero = memo(function ProfileHero({
                 </Text>
               </View>
 
+              {filledLinks.length > 0 ? (
+                <View
+                  style={[
+                    styles.socialIsland,
+                    isAr ? styles.rowReverse : styles.rowForward,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.08)'
+                        : '#FFFFFF',
+                      borderColor: isDark
+                        ? 'rgba(255,255,255,0.12)'
+                        : 'rgba(106,43,217,0.14)',
+                    },
+                  ]}
+                >
+                  {filledLinks.map((link) => {
+                    const brand = getSocialBrandIcon(link.platform);
+                    const useIon =
+                      !isDark && brand.lightInvisible && !!brand.ionicon;
+                    return (
+                      <TouchableOpacity
+                        key={`${link.platform}-${link.url}`}
+                        style={[
+                          styles.socialBtn,
+                          {
+                            backgroundColor: isDark
+                              ? 'rgba(255,255,255,0.1)'
+                              : 'rgba(106,43,217,0.08)',
+                          },
+                        ]}
+                        onPress={() => openSocial(link.url)}
+                        activeOpacity={0.85}
+                        accessibilityRole="link"
+                        accessibilityLabel={link.platform}
+                      >
+                        {useIon ? (
+                          <Ionicons
+                            name={brand.ionicon!}
+                            size={18}
+                            color={brand.brandColor || C.profilePrimary}
+                          />
+                        ) : (
+                          <Image
+                            source={brand.source}
+                            style={{
+                              width: brand.width,
+                              height: brand.height,
+                              ...( !isDark && brand.lightInvisible
+                                ? { tintColor: brand.brandColor || C.textPrimary }
+                                : null),
+                            }}
+                            contentFit="contain"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
             </View>
 
             {isOwnProfile && onEditPress ? (
@@ -301,51 +360,6 @@ const ProfileHero = memo(function ProfileHero({
               <View style={styles.editBtnSpacer} />
             )}
           </View>
-
-          {filledLinks.length > 0 ? (
-            <View
-              style={[
-                styles.socialIsland,
-                isAr ? styles.rowReverse : styles.rowForward,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(255,255,255,0.06)'
-                    : 'rgba(106,43,217,0.06)',
-                  borderColor: isDark
-                    ? 'rgba(255,255,255,0.10)'
-                    : 'rgba(106,43,217,0.10)',
-                  alignSelf: isAr ? 'flex-end' : 'flex-start',
-                },
-              ]}
-            >
-              {filledLinks.map((link) => {
-                const brand = getSocialBrandIcon(link.platform);
-                return (
-                  <TouchableOpacity
-                    key={`${link.platform}-${link.url}`}
-                    style={[
-                      styles.socialBtn,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(255,255,255,0.08)'
-                          : C.profileCard,
-                      },
-                    ]}
-                    onPress={() => openSocial(link.url)}
-                    activeOpacity={0.85}
-                    accessibilityRole="link"
-                    accessibilityLabel={link.platform}
-                  >
-                    <Image
-                      source={brand.source}
-                      style={{ width: Math.min(brand.width, 22), height: Math.min(brand.height, 22) }}
-                      contentFit="contain"
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
 
           {trimmedBio ? (
             <View style={styles.bioWrap}>
@@ -538,17 +552,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    alignContent: 'center',
     gap: 8,
     maxWidth: '100%',
-    height: 46,
+    height: 44,
     paddingHorizontal: 10,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
+    marginTop: 2,
   },
   socialBtn: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
