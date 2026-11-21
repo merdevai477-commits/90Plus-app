@@ -22,6 +22,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   Text,
   View,
 } from 'react-native';
@@ -83,15 +84,11 @@ import {
   IconStoreField,
   IconWhatsapp,
 } from '../../components/predictAndWin/icons';
-import {
-  PW,
-  PW_GRADIENTS,
-  PW_RADII,
+import { PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from '../../components/predictAndWin/theme';
+  usePWScale, usePWTheme } from '../../components/predictAndWin/theme';
 import { useToast } from '../../contexts/ToastContext';
 import { useMatchPool } from '../../hooks/useMatchPool';
 import {
@@ -118,6 +115,7 @@ const ENFORCE_DEADLINE_RULES = true;
 
 export default function CreateCompetitionScreen() {
   useScreenFont();
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { bold, regular, semibold } = usePWFonts();
   const dir = usePWDirection();
@@ -563,7 +561,8 @@ export default function CreateCompetitionScreen() {
   const gutter = { paddingHorizontal: s(22) };
 
   return (
-    <View style={{ flex: 1, backgroundColor: PW.screen }}>
+    <View style={{ flex: 1, backgroundColor: theme.screen }}>
+      <StatusBar barStyle={theme.statusBarStyle === 'dark' ? 'dark-content' : 'light-content'} />
       <PWHeader title={t.predictAndWin.addPrize} onBack={goBack} />
 
       <KeyboardAvoidingView
@@ -584,11 +583,11 @@ export default function CreateCompetitionScreen() {
           {phase === 'category' ? (
             <>
               <View style={{ paddingTop: s(32), alignItems: 'center', gap: s(8) }}>
-                <Text style={{ fontFamily: bold, fontSize: f(28), color: PW.text, textAlign: 'center' }}>
+                <Text style={{ fontFamily: bold, fontSize: f(28), color: theme.text, textAlign: 'center' }}>
                   {wizard.chooseCategoryTitle}
                 </Text>
                 <Text
-                  style={{ fontFamily: regular, fontSize: f(16), color: PW.textSubtitle, textAlign: 'center' }}
+                  style={{ fontFamily: regular, fontSize: f(16), color: theme.textSubtitle, textAlign: 'center' }}
                 >
                   {wizard.chooseCategorySubtitle}
                 </Text>
@@ -597,7 +596,7 @@ export default function CreateCompetitionScreen() {
               <View style={{ height: s(29) }} />
               {/* Figma's category screen has no CTA — choosing a card advances. */}
               {categoriesLoading ? (
-                <ActivityIndicator color={PW.ctaTop} size="large" style={{ marginTop: s(40) }} />
+                <ActivityIndicator color={theme.ctaTop} size="large" style={{ marginTop: s(40) }} />
               ) : categoriesError || categories.length === 0 ? (
                 <CategoriesPlaceholder failed={categoriesError} onRetry={reloadCategories} />
               ) : (
@@ -613,14 +612,14 @@ export default function CreateCompetitionScreen() {
 
               <View style={{ height: s(28) }} />
               <LinearGradient
-                colors={[...PW_GRADIENTS.cell]}
+                colors={[...theme.gradients.cell]}
                 style={{
                   width: gridWidth,
                   minHeight: s(88),
                   alignSelf: 'center',
                   borderRadius: s(17),
                   borderWidth: 1,
-                  borderColor: PW.cellBorder,
+                  borderColor: theme.cellBorder,
                   paddingHorizontal: s(15),
                   paddingVertical: s(12),
                   flexDirection: dir.rowReverse,
@@ -630,7 +629,7 @@ export default function CreateCompetitionScreen() {
                 }}
               >
                 <View style={{ flex: 1, gap: s(6), alignItems: dir.alignStart }}>
-                  <Text style={{ fontFamily: semibold, fontSize: f(18), color: PW.text, textAlign: dir.textAlign }}>
+                  <Text style={{ fontFamily: semibold, fontSize: f(18), color: theme.text, textAlign: dir.textAlign }}>
                     {wizard.tipTitle}
                   </Text>
                   <Text
@@ -638,7 +637,7 @@ export default function CreateCompetitionScreen() {
                       fontFamily: regular,
                       fontSize: f(13),
                       lineHeight: f(13) * 1.268,
-                      color: PW.textTipBody,
+                      color: theme.textTipBody,
                       textAlign: dir.textAlign,
                     }}
                   >
@@ -646,13 +645,13 @@ export default function CreateCompetitionScreen() {
                   </Text>
                 </View>
                 <LinearGradient
-                  colors={[...PW_GRADIENTS.medallion]}
+                  colors={[...theme.gradients.medallion]}
                   style={{
                     width: s(64),
                     height: s(64),
                     borderRadius: s(PW_RADII.medallion),
                     borderWidth: 1,
-                    borderColor: PW.medallionBorder,
+                    borderColor: theme.medallionBorder,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
@@ -680,9 +679,9 @@ export default function CreateCompetitionScreen() {
                       marginTop: s(27),
                       borderRadius: s(PW_RADII.card),
                       overflow: 'hidden',
-                      backgroundColor: PW.inputBottom,
+                      backgroundColor: theme.inputBottom,
                       borderWidth: 1,
-                      borderColor: PW.inputBorder,
+                      borderColor: theme.inputBorder,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
@@ -727,7 +726,7 @@ export default function CreateCompetitionScreen() {
                       paddingHorizontal: s(22),
                       fontFamily: regular,
                       fontSize: f(12),
-                      color: PW.textTileSub,
+                      color: theme.textTileSub,
                       textAlign: dir.textAlign,
                     }}
                   >
@@ -758,7 +757,7 @@ export default function CreateCompetitionScreen() {
                         style={{
                           fontFamily: regular,
                           fontSize: f(12),
-                          color: PW.textTileSub,
+                          color: theme.textTileSub,
                           textAlign: dir.textAlign,
                         }}
                       >
@@ -797,7 +796,7 @@ export default function CreateCompetitionScreen() {
                             style={{
                               fontFamily: semibold,
                               fontSize: f(17),
-                              color: PW.text,
+                              color: theme.text,
                               textAlign: dir.textAlign,
                             }}
                             numberOfLines={2}
@@ -808,7 +807,7 @@ export default function CreateCompetitionScreen() {
                             style={{
                               fontFamily: regular,
                               fontSize: f(12),
-                              color: PW.textTileSub,
+                              color: theme.textTileSub,
                               textAlign: dir.textAlign,
                             }}
                           >
@@ -910,7 +909,7 @@ export default function CreateCompetitionScreen() {
                           style={{
                             fontFamily: regular,
                             fontSize: f(12),
-                            color: PW.textTileSub,
+                            color: theme.textTileSub,
                             textAlign: dir.textAlign,
                           }}
                         >
@@ -925,7 +924,7 @@ export default function CreateCompetitionScreen() {
                         style={{
                           fontFamily: regular,
                           fontSize: f(12),
-                          color: PW.textTileSub,
+                          color: theme.textTileSub,
                           textAlign: dir.textAlign,
                         }}
                       >
@@ -942,7 +941,7 @@ export default function CreateCompetitionScreen() {
                         selected={meridiem}
                         onSelect={onMeridiemChange}
                         gap={12}
-                        idleColor={PW.textTimeIdle}
+                        idleColor={theme.textTimeIdle}
                         disabledKeys={meridiemDisabledKeys}
                       />
                     </View>
@@ -958,7 +957,7 @@ export default function CreateCompetitionScreen() {
                       style={{
                         fontFamily: regular,
                         fontSize: f(12),
-                        color: PW.textTileSub,
+                        color: theme.textTileSub,
                         textAlign: 'center',
                       }}
                     >
@@ -1048,7 +1047,7 @@ export default function CreateCompetitionScreen() {
                 {showStoreImage ? (
                   <View style={{ gap: s(12), alignItems: dir.alignStart }}>
                     <Pressable onPress={() => setPickerTarget('store')} hitSlop={8}>
-                      <Text style={{ fontFamily: semibold, fontSize: f(14), color: PW.vsTop }}>
+                      <Text style={{ fontFamily: semibold, fontSize: f(14), color: theme.vsTop }}>
                         {wizard.storeChangePhoto}
                       </Text>
                     </Pressable>
@@ -1059,7 +1058,7 @@ export default function CreateCompetitionScreen() {
                       }}
                       hitSlop={8}
                     >
-                      <Text style={{ fontFamily: regular, fontSize: f(13), color: PW.textTileSub }}>
+                      <Text style={{ fontFamily: regular, fontSize: f(13), color: theme.textTileSub }}>
                         {wizard.storeDeletePhoto}
                       </Text>
                     </Pressable>
@@ -1167,7 +1166,7 @@ export default function CreateCompetitionScreen() {
                       style={{
                         fontFamily: regular,
                         fontSize: f(12),
-                        color: PW.textTileSub,
+                        color: theme.textTileSub,
                         textAlign: 'center',
                       }}
                     >
@@ -1179,7 +1178,7 @@ export default function CreateCompetitionScreen() {
                       style={{
                         fontFamily: regular,
                         fontSize: f(12),
-                        color: PW.textTileSub,
+                        color: theme.textTileSub,
                         textAlign: 'center',
                       }}
                     >
@@ -1190,7 +1189,7 @@ export default function CreateCompetitionScreen() {
                     label={savingProfile ? wizard.savingProfile : wizard.next}
                     onPress={goNext}
                     disabled={!canAdvance()}
-                    loading={savingProfile ? <ActivityIndicator color={PW.text} /> : undefined}
+                    loading={savingProfile ? <ActivityIndicator color={theme.text} /> : undefined}
                   />
                 </View>
               </View>
@@ -1213,7 +1212,7 @@ export default function CreateCompetitionScreen() {
                   label={wizard.publish}
                   onPress={handlePublish}
                   disabled={submitting}
-                  loading={submitting ? <ActivityIndicator color={PW.text} /> : undefined}
+                  loading={submitting ? <ActivityIndicator color={theme.text} /> : undefined}
                 />
                 <PWOutlineButton label={wizard.edit} onPress={() => setPhase(1)} />
               </View>
@@ -1261,6 +1260,7 @@ export default function CreateCompetitionScreen() {
  * are now distinguishable and the failure is retryable.
  */
 function CategoriesPlaceholder({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, semibold } = usePWFonts();
   const { t } = useTranslation();
@@ -1269,18 +1269,18 @@ function CategoriesPlaceholder({ failed, onRetry }: { failed: boolean; onRetry: 
   return (
     <View style={{ alignItems: 'center', gap: s(8), paddingHorizontal: s(30), paddingVertical: s(20) }}>
       <Text
-        style={{ fontFamily: semibold, fontSize: f(15), color: PW.text, textAlign: 'center' }}
+        style={{ fontFamily: semibold, fontSize: f(15), color: theme.text, textAlign: 'center' }}
       >
         {failed ? wizard.categoriesError : wizard.categoriesEmpty}
       </Text>
       <Text
-        style={{ fontFamily: regular, fontSize: f(12), color: PW.textTileSub, textAlign: 'center' }}
+        style={{ fontFamily: regular, fontSize: f(12), color: theme.textTileSub, textAlign: 'center' }}
       >
         {failed ? t.predictAndWin.errorState.subtitle : wizard.categoriesEmptyHint}
       </Text>
       {failed ? (
         <Pressable onPress={onRetry} hitSlop={8} accessibilityRole="button">
-          <Text style={{ fontFamily: semibold, fontSize: f(13), color: PW.vsTop }}>
+          <Text style={{ fontFamily: semibold, fontSize: f(13), color: theme.vsTop }}>
             {t.predictAndWin.errorState.retry}
           </Text>
         </Pressable>

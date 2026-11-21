@@ -16,6 +16,7 @@
  */
 
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Linking, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
@@ -42,15 +43,12 @@ import {
   IconWhatsapp,
 } from './icons';
 import { usePWLocalize } from './localize';
-import {
-  PW,
-  PW_CONTENT_W,
+import { PW_CONTENT_W,
   PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 const CARD_W = PW_CONTENT_W;
 const CARD_H = 355;
@@ -110,20 +108,21 @@ function Stat({
   icon: React.ReactNode;
   width: number;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, semibold } = usePWFonts();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(4) }}>
       <View style={{ width: s(width), gap: s(4) }}>
         <Text
-          style={{ fontFamily: regular, fontSize: f(7), color: PW.statLabel, textAlign: 'center' }}
+          style={{ fontFamily: regular, fontSize: f(7), color: theme.statLabel, textAlign: 'center' }}
           numberOfLines={1}
         >
           {label}
         </Text>
         {typeof value === 'string' ? (
           <Text
-            style={{ fontFamily: semibold, fontSize: f(10), color: PW.statValue, textAlign: 'center' }}
+            style={{ fontFamily: semibold, fontSize: f(10), color: theme.statValue, textAlign: 'center' }}
             numberOfLines={1}
           >
             {value}
@@ -150,6 +149,7 @@ function TeamSlot({
   score?: number | null;
   picked?: boolean;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, semibold } = usePWFonts();
   const hasScore = score != null;
@@ -167,12 +167,12 @@ function TeamSlot({
               height: s(18),
               paddingHorizontal: s(4),
               borderRadius: s(9),
-              backgroundColor: PW.vsTop,
+              backgroundColor: theme.vsTop,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ fontFamily: semibold, fontSize: f(10), color: PW.text }}>{score}</Text>
+            <Text style={{ fontFamily: semibold, fontSize: f(10), color: theme.text }}>{score}</Text>
           </View>
         ) : picked ? (
           <View
@@ -183,12 +183,12 @@ function TeamSlot({
               width: s(14),
               height: s(14),
               borderRadius: s(7),
-              backgroundColor: PW.vsTop,
+              backgroundColor: theme.vsTop,
             }}
           />
         ) : null}
       </View>
-      <Text style={styles.tiny(f(9), PW.text, regular)} numberOfLines={1}>
+      <Text style={styles.tiny(f(9), theme.text, regular)} numberOfLines={1}>
         {name}
       </Text>
     </View>
@@ -218,6 +218,7 @@ export function CompetitionDetailCard({
   /** Store name / logo tap — opens the sponsor prize page. */
   onSponsorPress?: () => void;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { width: cardWidth, height: cardHeight, c, x } = useDetailMetrics();
   const { regular, medium, semibold } = usePWFonts();
@@ -238,6 +239,30 @@ export function CompetitionDetailCard({
             ? detail.wrongPrediction
             : ctaLabel;
   const ctaLook = PRIZE_CTA_GLASS[ctaKind];
+  const cardShell = {
+    backgroundColor: theme.detailBg,
+    borderWidth: 1,
+    borderColor: theme.detailBorder,
+    overflow: 'hidden' as const,
+    ...(theme.isDark
+      ? {
+          shadowColor: 'rgba(0,0,0,0.25)',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 1,
+          shadowRadius: 4,
+          elevation: 4,
+        }
+      : theme.cardShadow),
+  };
+  const chipShell = {
+    position: 'absolute' as const,
+    backgroundColor: theme.detailChip,
+    borderWidth: 0.5,
+    borderColor: theme.detailChipBorder,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  };
   const sponsor = competition.sponsor ?? {
     id: competition.id,
     name: competition.prizeName || 'Prize',
@@ -258,7 +283,7 @@ export function CompetitionDetailCard({
   const art = prizeArtSource(competition);
 
   const divider = (
-    <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
+    <View style={{ width: 1, height: s(29), backgroundColor: theme.statBorder }} />
   );
 
   const leftArt = sponsorLogoSource(sponsor.logoUrl, sponsor.socialLinks);
@@ -271,7 +296,7 @@ export function CompetitionDetailCard({
     <View
       collapsable={false}
       style={[
-        styles.card,
+        cardShell,
         {
           width: cardWidth,
           height: cardHeight,
@@ -334,14 +359,21 @@ export function CompetitionDetailCard({
           alignItems: 'center',
         }}
       >
-        <Text style={{ fontFamily: regular, fontSize: f(8), color: '#999', textAlign: 'center' }}>
+        <Text
+          style={{
+            fontFamily: regular,
+            fontSize: f(8),
+            color: theme.isDark ? theme.spDay : theme.muted,
+            textAlign: 'center',
+          }}
+        >
           {detail.predictTitle}
         </Text>
         <Text
           style={{
             fontFamily: semibold,
             fontSize: f(21),
-            color: PW.detailTitle,
+            color: theme.detailTitle,
             textAlign: 'center',
           }}
           numberOfLines={2}
@@ -349,7 +381,12 @@ export function CompetitionDetailCard({
           {competition.prizeName}
         </Text>
         <Text
-          style={{ fontFamily: medium, fontSize: f(8), color: '#d8d8d8', textAlign: 'center' }}
+          style={{
+            fontFamily: medium,
+            fontSize: f(8),
+            color: theme.isDark ? theme.textOnCardMuted : theme.muted,
+            textAlign: 'center',
+          }}
           numberOfLines={1}
         >
           {t.predictAndWin.card.by.replace('{sponsor}', sponsor.name)}
@@ -371,7 +408,7 @@ export function CompetitionDetailCard({
         }}
       >
         <Text
-          style={{ fontFamily: semibold, fontSize: f(13), color: PW.text, textAlign: 'center' }}
+          style={{ fontFamily: semibold, fontSize: f(13), color: theme.text, textAlign: 'center' }}
           numberOfLines={1}
         >
           {sponsor.name}
@@ -381,7 +418,7 @@ export function CompetitionDetailCard({
             style={{
               fontFamily: regular,
               fontSize: f(11),
-              color: PW.textOnCardMuted,
+              color: theme.textOnCardMuted,
               textAlign: 'center',
             }}
             numberOfLines={1}
@@ -395,7 +432,7 @@ export function CompetitionDetailCard({
               style={{
                 fontFamily: regular,
                 fontSize: f(11),
-                color: PW.textOnCardMuted,
+                color: theme.textOnCardMuted,
                 flexShrink: 1,
                 textAlign: 'center',
               }}
@@ -413,7 +450,7 @@ export function CompetitionDetailCard({
       <Pressable
         onPress={onOpenMap}
         style={[
-          styles.chip,
+          chipShell,
           {
             left: x(9, 109),
             top: c(175),
@@ -424,7 +461,7 @@ export function CompetitionDetailCard({
           },
         ]}
       >
-        <Text style={{ fontFamily: medium, fontSize: f(9), color: PW.textOnCardMuted }}>
+        <Text style={{ fontFamily: medium, fontSize: f(9), color: theme.textOnCardMuted }}>
           {detail.openMap}
         </Text>
         <IconMapFill width={s(14)} height={s(14)} />
@@ -438,9 +475,9 @@ export function CompetitionDetailCard({
           top: c(207),
           width: c(109),
           height: c(55),
-          backgroundColor: PW.detailDeliveryBg,
+          backgroundColor: theme.detailDeliveryBg,
           borderWidth: 1,
-          borderColor: PW.detailDeliveryBorder,
+          borderColor: theme.detailDeliveryBorder,
           borderTopLeftRadius: s(10),
           borderTopRightRadius: s(10),
           borderBottomLeftRadius: s(PW_RADII.chip),
@@ -451,20 +488,20 @@ export function CompetitionDetailCard({
         }}
       >
         <View style={{ width: s(66), gap: s(2) }}>
-          <Text style={styles.tiny(f(7), '#dfdfdf', medium)} numberOfLines={1}>
+          <Text style={styles.tiny(f(7), theme.statLabel, medium)} numberOfLines={1}>
             {detail.deliveryLabel}
           </Text>
           <Text
             style={styles.tiny(
               f(7),
-              sponsor.hasDelivery ? PW.badgeDeliveryText : PW.detailDeliveryOff,
+              sponsor.hasDelivery ? theme.badgeDeliveryText : theme.detailDeliveryOff,
               medium,
             )}
             numberOfLines={1}
           >
             {sponsor.hasDelivery ? detail.deliveryOn : detail.deliveryOff}
           </Text>
-          <Text style={styles.tiny(f(7), '#dfdfdf', medium)} numberOfLines={2}>
+          <Text style={styles.tiny(f(7), theme.statLabel, medium)} numberOfLines={2}>
             {sponsor.hasDelivery ? detail.deliveryNote : detail.pickupNote}
           </Text>
         </View>
@@ -480,11 +517,11 @@ export function CompetitionDetailCard({
           top: c(250),
           width: c(109),
           height: c(55),
-          backgroundColor: PW.detailSocialBg,
+          backgroundColor: theme.detailSocialBg,
           borderLeftWidth: 1,
           borderRightWidth: 1,
           borderBottomWidth: 1,
-          borderColor: PW.detailChipBorder,
+          borderColor: theme.detailChipBorder,
           borderBottomLeftRadius: s(10),
           borderBottomRightRadius: s(10),
           paddingBottom: s(7),
@@ -493,7 +530,7 @@ export function CompetitionDetailCard({
           justifyContent: 'flex-end',
         }}
       >
-        <Text style={styles.tiny(f(7), '#dfdfdf', medium)}>{detail.socialLinks}</Text>
+        <Text style={styles.tiny(f(7), theme.statLabel, medium)}>{detail.socialLinks}</Text>
         <View style={styles.socialRow(s(14))}>
           <Pressable
             onPress={() => links?.facebook && openExternal(links.facebook)}
@@ -554,10 +591,10 @@ export function CompetitionDetailCard({
           <Text style={styles.tiny(f(9), '#c2c2c2', medium)} numberOfLines={1}>
             {day}
           </Text>
-          <PWGradientText colors={[PW.vsTop, PW.vsBottom]} style={styles.tiny(f(11), PW.vsTop, semibold)}>
+          <PWGradientText colors={[theme.vsTop, theme.vsBottom]} style={styles.tiny(f(11), theme.vsTop, semibold)}>
             VS
           </PWGradientText>
-          <Text style={styles.tiny(f(14), PW.text, semibold)} numberOfLines={1}>
+          <Text style={styles.tiny(f(14), theme.text, semibold)} numberOfLines={1}>
             {time}
           </Text>
         </View>
@@ -579,9 +616,9 @@ export function CompetitionDetailCard({
           top: c(208.1),
           width: c(265.4),
           height: c(47.3),
-          backgroundColor: PW.statBg,
+          backgroundColor: theme.statBg,
           borderWidth: 1,
-          borderColor: PW.statBorder,
+          borderColor: theme.statBorder,
           borderRadius: s(10),
           paddingLeft: s(23),
           paddingRight: s(13),
@@ -629,15 +666,42 @@ export function CompetitionDetailCard({
           opacity: ctaDisabled && ctaKind === 'predict' ? 0.45 : 1,
         }}
       >
-        <GlassCtaShell tint={ctaLook.tint} radius={s(10)}>
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: s(10) }}>
+        {theme.isDark || ctaKind !== 'predict' ? (
+          <GlassCtaShell
+            tint={ctaLook.tint}
+            radius={s(10)}
+            colorScheme={theme.isDark ? 'dark' : 'light'}
+          >
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: s(10) }}>
+              <Text
+                style={{
+                  fontFamily: semibold,
+                  fontSize: f(ctaKind === 'predict' ? 14 : 13),
+                  letterSpacing: ctaKind === 'predict' ? 0.2 : 0,
+                  color: ctaLook.text,
+                  textAlign: 'center',
+                }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {shownCtaLabel}
+              </Text>
+            </View>
+          </GlassCtaShell>
+        ) : (
+          <LinearGradient
+            colors={[...theme.gradients.cta]}
+            style={{ flex: 1, borderRadius: s(10), alignItems: 'center', justifyContent: 'center' }}
+          >
             <Text
               style={{
                 fontFamily: semibold,
-                fontSize: f(ctaKind === 'predict' ? 14 : 13),
-                letterSpacing: ctaKind === 'predict' ? 0.2 : 0,
-                color: ctaLook.text,
+                fontSize: f(14),
+                letterSpacing: 0.2,
+                color: theme.white,
                 textAlign: 'center',
+                paddingHorizontal: s(10),
               }}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -645,8 +709,8 @@ export function CompetitionDetailCard({
             >
               {shownCtaLabel}
             </Text>
-          </View>
-        </GlassCtaShell>
+          </LinearGradient>
+        )}
       </Pressable>
 
       {/* Wide map button — Figma 379×27 at (12,315). */}
@@ -658,7 +722,7 @@ export function CompetitionDetailCard({
         accessibilityRole="button"
         accessibilityState={{ disabled: !sponsor.address }}
         style={[
-          styles.chip,
+          chipShell,
           {
             left: x(12, 379),
             top: c(315),
@@ -670,7 +734,7 @@ export function CompetitionDetailCard({
           },
         ]}
       >
-        <Text style={{ fontFamily: medium, fontSize: f(9), color: PW.textOnCardMuted }}>
+        <Text style={{ fontFamily: medium, fontSize: f(9), color: theme.textOnCardMuted }}>
           {detail.openMap}
         </Text>
         <IconMapFill width={s(14)} height={s(14)} />
@@ -680,31 +744,11 @@ export function CompetitionDetailCard({
 }
 
 const styles = {
-  card: {
-    backgroundColor: PW.detailBg,
-    borderWidth: 1,
-    borderColor: PW.detailBorder,
-    overflow: 'hidden' as const,
-    shadowColor: 'rgba(0,0,0,0.25)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
   locationRow: {
     width: '100%' as const,
     alignItems: 'center' as const,
     justifyContent: 'flex-end' as const,
     gap: 4,
-  },
-  chip: {
-    position: 'absolute' as const,
-    backgroundColor: PW.detailChip,
-    borderWidth: 0.5,
-    borderColor: PW.detailChipBorder,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
   },
   socialRow: (size: number) => ({
     width: '100%' as const,

@@ -10,7 +10,7 @@ import {
   normalizeNationalDigits,
 } from './sponsorPhone';
 import { PWBox } from './fields';
-import { usePWDirection, usePWFonts, usePWScale, PW } from './theme';
+import { usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 export function PWStorePhoneField({
   countryId,
@@ -27,6 +27,7 @@ export function PWStorePhoneField({
   placeholder: string;
   hint?: string;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -64,7 +65,7 @@ export function PWStorePhoneField({
               }}
             >
               <Text style={{ fontSize: f(22) }}>{country?.flag ?? '🇪🇬'}</Text>
-              <Text style={{ fontFamily: medium, fontSize: f(15), color: PW.vsTop }}>
+              <Text style={{ fontFamily: medium, fontSize: f(15), color: theme.vsTop }}>
                 {dial}
               </Text>
             </Pressable>
@@ -73,7 +74,7 @@ export function PWStorePhoneField({
               value={displayValue}
               onChangeText={onChangeText}
               placeholder={placeholder}
-              placeholderTextColor={PW.textPlaceholder}
+              placeholderTextColor={theme.textPlaceholder}
               keyboardType="phone-pad"
               textContentType="telephoneNumber"
               autoComplete="tel"
@@ -81,7 +82,7 @@ export function PWStorePhoneField({
                 flex: 1,
                 fontFamily: regular,
                 fontSize: f(17),
-                color: PW.text,
+                color: theme.text,
                 textAlign: dir.textAlign,
                 paddingVertical: 0,
               }}
@@ -93,7 +94,7 @@ export function PWStorePhoneField({
             style={{
               fontFamily: regular,
               fontSize: f(11),
-              color: PW.textTileSub,
+              color: theme.textTileSub,
               textAlign: dir.textAlign,
             }}
           >

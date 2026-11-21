@@ -16,7 +16,7 @@ import {
   type PlaceSuggestion,
 } from '../../services/placesAutocomplete.service';
 import { PWBox } from './fields';
-import { usePWDirection, usePWFonts, usePWScale, PW } from './theme';
+import { usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 import type { StoreAddressMeta } from './PWMapPickerModal';
 
 export function PWPlacesAddressField({
@@ -30,6 +30,7 @@ export function PWPlacesAddressField({
   placeholder?: string;
   icon?: React.ReactNode;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -97,17 +98,17 @@ export function PWPlacesAddressField({
               setSuggestions([]);
             }}
             placeholder={placeholder}
-            placeholderTextColor={PW.textPlaceholder}
+            placeholderTextColor={theme.textPlaceholder}
             style={{
               flex: 1,
               fontFamily: regular,
               fontSize: f(17),
-              color: PW.text,
+              color: theme.text,
               textAlign: dir.textAlign,
             }}
           />
           {loading ? (
-            <ActivityIndicator size="small" color={PW.textPlaceholder} />
+            <ActivityIndicator size="small" color={theme.textPlaceholder} />
           ) : icon ? (
             <View style={{ width: s(35), height: s(35) }}>{icon}</View>
           ) : null}
@@ -120,7 +121,7 @@ export function PWPlacesAddressField({
             marginTop: s(6),
             borderRadius: s(12),
             borderWidth: 1,
-            borderColor: PW.inputBorder,
+            borderColor: theme.inputBorder,
             backgroundColor: '#0c051a',
             maxHeight: s(200),
           }}
@@ -134,14 +135,14 @@ export function PWPlacesAddressField({
                   paddingHorizontal: s(16),
                   paddingVertical: s(12),
                   borderBottomWidth: 1,
-                  borderBottomColor: PW.inputBorder,
+                  borderBottomColor: theme.inputBorder,
                 }}
               >
                 <Text
                   style={{
                     fontFamily: medium,
                     fontSize: f(14),
-                    color: PW.text,
+                    color: theme.text,
                     textAlign: dir.textAlign,
                   }}
                   numberOfLines={2}

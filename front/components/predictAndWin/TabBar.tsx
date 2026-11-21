@@ -13,14 +13,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionTab } from '../../services/competitions.service';
-import {
-  PW,
-  PW_RADII,
+import { PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 /** SwiftUI HStack order (leading → trailing in LTR). */
 const TABS_LTR: CompetitionTab[] = ['mine', 'today', 'all'];
@@ -37,6 +34,7 @@ export function PredictAndWinTabBar({
   active: CompetitionTab;
   onChange: (tab: CompetitionTab) => void;
 }) {
+  const theme = usePWTheme();
   const { t } = useTranslation();
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
@@ -59,6 +57,8 @@ export function PredictAndWinTabBar({
           paddingHorizontal: s(16),
           flexDirection: dir.row,
           gap: s(15),
+          backgroundColor: theme.surface,
+          borderColor: theme.surfaceBorder,
         },
       ]}
     >
@@ -78,7 +78,7 @@ export function PredictAndWinTabBar({
                 height: s(38),
                 padding: s(10),
                 borderRadius: s(PW_RADII.pill),
-                backgroundColor: TAB_PILL_BG,
+                backgroundColor: theme.isDark ? TAB_PILL_BG : theme.primary,
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
@@ -88,7 +88,7 @@ export function PredictAndWinTabBar({
                 style={{
                   fontFamily: semibold,
                   fontSize: f(14),
-                  color: PW.text,
+                  color: theme.isDark ? theme.text : theme.white,
                   textAlign: 'center',
                 }}
                 numberOfLines={1}
@@ -115,7 +115,7 @@ export function PredictAndWinTabBar({
               style={{
                 fontFamily: regular,
                 fontSize: f(13),
-                color: PW.textTabIdle,
+                color: theme.textTabIdle,
                 textAlign: 'center',
               }}
               numberOfLines={1}
@@ -135,8 +135,6 @@ const styles = StyleSheet.create({
   bar: {
     alignSelf: 'center',
     alignItems: 'center',
-    backgroundColor: PW.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: PW.surfaceBorder,
   },
 });

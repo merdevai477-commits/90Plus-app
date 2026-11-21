@@ -1,6 +1,6 @@
 /**
- * Predict & Win header — same floating glass as Matches, with the 90 PLUS
- * brand pill and the screen title beside it.
+ * Predict & Win header — dark: floating glass + brand pill (Matches-style).
+ * Light: white bar, ink title, circular purple back, pale bottom border.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -12,15 +12,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { glassProps } from '../../constants/ui';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { IconBell } from './icons';
-import { PW_HEADER, usePWDirection, usePWScale } from './theme';
+import { PW_HEADER, usePWDirection, usePWScale, usePWTheme } from './theme';
 
 const PLUS_ACCENT = '#A855F7';
-const blurTint: BlurTint = 'dark';
 
 /** Scroll/content offset so rows sit below the overlay header, matching Matches. */
 export function usePWHeaderOffset() {
   const insets = useSafeAreaInsets();
-  return Math.max(insets.top, 10) + 54;
+  const theme = usePWTheme();
+  const extra = theme.isDark ? 54 : 58;
+  return Math.max(insets.top, 10) + extra;
 }
 
 export function PWHeader({
@@ -32,40 +33,67 @@ export function PWHeader({
   onBack?: () => void;
   onBell?: () => void;
 }) {
+  const theme = usePWTheme();
   const { isRTL, row } = usePWDirection();
-  const { s } = usePWScale();
+  const { s, f } = usePWScale();
   const insets = useSafeAreaInsets();
-  const padTop = Math.max(insets.top, 10) + 10;
+  const padTop = Math.max(insets.top, 10) + (theme.isDark ? 10 : 8);
+  const blurTint: BlurTint = theme.blurTint;
 
-  const content = (
-    <View style={[styles.row, { flexDirection: row }]}>
-      {onBack ? (
-        <Pressable
-          onPress={onBack}
-          hitSlop={10}
-          accessibilityRole="button"
-          style={styles.sideSlot}
-        >
-          <Ionicons
-            name={isRTL ? 'arrow-forward' : 'arrow-back'}
-            size={22}
-            color="#fff"
-          />
-        </Pressable>
-      ) : null}
+  const backButton = onBack ? (
+    <Pressable
+      onPress={onBack}
+      hitSlop={10}
+      accessibilityRole="button"
+      style={[
+        styles.sideSlot,
+        !theme.isDark && {
+          borderRadius: s(PW_HEADER.backSize) / 2,
+          borderWidth: 1.5,
+          borderColor: theme.primary,
+        },
+      ]}
+    >
+      <Ionicons
+        name={isRTL ? 'arrow-forward' : 'arrow-back'}
+        size={theme.isDark ? 22 : 20}
+        color={theme.isDark ? '#fff' : theme.primary}
+      />
+    </Pressable>
+  ) : null;
 
-      <View style={styles.logoPill} accessibilityLabel={title}>
-        <Text style={styles.logo90}>90</Text>
-        <View style={styles.plusChip}>
-          <Text style={styles.logoPlus}>PLUS</Text>
-        </View>
-        <Text style={styles.pillTitle} numberOfLines={1}>
-          {title}
-        </Text>
+  const titleBlock = theme.isDark ? (
+    <View style={styles.logoPill} accessibilityLabel={title}>
+      <Text style={styles.logo90}>90</Text>
+      <View style={styles.plusChip}>
+        <Text style={styles.logoPlus}>PLUS</Text>
       </View>
+      <Text style={styles.pillTitle} numberOfLines={1}>
+        {title}
+      </Text>
+    </View>
+  ) : (
+    <Text
+      accessibilityLabel={title}
+      numberOfLines={1}
+      style={{
+        color: theme.ink,
+        fontSize: f(28),
+        fontWeight: '700',
+        letterSpacing: -0.4,
+        flexShrink: 1,
+        maxWidth: '58%',
+      }}
+    >
+      {title}
+    </Text>
+  );
 
+  const content = theme.isDark ? (
+    <View style={[styles.row, { flexDirection: row }]}>
+      {backButton}
+      {titleBlock}
       <View style={{ flex: 1 }} />
-
       <Pressable
         onPress={onBell}
         hitSlop={10}
@@ -77,23 +105,39 @@ export function PWHeader({
         <IconBell width={s(PW_HEADER.bellSize)} height={s(PW_HEADER.bellSize * (26.6695 / 24.0004))} />
       </Pressable>
     </View>
+  ) : (
+    <View style={[styles.row, { flexDirection: row }]}>
+      {backButton}
+      {titleBlock}
+      <View style={{ flex: 1 }} />
+    </View>
   );
 
-  const shellStyle = [styles.bar, { paddingTop: padTop }];
+  const shellStyle = [
+    styles.bar,
+    {
+      paddingTop: padTop,
+      borderBottomColor: theme.headerBorder,
+      backgroundColor: theme.isDark ? 'transparent' : theme.white,
+    },
+  ];
 
-  if (isLiquidGlassSupported) {
+  if (theme.isDark) {
+    if (isLiquidGlassSupported) {
+      return (
+        <LiquidGlassView {...glassProps.header} style={shellStyle}>
+          {content}
+        </LiquidGlassView>
+      );
+    }
     return (
-      <LiquidGlassView {...glassProps.header} style={shellStyle}>
+      <BlurView intensity={15} tint={blurTint} style={shellStyle}>
         {content}
-      </LiquidGlassView>
+      </BlurView>
     );
   }
 
-  return (
-    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
-      {content}
-    </BlurView>
-  );
+  return <View style={shellStyle}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -106,8 +150,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-    backgroundColor: 'transparent',
   },
   row: {
     alignItems: 'center',

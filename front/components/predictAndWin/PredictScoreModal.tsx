@@ -35,7 +35,7 @@ import { PWGradientText } from './GradientText';
 import { PWPrimaryButton } from './fields';
 import { IconInfoOutline, IconSheetClose } from './icons';
 import { usePWLocalize } from './localize';
-import { PW, PW_GRADIENTS, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 export function PredictScoreModal({
   visible,
@@ -52,6 +52,7 @@ export function PredictScoreModal({
   onSubmitSettled?: (entry: CompetitionEntryInfo, competitionId: string) => void;
   onSubmitFailed?: (competitionId: string) => void;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { width: winW } = useWindowDimensions();
   const { semibold, medium, regular } = usePWFonts();
@@ -185,11 +186,12 @@ export function PredictScoreModal({
       >
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" />
         <LinearGradient
-          colors={[...PW_GRADIENTS.input]}
+          colors={[...theme.gradients.input]}
           style={[
             styles.sheet,
             {
               width: sheetW,
+              borderColor: theme.detailBorder,
               borderRadius: s(44),
               paddingVertical: s(16),
               shadowColor: '#5A129E',
@@ -223,7 +225,7 @@ export function PredictScoreModal({
               style={{
                 fontFamily: semibold,
                 fontSize: f(24),
-                color: PW.text,
+                color: theme.text,
                 textAlign: 'center',
                 marginBottom: s(16),
               }}
@@ -244,7 +246,7 @@ export function PredictScoreModal({
               <TeamCol name={competition.homeTeam} logo={competition.homeTeamLogo} />
               <View style={{ width: s(105), alignItems: 'center', gap: s(4) }}>
                 <PWGradientText
-                  colors={[PW.vsTop, PW.vsBottom]}
+                  colors={[theme.vsTop, theme.vsBottom]}
                   style={{ fontFamily: semibold, fontSize: f(21), textAlign: 'center' }}
                 >
                   VS
@@ -253,7 +255,7 @@ export function PredictScoreModal({
                   style={{
                     fontFamily: medium,
                     fontSize: f(13),
-                    color: PW.textVsTime,
+                    color: theme.textVsTime,
                     textAlign: 'center',
                   }}
                 >
@@ -267,7 +269,7 @@ export function PredictScoreModal({
               style={{
                 fontFamily: semibold,
                 fontSize: f(23),
-                color: PW.text,
+                color: theme.text,
                 textAlign: 'center',
                 marginTop: s(24),
                 marginBottom: s(16),
@@ -288,7 +290,7 @@ export function PredictScoreModal({
               >
                 <ScoreBox value={home} onChange={setHome} />
                 <PWGradientText
-                  colors={[PW.vsTop, PW.vsBottom]}
+                  colors={[theme.vsTop, theme.vsBottom]}
                   style={{ fontFamily: semibold, fontSize: f(26), textAlign: 'center' }}
                 >
                   VS
@@ -321,9 +323,9 @@ export function PredictScoreModal({
                         flex: 1,
                         height: s(74),
                         borderRadius: s(16),
-                        backgroundColor: on ? PW.controlTop : '#07040d',
+                        backgroundColor: on ? theme.controlTop : '#07040d',
                         borderWidth: 0.5,
-                        borderColor: on ? PW.controlTop : '#241731',
+                        borderColor: on ? theme.controlTop : '#241731',
                         alignItems: 'center',
                         justifyContent: 'center',
                         paddingHorizontal: s(6),
@@ -333,7 +335,7 @@ export function PredictScoreModal({
                         style={{
                           fontFamily: on ? semibold : medium,
                           fontSize: f(13),
-                          color: on ? PW.text : PW.textSegmentIdle,
+                          color: on ? theme.text : theme.textSegmentIdle,
                           textAlign: 'center',
                         }}
                         numberOfLines={2}
@@ -380,6 +382,7 @@ export function PredictScoreModal({
 }
 
 function TeamCol({ name, logo }: { name: string; logo: string | null }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   return (
@@ -389,7 +392,7 @@ function TeamCol({ name, logo }: { name: string; logo: string | null }) {
         style={{
           fontFamily: semibold,
           fontSize: f(18),
-          color: PW.text,
+          color: theme.text,
           textAlign: 'center',
         }}
         numberOfLines={2}
@@ -401,6 +404,7 @@ function TeamCol({ name, logo }: { name: string; logo: string | null }) {
 }
 
 function ScoreBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { medium } = usePWFonts();
   return (
@@ -421,12 +425,12 @@ function ScoreBox({ value, onChange }: { value: string; onChange: (v: string) =>
         onChangeText={(raw) => onChange(raw.replace(/\D/g, '').slice(0, 2))}
         keyboardType="number-pad"
         placeholder="—"
-        placeholderTextColor={PW.textTimeIdle}
+        placeholderTextColor={theme.textTimeIdle}
         accessibilityLabel="score"
         style={{
           fontFamily: medium,
           fontSize: f(28),
-          color: PW.text,
+          color: theme.text,
           textAlign: 'center',
           width: '100%',
           padding: 0,
@@ -449,7 +453,6 @@ const styles = {
   sheet: {
     overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: PW.detailBorder,
     zIndex: 1,
   },
 };

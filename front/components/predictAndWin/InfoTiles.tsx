@@ -1,11 +1,5 @@
 /**
  * Hub 2×2 marketing tiles — Figma `624:4364` (Frame 349).
- *
- * 404 wide, two rows of 52 with an 8 gap; each tile 198×52, bg #0c051a,
- * 1px #1a052d, radius 10, px 24, gap 12, icon (30) on the right of a
- * right-aligned two-line label (Medium 14 white / Regular 10 #868686).
- *
- * Figma draws these as static marketing tiles with no press or filter wiring.
  */
 
 import React from 'react';
@@ -15,20 +9,16 @@ import { useTranslation } from '../../src/i18n';
 import type { CompetitionFilter } from '../../services/competitions.service';
 import { IconGift, IconStar, IconStore, IconUsers } from './icons';
 import {
-  PW,
   PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
   usePWScale,
+  usePWTheme,
 } from './theme';
 
 type TileKey = CompetitionFilter;
 
-/**
- * Figma `624:4364` visual order (Arabic, RTL): row 1 right = تحديات اليوم,
- * left = مئات المشاركين; row 2 right = رعاة موثوقون, left = سهل ومجاني.
- */
 const ROWS: TileKey[][] = [
   ['daily', 'popular'],
   ['sponsored', 'free'],
@@ -43,6 +33,7 @@ function TileIcon({ tile, size }: { tile: TileKey; size: number }) {
 }
 
 export function InfoTiles() {
+  const theme = usePWTheme();
   const { t } = useTranslation();
   const { s, f } = usePWScale();
   const { medium, regular } = usePWFonts();
@@ -66,6 +57,10 @@ export function InfoTiles() {
                   paddingHorizontal: s(24),
                   gap: s(12),
                   flexDirection: dir.rowReverse,
+                  backgroundColor: theme.surface,
+                  borderWidth: theme.isDark ? 1 : 0,
+                  borderColor: theme.surfaceBorder,
+                  ...(theme.isDark ? {} : theme.tileShadow),
                 },
               ]}
             >
@@ -74,7 +69,7 @@ export function InfoTiles() {
                   style={{
                     fontFamily: medium,
                     fontSize: f(14),
-                    color: PW.text,
+                    color: theme.text,
                     textAlign: dir.textAlign,
                     width: '100%',
                   }}
@@ -88,7 +83,7 @@ export function InfoTiles() {
                   style={{
                     fontFamily: regular,
                     fontSize: f(10),
-                    color: PW.textTileSub,
+                    color: theme.textTileSub,
                     textAlign: dir.textAlign,
                     width: '100%',
                   }}
@@ -111,8 +106,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    backgroundColor: PW.surface,
-    borderWidth: 1,
-    borderColor: PW.surfaceBorder,
   },
 });

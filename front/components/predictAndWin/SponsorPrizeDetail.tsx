@@ -41,14 +41,10 @@ import { prizeArtSource } from './PrizeCategoryGrid';
 import { shouldShowSponsorLogo, sponsorLogoSource } from './pwAssets';
 import { SponsorCountryFlag } from './SponsorCountryFlag';
 import { sponsorContactLine } from './sponsorPhone';
-import {
-  PW,
-  PW_GRADIENTS,
-  usePWContentWidth,
+import { usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 function useMetrics() {
   const { contentWidth, cardScale } = usePWContentWidth();
@@ -92,6 +88,7 @@ function Pill({
   end: { x: number; y: number };
   row: FlexStyle['flexDirection'];
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useMetrics();
   const { medium } = usePWFonts();
@@ -103,7 +100,7 @@ function Pill({
         paddingHorizontal: c(12),
         borderRadius: 999,
         borderWidth: 0.5,
-        borderColor: PW.spPillBorder,
+        borderColor: theme.spPillBorder,
         overflow: 'hidden',
         flexDirection: row,
         alignItems: 'center',
@@ -118,7 +115,7 @@ function Pill({
         end={end}
         style={StyleSheet.absoluteFill}
       />
-      <Text style={{ fontFamily: medium, fontSize: f(12), color: PW.spPillText }} numberOfLines={1}>
+      <Text style={{ fontFamily: medium, fontSize: f(12), color: theme.spPillText }} numberOfLines={1}>
         {label}
       </Text>
       {icon}
@@ -137,6 +134,7 @@ function Chip({
   row: FlexStyle['flexDirection'];
   onPress?: () => void;
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useMetrics();
   const { regular } = usePWFonts();
@@ -148,7 +146,7 @@ function Chip({
       style={{ flexDirection: row, alignItems: 'center', gap: c(4), flexShrink: 1, maxWidth: '100%' }}
     >
       <Text
-        style={{ fontFamily: regular, fontSize: f(12), color: PW.spChipText, flexShrink: 1 }}
+        style={{ fontFamily: regular, fontSize: f(12), color: theme.spChipText, flexShrink: 1 }}
         numberOfLines={1}
       >
         {label}
@@ -169,16 +167,17 @@ function Stat({
   icon: React.ReactNode;
   row: FlexStyle['flexDirection'];
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useMetrics();
   const { regular, semibold } = usePWFonts();
   return (
     <View style={{ flexDirection: row, alignItems: 'center', gap: c(4), flexShrink: 1 }}>
       <View style={{ gap: c(4), alignItems: 'center', flexShrink: 1 }}>
-        <Text style={{ fontFamily: regular, fontSize: f(7), color: PW.statLabel }} numberOfLines={1}>
+        <Text style={{ fontFamily: regular, fontSize: f(7), color: theme.statLabel }} numberOfLines={1}>
           {label}
         </Text>
-        <Text style={{ fontFamily: semibold, fontSize: f(10), color: PW.statValue }} numberOfLines={1}>
+        <Text style={{ fontFamily: semibold, fontSize: f(10), color: theme.statValue }} numberOfLines={1}>
           {value}
         </Text>
       </View>
@@ -188,6 +187,7 @@ function Stat({
 }
 
 function TeamColumn({ name, logo }: { name: string; logo: string | null }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useMetrics();
   const { medium } = usePWFonts();
@@ -195,7 +195,7 @@ function TeamColumn({ name, logo }: { name: string; logo: string | null }) {
     <View style={{ flex: 1, alignItems: 'center', gap: c(11) }}>
       <TeamBadge name={name} logo={logo ?? undefined} size={c(55)} color="transparent" highQuality />
       <Text
-        style={{ fontFamily: medium, fontSize: f(11), color: PW.text, textAlign: 'center' }}
+        style={{ fontFamily: medium, fontSize: f(11), color: theme.text, textAlign: 'center' }}
         numberOfLines={1}
       >
         {name}
@@ -222,6 +222,7 @@ export function SponsorPrizeDetail({
   onOpenMap?: () => void;
   onShare?: () => void;
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { width, c } = useMetrics();
   const { regular, medium, semibold, bold } = usePWFonts();
@@ -282,17 +283,17 @@ export function SponsorPrizeDetail({
             ? detail.wrongPrediction
             : ctaLabel;
   const ctaInert = ctaDisabled && ctaKind === 'predict';
-  const ctaColors = ctaKind === 'predict' ? PW_GRADIENTS.spCta : PRIZE_CTA_GLASS[ctaKind].tint;
-  const ctaText = ctaKind === 'predict' ? PW.text : PRIZE_CTA_GLASS[ctaKind].text;
+  const ctaColors = ctaKind === 'predict' ? theme.gradients.spCta : PRIZE_CTA_GLASS[ctaKind].tint;
+  const ctaText = ctaKind === 'predict' ? theme.text : PRIZE_CTA_GLASS[ctaKind].text;
 
-  const divider = <View style={{ width: 1, height: c(29), backgroundColor: PW.statBorder }} />;
+  const divider = <View style={{ width: 1, height: c(29), backgroundColor: theme.statBorder }} />;
 
   return (
     <View
       style={{
         width,
         alignSelf: 'center',
-        backgroundColor: PW.spPageBg,
+        backgroundColor: theme.spPageBg,
         borderRadius: c(24),
         paddingHorizontal: c(19),
         paddingTop: c(47),
@@ -304,8 +305,8 @@ export function SponsorPrizeDetail({
         <Pill
           label={detail.prizeFromStore}
           minWidth={c(135)}
-          colors={PW_GRADIENTS.spPillPrize}
-          locations={PW_GRADIENTS.spPillPrizeLocations}
+          colors={theme.gradients.spPillPrize}
+          locations={theme.gradients.spPillPrizeLocations}
           start={{ x: dir.isRTL ? 1 : 0, y: 0 }}
           end={{ x: dir.isRTL ? 0 : 1, y: 0 }}
           row={figmaRow}
@@ -314,7 +315,7 @@ export function SponsorPrizeDetail({
           label={detail.sponsoredBy}
           icon={<IconCrown width={c(16)} height={c(16)} />}
           minWidth={c(102)}
-          colors={PW_GRADIENTS.spPillSponsor}
+          colors={theme.gradients.spPillSponsor}
           start={{ x: 0, y: 1 }}
           end={{ x: 0, y: 0 }}
           row={figmaRow}
@@ -341,7 +342,7 @@ export function SponsorPrizeDetail({
           <View style={{ flexShrink: 1, alignItems: dir.alignStart, gap: c(10) }}>
             <View style={{ alignItems: dir.alignStart, gap: c(2) }}>
               <Text
-                style={{ fontFamily: bold, fontSize: f(16), color: PW.text, textAlign: dir.textAlign }}
+                style={{ fontFamily: bold, fontSize: f(16), color: theme.text, textAlign: dir.textAlign }}
                 numberOfLines={1}
               >
                 {sponsor.name}
@@ -351,7 +352,7 @@ export function SponsorPrizeDetail({
                   style={{
                     fontFamily: regular,
                     fontSize: f(11),
-                    color: PW.spStoreDesc,
+                    color: theme.spStoreDesc,
                     textAlign: dir.textAlign,
                   }}
                   numberOfLines={2}
@@ -411,41 +412,63 @@ export function SponsorPrizeDetail({
 
       {/* Info tiles — Figma `1311:16250`. */}
       <View style={{ flexDirection: figmaRow, gap: c(12), marginTop: c(24) }}>
-        <View style={[styles.tile, { minHeight: c(113), borderRadius: c(14), paddingHorizontal: c(13), gap: c(11) }]}>
-          <LinearGradient colors={[...PW_GRADIENTS.spTile]} style={StyleSheet.absoluteFill} />
+        <View
+          style={[
+            tileBase,
+            {
+              minHeight: c(113),
+              borderRadius: c(14),
+              paddingHorizontal: c(13),
+              gap: c(11),
+              borderColor: theme.spTileBorder,
+            },
+          ]}
+        >
+          <LinearGradient colors={[...theme.gradients.spTile]} style={StyleSheet.absoluteFill} />
           <View style={{ flexDirection: figmaRow, alignSelf: 'stretch', justifyContent: 'flex-end', gap: c(8) }}>
-            <Text style={{ fontFamily: semibold, fontSize: f(11), color: PW.vsTop }}>{detail.howToWin}</Text>
+            <Text style={{ fontFamily: semibold, fontSize: f(11), color: theme.vsTop }}>{detail.howToWin}</Text>
             <IconTrophy width={c(16)} height={c(16)} />
           </View>
           <View style={{ alignSelf: 'stretch', alignItems: dir.alignStart, gap: c(11) }}>
             {rules.map((rule) => (
               <View key={rule} style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(6) }}>
                 <Text
-                  style={{ fontFamily: medium, fontSize: f(11), color: PW.spTileBody, flexShrink: 1 }}
+                  style={{ fontFamily: medium, fontSize: f(11), color: theme.spTileBody, flexShrink: 1 }}
                   numberOfLines={1}
                 >
                   {rule}
                 </Text>
-                <Text style={{ fontFamily: medium, fontSize: f(11), color: PW.spTileBody }}>•</Text>
+                <Text style={{ fontFamily: medium, fontSize: f(11), color: theme.spTileBody }}>•</Text>
               </View>
             ))}
           </View>
         </View>
 
-        <View style={[styles.tile, { minHeight: c(113), borderRadius: c(14), paddingHorizontal: c(10), gap: c(11) }]}>
-          <LinearGradient colors={[...PW_GRADIENTS.spTile]} style={StyleSheet.absoluteFill} />
-          <Text style={{ fontFamily: medium, fontSize: f(11), color: PW.text, textAlign: 'center' }}>
+        <View
+          style={[
+            tileBase,
+            {
+              minHeight: c(113),
+              borderRadius: c(14),
+              paddingHorizontal: c(10),
+              gap: c(11),
+              borderColor: theme.spTileBorder,
+            },
+          ]}
+        >
+          <LinearGradient colors={[...theme.gradients.spTile]} style={StyleSheet.absoluteFill} />
+          <Text style={{ fontFamily: medium, fontSize: f(11), color: theme.text, textAlign: 'center' }}>
             {detail.prizeLabel}
           </Text>
           <Text
-            style={{ fontFamily: bold, fontSize: f(20), color: PW.vsTop, textAlign: 'center' }}
+            style={{ fontFamily: bold, fontSize: f(20), color: theme.vsTop, textAlign: 'center' }}
             numberOfLines={2}
             adjustsFontSizeToFit
             minimumFontScale={0.7}
           >
             {prizeHeadline}
           </Text>
-          <Text style={{ fontFamily: medium, fontSize: f(11), color: PW.text, textAlign: 'center' }}>
+          <Text style={{ fontFamily: medium, fontSize: f(11), color: theme.text, textAlign: 'center' }}>
             {competition.winnersCount > 1 ? detail.prizeForEachWinner : detail.prizeForWinner}
           </Text>
         </View>
@@ -455,7 +478,7 @@ export function SponsorPrizeDetail({
       <View
         style={{
           marginTop: c(22),
-          backgroundColor: PW.spPanel,
+          backgroundColor: theme.spPanel,
           borderRadius: c(16),
           paddingVertical: c(19),
         }}
@@ -466,7 +489,7 @@ export function SponsorPrizeDetail({
           accessibilityState={{ expanded }}
           style={{ height: c(24), justifyContent: 'center', paddingHorizontal: c(14) }}
         >
-          <Text style={{ fontFamily: medium, fontSize: f(12), color: PW.text, textAlign: 'center' }}>
+          <Text style={{ fontFamily: medium, fontSize: f(12), color: theme.text, textAlign: 'center' }}>
             {competition.predictionMode === 'WINNER' ? detail.ruleWinner : detail.sheetTitle}
           </Text>
           <View
@@ -492,20 +515,20 @@ export function SponsorPrizeDetail({
             >
               <TeamColumn name={competition.homeTeam} logo={competition.homeTeamLogo} />
               <View style={{ minWidth: c(71), alignItems: 'center', gap: c(6) }}>
-                <Text style={{ fontFamily: regular, fontSize: f(11), color: PW.spDay }} numberOfLines={1}>
+                <Text style={{ fontFamily: regular, fontSize: f(11), color: theme.spDay }} numberOfLines={1}>
                   {day}
                 </Text>
                 <PWGradientText
-                  colors={[PW.vsTop, PW.vsBottom]}
-                  style={{ fontFamily: medium, fontSize: f(36), color: PW.vsTop, textAlign: 'center' }}
+                  colors={[theme.vsTop, theme.vsBottom]}
+                  style={{ fontFamily: medium, fontSize: f(36), color: theme.vsTop, textAlign: 'center' }}
                 >
                   VS
                 </PWGradientText>
-                <Text style={{ fontFamily: semibold, fontSize: f(13), color: PW.spTime }} numberOfLines={1}>
+                <Text style={{ fontFamily: semibold, fontSize: f(13), color: theme.spTime }} numberOfLines={1}>
                   {time}
                 </Text>
                 {myPrediction ? (
-                  <Text style={{ fontFamily: medium, fontSize: f(10), color: PW.statLabel }} numberOfLines={1}>
+                  <Text style={{ fontFamily: medium, fontSize: f(10), color: theme.statLabel }} numberOfLines={1}>
                     {`${detail.yourPrediction}: ${myPrediction}`}
                   </Text>
                 ) : null}
@@ -517,9 +540,9 @@ export function SponsorPrizeDetail({
               style={{
                 marginTop: c(11),
                 minHeight: c(47),
-                backgroundColor: PW.statBg,
+                backgroundColor: theme.statBg,
                 borderWidth: 0.5,
-                borderColor: PW.statBorder,
+                borderColor: theme.statBorder,
                 borderRadius: c(10),
                 paddingLeft: dir.isRTL ? c(23) : c(13),
                 paddingRight: dir.isRTL ? c(13) : c(23),
@@ -587,7 +610,7 @@ export function SponsorPrizeDetail({
       <View
         style={{
           marginTop: c(12),
-          backgroundColor: PW.spPanel,
+          backgroundColor: theme.spPanel,
           borderRadius: c(12),
           paddingVertical: c(9),
           paddingHorizontal: c(12),
@@ -612,7 +635,7 @@ export function SponsorPrizeDetail({
             opacity: sponsor.address ? 1 : 0.45,
           }}
         >
-          <Text style={{ fontFamily: medium, fontSize: f(12), color: PW.spAction }}>{detail.openMap}</Text>
+          <Text style={{ fontFamily: medium, fontSize: f(12), color: theme.spAction }}>{detail.openMap}</Text>
           <IconOpenInNewTab width={c(16)} height={c(16)} />
         </Pressable>
 
@@ -658,7 +681,7 @@ export function SponsorPrizeDetail({
           hitSlop={6}
           style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(4), paddingHorizontal: c(14) }}
         >
-          <Text style={{ fontFamily: medium, fontSize: f(12), color: PW.spAction }}>{detail.share}</Text>
+          <Text style={{ fontFamily: medium, fontSize: f(12), color: theme.spAction }}>{detail.share}</Text>
           <IconShareSolid width={c(20)} height={c(20)} />
         </Pressable>
       </View>
@@ -666,14 +689,11 @@ export function SponsorPrizeDetail({
   );
 }
 
-const styles = StyleSheet.create({
-  tile: {
-    flex: 1,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: PW.spTileBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-  },
-});
+const tileBase = {
+  flex: 1 as const,
+  overflow: 'hidden' as const,
+  borderWidth: 0.5,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  paddingVertical: 12,
+};

@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import { usePWLocalize } from './localize';
-import { PW, usePWFonts, usePWScale } from './theme';
+import { usePWFonts, usePWScale, usePWTheme } from './theme';
 
 type ClockListener = () => void;
 const listeners = new Set<ClockListener>();
@@ -27,6 +27,7 @@ function subscribe(listener: ClockListener) {
 
 /** One shared second-tick for every sponsor card. Only this label re-renders. */
 export function DeadlineCountdown({ deadlineIso }: { deadlineIso: string }) {
+  const theme = usePWTheme();
   const { formatRemaining } = usePWLocalize();
   const { t } = useTranslation();
   const endedLabel = t.predictAndWin.card.ended;
@@ -45,7 +46,7 @@ export function DeadlineCountdown({ deadlineIso }: { deadlineIso: string }) {
   }, [deadlineIso, endedLabel, formatRemaining]);
 
   return (
-    <Text style={{ fontFamily: semibold, fontSize: f(10), color: PW.statValue, textAlign: 'center' }} numberOfLines={1}>
+    <Text style={{ fontFamily: semibold, fontSize: f(10), color: theme.statValue, textAlign: 'center' }} numberOfLines={1}>
       {label}
     </Text>
   );

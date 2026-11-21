@@ -24,7 +24,8 @@ import {
   IconGiftFill,
   IconRoundPlus,
 } from './icons';
-import { PW, usePWFonts, usePWScale } from './theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { usePWFonts, usePWScale, usePWTheme } from './theme';
 
 /** Shared CTA size — every variant (add / pending / winner / rejected) uses this. */
 const PILL = {
@@ -128,11 +129,60 @@ function usePillMetrics() {
 }
 
 function AddPrizePrimaryPill({ label }: { label: string }) {
+  const theme = usePWTheme();
   const { semibold } = usePWFonts();
   const { width, height, radius, capWidth, gift, plus, titleSize, padH, s } = usePillMetrics();
 
+  if (!theme.isDark) {
+    return (
+      <LinearGradient
+        colors={[...theme.gradients.cta]}
+        style={{ width, height, borderRadius: radius, overflow: 'hidden' }}
+      >
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            direction: 'ltr',
+            alignItems: 'center',
+          }}
+        >
+          <View style={{ width: capWidth, height, alignItems: 'center', justifyContent: 'center' }}>
+            <IconGiftFill width={gift} height={gift} />
+          </View>
+          <View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: s(2),
+              paddingLeft: s(6),
+              paddingRight: padH,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: semibold,
+                fontSize: titleSize,
+                color: theme.white,
+                flexShrink: 1,
+              }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {label}
+            </Text>
+            <IconRoundPlus width={plus} height={plus} />
+          </View>
+        </View>
+      </LinearGradient>
+    );
+  }
+
   return (
-    <GlassCtaShell tint={ADD_TINT} width={width} height={height} radius={radius}>
+    <GlassCtaShell tint={ADD_TINT} width={width} height={height} radius={radius} colorScheme="dark">
       <View
         style={{
           flex: 1,
@@ -166,7 +216,7 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
             style={{
               fontFamily: semibold,
               fontSize: titleSize,
-              color: PW.text,
+              color: theme.white,
               flexShrink: 1,
             }}
             numberOfLines={1}
@@ -189,12 +239,13 @@ function StatusCtaPill({
   variant: Exclude<AddPrizeButtonVariant, 'add'>;
   label: string;
 }) {
+  const theme = usePWTheme();
   const { semibold } = usePWFonts();
   const { width, height, radius, capWidth, gift, titleSize, padH } = usePillMetrics();
   const { tint, text, Icon } = STATUS[variant];
 
   return (
-    <GlassCtaShell tint={tint} width={width} height={height} radius={radius}>
+    <GlassCtaShell tint={tint} width={width} height={height} radius={radius} colorScheme={theme.isDark ? 'dark' : 'light'}>
       <View
         style={{
           flex: 1,

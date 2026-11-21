@@ -13,9 +13,13 @@ import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlass
 
 const GlassSurface = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
-const GLASS_PROPS = isLiquidGlassSupported
-  ? { effect: 'clear' as const, interactive: true, colorScheme: 'dark' as const }
-  : { intensity: Platform.OS === 'android' ? 36 : 28, tint: 'dark' as const };
+const glassPropsFor = (colorScheme: 'light' | 'dark') =>
+  isLiquidGlassSupported
+    ? { effect: 'clear' as const, interactive: true, colorScheme }
+    : {
+        intensity: Platform.OS === 'android' ? 36 : 28,
+        tint: colorScheme,
+      };
 
 export function GlassCtaShell({
   tint,
@@ -23,13 +27,17 @@ export function GlassCtaShell({
   height,
   radius,
   children,
+  colorScheme = 'dark',
 }: {
   tint: readonly [string, string];
   width?: number;
   height?: number;
   radius: number;
   children: React.ReactNode;
+  colorScheme?: 'light' | 'dark';
 }) {
+  const borderColor =
+    colorScheme === 'light' ? 'rgba(106,43,217,0.18)' : 'rgba(255,255,255,0.38)';
   return (
     <View
       style={{
@@ -39,10 +47,10 @@ export function GlassCtaShell({
         borderRadius: radius,
         overflow: 'hidden',
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.38)',
+        borderColor,
       }}
     >
-      <GlassSurface {...(GLASS_PROPS as object)} style={StyleSheet.absoluteFill} />
+      <GlassSurface {...(glassPropsFor(colorScheme) as object)} style={StyleSheet.absoluteFill} />
       <LinearGradient
         colors={[...tint]}
         start={{ x: 0, y: 0 }}

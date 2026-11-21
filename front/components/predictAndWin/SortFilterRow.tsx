@@ -20,16 +20,14 @@ import { COMPETITION_SORTS } from '../../services/competitions.service';
 import { AddPrizeButton, type AddPrizeButtonVariant } from './AddPrizeFab';
 import { IconSortArrow } from './icons';
 import {
-  PW,
-  PW_GRADIENTS,
   PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
   usePWScale,
+  usePWTheme,
 } from './theme';
 
-/** Window-space box of the control the menu hangs off. */
 interface Anchor {
   x: number;
   y: number;
@@ -50,6 +48,7 @@ export function SortFilterRow({
   addPrizeVariant?: AddPrizeButtonVariant;
   addPrizeLoading?: boolean;
 }) {
+  const theme = usePWTheme();
   const { t } = useTranslation();
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
@@ -107,6 +106,14 @@ export function SortFilterRow({
 
   const sortOpen = anchor !== null;
 
+  const sortChipStyle = theme.isDark
+    ? { colors: [...theme.gradients.sort] as [string, string] }
+    : {
+        colors: [theme.pale, theme.pale] as [string, string],
+        borderWidth: 1,
+        borderColor: theme.sortChipBorder,
+      };
+
   return (
     <View style={{ width: contentWidth, alignSelf: 'center' }}>
       <View
@@ -129,7 +136,7 @@ export function SortFilterRow({
             accessibilityState={{ expanded: sortOpen }}
           >
             <LinearGradient
-              colors={[...PW_GRADIENTS.sort]}
+              colors={sortChipStyle.colors}
               style={{
                 minWidth: s(96),
                 height: s(34),
@@ -139,13 +146,16 @@ export function SortFilterRow({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: s(8),
+                ...(sortChipStyle.borderWidth
+                  ? { borderWidth: sortChipStyle.borderWidth, borderColor: sortChipStyle.borderColor }
+                  : {}),
               }}
             >
               <View style={{ transform: [{ rotate: sortOpen ? '180deg' : '0deg' }] }}>
                 <IconSortArrow width={s(24)} height={s(24)} />
               </View>
               <Text
-                style={{ fontFamily: semibold, fontSize: f(12), color: PW.textSort }}
+                style={{ fontFamily: semibold, fontSize: f(12), color: theme.textSort }}
                 numberOfLines={1}
               >
                 {pw.sort[sort]}
@@ -180,10 +190,12 @@ export function SortFilterRow({
                 width: menuWidth,
                 borderRadius: s(PW_RADII.sort),
                 borderWidth: 1,
-                borderColor: PW.dropdownRowBorder,
-                backgroundColor: PW.surface,
+                borderColor: theme.dropdownRowBorder,
+                backgroundColor: theme.surface,
                 overflow: 'hidden',
-                boxShadow: '0px 8px 20px rgba(0,0,0,0.55)',
+                boxShadow: theme.isDark
+                  ? '0px 8px 20px rgba(0,0,0,0.55)'
+                  : '0px 8px 24px rgba(106,43,217,0.12)',
               }}
             >
               {COMPETITION_SORTS.map((option) => {
@@ -207,7 +219,7 @@ export function SortFilterRow({
                       style={{
                         fontFamily: isOn ? semibold : regular,
                         fontSize: f(13),
-                        color: isOn ? PW.text : PW.textSort,
+                        color: isOn ? theme.text : theme.textSort,
                         textAlign: dir.textAlign,
                       }}
                       numberOfLines={1}

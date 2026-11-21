@@ -33,18 +33,15 @@ import { useTranslation } from '../../src/i18n';
 import type { MatchPoolEntry } from '../../services/competitions.service';
 import { PWGradientText } from './GradientText';
 import { PWChevronDown } from './fields';
-import {
-  PW,
-  PW_GRADIENTS,
-  PW_RADII,
+import { PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 /** Large VS block above the picker — Figma `692:1657` (402×148, gap 54). */
 export function SelectedMatchHero({ match }: { match: MatchPoolEntry }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { bold, medium, semibold } = usePWFonts();
   const dir = usePWDirection();
@@ -71,7 +68,7 @@ export function SelectedMatchHero({ match }: { match: MatchPoolEntry }) {
           color="transparent"
         />
         <Text
-          style={{ fontFamily: bold, fontSize: f(20), color: PW.text, textAlign: 'center' }}
+          style={{ fontFamily: bold, fontSize: f(20), color: theme.text, textAlign: 'center' }}
           numberOfLines={2}
         >
           {match.home.name}
@@ -80,13 +77,13 @@ export function SelectedMatchHero({ match }: { match: MatchPoolEntry }) {
 
       <View style={{ width: s(105), alignItems: 'center', gap: s(4) }}>
         <PWGradientText
-          colors={[PW.vsTop, PW.vsBottom]}
+          colors={[theme.vsTop, theme.vsBottom]}
           style={{ fontFamily: semibold, fontSize: f(48), textAlign: 'center' }}
         >
           VS
         </PWGradientText>
         <Text
-          style={{ fontFamily: medium, fontSize: f(20), color: PW.textVsTime, textAlign: 'center' }}
+          style={{ fontFamily: medium, fontSize: f(20), color: theme.textVsTime, textAlign: 'center' }}
         >
           {match.time}
         </Text>
@@ -100,7 +97,7 @@ export function SelectedMatchHero({ match }: { match: MatchPoolEntry }) {
           color="transparent"
         />
         <Text
-          style={{ fontFamily: bold, fontSize: f(20), color: PW.text, textAlign: 'center' }}
+          style={{ fontFamily: bold, fontSize: f(20), color: theme.text, textAlign: 'center' }}
           numberOfLines={2}
         >
           {match.away.name}
@@ -112,6 +109,7 @@ export function SelectedMatchHero({ match }: { match: MatchPoolEntry }) {
 
 /** The h64 inner row shared by the open list and the selected box. */
 function MatchRowBody({ match }: { match: MatchPoolEntry }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -120,7 +118,7 @@ function MatchRowBody({ match }: { match: MatchPoolEntry }) {
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: s(3) }}>
       <TeamBadge name={team.name} logo={team.logo ?? undefined} size={s(size)} color="transparent" />
       <Text
-        style={{ fontFamily: semibold, fontSize: f(12), color: PW.text, textAlign: 'center' }}
+        style={{ fontFamily: semibold, fontSize: f(12), color: theme.text, textAlign: 'center' }}
         numberOfLines={1}
       >
         {team.name}
@@ -142,13 +140,13 @@ function MatchRowBody({ match }: { match: MatchPoolEntry }) {
       {side(match.home, 30)}
       <View style={{ width: s(88), alignItems: 'center', gap: s(4) }}>
         <PWGradientText
-          colors={[PW.vsTop, PW.vsBottom]}
+          colors={[theme.vsTop, theme.vsBottom]}
           style={{ fontFamily: semibold, fontSize: f(21), textAlign: 'center' }}
         >
           VS
         </PWGradientText>
         <Text
-          style={{ fontFamily: medium, fontSize: f(13), color: PW.textVsTime, textAlign: 'center' }}
+          style={{ fontFamily: medium, fontSize: f(13), color: theme.textVsTime, textAlign: 'center' }}
           numberOfLines={1}
         >
           {match.time}
@@ -180,6 +178,7 @@ export function MatchPicker({
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { medium, regular, semibold } = usePWFonts();
   const dir = usePWDirection();
@@ -197,11 +196,11 @@ export function MatchPicker({
       accessibilityState={{ expanded: open }}
     >
       <LinearGradient
-        colors={[...PW_GRADIENTS.input]}
+        colors={[...theme.gradients.input]}
         style={{
           height: rowHeight,
           borderWidth: 1,
-          borderColor: open ? PW.dropdownOpenBorder : PW.inputBorder,
+          borderColor: open ? theme.dropdownOpenBorder : theme.inputBorder,
           // The open header loses its bottom rounding into the list below it.
           borderTopLeftRadius: s(PW_RADII.input),
           borderTopRightRadius: s(PW_RADII.input),
@@ -214,10 +213,10 @@ export function MatchPicker({
           justifyContent: 'space-between',
         }}
       >
-        <PWChevronDown size={s(32)} up={open} color={open ? PW.dropdownTitleTop : PW.textSelect} />
+        <PWChevronDown size={s(32)} up={open} color={open ? theme.dropdownTitleTop : theme.textSelect} />
         {open ? (
           <PWGradientText
-            colors={[PW.dropdownTitleTop, PW.dropdownTitleBottom]}
+            colors={[theme.dropdownTitleTop, theme.dropdownTitleBottom]}
             style={{ fontFamily: medium, fontSize: f(18), textAlign: dir.textAlign }}
           >
             {wizard.chooseMatch}
@@ -227,7 +226,7 @@ export function MatchPicker({
             style={{
               fontFamily: medium,
               fontSize: f(18),
-              color: PW.textSelect,
+              color: theme.textSelect,
               textAlign: dir.textAlign,
               flexShrink: 1,
             }}
@@ -245,20 +244,40 @@ export function MatchPicker({
   const body = () => {
     if (loading) {
       return (
-        <View style={[styles.state, { height: rowHeight }]}>
-          <ActivityIndicator color={PW.ctaTop} />
+        <View
+          style={[
+            stateBase,
+            {
+              height: rowHeight,
+              backgroundColor: theme.surface,
+              borderColor: theme.dropdownRowBorder,
+            },
+          ]}
+        >
+          <ActivityIndicator color={theme.ctaTop} />
         </View>
       );
     }
     if (error) {
       return (
-        <View style={[styles.state, { minHeight: rowHeight, gap: s(6), paddingVertical: s(14) }]}>
-          <Text style={{ fontFamily: medium, fontSize: f(14), color: PW.text, textAlign: 'center' }}>
+        <View
+          style={[
+            stateBase,
+            {
+              minHeight: rowHeight,
+              gap: s(6),
+              paddingVertical: s(14),
+              backgroundColor: theme.surface,
+              borderColor: theme.dropdownRowBorder,
+            },
+          ]}
+        >
+          <Text style={{ fontFamily: medium, fontSize: f(14), color: theme.text, textAlign: 'center' }}>
             {wizard.matchesError}
           </Text>
           {onRetry ? (
             <Pressable onPress={onRetry} hitSlop={8} accessibilityRole="button">
-              <Text style={{ fontFamily: semibold, fontSize: f(13), color: PW.vsTop }}>
+              <Text style={{ fontFamily: semibold, fontSize: f(13), color: theme.vsTop }}>
                 {t.predictAndWin.errorState.retry}
               </Text>
             </Pressable>
@@ -268,15 +287,26 @@ export function MatchPicker({
     }
     if (matches.length === 0) {
       return (
-        <View style={[styles.state, { minHeight: rowHeight, gap: s(4), paddingVertical: s(14) }]}>
-          <Text style={{ fontFamily: medium, fontSize: f(14), color: PW.text, textAlign: 'center' }}>
+        <View
+          style={[
+            stateBase,
+            {
+              minHeight: rowHeight,
+              gap: s(4),
+              paddingVertical: s(14),
+              backgroundColor: theme.surface,
+              borderColor: theme.dropdownRowBorder,
+            },
+          ]}
+        >
+          <Text style={{ fontFamily: medium, fontSize: f(14), color: theme.text, textAlign: 'center' }}>
             {wizard.noMatches}
           </Text>
           <Text
             style={{
               fontFamily: regular,
               fontSize: f(11),
-              color: PW.textTileSub,
+              color: theme.textTileSub,
               textAlign: 'center',
             }}
           >
@@ -299,9 +329,9 @@ export function MatchPicker({
           accessibilityState={{ selected: isOn }}
           style={{
             height: rowHeight,
-            backgroundColor: PW.surface,
+            backgroundColor: theme.surface,
             borderWidth: 1,
-            borderColor: isOn ? PW.dropdownSelectedBorder : PW.dropdownRowBorder,
+            borderColor: isOn ? theme.dropdownSelectedBorder : theme.dropdownRowBorder,
             borderBottomLeftRadius: isLast ? s(PW_RADII.dropdownFoot) : 0,
             borderBottomRightRadius: isLast ? s(PW_RADII.dropdownFoot) : 0,
             paddingHorizontal: s(24),
@@ -326,12 +356,12 @@ export function MatchPicker({
           accessibilityState={{ expanded: false }}
         >
           <LinearGradient
-            colors={[...PW_GRADIENTS.input]}
+            colors={[...theme.gradients.input]}
             style={{
               height: rowHeight,
               borderRadius: s(PW_RADII.input),
               borderWidth: 1,
-              borderColor: PW.dropdownSelectedBorder,
+              borderColor: theme.dropdownSelectedBorder,
               paddingHorizontal: s(24),
               justifyContent: 'center',
             }}
@@ -347,9 +377,9 @@ export function MatchPicker({
               {onSearchChange ? (
                 <View
                   style={{
-                    backgroundColor: PW.surface,
+                    backgroundColor: theme.surface,
                     borderWidth: 1,
-                    borderColor: PW.dropdownRowBorder,
+                    borderColor: theme.dropdownRowBorder,
                     borderTopWidth: 0,
                     paddingHorizontal: s(16),
                     paddingVertical: s(10),
@@ -359,7 +389,7 @@ export function MatchPicker({
                     value={searchQuery}
                     onChangeText={onSearchChange}
                     placeholder={wizard.searchMatch}
-                    placeholderTextColor={PW.textSelect}
+                    placeholderTextColor={theme.textSelect}
                     autoCorrect={false}
                     autoCapitalize="none"
                     returnKeyType="search"
@@ -367,12 +397,12 @@ export function MatchPicker({
                       height: s(42),
                       borderRadius: s(12),
                       borderWidth: 1,
-                      borderColor: PW.inputBorder,
-                      backgroundColor: PW.inputBottom,
+                      borderColor: theme.inputBorder,
+                      backgroundColor: theme.inputBottom,
                       paddingHorizontal: s(14),
                       fontFamily: medium,
                       fontSize: f(14),
-                      color: PW.text,
+                      color: theme.text,
                       textAlign: dir.textAlign,
                     }}
                   />
@@ -387,16 +417,12 @@ export function MatchPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  state: {
-    width: '100%',
-    backgroundColor: PW.surface,
-    borderWidth: 1,
-    borderColor: PW.dropdownRowBorder,
-    borderBottomLeftRadius: PW_RADII.dropdownFoot,
-    borderBottomRightRadius: PW_RADII.dropdownFoot,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-});
+const stateBase = {
+  width: '100%' as const,
+  borderWidth: 1,
+  borderBottomLeftRadius: PW_RADII.dropdownFoot,
+  borderBottomRightRadius: PW_RADII.dropdownFoot,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  paddingHorizontal: 16,
+};

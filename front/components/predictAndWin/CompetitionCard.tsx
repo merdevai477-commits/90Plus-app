@@ -7,7 +7,7 @@
  *
  * Inner coordinates are Figma units scaled by the card's own width so the
  * 404×199 proportions hold at every viewport, and the whole layout mirrors with
- * the reading direction. See `PW_GRADIENTS.cardWash` for why the wash is
+ * the reading direction. See `theme.gradients.cardWash` for why the wash is
  * expressed in alpha rather than Figma's `mix-blend-mode: darken`.
  */
 
@@ -24,15 +24,11 @@ import { shouldShowSponsorLogo, sponsorLogoSource, usesDefaultStoreLogo } from '
 import { SponsorCountryFlag } from './SponsorCountryFlag';
 import { sponsorContactLine } from './sponsorPhone';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
-import {
-  PW,
-  PW_GRADIENTS,
-  PW_RADII,
+import { PW_RADII,
   usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 const CARD_H = 199;
 
@@ -97,6 +93,7 @@ function DeliveryBadge({
   /** Leading edge of the card in the current reading direction. */
   side: { left: number } | { right: number };
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useCardMetrics();
   const { semibold, medium } = usePWFonts();
@@ -115,9 +112,9 @@ function DeliveryBadge({
           height: c(22),
           paddingHorizontal: c(6),
           borderRadius: c(17),
-          backgroundColor: PW.badgeDeliveryBg,
+          backgroundColor: theme.badgeDeliveryBg,
           borderWidth: 1,
-          borderColor: PW.badgeDeliveryBorder,
+          borderColor: theme.badgeDeliveryBorder,
           opacity: 0.63,
           flexDirection: 'row',
           alignItems: 'center',
@@ -125,7 +122,7 @@ function DeliveryBadge({
           gap: c(2),
         }}
       >
-        <Text style={{ fontFamily: medium, fontSize: f(7), color: PW.badgeDeliveryText }}>
+        <Text style={{ fontFamily: medium, fontSize: f(7), color: theme.badgeDeliveryText }}>
           {badge.delivery}
         </Text>
         <IconVespaGreen width={c(12)} height={c(12) * (7.00235 / 10.0004)} />
@@ -147,7 +144,7 @@ function DeliveryBadge({
         height: c(22),
         paddingHorizontal: c(6),
         borderRadius: c(PW_RADII.badge),
-        backgroundColor: PW.badgePickupBg,
+        backgroundColor: theme.badgePickupBg,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -155,7 +152,7 @@ function DeliveryBadge({
         overflow: 'hidden',
       }}
     >
-      <Text style={{ fontFamily: semibold, fontSize: f(6), color: PW.badgePickupText }}>
+      <Text style={{ fontFamily: semibold, fontSize: f(6), color: theme.badgePickupText }}>
         {badge.pickup}
       </Text>
       <IconPickupPin width={c(10.11)} height={c(9.1)} />
@@ -176,6 +173,7 @@ function StatusBadge({
   status: CompetitionInfo['status'];
   side: { left: number } | { right: number };
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { c } = useCardMetrics();
   const { semibold } = usePWFonts();
@@ -200,9 +198,9 @@ function StatusBadge({
         height: c(22),
         paddingHorizontal: c(8),
         borderRadius: c(PW_RADII.badge),
-        backgroundColor: rejected ? PW.badgeNoDeliveryBg : 'rgba(107,17,212,0.55)',
+        backgroundColor: rejected ? theme.badgeNoDeliveryBg : 'rgba(107,17,212,0.55)',
         borderWidth: 1,
-        borderColor: rejected ? PW.badgeNoDeliveryBorder : PW.medallionBorder,
+        borderColor: rejected ? theme.badgeNoDeliveryBorder : theme.medallionBorder,
         alignItems: 'center',
         justifyContent: 'center',
       }}
@@ -211,7 +209,7 @@ function StatusBadge({
         style={{
           fontFamily: semibold,
           fontSize: f(7),
-          color: rejected ? PW.badgeNoDeliveryText : PW.text,
+          color: rejected ? theme.badgeNoDeliveryText : theme.text,
         }}
         numberOfLines={1}
       >
@@ -228,6 +226,7 @@ export function CompetitionCard({
   competition: CompetitionInfo;
   onPress: () => void;
 }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { width, height, c } = useCardMetrics();
   const { bold, regular } = usePWFonts();
@@ -278,7 +277,7 @@ export function CompetitionCard({
           flex: 1,
           borderRadius: c(PW_RADII.card),
           overflow: 'hidden',
-          backgroundColor: PW.detailBg,
+          backgroundColor: theme.detailBg,
         }}
       >
         <Image
@@ -292,12 +291,12 @@ export function CompetitionCard({
           recyclingKey={`${competition.id}:${competition.prizeImageUrl ?? competition.category?.key ?? 'other'}`}
         />
 
-        {/* See `PW_GRADIENTS.cardWash` for why this no longer uses a blend
+        {/* See `theme.gradients.cardWash` for why this no longer uses a blend
             mode: `mixBlendMode` is a no-op below Android API 29, which hid the
             photo behind the wash's opaque stops on every such device. */}
         <LinearGradient
-          colors={[...PW_GRADIENTS.cardWash]}
-          locations={[...PW_GRADIENTS.cardWashLocations]}
+          colors={[...theme.gradients.cardWash]}
+          locations={[...theme.gradients.cardWashLocations]}
           start={{ x: flip ? 1 : 0, y: 0.5 }}
           end={{ x: flip ? 0 : 1, y: 0.5 }}
           style={StyleSheet.absoluteFill}
@@ -334,7 +333,7 @@ export function CompetitionCard({
         >
           <View style={{ width: '100%', gap: c(4) }}>
             <Text
-              style={{ fontFamily: bold, fontSize: f(16), color: PW.text, textAlign: 'center' }}
+              style={{ fontFamily: bold, fontSize: f(16), color: theme.text, textAlign: 'center' }}
               numberOfLines={1}
             >
               {sponsor.name}
@@ -344,7 +343,7 @@ export function CompetitionCard({
                 style={{
                   fontFamily: regular,
                   fontSize: f(10),
-                  color: PW.textOnCardMuted,
+                  color: theme.textOnCardMuted,
                   textAlign: 'center',
                 }}
                 numberOfLines={1}
@@ -360,7 +359,7 @@ export function CompetitionCard({
                 style={{
                   fontFamily: regular,
                   fontSize: f(10),
-                  color: PW.textOnCardMuted,
+                  color: theme.textOnCardMuted,
                   textAlign: 'center',
                   flexShrink: 1,
                 }}

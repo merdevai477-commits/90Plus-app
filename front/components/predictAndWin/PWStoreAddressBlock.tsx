@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { PWMapPickerModal, type StoreAddressMeta } from './PWMapPickerModal';
 import { PWPlacesAddressField } from './PWPlacesAddressField';
 import { IconMapFill } from './icons';
-import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 export function PWStoreAddressBlock({
   value,
@@ -42,6 +42,7 @@ export function PWStoreAddressBlock({
   onPasteDone: () => void;
   icon?: React.ReactNode;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -80,7 +81,7 @@ export function PWStoreAddressBlock({
           fontFamily: regular,
           fontSize: f(12),
           lineHeight: f(18),
-          color: PW.textTileSub,
+          color: theme.textTileSub,
           textAlign: dir.textAlign,
         }}
       >

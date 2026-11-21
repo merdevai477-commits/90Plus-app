@@ -28,7 +28,7 @@ import { toDateInputValue } from './deadline';
 import { PWGradientText } from './GradientText';
 import { IconCalendar, IconPlusBtn, IconRoundMinus } from './icons';
 import { usePWLocalize } from './localize';
-import { PW, PW_GRADIENTS, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { PW_RADII, usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 /** Shared gradient box used by every input, select and segment. */
 export function PWBox({
@@ -42,16 +42,17 @@ export function PWBox({
   children?: React.ReactNode;
   selected?: boolean;
 }) {
+  const theme = usePWTheme();
   const { s } = usePWScale();
   return (
     <LinearGradient
-      colors={selected ? [...PW_GRADIENTS.control] : [...PW_GRADIENTS.input]}
+      colors={selected ? [...theme.gradients.control] : [...theme.gradients.input]}
       style={[
         {
           height: height != null ? s(height) : undefined,
           borderRadius: s(PW_RADII.input),
           borderWidth: selected ? 0 : 1,
-          borderColor: PW.inputBorder,
+          borderColor: theme.inputBorder,
           paddingHorizontal: s(24),
           justifyContent: 'center',
         },
@@ -73,6 +74,7 @@ export function PWFieldLabel({
   optional?: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
   const dir = usePWDirection();
@@ -87,7 +89,7 @@ export function PWFieldLabel({
       ]}
     >
       <LinearGradient
-        colors={[...PW_GRADIENTS.accent]}
+        colors={[...theme.gradients.accent]}
         style={{ width: s(4), height: s(20), borderRadius: s(2) }}
       />
       <Text
@@ -98,7 +100,7 @@ export function PWFieldLabel({
       >
         {label}
         {optional ? (
-          <Text style={{ fontFamily: regular, fontSize: f(14), color: PW.textOptional }}>
+          <Text style={{ fontFamily: regular, fontSize: f(14), color: theme.textOptional }}>
             {` ${optional}`}
           </Text>
         ) : null}
@@ -109,12 +111,13 @@ export function PWFieldLabel({
 
 /** Secondary label above date/time inputs — Changa Regular 18 #868686. */
 export function PWSubLabel({ label }: { label: string }) {
+  const theme = usePWTheme();
   const { f } = usePWScale();
   const { regular } = usePWFonts();
   const dir = usePWDirection();
   return (
     <Text
-      style={[styles.subLabel, { fontFamily: regular, fontSize: f(18), textAlign: dir.textAlign }]}
+      style={[styles.subLabel, { color: theme.textSubLabel, fontFamily: regular, fontSize: f(18), textAlign: dir.textAlign }]}
     >
       {label}
     </Text>
@@ -137,6 +140,7 @@ export function PWTextField({
   height?: number;
   multilineRows?: boolean;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular } = usePWFonts();
   const dir = usePWDirection();
@@ -147,7 +151,7 @@ export function PWTextField({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={PW.textPlaceholder}
+          placeholderTextColor={theme.textPlaceholder}
           multiline={multilineRows}
           style={[
             styles.inputText,
@@ -192,6 +196,7 @@ export function PWDateField({
   maximumDate?: Date;
   height?: number;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular, semibold } = usePWFonts();
   const dir = usePWDirection();
@@ -251,7 +256,7 @@ export function PWDateField({
                   fontSize: f(17),
                   flex: 1,
                   textAlign: dir.textAlign,
-                  color: value ? PW.text : PW.textPlaceholder,
+                  color: value ? theme.text : theme.textPlaceholder,
                 },
               ]}
               numberOfLines={1}
@@ -289,7 +294,7 @@ export function PWDateField({
             <Pressable style={styles.pickerSheetWrap} onPress={(e) => e.stopPropagation()}>
               <View
                 style={{
-                  backgroundColor: PW.surface,
+                  backgroundColor: theme.surface,
                   borderTopLeftRadius: s(PW_RADII.detail),
                   borderTopRightRadius: s(PW_RADII.detail),
                   paddingTop: s(12),
@@ -300,7 +305,7 @@ export function PWDateField({
               >
                 <View style={{ flexDirection: dir.row, justifyContent: 'space-between' }}>
                   <Pressable onPress={() => setOpen(false)} hitSlop={10} accessibilityRole="button">
-                    <Text style={{ fontFamily: regular, fontSize: f(15), color: PW.textSelect }}>
+                    <Text style={{ fontFamily: regular, fontSize: f(15), color: theme.textSelect }}>
                       {wizard.dateCancel}
                     </Text>
                   </Pressable>
@@ -312,7 +317,7 @@ export function PWDateField({
                     hitSlop={10}
                     accessibilityRole="button"
                   >
-                    <Text style={{ fontFamily: semibold, fontSize: f(15), color: PW.vsTop }}>
+                    <Text style={{ fontFamily: semibold, fontSize: f(15), color: theme.vsTop }}>
                       {wizard.dateConfirm}
                     </Text>
                   </Pressable>
@@ -322,8 +327,8 @@ export function PWDateField({
                   value={draft ?? initial()}
                   mode="date"
                   display="spinner"
-                  themeVariant="dark"
-                  textColor={PW.text}
+                  themeVariant={theme.isDark ? "dark" : "light"}
+                  textColor={theme.text}
                   onChange={(_e: DateTimePickerEvent, selected?: Date) => {
                     if (selected) setDraft(selected);
                   }}
@@ -341,7 +346,7 @@ export function PWDateField({
                     accessibilityRole="button"
                     style={{ alignSelf: 'center' }}
                   >
-                    <Text style={{ fontFamily: regular, fontSize: f(13), color: PW.textTileSub }}>
+                    <Text style={{ fontFamily: regular, fontSize: f(13), color: theme.textTileSub }}>
                       {wizard.dateClear}
                     </Text>
                   </Pressable>
@@ -439,6 +444,7 @@ export function PWSelectField({
   /** Drives the chevron flip and the a11y expanded state. */
   expanded?: boolean;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { medium } = usePWFonts();
   const dir = usePWDirection();
@@ -457,7 +463,7 @@ export function PWSelectField({
               {
                 fontFamily: medium,
                 fontSize: f(18),
-                color: value ? PW.text : PW.textSelect,
+                color: value ? theme.text : theme.textSelect,
                 textAlign: dir.textAlign,
               },
             ]}
@@ -483,6 +489,7 @@ export function PWTextArea({
   placeholder?: string;
   maxLength?: number;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { regular } = usePWFonts();
   const dir = usePWDirection();
@@ -492,7 +499,7 @@ export function PWTextArea({
         value={value}
         onChangeText={(t) => onChangeText(t.slice(0, maxLength))}
         placeholder={placeholder}
-        placeholderTextColor={PW.textPlaceholder}
+        placeholderTextColor={theme.textPlaceholder}
         multiline
         style={[
           styles.inputText,
@@ -529,6 +536,7 @@ export function PWNumberStepper({
   /** When set, +/- only move within this list (e.g. legal deadline hours). */
   allowedValues?: number[];
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   // Figma `690:1349`: the minus sits on a 46×46 r12 gradient plate with a 28px
@@ -562,7 +570,7 @@ export function PWNumberStepper({
           <IconPlusBtn width={s(46)} height={s(46)} />
         ) : (
           <LinearGradient
-            colors={[...PW_GRADIENTS.control]}
+            colors={[...theme.gradients.control]}
             style={{
               width: s(46),
               height: s(46),
@@ -582,7 +590,7 @@ export function PWNumberStepper({
     <PWBox height={74}>
       <View style={styles.stepperRow}>
         {btn('minus')}
-        <Text style={[styles.stepperValue, { fontFamily: semibold, fontSize: f(35) }]}>
+        <Text style={[styles.stepperValue, { color: theme.text, fontFamily: semibold, fontSize: f(35) }]}>
           {value}
         </Text>
         {btn('plus')}
@@ -604,7 +612,7 @@ export function PWSegmentedPair({
   selected,
   onSelect,
   gap = 10,
-  idleColor = PW.textSegmentIdle,
+  idleColor,
   disabledKeys,
 }: {
   left: { key: string; label: string };
@@ -615,6 +623,8 @@ export function PWSegmentedPair({
   idleColor?: string;
   disabledKeys?: string[];
 }) {
+  const theme = usePWTheme();
+  const resolvedIdle = idleColor ?? theme.textSegmentIdle;
   const { s, f } = usePWScale();
   const { bold, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -638,7 +648,7 @@ export function PWSegmentedPair({
             style={{
               fontFamily: isOn ? bold : medium,
               fontSize: f(24),
-              color: isOn ? PW.text : idleColor,
+              color: isOn ? (theme.isDark ? theme.text : theme.white) : resolvedIdle,
               textAlign: 'center',
             }}
             numberOfLines={1}
@@ -671,6 +681,7 @@ export function PWPrimaryButton({
   disabled?: boolean;
   loading?: React.ReactNode;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   return (
@@ -686,7 +697,7 @@ export function PWPrimaryButton({
           gradient's child stable and overlay the spinner. */}
       <View>
         <LinearGradient
-          colors={[...PW_GRADIENTS.cta]}
+          colors={[...theme.gradients.cta]}
           style={{
             borderRadius: s(PW_RADII.input),
             paddingVertical: s(21),
@@ -700,7 +711,7 @@ export function PWPrimaryButton({
             style={{
               fontFamily: semibold,
               fontSize: f(18),
-              color: PW.text,
+              color: theme.isDark ? theme.text : theme.white,
               textAlign: 'center',
               opacity: loading ? 0 : 1,
             }}
@@ -724,6 +735,7 @@ export function PWPrimaryButton({
 
 /** Outline CTA — 2px #3d0ab3 border, gradient text (Figma `696:2397`). */
 export function PWOutlineButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   return (
@@ -732,7 +744,7 @@ export function PWOutlineButton({ label, onPress }: { label: string; onPress: ()
         style={{
           borderRadius: s(PW_RADII.input),
           borderWidth: 2,
-          borderColor: PW.ctaTop,
+          borderColor: theme.ctaTop,
           paddingVertical: s(21),
           paddingHorizontal: s(16),
           alignItems: 'center',
@@ -740,7 +752,7 @@ export function PWOutlineButton({ label, onPress }: { label: string; onPress: ()
         }}
       >
         <PWGradientText
-          colors={[PW.outlineTextTop, PW.outlineTextBottom]}
+          colors={[theme.outlineTextTop, theme.outlineTextBottom]}
           style={{ fontFamily: semibold, fontSize: f(18) }}
         >
           {label}
@@ -757,13 +769,15 @@ export function PWOutlineButton({ label, onPress }: { label: string; onPress: ()
  */
 export function PWChevronDown({
   size,
-  color = PW.textSelect,
+  color,
   up,
 }: {
   size: number;
   color?: string;
   up?: boolean;
 }) {
+  const theme = usePWTheme();
+  const chevronColor = color ?? theme.textSelect;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <View
@@ -772,7 +786,7 @@ export function PWChevronDown({
           height: size * 0.42,
           borderRightWidth: 2.5,
           borderBottomWidth: 2.5,
-          borderColor: color,
+          borderColor: chevronColor,
           transform: [
             { rotate: up ? '225deg' : '45deg' },
             { translateY: up ? size * 0.07 : -size * 0.07 },
@@ -785,17 +799,17 @@ export function PWChevronDown({
 
 const styles = StyleSheet.create({
   labelRow: { alignItems: 'center' },
-  labelText: { color: PW.text },
-  subLabel: { color: PW.textSubLabel, width: '100%' },
+  labelText: {},
+  subLabel: { width: '100%' },
   // Figma `676:6006`: [value][icon] with `justify-end` — the icon sits on the
   // trailing edge of the reading order, so the row direction is mirrored.
   inputRow: { alignItems: 'center', justifyContent: 'flex-end' },
   pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   pickerSheetWrap: { width: '100%' },
-  inputText: { color: PW.text, padding: 0 },
+  inputText: { padding: 0 },
   selectRow: { alignItems: 'center', justifyContent: 'space-between' },
   selectText: { flexShrink: 1 },
-  counter: { color: PW.textPlaceholder },
+  counter: {},
   stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stepperValue: { color: PW.text, textAlign: 'center' },
+  stepperValue: { textAlign: 'center' },
 });

@@ -31,7 +31,8 @@ import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHe
 import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
 import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerModal';
-import { PW, usePWScale } from '../../components/predictAndWin/theme';
+import { StatusBar } from 'react-native';
+import { usePWScale, usePWTheme } from '../../components/predictAndWin/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCompetitions } from '../../hooks/useCompetitions';
 import { useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
@@ -41,6 +42,7 @@ import type { CompetitionInfo, CompetitionTab } from '../../services/competition
 
 export default function PredictAndWinScreen() {
   useScreenFont();
+  const theme = usePWTheme();
   const { s } = usePWScale();
   const insets = useSafeAreaInsets();
   const headerOffset = usePWHeaderOffset();
@@ -128,7 +130,8 @@ export default function PredictAndWinScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: PW.screen }}>
+    <View style={{ flex: 1, backgroundColor: theme.screen }}>
+      <StatusBar barStyle={theme.statusBarStyle === 'dark' ? 'dark-content' : 'light-content'} />
       <PWHeader
         title={t.predictAndWin.title}
         onBack={goBackToRank}
@@ -139,7 +142,7 @@ export default function PredictAndWinScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingTop: headerOffset, paddingBottom: bottomPad, flexGrow: 1 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={PW.vsTop} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.vsTop} />
         }
         onScroll={hasMore ? onScroll : undefined}
         scrollEventThrottle={16}
@@ -149,7 +152,7 @@ export default function PredictAndWinScreen() {
 
         {loading && rows.length === 0 ? (
           <View style={{ alignItems: 'center', paddingTop: emptyPadTop }}>
-            <ActivityIndicator color={PW.ctaTop} size="large" />
+            <ActivityIndicator color={theme.ctaTop} size="large" />
           </View>
         ) : null}
 
@@ -168,7 +171,7 @@ export default function PredictAndWinScreen() {
         ))}
 
         {loadingMore ? (
-          <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap28 }} />
+          <ActivityIndicator color={theme.ctaTop} style={{ marginTop: gap28 }} />
         ) : null}
       </ScrollView>
 
@@ -205,6 +208,7 @@ function HubPlaceholder({
   tab: CompetitionTab;
   onRetry: () => void;
 }) {
+  const theme = usePWTheme();
   const { t } = useTranslation();
   const pw = t.predictAndWin;
 
@@ -221,12 +225,12 @@ function HubPlaceholder({
         paddingTop: 24,
       }}
     >
-      <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
+      <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
         {copy.title}
       </Text>
       <Text
         style={{
-          color: '#CBCBCB',
+          color: theme.textTileSub,
           fontSize: 13,
           textAlign: 'center',
           marginTop: 8,
@@ -237,7 +241,7 @@ function HubPlaceholder({
 
       {error && !needsSignIn ? (
         <Pressable onPress={onRetry} hitSlop={8} style={{ marginTop: 12 }}>
-          <Text style={{ color: '#A44AF9', fontSize: 14, fontWeight: '600' }}>
+          <Text style={{ color: theme.vsTop, fontSize: 14, fontWeight: '600' }}>
             {pw.errorState.retry}
           </Text>
         </Pressable>

@@ -20,7 +20,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
-import { PW, PW_GRADIENTS, usePWFonts, usePWScale } from './theme';
+import { usePWFonts, usePWScale, usePWTheme } from './theme';
 
 const STEP_KEYS = ['step1Title', 'step2Title', 'step3Title', 'step4Title'] as const;
 
@@ -28,6 +28,7 @@ const STEP_KEYS = ['step1Title', 'step2Title', 'step3Title', 'step4Title'] as co
 const CURRENT_RAIL_FILL = 0.63;
 
 export function PredictionStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { bold, medium } = usePWFonts();
   const { t } = useTranslation();
@@ -52,15 +53,15 @@ export function PredictionStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
                   borderWidth: 2,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: reached ? PW.stepActiveBg : PW.stepIdleBg,
-                  borderColor: reached ? PW.stepActiveBorder : PW.stepIdleBorder,
+                  backgroundColor: reached ? theme.stepActiveBg : theme.stepIdleBg,
+                  borderColor: reached ? theme.stepActiveBorder : theme.stepIdleBorder,
                 }}
               >
                 <Text
                   style={{
                     fontFamily: reached ? bold : medium,
                     fontSize: f(16),
-                    color: reached ? PW.text : PW.stepIdleText,
+                    color: reached ? (theme.isDark ? theme.text : theme.white) : theme.stepIdleText,
                   }}
                 >
                   {n}
@@ -68,10 +69,10 @@ export function PredictionStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
               </View>
 
               {n < 4 ? (
-                <View style={{ flex: 1, height: s(5), backgroundColor: PW.railIdle }}>
+                <View style={{ flex: 1, height: s(5), backgroundColor: theme.railIdle }}>
                   {railFill > 0 ? (
                     <LinearGradient
-                      colors={[...PW_GRADIENTS.rail]}
+                      colors={[...theme.gradients.rail]}
                       start={{ x: 0, y: 0.5 }}
                       end={{ x: 1, y: 0.5 }}
                       style={{
@@ -98,7 +99,7 @@ export function PredictionStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
               fontFamily: bold,
               fontSize: f(10),
               lineHeight: f(10) * 1.268,
-              color: i + 1 <= step ? PW.stepLabelActive : PW.stepIdleText,
+              color: i + 1 <= step ? theme.stepLabelActive : theme.stepIdleText,
               textAlign: i === 0 ? 'left' : i === 3 ? 'right' : 'center',
             }}
             numberOfLines={1}

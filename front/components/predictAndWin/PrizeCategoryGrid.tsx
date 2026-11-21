@@ -19,7 +19,7 @@ import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'rea
 
 import type { PrizeCategoryInfo } from '../../services/competitions.service';
 import { usePWLocalize } from './localize';
-import { PW, PW_GRADIENTS, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { PW_RADII, usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 /** Figma category artwork, keyed by `PrizeCategory.key`. */
 export const CATEGORY_ART: Record<string, ImageSourcePropType> = {
@@ -65,6 +65,7 @@ export function CategoryMedallion({
   size?: number;
   artSize?: number;
 }) {
+  const theme = usePWTheme();
   const { s } = usePWScale();
 
   /**
@@ -98,13 +99,13 @@ export function CategoryMedallion({
 
   return (
     <LinearGradient
-      colors={[...PW_GRADIENTS.medallion]}
+      colors={[...theme.gradients.medallion]}
       style={{
         width: s(size),
         height: s(size),
         borderRadius: s(PW_RADII.medallion),
         borderWidth: 1,
-        borderColor: PW.medallionBorder,
+        borderColor: theme.medallionBorder,
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
@@ -153,6 +154,7 @@ export function PrizeCategoryGrid({
   selectedId: string | null;
   onSelect: (category: PrizeCategoryInfo) => void;
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { bold, regular } = usePWFonts();
   const dir = usePWDirection();
@@ -180,7 +182,7 @@ export function PrizeCategoryGrid({
             style={{ width: cellWidth }}
           >
             <LinearGradient
-              colors={[...PW_GRADIENTS.cell]}
+              colors={[...theme.gradients.cell]}
               style={{
                 // English copy runs longer than the Arabic the 99pt cell was
                 // sized against, so the design height is a floor — a fixed
@@ -188,7 +190,7 @@ export function PrizeCategoryGrid({
                 minHeight: s(99),
                 borderRadius: s(PW_RADII.cell),
                 borderWidth: 1,
-                borderColor: isSelected ? PW.medallionBorder : PW.cellBorder,
+                borderColor: isSelected ? theme.medallionBorder : theme.cellBorder,
                 paddingHorizontal: s(15),
                 paddingVertical: s(16),
                 flexDirection: dir.rowReverse,
@@ -204,7 +206,7 @@ export function PrizeCategoryGrid({
                   style={{
                     fontFamily: bold,
                     fontSize: f(13),
-                    color: PW.text,
+                    color: theme.text,
                     textAlign: dir.textAlign,
                     width: '100%',
                   }}
@@ -217,7 +219,7 @@ export function PrizeCategoryGrid({
                     fontFamily: regular,
                     fontSize: f(10),
                     lineHeight: f(10) * 1.25,
-                    color: PW.textCellDesc,
+                    color: theme.textCellDesc,
                     textAlign: dir.textAlign,
                     width: '100%',
                   }}

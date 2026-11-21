@@ -19,7 +19,7 @@ import {
 } from '../../utils/storeLocationPermission';
 import { getGoogleMapsJsApiKey, hasGoogleMapsJsApiKey } from './googlePlaces';
 import { buildMapPickerHtml } from './mapPickerHtml';
-import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { usePWDirection, usePWFonts, usePWScale, usePWTheme } from './theme';
 
 type MapPickerMessage =
   | { type: 'ready' }
@@ -56,6 +56,7 @@ export function PWMapPickerModal({
     openSettings: string;
   };
 }) {
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
@@ -196,7 +197,7 @@ export function PWMapPickerModal({
             paddingBottom: s(12),
           }}
         >
-          <Text style={{ fontFamily: semibold, fontSize: f(18), color: PW.text }}>
+          <Text style={{ fontFamily: semibold, fontSize: f(18), color: theme.text }}>
             {labels.title}
           </Text>
           <Pressable onPress={handleClose} hitSlop={8} accessibilityRole="button">

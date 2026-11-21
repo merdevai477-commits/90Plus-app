@@ -6,17 +6,18 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Share, StatusBar, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SponsorStorePage } from '../../components/predictAndWin/SponsorStorePage';
-import { PW, usePWFonts, usePWScale } from '../../components/predictAndWin/theme';
+import { usePWFonts, usePWScale,  usePWTheme } from '../../components/predictAndWin/theme';
 import { useCompetition } from '../../hooks/useCompetition';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 
 export default function CompetitionDetailScreen() {
   useScreenFont();
+  const theme = usePWTheme();
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
   const insets = useSafeAreaInsets();
@@ -29,15 +30,15 @@ export default function CompetitionDetailScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: PW.screen, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={PW.ctaTop} size="large" />
+      <View style={{ flex: 1, backgroundColor: theme.screen, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={theme.ctaTop} size="large" />
       </View>
     );
   }
 
   if (!competition) {
     return (
-      <View style={{ flex: 1, backgroundColor: PW.screen }}>
+      <View style={{ flex: 1, backgroundColor: theme.screen }}>
         <View
           style={{
             flex: 1,
@@ -47,21 +48,21 @@ export default function CompetitionDetailScreen() {
             paddingHorizontal: s(40),
           }}
         >
-          <Text style={{ fontFamily: semibold, fontSize: f(16), color: PW.text, textAlign: 'center' }}>
+          <Text style={{ fontFamily: semibold, fontSize: f(16), color: theme.text, textAlign: 'center' }}>
             {t.predictAndWin.errorState.title}
           </Text>
           <Text
             style={{
               fontFamily: regular,
               fontSize: f(12),
-              color: PW.textTileSub,
+              color: theme.textTileSub,
               textAlign: 'center',
             }}
           >
             {t.predictAndWin.errorState.subtitle}
           </Text>
           <Pressable onPress={refresh} hitSlop={8} style={{ marginTop: s(6) }}>
-            <Text style={{ fontFamily: semibold, fontSize: f(13), color: PW.vsTop }}>
+            <Text style={{ fontFamily: semibold, fontSize: f(13), color: theme.vsTop }}>
               {t.predictAndWin.errorState.retry}
             </Text>
           </Pressable>
@@ -86,7 +87,8 @@ export default function CompetitionDetailScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: PW.screen }}>
+    <View style={{ flex: 1, backgroundColor: theme.screen }}>
+      <StatusBar barStyle={theme.statusBarStyle === 'dark' ? 'dark-content' : 'light-content'} />
       <ScrollView
         contentContainerStyle={{
           paddingBottom: insets.bottom + s(40),

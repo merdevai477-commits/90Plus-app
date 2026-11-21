@@ -45,13 +45,10 @@ import {
   IconStoreTruckGreen,
   IconStoreVerified,
 } from './storePageIcons';
-import {
-  PW,
-  usePWContentWidth,
+import { usePWContentWidth,
   usePWDirection,
   usePWFonts,
-  usePWScale,
-} from './theme';
+  usePWScale, usePWTheme } from './theme';
 
 function openExternal(url: string) {
   const trimmed = url.trim();
@@ -164,6 +161,7 @@ export function SponsorStorePage({
   onShare?: () => void;
   onOpenMap?: () => void;
 }) {
+  const theme = usePWTheme();
   const insets = useSafeAreaInsets();
   const { f } = usePWScale();
   const { contentWidth, cardScale } = usePWContentWidth();
@@ -291,7 +289,7 @@ export function SponsorStorePage({
               <View style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(8) }}>
                 {sponsor.isVerified ? <IconStoreVerified width={c(16)} height={c(16)} /> : null}
                 <Text
-                  style={{ fontFamily: bold, fontSize: f(16), color: PW.text, textAlign: dir.textAlign }}
+                  style={{ fontFamily: bold, fontSize: f(16), color: theme.text, textAlign: dir.textAlign }}
                   numberOfLines={1}
                 >
                   {sponsor.name}
@@ -323,7 +321,7 @@ export function SponsorStorePage({
             <View style={{ alignItems: dir.alignStart, gap: c(8) }}>
               <View style={{ flexDirection: figmaRow, alignItems: 'center', gap: c(4) }}>
                 <Text style={{ fontFamily: medium, fontSize: f(14), color: '#CECECE' }}>{store.ratingLabel}</Text>
-                <Text style={{ fontFamily: medium, fontSize: f(15), color: PW.text }}>(4.5)</Text>
+                <Text style={{ fontFamily: medium, fontSize: f(15), color: theme.text }}>(4.5)</Text>
                 <IconStoreStar width={c(16)} height={c(16)} />
               </View>
               {locationSummary ? (
@@ -384,7 +382,7 @@ export function SponsorStorePage({
               colors={following ? ['#2E146A', '#170D2B'] : ['#8B5CF6', '#2E146A']}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={{ fontFamily: bold, fontSize: f(12), color: PW.text }}>{followLabel}</Text>
+            <Text style={{ fontFamily: bold, fontSize: f(12), color: theme.text }}>{followLabel}</Text>
             <IconStoreFollow width={c(16)} height={c(16)} />
           </Pressable>
 
