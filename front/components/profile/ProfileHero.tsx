@@ -304,23 +304,7 @@ const ProfileHero = memo(function ProfileHero({
               ) : null}
             </View>
 
-            {onSharePress ? (
-              <TouchableOpacity
-                style={[
-                  styles.sideActionBtn,
-                  {
-                    backgroundColor: C.profilePrimarySoft,
-                    borderColor: C.embossBorder,
-                  },
-                ]}
-                onPress={onSharePress}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={t.profile.shareProfile}
-              >
-                <Ionicons name="share-social-outline" size={20} color={C.profilePrimary} />
-              </TouchableOpacity>
-            ) : isOwnProfile && onEditPress ? (
+            {isOwnProfile && onEditPress ? (
               <TouchableOpacity
                 style={[
                   styles.sideActionBtn,
@@ -335,6 +319,22 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityLabel={t.profile.editProfile}
               >
                 <Ionicons name="pencil" size={18} color={C.profilePrimary} />
+              </TouchableOpacity>
+            ) : !isOwnProfile && onSharePress ? (
+              <TouchableOpacity
+                style={[
+                  styles.sideActionBtn,
+                  {
+                    backgroundColor: C.profilePrimarySoft,
+                    borderColor: C.embossBorder,
+                  },
+                ]}
+                onPress={onSharePress}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={t.profile.shareProfile}
+              >
+                <Ionicons name="share-social-outline" size={20} color={C.profilePrimary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.editBtnSpacer} />

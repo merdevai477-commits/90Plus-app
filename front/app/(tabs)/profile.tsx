@@ -1763,7 +1763,6 @@ function OwnProfileScreen() {
           onAvatarPress={handleAvatarPress}
           onSettingsPress={() => router.push('/(tabs)/settings')}
           onMorePress={handleMorePress}
-          onSharePress={handleSharePress}
           onEditPress={handleEditProfile}
           viewAllBioLabel={t.profile.viewAllBio}
           showLessBioLabel={t.profile.showLess}
