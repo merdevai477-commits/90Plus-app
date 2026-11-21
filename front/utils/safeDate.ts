@@ -65,26 +65,36 @@ export function safeFormatMatchTime(fixtureDate: string | null | undefined): str
   }
 }
 
+function startOfLocalDayMs(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
 /**
- * Weekday + DD/MM for upcoming matches on a day other than today
- * (e.g. "الاثنين 23/11" / "Monday 23/11"). Returns null when kickoff is today
- * so the UI can keep the generic "Upcoming" label.
+ * Relative day label for upcoming kickoffs:
+ * - today → "اليوم" / "Today"
+ * - tomorrow → "غداً" / "Tomorrow"
+ * - otherwise → weekday + DD/MM (e.g. "الاثنين 23/11")
  */
 export function formatUpcomingMatchDayLabel(
   fixtureDate: string | number | Date | null | undefined,
   language: string,
   now: Date = new Date(),
+  labels?: { today?: string; tomorrow?: string },
 ): string | null {
   const date = safeParseDate(fixtureDate);
   if (!date) return null;
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return null;
-  }
-  const locale = language?.toLowerCase().startsWith('ar') ? 'ar' : 'en';
+
+  const isAr = language?.toLowerCase().startsWith('ar');
+  const todayLabel = labels?.today ?? (isAr ? 'اليوم' : 'Today');
+  const tomorrowLabel = labels?.tomorrow ?? (isAr ? 'غداً' : 'Tomorrow');
+
+  const dayDiff = Math.round(
+    (startOfLocalDayMs(date) - startOfLocalDayMs(now)) / 86_400_000,
+  );
+  if (dayDiff === 0) return todayLabel;
+  if (dayDiff === 1) return tomorrowLabel;
+
+  const locale = isAr ? 'ar' : 'en';
   let weekday = '';
   try {
     weekday = date.toLocaleDateString(locale, { weekday: 'long' });

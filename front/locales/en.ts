@@ -934,6 +934,8 @@ export const en = {
       interrupted: 'Interrupted',
       walkover: 'Walkover',
       upcoming: 'UPCOMING',
+      today: 'Today',
+      tomorrow: 'Tomorrow',
     },
     screen: {
       title: 'Live Score',

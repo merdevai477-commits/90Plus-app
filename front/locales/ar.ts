@@ -586,6 +586,8 @@ export const ar = {
       interrupted: 'متوقفة',
       walkover: 'فوز بالانسحاب',
       upcoming: 'قادمة',
+      today: 'اليوم',
+      tomorrow: 'غداً',
     },
     screen: {
       title: 'النتائج\u00A0المباشرة',

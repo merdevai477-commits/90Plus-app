@@ -506,10 +506,14 @@ const MatchRow = memo(function MatchRow({
       : null;
   const upcomingDayLabel =
     fixture.status === 'UPCOMING'
-      ? formatUpcomingMatchDayLabel(fixture.matchDate, language)
+      ? formatUpcomingMatchDayLabel(fixture.matchDate, language, new Date(), {
+          today: t('matches.status.today'),
+          tomorrow: t('matches.status.tomorrow'),
+        })
       : null;
   const upcomingStatusLabel =
     upcomingDayLabel || t('matches.status.upcoming');
+  const upcomingIsDatedLabel = Boolean(upcomingDayLabel && upcomingDayLabel.includes('/'));
 
   const rowContent = (
     <>
@@ -548,9 +552,9 @@ const MatchRow = memo(function MatchRow({
                 <Text style={styles.specialBadge} numberOfLines={1}>{specialStatusLabel}</Text>
               </View>
             ) : fixture.status === 'UPCOMING' ? (
-              <View style={[styles.upcomingBadgeWrap, upcomingDayLabel ? styles.upcomingDayBadgeWrap : null]}>
+              <View style={[styles.upcomingBadgeWrap, upcomingIsDatedLabel ? styles.upcomingDayBadgeWrap : null]}>
                 <Text
-                  style={[styles.upcomingBadge, upcomingDayLabel ? styles.upcomingDayBadge : null]}
+                  style={[styles.upcomingBadge, upcomingIsDatedLabel ? styles.upcomingDayBadge : null]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.75}

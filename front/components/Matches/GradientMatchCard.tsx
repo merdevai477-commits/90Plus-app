@@ -172,7 +172,10 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
   const isLive = match.status === 'live';
   const isUpcoming = match.status === 'upcoming';
   const upcomingDayLabel = isUpcoming
-    ? formatUpcomingMatchDayLabel(match.fixtureDate, language)
+    ? formatUpcomingMatchDayLabel(match.fixtureDate, language, new Date(), {
+        today: t.matches?.status?.today ?? (language === 'ar' ? 'اليوم' : 'Today'),
+        tomorrow: t.matches?.status?.tomorrow ?? (language === 'ar' ? 'غداً' : 'Tomorrow'),
+      })
     : null;
   const canPredict = showPrediction && isUpcoming && !userPrediction && onPredictionSubmit;
 
