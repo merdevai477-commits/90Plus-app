@@ -450,30 +450,34 @@ export function LineupBelowSections({
                 key={`sub-row-${ri}`}
                 style={[styles.gridRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
               >
-                {row.map((swap) => (
-                  <SquadPlayerCard
-                    key={`sub-${swap.in.id ?? swap.in.name}-${swap.minute}-${swap.out.id ?? swap.out.name}`}
-                    name={swap.in.name}
-                    number={swap.in.number}
-                    athleteId={swap.in.id}
-                    photoUri={
-                      swap.in.id
-                        ? resolvePhoto(swap.in.id, swap.in.photo, 256) ||
-                          swap.in.photo ||
-                          (swap.out.id
-                            ? resolvePhoto(swap.out.id, swap.out.photo, 256) || swap.out.photo
-                            : swap.out.photo)
-                        : swap.in.photo || swap.out.photo
-                    }
-                    swappedWith={swap.out.name}
-                    language={language}
-                    rtl={rtl}
-                    onPress={
-                      onPlayerPress && swap.in.id ? () => onPlayerPress(swap.in) : undefined
-                    }
-                    style={{ width: cardW, maxWidth: cardW }}
-                  />
-                ))}
+                {row.map((swap) => {
+                  const sub = swap.in;
+                  const rosterPhoto = sub.photo?.trim() || '';
+                  const resolved =
+                    (sub.id
+                      ? resolvePhoto(sub.id, rosterPhoto || sub.photo, 256)
+                      : '') ||
+                    rosterPhoto ||
+                    (swap.out.id
+                      ? resolvePhoto(swap.out.id, swap.out.photo, 256) || swap.out.photo || ''
+                      : swap.out.photo || '');
+                  return (
+                    <SquadPlayerCard
+                      key={`sub-${sub.id ?? sub.name}-${swap.minute}-${swap.out.id ?? swap.out.name}`}
+                      name={sub.name}
+                      number={sub.number}
+                      athleteId={sub.id}
+                      photoUri={resolved || null}
+                      swappedWith={swap.out.name}
+                      language={language}
+                      rtl={rtl}
+                      onPress={
+                        onPlayerPress && sub.id ? () => onPlayerPress(sub) : undefined
+                      }
+                      style={{ width: cardW, maxWidth: cardW }}
+                    />
+                  );
+                })}
                 {row.length === 1 ? <View style={{ width: cardW }} /> : null}
               </View>
             ))}

@@ -19,11 +19,18 @@ export interface LineupPitchPlayer {
 
 function toPitchPlayer(item: { player: Record<string, unknown> }): LineupPitchPlayer {
   const p = item.player;
+  const rawId = p.id ?? p.athleteId;
+  const idNum = rawId != null ? Number(rawId) : NaN;
+  const photo =
+    (typeof p.photo === 'string' && p.photo.trim()) ||
+    (typeof p.imageUrl === 'string' && p.imageUrl.trim()) ||
+    (typeof p.athletePhoto === 'string' && p.athletePhoto.trim()) ||
+    undefined;
   return {
-    id: (p.id ?? p.athleteId) as number | undefined,
+    id: Number.isFinite(idNum) && idNum > 0 ? idNum : undefined,
     name: String(p.name ?? ''),
     number: Number(p.number ?? 0),
-    photo: (p.photo as string | undefined) || undefined,
+    photo: photo || undefined,
     pos: String(p.pos ?? ''),
     grid: (p.grid as string | null) ?? null,
     fieldLine: (p.fieldLine as number | null) ?? null,
@@ -43,24 +50,69 @@ export type LineupSubstitution = {
   in: LineupPitchPlayer;
 };
 
-function lookupLineupPlayer(
+function foldPlayerName(name?: string | null): string {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function samePlayerId(a: unknown, b: unknown): boolean {
+  const na = Number(a);
+  const nb = Number(b);
+  return Number.isFinite(na) && na > 0 && na === nb;
+}
+
+function namesLikelySame(a?: string | null, b?: string | null): boolean {
+  const left = foldPlayerName(a);
+  const right = foldPlayerName(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  // Surname / short Arabic forms: "Foden" vs "Phil Foden", "إ. ندياي" vs "Ndiaye"
+  if (left.length >= 3 && right.length >= 3) {
+    if (left.endsWith(right) || right.endsWith(left)) return true;
+    if (left.includes(right) || right.includes(left)) return true;
+  }
+  return false;
+}
+
+/** Resolve a subst event player against XI / bench so we keep real photo URLs. */
+export function lookupLineupPlayer(
   id: number | null | undefined,
   name: string | null | undefined,
   pools: Array<Array<{ player: Record<string, unknown> }>>,
 ): LineupPitchPlayer {
-  for (const pool of pools) {
-    const hit = pool.find((item) => {
-      const pid = item.player.id ?? item.player.athleteId;
-      return id != null && pid === id;
-    });
-    if (hit) return toPitchPlayer(hit);
+  const wantedId = id != null && Number(id) > 0 ? Number(id) : null;
+
+  if (wantedId != null) {
+    for (const pool of pools) {
+      const hit = pool.find((item) => {
+        const p = item.player;
+        return samePlayerId(p.id, wantedId) || samePlayerId(p.athleteId, wantedId);
+      });
+      if (hit) return toPitchPlayer(hit);
+    }
   }
+
+  // Event feeds often omit / mismatch athlete ids — fall back to roster name.
+  if (name?.trim()) {
+    for (const pool of pools) {
+      const hit = pool.find((item) => namesLikelySame(String(item.player.name ?? ''), name));
+      if (hit) return toPitchPlayer(hit);
+    }
+  }
+
   return {
-    id: id ?? undefined,
+    id: wantedId ?? undefined,
     name: name?.trim() || '—',
     number: 0,
     pos: '',
   };
+}
+
+function sameTeamId(eventTeamId: unknown, lineupTeamId: unknown): boolean {
+  return samePlayerId(eventTeamId, lineupTeamId);
 }
 
 /** Substitutions that actually happened for one team, earliest first. Unused bench players are excluded. */
@@ -72,7 +124,7 @@ export function collectLineupSubstitutions(
 ): LineupSubstitution[] {
   if (!Array.isArray(events) || teamId == null) return [];
   return events
-    .filter((event) => event?.type === 'subst' && event.team?.id === teamId)
+    .filter((event) => event?.type === 'subst' && sameTeamId(event.team?.id, teamId))
     .map((event) => {
       const minute = event.time.elapsed + (event.time.extra ?? 0) * 0.01;
       const outId = event.assist?.id ?? null;

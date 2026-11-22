@@ -45,6 +45,11 @@ export function AthleteCutoutImage({
     const size = Math.max(160, Math.round(Math.max(width, height) * 2));
     const preferred = photo?.trim() || '';
     const list: string[] = [];
+    // Roster / resolved headshot first — cutouts 404 often, and bare CDN ids can
+    // resolve to the white default silhouette which looks like a missing photo.
+    if (preferred && !preferred.includes('placeholder')) {
+      list.push(preferred);
+    }
     // 365 cutouts only when the photo (or lack of one) is on the 365 CDN —
     // API-Football ids are not 365 athlete ids and would resolve to silhouettes.
     if (id > 0 && (isScores365ImageUrl(preferred) || !preferred)) {
@@ -52,7 +57,6 @@ export function AthleteCutoutImage({
     } else if (isScores365ImageUrl(preferred)) {
       list.push(...scores365AthleteCutoutCandidates(0, preferred, size, version));
     }
-    if (preferred && !preferred.includes('placeholder')) list.push(preferred);
     return [...new Set(list.filter(Boolean))];
   }, [athleteId, photo, width, height]);
 
