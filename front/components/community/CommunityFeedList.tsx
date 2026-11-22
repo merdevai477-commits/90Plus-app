@@ -142,7 +142,10 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
     if (feed.hasNextPage && !feed.isFetchingNextPage && !feed.isError) void feed.fetchNextPage();
   }, [feed]);
 
-  const onOpenImage = useCallback((p: CommunityPost) => p.image && setViewerUrl(p.image.url), []);
+  const onOpenImage = useCallback((p: CommunityPost, imageUrl?: string) => {
+    const url = imageUrl ?? p.image?.url;
+    if (url) setViewerUrl(url);
+  }, []);
   const onComment = useCallback((p: CommunityPost) => setSheetPostId(p.id), []);
   const onMenu = useCallback((p: CommunityPost) => setMenuPost(p), []);
   const onShare = useCallback((p: CommunityPost) => void actions.share(p), [actions]);

@@ -1,5 +1,6 @@
-import React, { memo, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { memo, useEffect, useState } from 'react';
+import { NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import Animated, {
   FadeIn,
@@ -151,35 +152,18 @@ export const GhostPostCard = memo(function GhostPostCard({
           </View>
         )}
 
-        {ghostImages.length > 0 && (
-          <View
-            style={[
-              styles.imageWrap,
-              {
-                height: imageLayout?.height,
-                backgroundColor: colors.contentBox,
-                flexDirection: ghostImages.length > 1 ? 'row' : 'column',
-                gap: ghostImages.length > 1 ? 6 : 0,
-              },
-            ]}
-          >
-            {ghostImages.map((img, index) => (
-              <Image
-                key={`${pending.clientId}-g-${index}`}
-                source={{ uri: img.uri }}
-                style={
-                  ghostImages.length > 1
-                    ? {
-                        width: Math.floor((contentWidth - 6 * (ghostImages.length - 1)) / ghostImages.length),
-                        height: imageLayout?.height,
-                      }
-                    : StyleSheet.absoluteFill
-                }
-                contentFit={imageLayout?.fit ?? 'contain'}
-              />
-            ))}
-            {!failed && <View style={styles.imageVeil} />}
-          </View>
+        {ghostImages.length > 0 && imageLayout && (
+          <GhostImages
+            clientId={pending.clientId}
+            images={ghostImages}
+            width={contentWidth}
+            height={imageLayout.height}
+            fit={imageLayout.fit ?? 'contain'}
+            backgroundColor={colors.contentBox}
+            accent={colors.accent}
+            failed={failed}
+            isDark={isDark}
+          />
         )}
       </Animated.View>
 
@@ -241,6 +225,84 @@ export const GhostPostCard = memo(function GhostPostCard({
     </Animated.View>
   );
 });
+
+function GhostImages({
+  clientId,
+  images,
+  width,
+  height,
+  fit,
+  backgroundColor,
+  accent,
+  failed,
+  isDark,
+}: {
+  clientId: string;
+  images: Array<{ uri: string }>;
+  width: number;
+  height: number;
+  fit: 'cover' | 'contain';
+  backgroundColor: string;
+  accent: string;
+  failed: boolean;
+  isDark: boolean;
+}) {
+  const [page, setPage] = useState(0);
+  const multi = images.length > 1;
+
+  const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width));
+    setPage(Math.max(0, Math.min(images.length - 1, next)));
+  };
+
+  return (
+    <View style={{ width, gap: multi ? 8 : 0 }}>
+      <View style={[styles.imageWrap, { height, backgroundColor }]}>
+        {multi ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            nestedScrollEnabled
+            bounces={false}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onScrollEnd}
+            style={{ width, height }}
+          >
+            {images.map((img, index) => (
+              <Image
+                key={`${clientId}-g-${index}`}
+                source={{ uri: img.uri }}
+                style={{ width, height }}
+                contentFit={fit}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <Image source={{ uri: images[0].uri }} style={StyleSheet.absoluteFill} contentFit={fit} />
+        )}
+        {!failed && <View style={styles.imageVeil} />}
+      </View>
+      {multi && (
+        <View style={styles.dotsRow} pointerEvents="none">
+          {images.map((_, index) => (
+            <View
+              key={`${clientId}-dot-${index}`}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: index === page ? accent : isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.22)',
+                  width: index === page ? 7 : 6,
+                  height: index === page ? 7 : 6,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   ghost: {
@@ -306,6 +368,16 @@ const styles = StyleSheet.create({
   imageVeil: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(9,7,16,0.35)',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    minHeight: 8,
+  },
+  dot: {
+    borderRadius: 999,
   },
   track: {
     height: 3,

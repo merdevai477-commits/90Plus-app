@@ -1,8 +1,15 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -37,7 +44,7 @@ export interface PostCardHandlers {
   onComment: (post: CommunityPost) => void;
   onShare: (post: CommunityPost) => void;
   onMenu: (post: CommunityPost) => void;
-  onOpenImage: (post: CommunityPost) => void;
+  onOpenImage: (post: CommunityPost, imageUrl?: string) => void;
   onProfile: (username: string) => void;
   onHashtag: (tag: string) => void;
   onMention: (username: string) => void;
@@ -122,7 +129,7 @@ function PostImage({
 }: {
   post: CommunityPost;
   width: number;
-  onOpen: () => void;
+  onOpen: (imageUrl: string) => void;
   onDoubleTap: () => void;
   priority?: 'low' | 'normal' | 'high';
 }) {
@@ -131,80 +138,142 @@ function PostImage({
   const images = postImages(post);
   const primary = images[0] ?? null;
   const layout = postImageLayout(width, primary);
+  const [page, setPage] = useState(0);
+  const pageRef = useRef(0);
 
   const burst = useCallback(() => {
     onDoubleTap();
   }, [onDoubleTap]);
 
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDelay(240)
-    .onEnd((_e, ok) => {
-      if (!ok) return;
-      heart.value = withSequence(
-        withSpring(1, { damping: 8, stiffness: 320 }),
-        withDelay(380, withTiming(0, { duration: 220 })),
-      );
-      runOnJS(burst)();
-    });
-  const singleTap = Gesture.Tap().onEnd((_e, ok) => {
-    if (ok) runOnJS(onOpen)();
-  });
-  const gesture = Gesture.Exclusive(doubleTap, singleTap);
+  const openCurrent = useCallback(() => {
+    const img = images[pageRef.current] ?? images[0];
+    if (img?.url) onOpen(img.url);
+  }, [images, onOpen]);
+
+  const playHeart = useCallback(() => {
+    heart.value = withSequence(
+      withSpring(1, { damping: 8, stiffness: 320 }),
+      withDelay(380, withTiming(0, { duration: 220 })),
+    );
+    burst();
+  }, [burst, heart]);
+
+  const tapGesture = useCallback(
+    () =>
+      Gesture.Exclusive(
+        Gesture.Tap()
+          .numberOfTaps(2)
+          .maxDelay(240)
+          .onEnd((_e, ok) => {
+            if (ok) runOnJS(playHeart)();
+          }),
+        Gesture.Tap().onEnd((_e, ok) => {
+          if (ok) runOnJS(openCurrent)();
+        }),
+      ),
+    [openCurrent, playHeart],
+  );
 
   const heartStyle = useAnimatedStyle(() => ({
     opacity: heart.value,
     transform: [{ scale: 0.4 + heart.value * 0.8 }],
   }));
 
+  const onScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const next = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width));
+      const clamped = Math.max(0, Math.min(images.length - 1, next));
+      pageRef.current = clamped;
+      setPage(clamped);
+    },
+    [images.length, width],
+  );
+
   if (!images.length || !primary) return null;
-  const tileW =
-    images.length > 1 ? Math.floor((width - 6 * (images.length - 1)) / images.length) : width;
+
+  const multi = images.length > 1;
+  const frameStyle = [
+    styles.imageWrap,
+    {
+      width,
+      height: layout.height,
+      backgroundColor: isDark ? '#15111F' : colors.contentBox,
+      borderColor: isDark ? 'transparent' : 'rgba(75,31,163,0.12)',
+      borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+    },
+  ];
+
+  const slide = (img: CommunityImage, index: number) => (
+    <GestureDetector key={`${post.id}-${img.url}-${index}`} gesture={tapGesture()}>
+      <View style={{ width, height: layout.height }} accessibilityRole="imagebutton">
+        <Image
+          source={{ uri: img.url }}
+          placeholder={img.placeholder ? { uri: img.placeholder } : undefined}
+          placeholderContentFit={layout.fit}
+          style={StyleSheet.absoluteFill}
+          contentFit={layout.fit}
+          transition={120}
+          cachePolicy="memory-disk"
+          recyclingKey={`${post.id}-${index}`}
+          priority={index === 0 ? priority : 'low'}
+          allowDownscaling
+        />
+      </View>
+    </GestureDetector>
+  );
 
   return (
-    <GestureDetector gesture={gesture}>
-      <View
-        style={[
-          styles.imageWrap,
-          {
-            width,
-            minHeight: layout.height,
-            backgroundColor: isDark ? '#15111F' : colors.contentBox,
-            borderColor: isDark ? 'transparent' : 'rgba(75,31,163,0.12)',
-            borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
-            flexDirection: images.length > 1 ? 'row' : 'column',
-            gap: images.length > 1 ? 6 : 0,
-          },
-        ]}
-        accessibilityRole="imagebutton"
-      >
-        {images.map((img: CommunityImage, index) => {
-          const tileLayout = postImageLayout(tileW, img);
-          return (
-            <Image
-              key={`${post.id}-${img.url}-${index}`}
-              source={{ uri: img.url }}
-              placeholder={img.placeholder ? { uri: img.placeholder } : undefined}
-              placeholderContentFit={layout.fit}
-              style={
-                images.length > 1
-                  ? { width: tileW, height: Math.min(layout.height, tileLayout.height) }
-                  : StyleSheet.absoluteFill
-              }
-              contentFit={layout.fit}
-              transition={120}
-              cachePolicy="memory-disk"
-              recyclingKey={`${post.id}-${index}`}
-              priority={priority}
-              allowDownscaling
-            />
-          );
-        })}
+    <View style={{ width, gap: multi ? 8 : 0 }}>
+      <View style={frameStyle}>
+        {multi ? (
+          <ScrollView
+            horizontal
+            pagingEnabled
+            nestedScrollEnabled
+            bounces={false}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onScrollEnd}
+            style={{ width, height: layout.height }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {images.map((img, index) => slide(img, index))}
+          </ScrollView>
+        ) : (
+          slide(primary, 0)
+        )}
+
+        {multi && (
+          <View style={styles.pageBadge} pointerEvents="none">
+            <Text style={styles.pageBadgeText}>
+              {page + 1}/{images.length}
+            </Text>
+          </View>
+        )}
+
         <Animated.View pointerEvents="none" style={[styles.burst, heartStyle]}>
           <Image source={CI.heartFilled} tintColor="#FFFFFF" style={{ width: 92, height: 92 }} contentFit="contain" />
         </Animated.View>
       </View>
-    </GestureDetector>
+
+      {multi && (
+        <View style={styles.dotsRow} pointerEvents="none">
+          {images.map((_, index) => (
+            <View
+              key={`${post.id}-dot-${index}`}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: index === page ? colors.accent : isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.22)',
+                  width: index === page ? 7 : 6,
+                  height: index === page ? 7 : 6,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -482,7 +551,7 @@ function PostCardBase({
           post={post}
           width={contentWidth}
           priority={imagePriority}
-          onOpen={() => onOpenImage(post)}
+          onOpen={(imageUrl) => onOpenImage(post, imageUrl)}
           onDoubleTap={() => onDoubleTapLike(post)}
         />
         <View style={[styles.actions, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
@@ -696,6 +765,31 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pageBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  pageBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    minHeight: 8,
+  },
+  dot: {
+    borderRadius: 999,
   },
   burst: {
     position: 'absolute',

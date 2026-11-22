@@ -63,7 +63,10 @@ function CommunityPostScreenInner() {
     else router.replace('/(tabs)/community');
   }, [router]);
 
-  const onOpenImage = useCallback((p: CommunityPost) => p.image && setViewerUrl(p.image.url), []);
+  const onOpenImage = useCallback((p: CommunityPost, imageUrl?: string) => {
+    const url = imageUrl ?? p.image?.url;
+    if (url) setViewerUrl(url);
+  }, []);
   const onComment = useCallback(() => ctx.composerRef.current?.focus(), [ctx.composerRef]);
   const onShare = useCallback((p: CommunityPost) => void actions.share(p), [actions]);
   const onMenu = useCallback(() => setMenuOpen(true), []);
