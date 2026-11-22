@@ -15,6 +15,7 @@ import { isClockBaselineEnabled, noteDetailsHeaderRender } from '../../utils/clo
 import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import { LIVE_RED } from '../../constants/tokens';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 
 interface MatchHeaderProps {
   homeTeam: string;
@@ -89,16 +90,22 @@ function TeamLogo({
   uri?: string;
   size: number;
 }): React.ReactElement {
-  if (uri) {
+  // Slight inset so tall crests aren't clipped on iOS; fetch a sharper CDN size.
+  const mark = Math.round(size * 0.88);
+  const sizedUri = uri ? with365ImageSize(uri, Math.max(192, size * 3)) ?? uri : undefined;
+  if (sizedUri) {
     return (
-      <Image
-        source={{ uri }}
-        style={{ width: size, height: size }}
-        contentFit="contain"
-        transition={150}
-        cachePolicy="memory-disk"
-        recyclingKey={uri}
-      />
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <Image
+          source={{ uri: sizedUri }}
+          style={{ width: mark, height: mark }}
+          contentFit="contain"
+          transition={150}
+          cachePolicy="memory-disk"
+          recyclingKey={sizedUri}
+          priority="high"
+        />
+      </View>
     );
   }
   return (

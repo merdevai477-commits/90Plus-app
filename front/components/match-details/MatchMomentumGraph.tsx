@@ -257,7 +257,7 @@ function LegendRow({
 export function MatchMomentumGraph(props: Props) {
   const { width: screenW } = useWindowDimensions();
   const { colors, isDark } = useMatchDetailsTheme();
-  const cardW = Math.min(screenW - 32, 420);
+  const cardW = Math.min(Math.max(0, screenW - 56), 400);
   const uid = useId().replace(/:/g, '');
   const [remote, setRemote] = useState<MomentumSeries | null | undefined>(undefined);
   const awayFill = isDark ? AWAY_GREY_DARK : AWAY_GREY_LIGHT;

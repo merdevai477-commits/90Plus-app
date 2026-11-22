@@ -14,7 +14,8 @@ type Props = {
 /** Replaces the momentum card when a full-match recap video exists. */
 export function MatchSummaryVideo({ thumbnail, url, playLabel, onPlay }: Props) {
   const { width: screenW } = useWindowDimensions();
-  const cardW = Math.min(screenW - 32, 420);
+  // Keep clear side inset on Android/iPhone (parent already pads; avoid full-bleed).
+  const cardW = Math.min(Math.max(0, screenW - 56), 400);
 
   return (
     <Pressable

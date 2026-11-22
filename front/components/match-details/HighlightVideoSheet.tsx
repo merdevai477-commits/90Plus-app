@@ -137,7 +137,7 @@ function resetSessionRefs(refs: {
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const { t } = useTranslation();
   const { width: screenWidth } = useWindowDimensions();
-  const playerWidth = Math.max(280, screenWidth - 24);
+  const playerWidth = Math.max(280, screenWidth - 48);
   const playerHeight = Math.round(playerWidth * 9 / 16);
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);

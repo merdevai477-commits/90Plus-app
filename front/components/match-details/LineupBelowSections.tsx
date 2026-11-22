@@ -452,20 +452,24 @@ export function LineupBelowSections({
               >
                 {row.map((swap) => (
                   <SquadPlayerCard
-                    key={`sub-${swap.out.id ?? swap.out.name}-${swap.minute}-${swap.in.id ?? swap.in.name}`}
-                    name={swap.out.name}
-                    number={swap.out.number}
-                    athleteId={swap.out.id}
+                    key={`sub-${swap.in.id ?? swap.in.name}-${swap.minute}-${swap.out.id ?? swap.out.name}`}
+                    name={swap.in.name}
+                    number={swap.in.number}
+                    athleteId={swap.in.id}
                     photoUri={
-                      swap.out.id
-                        ? resolvePhoto(swap.out.id, swap.out.photo, 160) || swap.out.photo
-                        : swap.out.photo
+                      swap.in.id
+                        ? resolvePhoto(swap.in.id, swap.in.photo, 256) ||
+                          swap.in.photo ||
+                          (swap.out.id
+                            ? resolvePhoto(swap.out.id, swap.out.photo, 256) || swap.out.photo
+                            : swap.out.photo)
+                        : swap.in.photo || swap.out.photo
                     }
-                    swappedWith={swap.in.name}
+                    swappedWith={swap.out.name}
                     language={language}
                     rtl={rtl}
                     onPress={
-                      onPlayerPress && swap.out.id ? () => onPlayerPress(swap.out) : undefined
+                      onPlayerPress && swap.in.id ? () => onPlayerPress(swap.in) : undefined
                     }
                     style={{ width: cardW, maxWidth: cardW }}
                   />

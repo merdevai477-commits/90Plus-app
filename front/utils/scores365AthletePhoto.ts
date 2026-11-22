@@ -73,7 +73,10 @@ export function toScores365CutoutUrl(
   return undefined;
 }
 
-/** Cutout first, then regular headshot candidates — for “مجسم” lineup cards. */
+/** Cutout first, then the real preferred headshot, then circular CDN fallbacks.
+ * Preferred must come before `d_Athletes:default.png` circular URLs — those return
+ * HTTP 200 with a silhouette and would otherwise block real photos forever.
+ */
 export function scores365AthleteCutoutCandidates(
   athleteId: number,
   preferred?: string | null,
@@ -83,9 +86,9 @@ export function scores365AthleteCutoutCandidates(
   const urls: string[] = [];
   const cutout = toScores365CutoutUrl(athleteId, preferred, size, imageVersion);
   if (cutout) urls.push(cutout);
-  urls.push(...scores365AthletePhotoCandidates(athleteId, preferred, 250, imageVersion));
   const preferredFixed = preferScores365AthletesPhotoUrl(preferred?.trim() || null);
   if (preferredFixed) urls.push(preferredFixed);
+  urls.push(...scores365AthletePhotoCandidates(athleteId, preferred, 250, imageVersion));
   return [...new Set(urls.filter(Boolean))];
 }
 

@@ -43,14 +43,16 @@ export function AthleteCutoutImage({
     const id = athleteId && athleteId > 0 ? athleteId : 0;
     const version = scores365AthleteImageVersionFromUrl(photo);
     const size = Math.max(160, Math.round(Math.max(width, height) * 2));
+    const preferred = photo?.trim() || '';
     const list: string[] = [];
-    // Always try the 365 cutout by id first — background removal only works there.
-    if (id > 0) {
-      list.push(...scores365AthleteCutoutCandidates(id, photo, size, version));
-    } else if (isScores365ImageUrl(photo)) {
-      list.push(...scores365AthleteCutoutCandidates(0, photo, size, version));
+    // 365 cutouts only when the photo (or lack of one) is on the 365 CDN —
+    // API-Football ids are not 365 athlete ids and would resolve to silhouettes.
+    if (id > 0 && (isScores365ImageUrl(preferred) || !preferred)) {
+      list.push(...scores365AthleteCutoutCandidates(id, preferred || null, size, version));
+    } else if (isScores365ImageUrl(preferred)) {
+      list.push(...scores365AthleteCutoutCandidates(0, preferred, size, version));
     }
-    if (photo?.trim()) list.push(photo.trim());
+    if (preferred && !preferred.includes('placeholder')) list.push(preferred);
     return [...new Set(list.filter(Boolean))];
   }, [athleteId, photo, width, height]);
 

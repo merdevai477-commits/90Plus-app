@@ -6,6 +6,7 @@ import { PulsingDot } from './MatchHeader';
 import { useMatchStatusLine, type MatchStatusLineInput } from './useMatchStatusLine';
 import { LIVE_RED } from '../../constants/tokens';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 
 type MatchCompactScoreProps = MatchStatusLineInput & {
   homeTeam: string;
@@ -20,8 +21,15 @@ type Tone = 'live' | 'halftime' | 'finished' | 'upcoming';
 
 function CompactLogo({ uri }: { uri?: string | null }) {
   if (!uri) return <View style={[styles.logo, styles.logoFallback]} />;
+  const sized = with365ImageSize(uri, 96) ?? uri;
   return (
-    <Image source={{ uri }} style={styles.logo} contentFit="contain" cachePolicy="memory-disk" recyclingKey={uri} />
+    <Image
+      source={{ uri: sized }}
+      style={styles.logo}
+      contentFit="contain"
+      cachePolicy="memory-disk"
+      recyclingKey={sized}
+    />
   );
 }
 

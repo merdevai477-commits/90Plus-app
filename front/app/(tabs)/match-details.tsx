@@ -1476,12 +1476,19 @@ const MatchDetailsScreen = () => {
     }
   }, [fixture?.fixture?.status?.short, activeTab, loadStatsIfNeeded, loadStandingsIfNeeded]);
 
-  // Standings need fixture league ids — load when fixture arrives while tab is open
+  // Prefetch standings so the tab only appears when a table exists.
   useEffect(() => {
-    if (activeTab !== 'standings' || !fixture) return;
-    if (loadedTabsRef.current.has('standings')) return;
+    if (!fixture) return;
     void loadStandingsIfNeeded();
-  }, [activeTab, fixture?.fixture?.id, loadStandingsIfNeeded]);
+  }, [fixture?.fixture?.id, loadStandingsIfNeeded]);
+
+  // Leave standings if the table disappeared / never loaded.
+  useEffect(() => {
+    if (activeTab !== 'standings') return;
+    if (standingsLoading) return;
+    if (standingsGroups.length > 0) return;
+    setActiveTab(infoTabVisible ? 'info' : 'events');
+  }, [activeTab, standingsLoading, standingsGroups.length, infoTabVisible]);
 
   // Refresh group table during live matches (updates after goals)
   useEffect(() => {
@@ -1548,6 +1555,20 @@ const MatchDetailsScreen = () => {
     loadTabData(tab);
   }, [loadTabData]);
 
+  const openRelatedMatch = useCallback(
+    (relatedFixtureId?: number | null) => {
+      if (relatedFixtureId == null || !Number.isFinite(relatedFixtureId) || relatedFixtureId <= 0) {
+        return;
+      }
+      if (String(relatedFixtureId) === String(fixtureId)) return;
+      router.push({
+        pathname: '/(tabs)/match-details',
+        params: { fixtureId: String(relatedFixtureId) },
+      });
+    },
+    [router, fixtureId],
+  );
+
   const tabs = useMemo(() => [
     ...(infoTabVisible
       ? [{
@@ -1570,8 +1591,10 @@ const MatchDetailsScreen = () => {
       : []),
     { key: 'chats', label: t.matchDetails.chats || 'Chats', icon: 'chatbubbles' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
-    { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
-  ], [infoTabVisible, t, language, events.length, isFinishedMatch, showLineupsTab]);
+    ...(standingsGroups.length > 0
+      ? [{ key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const }]
+      : []),
+  ], [infoTabVisible, t, language, events.length, isFinishedMatch, showLineupsTab, standingsGroups.length]);
 
   // ── Swipeable tab pager ───────────────────────────────────────────────────
   const { width: windowWidth } = useWindowDimensions();
@@ -2073,11 +2096,12 @@ const MatchDetailsScreen = () => {
     }
 
     const matchClock = fixture?.fixture?.status?.elapsed ?? null;
+    // Latest first (top → bottom), so the match reads from the end of play downward.
     const sortedEvents = [...events].sort((a, b) => {
       const ea = a.time?.elapsed ?? 0;
       const eb = b.time?.elapsed ?? 0;
-      if (ea !== eb) return ea - eb;
-      return (a.time?.extra ?? 0) - (b.time?.extra ?? 0);
+      if (ea !== eb) return eb - ea;
+      return (b.time?.extra ?? 0) - (a.time?.extra ?? 0);
     });
 
     return (
@@ -2655,8 +2679,12 @@ const MatchDetailsScreen = () => {
           {h2hFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
               {h2hFixtures.map((row, index) => (
-                <View
-                  key={`h2h-${index}`}
+                <TouchableOpacity
+                  key={`h2h-${row.fixture.id}-${index}`}
+                  activeOpacity={0.75}
+                  onPress={() => openRelatedMatch(row.fixture.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${getTeamDisplayName(row.teams.away.name, language)} ${row.goals.away ?? '-'} - ${row.goals.home ?? '-'} ${getTeamDisplayName(row.teams.home.name, language)}`}
                   style={[
                     styles.h2hCard,
                     {
@@ -2671,16 +2699,17 @@ const MatchDetailsScreen = () => {
                   <View style={styles.h2hCardRow}>
                     <View style={styles.h2hTeamSide}>
                       <TeamBadge
-                        name={row.teams.home.name}
-                        logo={row.teams.home.logo}
+                        name={row.teams.away.name}
+                        logo={row.teams.away.logo}
                         size={40}
                         color="transparent"
+                        highQuality
                       />
                       <Text
                         style={[styles.h2hTeamName, { color: mdColors.textPrimary }]}
                         numberOfLines={1}
                       >
-                        {getTeamDisplayName(row.teams.home.name, language)}
+                        {getTeamDisplayName(row.teams.away.name, language)}
                       </Text>
                     </View>
                     <View
@@ -2695,7 +2724,7 @@ const MatchDetailsScreen = () => {
                           { color: mdIsDark ? '#E9D5FF' : '#4B1FA3' },
                         ]}
                       >
-                        {row.goals.home ?? '-'} - {row.goals.away ?? '-'}
+                        {row.goals.away ?? '-'} - {row.goals.home ?? '-'}
                       </Text>
                     </View>
                     <View style={[styles.h2hTeamSide, styles.h2hTeamSideEnd]}>
@@ -2703,13 +2732,14 @@ const MatchDetailsScreen = () => {
                         style={[styles.h2hTeamName, styles.h2hTeamNameEnd, { color: mdColors.textPrimary }]}
                         numberOfLines={1}
                       >
-                        {getTeamDisplayName(row.teams.away.name, language)}
+                        {getTeamDisplayName(row.teams.home.name, language)}
                       </Text>
                       <TeamBadge
-                        name={row.teams.away.name}
-                        logo={row.teams.away.logo}
+                        name={row.teams.home.name}
+                        logo={row.teams.home.logo}
                         size={40}
                         color="transparent"
+                        highQuality
                       />
                     </View>
                   </View>
@@ -2728,7 +2758,7 @@ const MatchDetailsScreen = () => {
                       contentFit="contain"
                     />
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           ) : (
@@ -2783,8 +2813,12 @@ const MatchDetailsScreen = () => {
                 const result = resolveFormResult(teamScore, opponentScore);
 
                 return (
-                  <View
-                    key={index}
+                  <TouchableOpacity
+                    key={`last-${fixture.fixture.id}-${index}`}
+                    activeOpacity={0.75}
+                    onPress={() => openRelatedMatch(fixture.fixture.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t.matchDetails.vs} ${getTeamDisplayName(opponent.name, language)} ${teamScore} - ${opponentScore}`}
                     style={[
                       styles.fixtureCard,
                       {
@@ -2794,7 +2828,13 @@ const MatchDetailsScreen = () => {
                       },
                     ]}
                   >
-                    <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
+                    <TeamBadge
+                      name={opponent.name}
+                      logo={opponent.logo}
+                      size={40}
+                      color="transparent"
+                      highQuality
+                    />
                     <View style={styles.fixtureInfo}>
                       <Text style={[styles.fixtureOpponent, { color: mdColors.textPrimary }]} numberOfLines={1}>
                         {t.matchDetails.vs} {getTeamDisplayName(opponent.name, language)}
@@ -2821,7 +2861,7 @@ const MatchDetailsScreen = () => {
                     >
                       <Text style={styles.fixtureScore}>{teamScore} - {opponentScore}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -3762,7 +3802,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 8,
   },
