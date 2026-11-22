@@ -30,19 +30,24 @@ import { activeMentionQuery, activeSlashQuery, everyoneSuggestionMatches, isArab
 import { communityErrorMessage, fillTemplate, isImageRejected } from '../../components/community/format';
 import { CI, POST_IMAGE_RADIUS } from '../../components/community/theme';
 import {
+  cancelAllImageUploads,
   cancelImageUpload,
+  imageDraftKey,
+  listImageDrafts,
+  MAX_POST_IMAGES,
   newClientId,
+  nextImageSlot,
   publishPost,
   startImageUpload,
   usePublishStore,
-  waitForImageUpload,
+  waitForAllImageUploads,
 } from '../../hooks/community/publishQueue';
 import { findPost, updatePostEverywhere } from '../../hooks/community/communityCache';
 import { useCommunityMe } from '../../hooks/community/useCommunityMe';
 import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
 import { useMentionSearch } from '../../hooks/community/useMentionSearch';
 import { CommunityThemeProvider, useCommunityTheme } from '../../hooks/useCommunityTheme';
-import { communityApi, type CommunityAuthor } from '../../services/community.api';
+import { communityApi, postImages, type CommunityAuthor } from '../../services/community.api';
 import { toastManager } from '../../services/toastManager';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
@@ -110,10 +115,11 @@ function ComposeScreenInner() {
     return [pending?.pollOptionA ?? existing?.poll?.optionA ?? '', pending?.pollOptionB ?? existing?.poll?.optionB ?? ''];
   });
   const [caret, setCaret] = useState(0);
-  const [keepRemoteImage, setKeepRemoteImage] = useState(() => !!existing?.image);
+  const [keepRemoteImages, setKeepRemoteImages] = useState(() => postImages(existing ?? { image: null, images: [] }));
   const [saving, setSaving] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const draft = usePublishStore((st) => st.drafts[clientId]);
+  const draftsMap = usePublishStore((st) => st.drafts);
+  const imageDrafts = useMemo(() => listImageDrafts(clientId), [clientId, draftsMap]);
   const inputRef = useRef<TextInput>(null);
   const published = useRef(false);
 
@@ -130,15 +136,38 @@ function ComposeScreenInner() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) return;
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, allowsEditing: false });
-      if (result.canceled || !result.assets?.[0]) return;
-      const a = result.assets[0];
-      setKeepRemoteImage(false);
-      startImageUpload(getToken, clientId, { uri: a.uri, width: a.width || 1080, height: a.height || 1080 });
+      const localCount = imageDrafts.length;
+      const remoteCount = localCount ? 0 : keepRemoteImages.length;
+      const remaining = Math.max(0, MAX_POST_IMAGES - localCount - remoteCount);
+      if (remaining <= 0) {
+        toastManager.showError(
+          s.addPhoto,
+          (s.maxPhotosHint || 'Max {n} photos').replace('{n}', String(MAX_POST_IMAGES)),
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      if (keepRemoteImages.length) setKeepRemoteImages([]);
+      for (const asset of result.assets.slice(0, remaining)) {
+        const slot = nextImageSlot(clientId);
+        if (slot == null) break;
+        startImageUpload(getToken, imageDraftKey(clientId, slot), {
+          uri: asset.uri,
+          width: asset.width || 1080,
+          height: asset.height || 1080,
+        });
+      }
     } catch {
       toastManager.showError(s.addPhoto, s.imageFailed);
     }
-  }, [clientId, getToken, s.addPhoto, s.imageFailed]);
+  }, [clientId, getToken, imageDrafts.length, keepRemoteImages.length, s.addPhoto, s.imageFailed, s.maxPhotosHint]);
 
   useEffect(() => {
     if (params.photo === '1' && !params.restore) {
@@ -151,20 +180,22 @@ function ComposeScreenInner() {
   }, []);
 
   const isPollMode = postKind === 'TEAM_POLL';
-  const hasLocalImage = !!draft;
-  const hasRemoteImage = editing && keepRemoteImage && !!existing?.image && !hasLocalImage;
-  const hasImage = !isPollMode && (hasLocalImage || hasRemoteImage);
+  const hasLocalImage = imageDrafts.length > 0;
+  const photoCount = hasLocalImage ? imageDrafts.length : keepRemoteImages.length;
+  const hasImage = !isPollMode && photoCount > 0;
+  const canAddMorePhotos = !isPollMode && photoCount < MAX_POST_IMAGES;
   const trimmed = text.trim();
   const trimmedOptions = options.map((option) => option.trim());
   const teamsReady =
     trimmedOptions.length >= 2 &&
     trimmedOptions.every(Boolean) &&
     new Set(trimmedOptions.map((option) => option.toLowerCase())).size === trimmedOptions.length;
+  const existingPhotoCount = postImages(existing ?? { image: null, images: [] }).length;
   const dirty =
     !editing ||
     trimmed !== (existing?.content ?? '').trim() ||
     (!editingPoll && hasLocalImage) ||
-    (keepRemoteImage !== !!existing?.image && !isPollMode);
+    (keepRemoteImages.length !== existingPhotoCount && !isPollMode);
   const hasContent = isPollMode ? teamsReady || trimmed.length > 0 : trimmed.length > 0 || hasImage;
   const overLimit = text.length > MAX_LEN;
   const canPost = isPollMode
@@ -172,7 +203,7 @@ function ComposeScreenInner() {
     : (trimmed.length > 0 || hasImage) && !overLimit && !saving && (!editing || dirty);
 
   const leave = useCallback(() => {
-    if (!published.current) cancelImageUpload(clientId);
+    if (!published.current) cancelAllImageUploads(clientId);
     router.back();
   }, [clientId, router]);
 
@@ -207,22 +238,24 @@ function ComposeScreenInner() {
     if (!editId || !canPost) return;
     setSaving(true);
     try {
-      let mediaId: string | undefined;
-      if (draft) {
-        if (draft.status === 'failed' || !draft.media) {
-          startImageUpload(getToken, clientId, draft.local);
+      let mediaIds: string[] | undefined;
+      if (imageDrafts.length) {
+        for (const row of imageDrafts) {
+          if (row.draft.status === 'failed' || !row.draft.media) {
+            startImageUpload(getToken, row.key, row.draft.local);
+          }
         }
-        mediaId = (await waitForImageUpload(clientId)).id;
+        mediaIds = (await waitForAllImageUploads(clientId)).map((media) => media.id);
       }
-      const removeImage = !keepRemoteImage && !draft && !!existing?.image;
+      const removeImage = !keepRemoteImages.length && !imageDrafts.length && existingPhotoCount > 0;
       const post = await communityApi.updatePost(getToken, editId, {
         content: trimmed,
-        ...(mediaId ? { mediaId } : {}),
+        ...(mediaIds?.length ? { mediaId: mediaIds[0], mediaIds } : {}),
         ...(removeImage ? { removeImage: true } : {}),
       });
       updatePostEverywhere(qc, editId, () => post);
       qc.setQueryData(['community', 'post', editId], post);
-      cancelImageUpload(clientId);
+      cancelAllImageUploads(clientId);
       published.current = true;
       toastManager.showSuccess(s.posted, '');
       router.back();
@@ -231,7 +264,19 @@ function ComposeScreenInner() {
     } finally {
       setSaving(false);
     }
-  }, [canPost, clientId, draft, editId, existing?.image, getToken, keepRemoteImage, qc, router, s, trimmed]);
+  }, [
+    canPost,
+    clientId,
+    editId,
+    existingPhotoCount,
+    getToken,
+    imageDrafts,
+    keepRemoteImages.length,
+    qc,
+    router,
+    s,
+    trimmed,
+  ]);
 
   const post = useCallback(() => {
     if (!canPost) return;
@@ -289,13 +334,23 @@ function ComposeScreenInner() {
   );
 
   const previewW = Math.min(width, 640) - 40;
-  const previewSource = draft?.local.uri ?? (hasRemoteImage ? existing!.image!.url : null);
-  const ratio = draft
-    ? Math.min(1.25, Math.max(0.5, draft.local.height / Math.max(1, draft.local.width)))
-    : hasRemoteImage && existing?.image
-      ? Math.min(1.25, Math.max(0.5, existing.image.height / Math.max(1, existing.image.width)))
-      : 1;
-  const previewH = Math.round(previewW * ratio);
+  const previewItems = hasLocalImage
+    ? imageDrafts.map((row) => ({
+        key: row.key,
+        uri: row.draft.local.uri,
+        draft: row.draft,
+        width: row.draft.local.width,
+        height: row.draft.local.height,
+      }))
+    : keepRemoteImages.map((img, index) => ({
+        key: `remote-${index}`,
+        uri: img.url,
+        draft: null as null,
+        width: img.width,
+        height: img.height,
+      }));
+  const thumbW =
+    previewItems.length > 1 ? Math.floor((previewW - 8 * (previewItems.length - 1)) / previewItems.length) : previewW;
   const left = MAX_LEN - text.length;
   const textAlign = text ? (isArabicText(text) ? 'right' : 'left') : isAr ? 'right' : 'left';
   const name = me.displayName || me.username;
@@ -387,8 +442,8 @@ function ComposeScreenInner() {
             </Pressable>
             <Pressable
               onPress={() => {
-                cancelImageUpload(clientId);
-                setKeepRemoteImage(false);
+                cancelAllImageUploads(clientId);
+                setKeepRemoteImages([]);
                 setPostKind('TEAM_POLL');
               }}
               style={[
@@ -476,53 +531,60 @@ function ComposeScreenInner() {
           </View>
         )}
 
-        {!isPollMode && previewSource && (
-          <Animated.View entering={FadeIn.duration(180)} style={[styles.preview, { width: previewW, height: previewH }]}>
-            <Image source={{ uri: previewSource }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
-            {draft?.status === 'uploading' && (
-              <View style={styles.previewShade}>
-                <ActivityIndicator color="#FFF" />
-                <Text style={[styles.previewLabel, { fontFamily: fonts.medium }]}>
-                  {s.uploadingImage} {Math.round(draft.progress * 100)}%
-                </Text>
-              </View>
-            )}
-            {draft?.status === 'failed' &&
-              (isImageRejected(draft.error) ? (
-                <View style={[styles.previewShade, styles.previewShadeDanger]} accessibilityRole="alert">
-                  <View style={styles.errorMark}>
-                    <ShieldAlert size={28} color="#FECACA" />
-                  </View>
-                  <Text style={[styles.previewErrorTitle, { fontFamily: fonts.semibold }]}>{s.imageRejectedTitle}</Text>
-                  <Text style={[styles.previewErrorBody, { fontFamily: fonts.medium }]}>{communityErrorMessage(draft.error, s)}</Text>
-                </View>
-              ) : (
-                <Pressable
-                  style={styles.previewShade}
-                  onPress={() => startImageUpload(getToken, clientId, draft.local)}
-                  accessibilityRole="button"
+        {!isPollMode && previewItems.length > 0 && (
+          <View style={[styles.previewRow, { width: previewW }]}>
+            {previewItems.map((item) => {
+              const ratio = Math.min(1.25, Math.max(0.55, item.height / Math.max(1, item.width)));
+              const h = Math.round(thumbW * ratio);
+              const draft = item.draft;
+              return (
+                <Animated.View
+                  key={item.key}
+                  entering={FadeIn.duration(180)}
+                  style={[styles.preview, { width: thumbW, height: h }]}
                 >
-                  <RotateCcw size={26} color="#FFF" />
-                  <Text style={[styles.previewLabel, { fontFamily: fonts.medium }]}>{communityErrorMessage(draft.error, s)}</Text>
-                  <Text style={[styles.previewRetry, { fontFamily: fonts.semibold }]}>{s.retry}</Text>
-                </Pressable>
-              ))}
-            {draft && draft.status !== 'failed' && (
-              <UploadBar progress={draft.status === 'done' ? 1 : draft.progress} accent={colors.accent} />
-            )}
-            <Pressable
-              onPress={() => {
-                cancelImageUpload(clientId);
-                setKeepRemoteImage(false);
-              }}
-              hitSlop={8}
-              style={styles.removeImage}
-              accessibilityRole="button"
-              accessibilityLabel={s.removePhoto}
-            >
-              <X size={18} color="#FFF" />
-            </Pressable>
-          </Animated.View>
+                  <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+                  {draft?.status === 'uploading' && (
+                    <View style={styles.previewShade}>
+                      <ActivityIndicator color="#FFF" />
+                      <Text style={[styles.previewLabel, { fontFamily: fonts.medium }]}>
+                        {Math.round(draft.progress * 100)}%
+                      </Text>
+                    </View>
+                  )}
+                  {draft?.status === 'failed' &&
+                    (isImageRejected(draft.error) ? (
+                      <View style={[styles.previewShade, styles.previewShadeDanger]} accessibilityRole="alert">
+                        <ShieldAlert size={22} color="#FECACA" />
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={styles.previewShade}
+                        onPress={() => startImageUpload(getToken, item.key, draft.local)}
+                        accessibilityRole="button"
+                      >
+                        <RotateCcw size={22} color="#FFF" />
+                      </Pressable>
+                    ))}
+                  {draft && draft.status !== 'failed' ? (
+                    <UploadBar progress={draft.status === 'done' ? 1 : draft.progress} accent={colors.accent} />
+                  ) : null}
+                  <Pressable
+                    onPress={() => {
+                      if (draft) cancelImageUpload(item.key);
+                      else setKeepRemoteImages((current) => current.filter((img) => img.url !== item.uri));
+                    }}
+                    hitSlop={8}
+                    style={styles.removeImage}
+                    accessibilityRole="button"
+                    accessibilityLabel={s.removePhoto}
+                  >
+                    <X size={16} color="#FFF" />
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -567,10 +629,12 @@ function ComposeScreenInner() {
               ]}
               pointerEvents={isPollMode ? 'none' : 'auto'}
             >
-              {!hasImage && (
+              {canAddMorePhotos && (
                 <Pressable onPress={() => void pickImage()} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.addPhoto}>
                   <Image source={CI.image} style={styles.toolIcon} contentFit="contain" />
-                  <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>{s.addPhoto}</Text>
+                  <Text style={[styles.toolText, { fontFamily: fonts.medium, color: colors.accentSoft }]}>
+                    {hasImage ? `${s.addPhoto} (${photoCount}/${MAX_POST_IMAGES})` : s.addPhoto}
+                  </Text>
                 </Pressable>
               )}
               <Pressable onPress={() => applyInsert('#')} style={styles.tool} accessibilityRole="button" accessibilityLabel={s.hashtagTool}>
@@ -593,8 +657,8 @@ function ComposeScreenInner() {
                     setPostKind('TEXT');
                     return;
                   }
-                  cancelImageUpload(clientId);
-                  setKeepRemoteImage(false);
+                  cancelAllImageUploads(clientId);
+                  setKeepRemoteImages([]);
                   setPostKind('TEAM_POLL');
                 }}
                 style={styles.tool}
@@ -780,11 +844,16 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     padding: 0,
   },
+  previewRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignSelf: 'center',
+    alignItems: 'flex-start',
+  },
   preview: {
     borderRadius: POST_IMAGE_RADIUS,
     overflow: 'hidden',
     backgroundColor: '#15111F',
-    alignSelf: 'center',
   },
   previewShade: {
     ...StyleSheet.absoluteFillObject,

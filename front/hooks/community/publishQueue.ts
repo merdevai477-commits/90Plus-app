@@ -2,7 +2,7 @@
  * Background publishing for Community posts.
  *
  * The composer closes the moment the user taps "Post": a ghost card shows up
- * at the top of the feed while the photo finishes uploading and the post is
+ * at the top of the feed while photos finish uploading and the post is
  * created. Photos start uploading as soon as they're picked, so by the time
  * the user is done typing the slow part is usually already over.
  */
@@ -15,6 +15,7 @@ import { create } from 'zustand';
 import {
   CommunityApiError,
   communityApi,
+  MAX_POST_IMAGES,
   uploadCommunityImage,
   type CommunityAuthor,
   type CommunityMedia,
@@ -23,7 +24,11 @@ import {
 import type { GetTokenFn } from '../../utils/clerkAuthToken';
 import { prependPostToFeed } from './communityCache';
 
-const MAX_EDGE = 1440;
+/** Long-edge cap before upload — keeps multi-image posts light on R2. */
+const MAX_EDGE = 1080;
+const JPEG_QUALITY = 0.7;
+
+export { MAX_POST_IMAGES };
 
 export interface LocalImage {
   uri: string;
@@ -47,6 +52,7 @@ export interface PendingPost {
   pollOptionB?: string;
   pollOptions?: string[];
   image: LocalImage | null;
+  images: LocalImage[];
   author: CommunityAuthor;
   createdAt: string;
   status: 'publishing' | 'failed';
@@ -91,13 +97,51 @@ export function newClientId(): string {
   return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function imageDraftKey(clientId: string, index: number): string {
+  return `${clientId}#img${index}`;
+}
+
+export function listImageDraftKeys(clientId: string): string[] {
+  const drafts = usePublishStore.getState().drafts;
+  const keys: string[] = [];
+  for (let i = 0; i < MAX_POST_IMAGES; i++) {
+    const key = imageDraftKey(clientId, i);
+    if (drafts[key]) keys.push(key);
+  }
+  // Legacy single-draft key from older compose sessions.
+  if (drafts[clientId]) keys.push(clientId);
+  return keys;
+}
+
+export function listImageDrafts(clientId: string): Array<{ key: string; index: number; draft: MediaDraft }> {
+  const drafts = usePublishStore.getState().drafts;
+  const out: Array<{ key: string; index: number; draft: MediaDraft }> = [];
+  for (let i = 0; i < MAX_POST_IMAGES; i++) {
+    const key = imageDraftKey(clientId, i);
+    const draft = drafts[key];
+    if (draft) out.push({ key, index: i, draft });
+  }
+  if (!out.length && drafts[clientId]) {
+    out.push({ key: clientId, index: 0, draft: drafts[clientId] });
+  }
+  return out;
+}
+
+export function nextImageSlot(clientId: string): number | null {
+  const drafts = usePublishStore.getState().drafts;
+  for (let i = 0; i < MAX_POST_IMAGES; i++) {
+    if (!drafts[imageDraftKey(clientId, i)] && !(i === 0 && drafts[clientId])) return i;
+  }
+  return null;
+}
+
 async function shrink(local: LocalImage): Promise<LocalImage> {
   const longEdge = Math.max(local.width, local.height);
   const actions =
     longEdge > MAX_EDGE
       ? [{ resize: local.width >= local.height ? { width: MAX_EDGE } : { height: MAX_EDGE } }]
       : [];
-  const out = await manipulateAsync(local.uri, actions, { compress: 0.82, format: SaveFormat.JPEG });
+  const out = await manipulateAsync(local.uri, actions, { compress: JPEG_QUALITY, format: SaveFormat.JPEG });
   return { uri: out.uri, width: out.width, height: out.height };
 }
 
@@ -147,6 +191,10 @@ export function cancelImageUpload(id: string): void {
   usePublishStore.getState().setDraft(id, null);
 }
 
+export function cancelAllImageUploads(clientId: string): void {
+  for (const key of listImageDraftKeys(clientId)) cancelImageUpload(key);
+}
+
 interface PublishInput {
   getToken: GetTokenFn;
   queryClient: QueryClient;
@@ -164,10 +212,11 @@ interface PublishInput {
 /** Fire-and-forget: shows a ghost post immediately and publishes in the background. */
 export function publishPost(input: PublishInput): void {
   const { clientId } = input;
-  const draft = usePublishStore.getState().drafts[clientId];
+  const imageDrafts = listImageDrafts(clientId);
   const store = usePublishStore.getState();
   const kind = input.kind ?? 'TEXT';
   const isPoll = kind === 'TEAM_POLL';
+  const locals = isPoll ? [] : imageDrafts.map((row) => row.draft.local);
   store.upsertPending({
     clientId,
     content: input.content,
@@ -175,7 +224,8 @@ export function publishPost(input: PublishInput): void {
     pollOptionA: input.pollOptionA,
     pollOptionB: input.pollOptionB,
     pollOptions: input.pollOptions,
-    image: isPoll ? null : (draft?.local ?? null),
+    image: locals[0] ?? null,
+    images: locals,
     author: input.author,
     createdAt: new Date().toISOString(),
     status: 'publishing',
@@ -184,22 +234,22 @@ export function publishPost(input: PublishInput): void {
   const run = async () => {
     usePublishStore.getState().patchPending(clientId, { status: 'publishing', error: undefined });
     try {
-      let mediaId: string | null = null;
+      const mediaIds: string[] = [];
       if (!isPoll) {
-        const current = usePublishStore.getState().drafts[clientId];
-        if (current) {
-          let handle = uploads.get(clientId);
-          if (!handle || current.status === 'failed') {
-            startImageUpload(input.getToken, clientId, current.local);
-            handle = uploads.get(clientId);
+        for (const { key, draft } of listImageDrafts(clientId)) {
+          let handle = uploads.get(key);
+          if (!handle || draft.status === 'failed') {
+            startImageUpload(input.getToken, key, draft.local);
+            handle = uploads.get(key);
           }
-          const media = current.media ?? (await handle!.promise);
-          mediaId = media.id;
+          const media = draft.media ?? (await handle!.promise);
+          mediaIds.push(media.id);
         }
       }
       const post = await communityApi.createPost(input.getToken, {
         content: input.content,
-        mediaId,
+        mediaId: mediaIds[0] ?? null,
+        mediaIds,
         clientId,
         kind,
         ...(isPoll
@@ -210,17 +260,20 @@ export function publishPost(input: PublishInput): void {
             }
           : {}),
       });
-      uploads.delete(clientId);
+      for (const key of listImageDraftKeys(clientId)) {
+        uploads.delete(key);
+        usePublishStore.getState().setDraft(key, null);
+      }
       retryJobs.delete(clientId);
       prependPostToFeed(input.queryClient, post);
       usePublishStore.getState().removePending(clientId);
-      usePublishStore.getState().setDraft(clientId, null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       input.onPublished?.(post);
     } catch (error) {
       if (error instanceof CommunityApiError && error.code === 'MEDIA_NOT_FOUND') {
-        const d = usePublishStore.getState().drafts[clientId];
-        if (d) usePublishStore.getState().setDraft(clientId, { status: 'failed', media: undefined });
+        for (const { key } of listImageDrafts(clientId)) {
+          usePublishStore.getState().setDraft(key, { status: 'failed', media: undefined });
+        }
       }
       usePublishStore.getState().patchPending(clientId, { status: 'failed', error });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -237,16 +290,22 @@ export function retryPending(clientId: string): void {
 
 export function discardPending(clientId: string): void {
   retryJobs.delete(clientId);
-  cancelImageUpload(clientId);
+  cancelAllImageUploads(clientId);
   usePublishStore.getState().removePending(clientId);
 }
 
-/** Resolves when the draft's photo finishes uploading (or is already done). */
-export async function waitForImageUpload(clientId: string): Promise<CommunityMedia> {
-  const current = usePublishStore.getState().drafts[clientId];
+/** Resolves when a single draft photo finishes uploading (or is already done). */
+export async function waitForImageUpload(draftKey: string): Promise<CommunityMedia> {
+  const current = usePublishStore.getState().drafts[draftKey];
   if (!current) throw new CommunityApiError(0, 'MEDIA_NOT_FOUND', 'No image draft');
   if (current.media) return current.media;
-  const handle = uploads.get(clientId);
+  const handle = uploads.get(draftKey);
   if (!handle) throw new CommunityApiError(0, 'MEDIA_NOT_FOUND', 'Upload not started');
   return handle.promise;
+}
+
+export async function waitForAllImageUploads(clientId: string): Promise<CommunityMedia[]> {
+  const rows = listImageDrafts(clientId);
+  if (!rows.length) return [];
+  return Promise.all(rows.map((row) => waitForImageUpload(row.key)));
 }

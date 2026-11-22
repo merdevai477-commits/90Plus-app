@@ -4121,6 +4121,7 @@ export const en = {
     posted: 'Posted',
     uploadingImage: 'Uploading photo…',
     addPhoto: 'Photo',
+    maxPhotosHint: 'You can add up to {n} photos.',
     removePhoto: 'Remove photo',
     failedToPost: "Couldn't post",
     retry: 'Retry',

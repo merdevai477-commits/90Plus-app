@@ -48,7 +48,12 @@ export const GhostPostCard = memo(function GhostPostCard({
   onDiscard,
 }: Props) {
   const { colors, isDark } = useCommunityTheme();
-  const progress = usePublishStore((s) => s.drafts[pending.clientId]?.progress ?? (pending.image ? 0 : 1));
+  const progress = usePublishStore((s) => {
+    const keys = Object.keys(s.drafts).filter((key) => key === pending.clientId || key.startsWith(`${pending.clientId}#img`));
+    if (!keys.length) return pending.images?.length || pending.image ? 0 : 1;
+    const values = keys.map((key) => s.drafts[key]?.progress ?? 0);
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  });
   const failed = pending.status === 'failed';
   const isPoll = pending.kind === 'TEAM_POLL';
   const pulse = useSharedValue(0.55);
@@ -74,7 +79,8 @@ export const GhostPostCard = memo(function GhostPostCard({
   const row = isAr ? 'row-reverse' : 'row';
   const name = pending.author.displayName || pending.author.username;
   const rtl = isArabicText(pending.content);
-  const imageLayout = pending.image ? postImageLayout(contentWidth, pending.image) : null;
+  const ghostImages = pending.images?.length ? pending.images : pending.image ? [pending.image] : [];
+  const imageLayout = ghostImages[0] ? postImageLayout(contentWidth, ghostImages[0]) : null;
 
   return (
     <Animated.View
@@ -145,9 +151,33 @@ export const GhostPostCard = memo(function GhostPostCard({
           </View>
         )}
 
-        {pending.image && (
-          <View style={[styles.imageWrap, { height: imageLayout?.height, backgroundColor: colors.contentBox }]}>
-            <Image source={{ uri: pending.image.uri }} style={StyleSheet.absoluteFill} contentFit={imageLayout?.fit ?? 'contain'} />
+        {ghostImages.length > 0 && (
+          <View
+            style={[
+              styles.imageWrap,
+              {
+                height: imageLayout?.height,
+                backgroundColor: colors.contentBox,
+                flexDirection: ghostImages.length > 1 ? 'row' : 'column',
+                gap: ghostImages.length > 1 ? 6 : 0,
+              },
+            ]}
+          >
+            {ghostImages.map((img, index) => (
+              <Image
+                key={`${pending.clientId}-g-${index}`}
+                source={{ uri: img.uri }}
+                style={
+                  ghostImages.length > 1
+                    ? {
+                        width: Math.floor((contentWidth - 6 * (ghostImages.length - 1)) / ghostImages.length),
+                        height: imageLayout?.height,
+                      }
+                    : StyleSheet.absoluteFill
+                }
+                contentFit={imageLayout?.fit ?? 'contain'}
+              />
+            ))}
             {!failed && <View style={styles.imageVeil} />}
           </View>
         )}

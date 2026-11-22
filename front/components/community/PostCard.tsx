@@ -13,7 +13,14 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 
-import { pollChoices, pollTotal, pollVotedIndex, type CommunityPost } from '../../services/community.api';
+import {
+  pollChoices,
+  pollTotal,
+  pollVotedIndex,
+  postImages,
+  type CommunityImage,
+  type CommunityPost,
+} from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { PollVotersSheet } from './PollVotersSheet';
 import { CommunityAvatar } from './CommunityAvatar';
@@ -121,7 +128,9 @@ function PostImage({
 }) {
   const { colors, isDark } = useCommunityTheme();
   const heart = useSharedValue(0);
-  const layout = postImageLayout(width, post.image);
+  const images = postImages(post);
+  const primary = images[0] ?? null;
+  const layout = postImageLayout(width, primary);
 
   const burst = useCallback(() => {
     onDoubleTap();
@@ -148,7 +157,10 @@ function PostImage({
     transform: [{ scale: 0.4 + heart.value * 0.8 }],
   }));
 
-  if (!post.image) return null;
+  if (!images.length || !primary) return null;
+  const tileW =
+    images.length > 1 ? Math.floor((width - 6 * (images.length - 1)) / images.length) : width;
+
   return (
     <GestureDetector gesture={gesture}>
       <View
@@ -156,26 +168,38 @@ function PostImage({
           styles.imageWrap,
           {
             width,
-            height: layout.height,
+            minHeight: layout.height,
             backgroundColor: isDark ? '#15111F' : colors.contentBox,
             borderColor: isDark ? 'transparent' : 'rgba(75,31,163,0.12)',
             borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+            flexDirection: images.length > 1 ? 'row' : 'column',
+            gap: images.length > 1 ? 6 : 0,
           },
         ]}
         accessibilityRole="imagebutton"
       >
-        <Image
-          source={{ uri: post.image.url }}
-          placeholder={post.image.placeholder ? { uri: post.image.placeholder } : undefined}
-          placeholderContentFit={layout.fit}
-          style={StyleSheet.absoluteFill}
-          contentFit={layout.fit}
-          transition={120}
-          cachePolicy="memory-disk"
-          recyclingKey={post.id}
-          priority={priority}
-          allowDownscaling
-        />
+        {images.map((img: CommunityImage, index) => {
+          const tileLayout = postImageLayout(tileW, img);
+          return (
+            <Image
+              key={`${post.id}-${img.url}-${index}`}
+              source={{ uri: img.url }}
+              placeholder={img.placeholder ? { uri: img.placeholder } : undefined}
+              placeholderContentFit={layout.fit}
+              style={
+                images.length > 1
+                  ? { width: tileW, height: Math.min(layout.height, tileLayout.height) }
+                  : StyleSheet.absoluteFill
+              }
+              contentFit={layout.fit}
+              transition={120}
+              cachePolicy="memory-disk"
+              recyclingKey={`${post.id}-${index}`}
+              priority={priority}
+              allowDownscaling
+            />
+          );
+        })}
         <Animated.View pointerEvents="none" style={[styles.burst, heartStyle]}>
           <Image source={CI.heartFilled} tintColor="#FFFFFF" style={{ width: 92, height: 92 }} contentFit="contain" />
         </Animated.View>

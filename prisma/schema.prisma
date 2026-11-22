@@ -1011,6 +1011,9 @@ model CommunityPost {
   imageHeight      Int?
   /// Tiny base64 WebP shown while the full image loads.
   imagePlaceholder String?
+  /// Extra post photos (max 3 total with the primary image* fields). Each item:
+  /// { url, storagePath, width, height, placeholder }.
+  images           Json?
   status           CommunityContentStatus @default(ACTIVE)
   likesCount       Int                    @default(0)
   commentsCount    Int                    @default(0)

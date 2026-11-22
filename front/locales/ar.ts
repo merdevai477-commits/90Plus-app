@@ -4030,6 +4030,7 @@ export const ar = {
     posted: 'تم النشر',
     uploadingImage: 'جاري رفع الصورة…',
     addPhoto: 'صورة',
+    maxPhotosHint: 'تقدر تضيف لحد {n} صور.',
     removePhoto: 'إزالة الصورة',
     failedToPost: 'فشل النشر',
     retry: 'إعادة المحاولة',

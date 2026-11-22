@@ -71,7 +71,10 @@ export interface CommunityPost {
   kind: 'TEXT' | 'TEAM_POLL';
   content: string;
   createdAt: string;
+  /** First photo — legacy clients. */
   image: CommunityImage | null;
+  /** All photos (1–3). Older API responses may omit this. */
+  images?: CommunityImage[];
   poll: CommunityPoll | null;
   author: CommunityAuthor;
   likesCount: number;
@@ -80,6 +83,14 @@ export interface CommunityPost {
   likedByMe: boolean;
   isMine: boolean;
 }
+
+/** Prefer `images`; fall back to singular `image` for older payloads. */
+export function postImages(post: Pick<CommunityPost, 'image' | 'images'>): CommunityImage[] {
+  if (Array.isArray(post.images) && post.images.length) return post.images;
+  return post.image ? [post.image] : [];
+}
+
+export const MAX_POST_IMAGES = 3;
 
 export interface CommunityComment {
   id: string;
@@ -204,6 +215,7 @@ export const communityApi = {
     body: {
       content: string;
       mediaId?: string | null;
+      mediaIds?: string[];
       clientId: string;
       kind?: 'TEXT' | 'TEAM_POLL';
       pollOptionA?: string;
@@ -227,7 +239,7 @@ export const communityApi = {
   updatePost: (
     getToken: GetTokenFn,
     id: string,
-    body: { content?: string; mediaId?: string | null; removeImage?: boolean },
+    body: { content?: string; mediaId?: string | null; mediaIds?: string[]; removeImage?: boolean },
   ) =>
     request<CommunityPost>(getToken, `/posts/${id}`, {
       method: 'PATCH',

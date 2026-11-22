@@ -241,15 +241,86 @@ const postSelect = {
     pollVotesA: true,
     pollVotesB: true,
     imageUrl: true,
+    imageStoragePath: true,
     imageWidth: true,
     imageHeight: true,
     imagePlaceholder: true,
+    images: true,
     likesCount: true,
     commentsCount: true,
     sharesCount: true,
     createdAt: true,
     user: { select: authorSelect },
 } satisfies Prisma.CommunityPostSelect;
+
+/** Max photos attached to one TEXT post (R2 community prefix). */
+export const MAX_POST_IMAGES = 3;
+
+type StoredPostImage = {
+    url: string;
+    storagePath: string;
+    width: number;
+    height: number;
+    placeholder: string | null;
+};
+
+function asStoredImages(raw: unknown): StoredPostImage[] {
+    if (!Array.isArray(raw)) return [];
+    const out: StoredPostImage[] = [];
+    for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        const row = item as Record<string, unknown>;
+        const url = typeof row.url === 'string' ? row.url : '';
+        const storagePath = typeof row.storagePath === 'string' ? row.storagePath : '';
+        if (!url) continue;
+        out.push({
+            url,
+            storagePath,
+            width: typeof row.width === 'number' && row.width > 0 ? row.width : 1080,
+            height: typeof row.height === 'number' && row.height > 0 ? row.height : 1080,
+            placeholder: typeof row.placeholder === 'string' ? row.placeholder : null,
+        });
+        if (out.length >= MAX_POST_IMAGES) break;
+    }
+    return out;
+}
+
+function postImagesFromRow(row: {
+    imageUrl: string | null;
+    imageStoragePath?: string | null;
+    imageWidth: number | null;
+    imageHeight: number | null;
+    imagePlaceholder: string | null;
+    images?: unknown;
+}): StoredPostImage[] {
+    const fromJson = asStoredImages(row.images);
+    if (fromJson.length) return fromJson;
+    if (!row.imageUrl) return [];
+    return [
+        {
+            url: row.imageUrl,
+            storagePath: row.imageStoragePath ?? '',
+            width: row.imageWidth ?? 1080,
+            height: row.imageHeight ?? 1080,
+            placeholder: row.imagePlaceholder,
+        },
+    ];
+}
+
+function parseMediaIds(input: { mediaId?: unknown; mediaIds?: unknown }): string[] {
+    const ids: string[] = [];
+    if (Array.isArray(input.mediaIds)) {
+        for (const value of input.mediaIds) {
+            if (typeof value !== 'string' || !value) continue;
+            if (!ids.includes(value)) ids.push(value);
+            if (ids.length >= MAX_POST_IMAGES) break;
+        }
+    }
+    if (typeof input.mediaId === 'string' && input.mediaId && !ids.includes(input.mediaId)) {
+        ids.unshift(input.mediaId);
+    }
+    return ids.slice(0, MAX_POST_IMAGES);
+}
 
 type PostRow = Prisma.CommunityPostGetPayload<{ select: typeof postSelect }>;
 
@@ -364,12 +435,22 @@ function toPollDto(
     };
 }
 
+export interface CommunityPostImageDto {
+    url: string;
+    width: number;
+    height: number;
+    placeholder: string | null;
+}
+
 export interface CommunityPostDto {
     id: string;
     content: string;
     kind: CommunityPostKindDto;
     createdAt: string;
-    image: { url: string; width: number; height: number; placeholder: string | null } | null;
+    /** First photo — kept for older clients. */
+    image: CommunityPostImageDto | null;
+    /** All photos on the post (1–3). */
+    images: CommunityPostImageDto[];
     poll: CommunityTeamPollDto | null;
     author: CommunityAuthorDto;
     likesCount: number;
@@ -387,19 +468,20 @@ function toPostDto(
     myPollVotes: Map<string, number>,
 ): CommunityPostDto {
     const kind: CommunityPostKindDto = row.kind === 'TEAM_POLL' ? 'TEAM_POLL' : 'TEXT';
+    const stored = postImagesFromRow(row);
+    const images: CommunityPostImageDto[] = stored.map(({ url, width, height, placeholder }) => ({
+        url,
+        width,
+        height,
+        placeholder,
+    }));
     return {
         id: row.id,
         content: row.content,
         kind,
         createdAt: row.createdAt.toISOString(),
-        image: row.imageUrl
-            ? {
-                  url: row.imageUrl,
-                  width: row.imageWidth ?? 1080,
-                  height: row.imageHeight ?? 1080,
-                  placeholder: row.imagePlaceholder,
-              }
-            : null,
+        image: images[0] ?? null,
+        images,
         poll: kind === 'TEAM_POLL' ? toPollDto(row, myPollVotes.get(row.id) ?? null) : null,
         author: { ...row.user, isFollowing: following.has(row.userId) },
         likesCount: row.likesCount,
@@ -818,7 +900,9 @@ export async function getPost(viewerId: string, postId: string): Promise<Communi
 
 // ─── Media ────────────────────────────────────────────────────────────────
 
-const MEDIA_MAX_EDGE = 1440;
+/** Long-edge cap for community photos — keeps R2 usage light for multi-image posts. */
+const MEDIA_MAX_EDGE = 1200;
+const MEDIA_WEBP_QUALITY = 72;
 
 export interface CommunityMediaDto {
     id: string;
@@ -839,9 +923,9 @@ export async function uploadMedia(actor: CommunityActor, file: { buffer: Buffer;
         output = await pipeline
             .clone()
             .resize(MEDIA_MAX_EDGE, MEDIA_MAX_EDGE, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80, effort: 3 })
+            .webp({ quality: MEDIA_WEBP_QUALITY, effort: 4 })
             .toBuffer({ resolveWithObject: true });
-        const tiny = await sharp(output.data).resize(16, 16, { fit: 'inside' }).webp({ quality: 30 }).toBuffer();
+        const tiny = await sharp(output.data).resize(16, 16, { fit: 'inside' }).webp({ quality: 28 }).toBuffer();
         placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
     } catch (err: any) {
         throw new CommunityError(400, 'INVALID_IMAGE', 'Image is corrupted or unsupported', { detail: err?.message });
@@ -1218,6 +1302,7 @@ export async function createPost(
     input: {
         content?: unknown;
         mediaId?: unknown;
+        mediaIds?: unknown;
         clientId?: unknown;
         kind?: unknown;
         pollOptionA?: unknown;
@@ -1232,13 +1317,13 @@ export async function createPost(
 
     const kind = parsePostKind(input.kind);
     const content = normalizeCommunityText(input.content);
-    const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
+    const mediaIds = parseMediaIds(input);
     const pollOptions = kind === 'TEAM_POLL' ? parsePollOptions(input) : [];
     const pollOptionA = pollOptions[0] ?? '';
     const pollOptionB = pollOptions[1] ?? '';
 
     if (kind === 'TEAM_POLL') {
-        if (mediaId) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
+        if (mediaIds.length) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
         if (content.length > POST_MAX_LENGTH) {
             throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
                 max: POST_MAX_LENGTH,
@@ -1247,7 +1332,7 @@ export async function createPost(
         if (content) await moderateOrThrow(actor.id, 'post', content);
         for (const option of pollOptions) await moderateOrThrow(actor.id, 'post', option);
     } else {
-        if (!content && !mediaId) throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
+        if (!content && mediaIds.length === 0) throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
         if (content.length > POST_MAX_LENGTH) {
             throw new CommunityError(400, 'POST_TOO_LONG', `Posts are limited to ${POST_MAX_LENGTH} characters`, {
                 max: POST_MAX_LENGTH,
@@ -1256,15 +1341,35 @@ export async function createPost(
         if (content) await moderateOrThrow(actor.id, 'post', content);
     }
 
-    const media =
-        kind === 'TEXT' && mediaId
-            ? await prisma.communityMedia.findFirst({
-                  where: { id: mediaId, userId: actor.id, attachedAt: null },
+    const mediaRows =
+        kind === 'TEXT' && mediaIds.length
+            ? await prisma.communityMedia.findMany({
+                  where: { id: { in: mediaIds }, userId: actor.id, attachedAt: null },
                   select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
               })
-            : null;
-    if (mediaId && kind === 'TEXT' && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
-    if (media) await assertRemoteImageSafe(actor.id, media.url);
+            : [];
+    const mediaById = new Map(mediaRows.map((row) => [row.id, row]));
+    const orderedMedia = mediaIds.map((id) => mediaById.get(id)).filter(Boolean) as Array<{
+        id: string;
+        url: string;
+        storagePath: string;
+        width: number;
+        height: number;
+        placeholder: string | null;
+    }>;
+    if (kind === 'TEXT' && mediaIds.length && orderedMedia.length !== mediaIds.length) {
+        throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    }
+    for (const media of orderedMedia) await assertRemoteImageSafe(actor.id, media.url);
+
+    const storedImages: StoredPostImage[] = orderedMedia.map((media) => ({
+        url: media.url,
+        storagePath: media.storagePath,
+        width: media.width,
+        height: media.height,
+        placeholder: media.placeholder,
+    }));
+    const primary = storedImages[0] ?? null;
 
     await claimRate('post', actor.id);
 
@@ -1281,16 +1386,20 @@ export async function createPost(
                 pollOptionB: kind === 'TEAM_POLL' ? pollOptionB : null,
                 pollOptions: kind === 'TEAM_POLL' ? pollOptions : undefined,
                 pollVoteCounts: kind === 'TEAM_POLL' ? pollOptions.map(() => 0) : undefined,
-                imageUrl: media?.url ?? null,
-                imageStoragePath: media?.storagePath ?? null,
-                imageWidth: media?.width ?? null,
-                imageHeight: media?.height ?? null,
-                imagePlaceholder: media?.placeholder ?? null,
+                imageUrl: primary?.url ?? null,
+                imageStoragePath: primary?.storagePath ?? null,
+                imageWidth: primary?.width ?? null,
+                imageHeight: primary?.height ?? null,
+                imagePlaceholder: primary?.placeholder ?? null,
+                images: storedImages.length ? storedImages : undefined,
             },
             select: postSelect,
         });
-        if (media) {
-            await tx.communityMedia.update({ where: { id: media.id }, data: { attachedAt: new Date() } });
+        if (orderedMedia.length) {
+            await tx.communityMedia.updateMany({
+                where: { id: { in: orderedMedia.map((row) => row.id) } },
+                data: { attachedAt: new Date() },
+            });
         }
         const hashtagIds = await upsertHashtagIds(tx, tags);
         if (hashtagIds.length) {
@@ -1495,11 +1604,18 @@ export async function listPollVoters(
 export async function deletePost(actor: CommunityActor, postId: string): Promise<void> {
     const post = await prisma.communityPost.findUnique({
         where: { id: postId },
-        select: { userId: true, status: true, imageStoragePath: true },
+        select: { userId: true, status: true, imageStoragePath: true, images: true },
     });
     if (!post || post.status === 'DELETED') throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
     if (post.userId !== actor.id) throw new CommunityError(403, 'FORBIDDEN', 'You can only delete your own posts');
-    const key = post.imageStoragePath;
+    const uniqueKeys = [
+        ...new Set(
+            [
+                ...asStoredImages(post.images).map((img) => img.storagePath),
+                post.imageStoragePath ?? '',
+            ].filter(Boolean),
+        ),
+    ];
     await prisma.$transaction(async (tx) => {
         await tx.communityPost.update({
             where: { id: postId },
@@ -1510,23 +1626,24 @@ export async function deletePost(actor: CommunityActor, postId: string): Promise
                 imageWidth: null,
                 imageHeight: null,
                 imagePlaceholder: null,
+                images: Prisma.DbNull,
             },
         });
-        if (key) {
-            await tx.communityMedia.deleteMany({ where: { userId: actor.id, storagePath: key } });
+        if (uniqueKeys.length) {
+            await tx.communityMedia.deleteMany({ where: { userId: actor.id, storagePath: { in: uniqueKeys } } });
         }
     });
     void invalidateFeedCache();
-    if (key) {
+    for (const key of uniqueKeys) {
         fireAndForget(() => r2MediaStorage.deleteObject(key));
     }
 }
 
-/** Owner-only edit: change text and/or attach a new photo. */
+/** Owner-only edit: change text and/or replace photos (max 3). */
 export async function updatePost(
     actor: CommunityActor,
     postId: string,
-    input: { content?: unknown; mediaId?: unknown; removeImage?: unknown },
+    input: { content?: unknown; mediaId?: unknown; mediaIds?: unknown; removeImage?: unknown },
 ): Promise<CommunityPostDto> {
     assertCanWrite(actor);
     const existing = await prisma.communityPost.findUnique({
@@ -1544,6 +1661,7 @@ export async function updatePost(
             imageWidth: true,
             imageHeight: true,
             imagePlaceholder: true,
+            images: true,
         },
     });
     if (!existing || existing.status === 'DELETED') throw new CommunityError(404, 'POST_NOT_FOUND', 'Post not found');
@@ -1552,9 +1670,9 @@ export async function updatePost(
     const isPoll = existing.kind === 'TEAM_POLL';
     const hasContent = Object.prototype.hasOwnProperty.call(input, 'content');
     const content = hasContent ? normalizeCommunityText(input.content) : existing.content;
-    const mediaId = typeof input.mediaId === 'string' && input.mediaId ? input.mediaId : null;
+    const mediaIds = parseMediaIds(input);
     const removeImage = input.removeImage === true || input.removeImage === 'true';
-    if (isPoll && mediaId) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
+    if (isPoll && mediaIds.length) throw new CommunityError(400, 'POLL_NO_MEDIA', 'Poll posts cannot include a photo');
 
     if (hasContent) {
         if (content.length > POST_MAX_LENGTH) {
@@ -1565,25 +1683,47 @@ export async function updatePost(
         if (content) await moderateOrThrow(actor.id, 'post', content);
     }
 
-    const media =
-        !isPoll && mediaId
-            ? await prisma.communityMedia.findFirst({
-                  where: { id: mediaId, userId: actor.id, attachedAt: null },
+    const mediaRows =
+        !isPoll && mediaIds.length
+            ? await prisma.communityMedia.findMany({
+                  where: { id: { in: mediaIds }, userId: actor.id, attachedAt: null },
                   select: { id: true, url: true, storagePath: true, width: true, height: true, placeholder: true },
               })
-            : null;
-    if (mediaId && !isPoll && !media) throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
-    if (media) await assertRemoteImageSafe(actor.id, media.url);
+            : [];
+    const mediaById = new Map(mediaRows.map((row) => [row.id, row]));
+    const orderedMedia = mediaIds.map((id) => mediaById.get(id)).filter(Boolean) as Array<{
+        id: string;
+        url: string;
+        storagePath: string;
+        width: number;
+        height: number;
+        placeholder: string | null;
+    }>;
+    if (mediaIds.length && orderedMedia.length !== mediaIds.length) {
+        throw new CommunityError(400, 'MEDIA_NOT_FOUND', 'Image expired, please upload it again');
+    }
+    for (const media of orderedMedia) await assertRemoteImageSafe(actor.id, media.url);
 
-    const clearImage = !isPoll && removeImage && !media;
-    if (!isPoll && !content && !media && (clearImage || !existing.imageUrl)) {
+    const storedImages: StoredPostImage[] = orderedMedia.map((media) => ({
+        url: media.url,
+        storagePath: media.storagePath,
+        width: media.width,
+        height: media.height,
+        placeholder: media.placeholder,
+    }));
+    const primary = storedImages[0] ?? null;
+    const clearImage = !isPoll && removeImage && storedImages.length === 0;
+    const existingImages = postImagesFromRow(existing);
+    if (!isPoll && !content && storedImages.length === 0 && (clearImage || existingImages.length === 0)) {
         throw new CommunityError(400, 'EMPTY_POST', 'Write something or add a photo');
     }
     if (isPoll && !existing.pollOptionA) {
         throw new CommunityError(400, 'POLL_OPTIONS_REQUIRED', 'Enter both team names');
     }
 
-    const oldKey = media || clearImage ? existing.imageStoragePath : null;
+    const oldKeys = storedImages.length || clearImage
+        ? existingImages.map((img) => img.storagePath).filter(Boolean)
+        : [];
     const tags = extractHashtags(content);
     const mentioned = await resolveMentionedUsers(content, actor.id);
 
@@ -1592,13 +1732,14 @@ export async function updatePost(
             where: { id: postId },
             data: {
                 content,
-                ...(media
+                ...(storedImages.length
                     ? {
-                          imageUrl: media.url,
-                          imageStoragePath: media.storagePath,
-                          imageWidth: media.width,
-                          imageHeight: media.height,
-                          imagePlaceholder: media.placeholder,
+                          imageUrl: primary!.url,
+                          imageStoragePath: primary!.storagePath,
+                          imageWidth: primary!.width,
+                          imageHeight: primary!.height,
+                          imagePlaceholder: primary!.placeholder,
+                          images: storedImages,
                       }
                     : clearImage
                       ? {
@@ -1607,13 +1748,17 @@ export async function updatePost(
                             imageWidth: null,
                             imageHeight: null,
                             imagePlaceholder: null,
+                            images: Prisma.DbNull,
                         }
                       : {}),
             },
             select: postSelect,
         });
-        if (media) {
-            await tx.communityMedia.update({ where: { id: media.id }, data: { attachedAt: new Date() } });
+        if (orderedMedia.length) {
+            await tx.communityMedia.updateMany({
+                where: { id: { in: orderedMedia.map((row) => row.id) } },
+                data: { attachedAt: new Date() },
+            });
         }
         if (hasContent) {
             await tx.communityPostHashtag.deleteMany({ where: { postId } });
@@ -1635,11 +1780,11 @@ export async function updatePost(
     });
 
     void invalidateFeedCache();
-    const newKey = media?.storagePath ?? (clearImage ? null : oldKey);
-    if (oldKey && oldKey !== newKey) {
-        fireAndForget(() => r2MediaStorage.deleteObject(oldKey));
+    const keep = new Set(storedImages.map((img) => img.storagePath).filter(Boolean));
+    for (const key of oldKeys) {
+        if (key && !keep.has(key)) fireAndForget(() => r2MediaStorage.deleteObject(key));
     }
-    if (hasContent || media) {
+    if (hasContent || storedImages.length) {
         void enqueueCommunityAiModeration({
             kind: 'post',
             id: post.id,
