@@ -9,6 +9,7 @@ import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { displayMatchTeamName } from '../../utils/maskedNationalTeam';
 import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
 import { buildGoalClipPlaybackCandidates } from '../../utils/goalClipPlaybackCandidates';
+import { isHomeSideEvent } from '../../utils/matchEventSide';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
@@ -37,6 +38,10 @@ type Props = {
   language: Language;
   homeTeamId?: number | null;
   awayTeamId?: number | null;
+  homeTeamName?: string | null;
+  awayTeamName?: string | null;
+  homeTeamLogo?: string | null;
+  awayTeamLogo?: string | null;
   goalForLabel: string;
   detailsUnavailableLabel: string;
   goalClips?: GoalClipMedia[];
@@ -51,17 +56,6 @@ function formatMinute(event: FixtureEvent): string {
   if (isSynthetic && event._minuteKnown === false) return '—';
   const extra = event.time?.extra ? `+${event.time.extra}` : '';
   return `${event.time?.elapsed ?? 0}${extra}’`;
-}
-
-function isHomeEvent(
-  event: FixtureEvent,
-  homeTeamId?: number | null,
-  awayTeamId?: number | null,
-): boolean {
-  const teamId = event.team?.id;
-  if (teamId != null && homeTeamId != null && teamId === homeTeamId) return true;
-  if (teamId != null && awayTeamId != null && teamId === awayTeamId) return false;
-  return true;
 }
 
 function EventGlyph({ event }: { event: FixtureEvent }) {
@@ -258,6 +252,10 @@ export function MatchEventsTimeline({
   language,
   homeTeamId,
   awayTeamId,
+  homeTeamName,
+  awayTeamName,
+  homeTeamLogo,
+  awayTeamLogo,
   goalForLabel,
   detailsUnavailableLabel,
   goalClips = [],
@@ -266,6 +264,8 @@ export function MatchEventsTimeline({
 }: Props) {
   const { colors, isDark } = useMatchDetailsTheme();
   const clipsByEvent = assignGoalClips(events, goalClips);
+  const homeTeam = { id: homeTeamId, name: homeTeamName, logo: homeTeamLogo };
+  const awayTeam = { id: awayTeamId, name: awayTeamName, logo: awayTeamLogo };
 
   return (
     <View
@@ -295,7 +295,7 @@ export function MatchEventsTimeline({
           style={styles.centerLine}
         />
         {events.map((event, index) => {
-          const homeSide = isHomeEvent(event, homeTeamId, awayTeamId);
+          const homeSide = isHomeSideEvent(event, homeTeam, awayTeam);
           // Scoreboard is away | home, so away events sit left and home sit right.
           const towardCenter: 'left' | 'right' = homeSide ? 'right' : 'left';
           const isGoal = event.type === 'Goal';

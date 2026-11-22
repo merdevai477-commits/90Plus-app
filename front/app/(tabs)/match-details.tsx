@@ -348,6 +348,13 @@ const MatchDetailsScreen = () => {
       data: { from, to: activeTab },
     });
   }, [activeTab, fixtureId]);
+
+  // Every match opens on the events tab: labeled "Highlights" pre-kickoff, "Events" when live/finished.
+  useEffect(() => {
+    if (!fixtureId) return;
+    setActiveTab('events');
+    detailsTabPrev.current = 'events';
+  }, [fixtureId]);
   const { refreshing: pullRefreshing, onRefresh: onPullRefresh } = usePullToRefresh(runDetailsPull);
   const fixture = snapshot?.fixture ?? null;
   // Stable empties: a fresh `[]` per render made every effect keyed on these arrays
@@ -2165,8 +2172,12 @@ const MatchDetailsScreen = () => {
               <MatchEventsTimeline
                 events={sortedEvents}
                 language={language}
-                homeTeamId={fixture?.teams?.home?.id}
-                awayTeamId={fixture?.teams?.away?.id}
+                homeTeamId={form365TeamIds.home ?? fixture?.teams?.home?.id}
+                awayTeamId={form365TeamIds.away ?? fixture?.teams?.away?.id}
+                homeTeamName={homeTeamName}
+                awayTeamName={awayTeamName}
+                homeTeamLogo={homeTeamLogo}
+                awayTeamLogo={awayTeamLogo}
                 goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
                 detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
                 goalClips={goalClips}
