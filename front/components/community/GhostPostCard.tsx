@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   inner: {
-    gap: 16,
+    gap: 25,
   },
   header: {
     alignItems: 'center',
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     flexShrink: 1,
   },
@@ -241,12 +241,12 @@ const styles = StyleSheet.create({
   },
   icon16: { width: 16, height: 16 },
   content: {
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 14,
+    lineHeight: 19,
   },
   contentBox: {
     borderRadius: 12,
-    paddingHorizontal: 23,
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   pollStack: {

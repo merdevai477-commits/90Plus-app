@@ -60,8 +60,8 @@ export const COMMUNITY_THEME: { dark: CommunityColors; light: CommunityColors } 
     textStrong: '#FFFFFF',
     counter: '#a49bad',
     muted: '#a49bad',
-    followBtn: '#21153c',
-    followText: '#bdb6c3',
+    followBtn: '#6A2BD9',
+    followText: '#F9F6FE',
     pollIdle: '#241b36',
     pollSelected: 'rgba(94, 63, 190, 0.35)',
     icon: '#CCCCCC',
@@ -87,7 +87,7 @@ export const COMMUNITY_THEME: { dark: CommunityColors; light: CommunityColors } 
     header: '#EEEAF6',
     card: '#FFFFFF',
     cardBorder: 'rgba(75,31,163,0.18)',
-    contentBox: '#F5F1FB',
+    contentBox: '#F7F4FC',
     composer: '#FFFFFF',
     composerBorder: 'rgba(75,31,163,0.2)',
     composerGlow: 'rgba(75,31,163,0.14)',
@@ -98,9 +98,9 @@ export const COMMUNITY_THEME: { dark: CommunityColors; light: CommunityColors } 
     text: AUTH_LIGHT.textPrimary,
     textStrong: AUTH_LIGHT.textPrimary,
     counter: AUTH_LIGHT.textMuted,
-    muted: AUTH_LIGHT.textSecondary,
-    followBtn: 'rgba(106,43,217,0.1)',
-    followText: AUTH_LIGHT.primary,
+    muted: '#6B7280',
+    followBtn: '#6A2BD9',
+    followText: '#F9F6FE',
     pollIdle: '#F1ECFA',
     pollSelected: 'rgba(106,43,217,0.16)',
     icon: AUTH_LIGHT.textSecondary,
@@ -123,21 +123,21 @@ export const COMMUNITY_THEME: { dark: CommunityColors; light: CommunityColors } 
   },
 };
 
-/** Soft layered elevation for light feed surfaces — keeps dark mode flat. */
+/** Soft purple glow for light feed cards — matches Figma 2378:389. */
 export const COMMUNITY_LIGHT_ELEVATION = {
   card: {
-    shadowColor: '#2A1060',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 4,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.5,
+    elevation: 3,
   },
   soft: {
-    shadowColor: '#2A1060',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
   },
 } as const;
 

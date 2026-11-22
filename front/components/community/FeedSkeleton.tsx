@@ -17,7 +17,7 @@ function SkeletonCard({ isAr, withImage, imageHeight }: { isAr: boolean; withIma
         {
           backgroundColor: colors.card,
           borderColor: colors.cardBorder,
-          borderWidth: isDark ? 0.5 : 1,
+          borderWidth: isDark ? 0.5 : 0,
         },
         !isDark && COMMUNITY_LIGHT_ELEVATION.card,
       ]}

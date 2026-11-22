@@ -34,7 +34,6 @@ function ProfilePostsPaneComponent({ username }: { username: string }) {
       like: s.likeLabel,
       comment: s.commentLabel,
       share: s.shareLabel,
-      viewAllComments: s.viewAllComments,
     }),
     [s],
   );

@@ -159,7 +159,6 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
       like: s.likeLabel,
       comment: s.commentLabel,
       share: s.shareLabel,
-      viewAllComments: s.viewAllComments,
     }),
     [s],
   );

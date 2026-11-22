@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { ChevronLeft } from 'lucide-react-native';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -45,7 +44,6 @@ export interface PostCardLabels {
   like: string;
   comment: string;
   share: string;
-  viewAllComments: string;
 }
 
 interface Props extends PostCardHandlers {
@@ -301,18 +299,22 @@ function ActionButton({
   isAr: boolean;
   fonts: Props['fonts'];
   selected?: boolean;
-  colors: { muted: string; icon: string };
+  colors: { muted: string; textStrong: string };
 }) {
   const inner = isAr ? (
     <>
       <Text style={[styles.actionLabel, { fontFamily: fonts.regular, color: colors.muted }]}>{label}</Text>
-      <Text style={[styles.actionCount, { fontFamily: fonts.regular, color: colors.icon }]}>{formatCount(count)}</Text>
+      <Text style={[styles.actionCount, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+        {formatCount(count)}
+      </Text>
       {icon}
     </>
   ) : (
     <>
       {icon}
-      <Text style={[styles.actionCount, { fontFamily: fonts.regular, color: colors.icon }]}>{formatCount(count)}</Text>
+      <Text style={[styles.actionCount, { fontFamily: fonts.semibold, color: colors.textStrong }]}>
+        {formatCount(count)}
+      </Text>
       <Text style={[styles.actionLabel, { fontFamily: fonts.regular, color: colors.muted }]}>{label}</Text>
     </>
   );
@@ -372,7 +374,7 @@ function PostCardBase({
         {
           backgroundColor: colors.card,
           borderColor: colors.cardBorder,
-          borderWidth: isDark ? 0.5 : 1,
+          borderWidth: isDark ? 0.5 : 0,
         },
         !isDark && COMMUNITY_LIGHT_ELEVATION.card,
       ]}
@@ -400,17 +402,22 @@ function PostCardBase({
               style={[
                 styles.followBtn,
                 {
-                  backgroundColor: colors.followBtn,
-                  borderColor: isDark ? 'transparent' : colors.cardBorder,
-                  borderWidth: isDark ? 0 : 1,
+                  backgroundColor: following ? (isDark ? '#21153c' : 'rgba(106,43,217,0.1)') : colors.followBtn,
                 },
-                following && styles.followBtnActive,
               ]}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityState={{ selected: following }}
             >
-              <Text style={[styles.followText, { fontFamily: fonts.semibold, color: colors.followText }]}>
+              <Text
+                style={[
+                  styles.followText,
+                  {
+                    fontFamily: fonts.semibold,
+                    color: following ? (isDark ? '#bdb6c3' : colors.accent) : colors.followText,
+                  },
+                ]}
+              >
                 {following ? labels.following : labels.follow}
               </Text>
             </Pressable>
@@ -426,11 +433,7 @@ function PostCardBase({
           <View
             style={[
               styles.contentBox,
-              {
-                backgroundColor: colors.contentBox,
-                borderColor: isDark ? 'transparent' : colors.cardBorder,
-                borderWidth: isDark || post.kind === 'TEAM_POLL' ? 0 : 1,
-              },
+              { backgroundColor: colors.contentBox },
               post.kind === 'TEAM_POLL' && styles.contentBoxPoll,
             ]}
           >
@@ -438,7 +441,7 @@ function PostCardBase({
               <RichText
                 key={post.id}
                 text={post.content}
-                style={[styles.content, { fontFamily: fonts.medium, color: colors.text }]}
+                style={[styles.content, { fontFamily: fonts.medium, color: colors.textStrong }]}
                 onHashtag={onHashtag}
                 onMention={onMention}
                 collapseAfterLines={post.image ? 4 : 8}
@@ -458,56 +461,42 @@ function PostCardBase({
           onOpen={() => onOpenImage(post)}
           onDoubleTap={() => onDoubleTapLike(post)}
         />
+        <View style={[styles.actions, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+          <ActionButton
+            label={labels.share}
+            count={post.sharesCount}
+            icon={<Image source={CI.share} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
+            onPress={() => onShare(post)}
+            isAr={isAr}
+            fonts={fonts}
+            colors={colors}
+          />
+          <ActionButton
+            label={labels.comment}
+            count={post.commentsCount}
+            icon={<Image source={CI.comment} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
+            onPress={() => onComment(post)}
+            isAr={isAr}
+            fonts={fonts}
+            colors={colors}
+          />
+          <ActionButton
+            label={labels.like}
+            count={post.likesCount}
+            icon={<LikeIcon liked={post.likedByMe} size={18} />}
+            onPress={() => onLike(post)}
+            onLongPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setLikersOpen(true);
+            }}
+            isAr={isAr}
+            fonts={fonts}
+            selected={post.likedByMe}
+            colors={colors}
+          />
+        </View>
       </View>
 
-      <View style={[styles.actions, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <ActionButton
-          label={labels.share}
-          count={post.sharesCount}
-          icon={<Image source={CI.share} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
-          onPress={() => onShare(post)}
-          isAr={isAr}
-          fonts={fonts}
-          colors={colors}
-        />
-        <ActionButton
-          label={labels.comment}
-          count={post.commentsCount}
-          icon={<Image source={CI.comment} style={styles.icon18} contentFit="contain" tintColor={colors.icon} />}
-          onPress={() => onComment(post)}
-          isAr={isAr}
-          fonts={fonts}
-          colors={colors}
-        />
-        <ActionButton
-          label={labels.like}
-          count={post.likesCount}
-          icon={<LikeIcon liked={post.likedByMe} size={18} />}
-          onPress={() => onLike(post)}
-          onLongPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setLikersOpen(true);
-          }}
-          isAr={isAr}
-          fonts={fonts}
-          selected={post.likedByMe}
-          colors={colors}
-        />
-      </View>
-
-      <View style={[styles.footerDivider, { backgroundColor: colors.divider }]} />
-      <View style={[styles.viewCommentsRow, { justifyContent: isAr ? 'flex-end' : 'flex-start' }]}>
-        <Pressable
-          onPress={() => onComment(post)}
-          style={[styles.viewComments, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
-          accessibilityRole="button"
-        >
-          <Text style={[styles.viewCommentsText, { fontFamily: fonts.regular, color: colors.muted }]}>
-            {labels.viewAllComments}
-          </Text>
-          <ChevronLeft size={16} color={colors.muted} style={isAr ? undefined : styles.chevronEn} />
-        </Pressable>
-      </View>
       <LikersSheet
         postId={post.id}
         visible={likersOpen}
@@ -536,7 +525,7 @@ export const postCardStyles = StyleSheet.create({
     paddingVertical: 25,
     borderRadius: CARD_RADIUS,
     borderWidth: 0.5,
-    gap: 17,
+    gap: 25,
   },
 });
 
@@ -557,14 +546,12 @@ const styles = StyleSheet.create({
   followBtn: {
     paddingHorizontal: 15,
     paddingVertical: 6,
-    borderRadius: 52,
-  },
-  followBtnActive: {
-    opacity: 0.85,
+    borderRadius: 54,
   },
   followText: {
     fontSize: 11,
     fontWeight: '600',
+    textAlign: 'center',
   },
   nameRow: {
     alignItems: 'center',
@@ -592,10 +579,11 @@ const styles = StyleSheet.create({
   icon24: { width: 24, height: 24 },
   body: {
     gap: 22,
+    width: '100%',
   },
   contentBox: {
     borderRadius: 12,
-    paddingHorizontal: 23,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 12,
     width: '100%',
@@ -605,8 +593,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   content: {
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: '500',
   },
   pollStack: {
@@ -691,7 +679,8 @@ const styles = StyleSheet.create({
   actions: {
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 7,
+    width: '100%',
   },
   action: {
     flexDirection: 'row',
@@ -701,29 +690,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionLabel: {
-    fontSize: 12,
+    fontSize: 14,
+    lineHeight: 19,
   },
   actionCount: {
-    fontSize: 12,
-  },
-  footerDivider: {
-    height: StyleSheet.hairlineWidth,
-  },
-  viewCommentsRow: {
-    width: '100%',
-    flexDirection: 'row',
-    direction: 'ltr',
-  },
-  viewComments: {
-    direction: 'ltr',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-  },
-  chevronEn: {
-    transform: [{ scaleX: -1 }],
-  },
-  viewCommentsText: {
-    fontSize: 12,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '600',
   },
 });
