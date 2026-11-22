@@ -526,25 +526,26 @@ const MatchRow = memo(function MatchRow({
           activeOpacity={0.75}
           onPress={() => onOpenDetails(fixture)}
         >
+          {/* Away left | Home right — same scoreboard orientation as MatchHeader. */}
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
-              {fixture.homeLogo ? (
+              {fixture.awayLogo ? (
                 <Image
-                  source={{ uri: fixture.homeLogo }}
+                  source={{ uri: fixture.awayLogo }}
                   style={styles.teamLogo}
                   contentFit="contain"
                   cachePolicy="memory-disk"
                   transition={0}
                   priority="high"
-                  recyclingKey={fixture.homeLogo}
+                  recyclingKey={fixture.awayLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
-                  <Text style={styles.logoInitialsTxt}>{(homeName || '?').slice(0, 2).toUpperCase()}</Text>
+                  <Text style={styles.logoInitialsTxt}>{(awayName || '?').slice(0, 2).toUpperCase()}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
+            <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
           </View>
           <View style={styles.scoreCol}>
             {specialStatusLabel ? (
@@ -589,7 +590,7 @@ const MatchRow = memo(function MatchRow({
               </Text>
             ) : (
               <Text style={styles.scoreTxt} numberOfLines={1} adjustsFontSizeToFit>
-                {fixture.homeScore}<Text style={styles.scoreDash}>-</Text>{fixture.awayScore}
+                {fixture.awayScore}<Text style={styles.scoreDash}>-</Text>{fixture.homeScore}
               </Text>
             )}
             {fixture.live ? (
@@ -614,7 +615,7 @@ const MatchRow = memo(function MatchRow({
                 />
                 {fixture.corners ? (
                   <Text style={styles.cornersTxt} numberOfLines={1}>
-                    {t('matchDetails.corners')} {fixture.corners.home}-{fixture.corners.away}
+                    {t('matchDetails.corners')} {fixture.corners.away}-{fixture.corners.home}
                   </Text>
                 ) : null}
               </View>
@@ -624,23 +625,23 @@ const MatchRow = memo(function MatchRow({
           </View>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
-              {fixture.awayLogo ? (
+              {fixture.homeLogo ? (
                 <Image
-                  source={{ uri: fixture.awayLogo }}
+                  source={{ uri: fixture.homeLogo }}
                   style={styles.teamLogo}
                   contentFit="contain"
                   cachePolicy="memory-disk"
                   transition={0}
                   priority="high"
-                  recyclingKey={fixture.awayLogo}
+                  recyclingKey={fixture.homeLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
-                  <Text style={styles.logoInitialsTxt}>{(awayName || '?').slice(0, 2).toUpperCase()}</Text>
+                  <Text style={styles.logoInitialsTxt}>{(homeName || '?').slice(0, 2).toUpperCase()}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
+            <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -675,11 +676,11 @@ const MatchRow = memo(function MatchRow({
 
           <View style={styles.predButtons}>
             <PredictionButton
-              label={homeName}
-              kind="home"
-              percent={fixture.crowdPrediction?.homePercent}
-              isActive={existingPrediction === 'home'}
-              onPress={() => onPredict(fixture.id, 'home')}
+              label={awayName}
+              kind="away"
+              percent={fixture.crowdPrediction?.awayPercent}
+              isActive={existingPrediction === 'away'}
+              onPress={() => onPredict(fixture.id, 'away')}
               disabled={!!existingPrediction || isSubmitting}
             />
             <PredictionButton
@@ -691,11 +692,11 @@ const MatchRow = memo(function MatchRow({
               disabled={!!existingPrediction || isSubmitting}
             />
             <PredictionButton
-              label={awayName}
-              kind="away"
-              percent={fixture.crowdPrediction?.awayPercent}
-              isActive={existingPrediction === 'away'}
-              onPress={() => onPredict(fixture.id, 'away')}
+              label={homeName}
+              kind="home"
+              percent={fixture.crowdPrediction?.homePercent}
+              isActive={existingPrediction === 'home'}
+              onPress={() => onPredict(fixture.id, 'home')}
               disabled={!!existingPrediction || isSubmitting}
             />
           </View>
