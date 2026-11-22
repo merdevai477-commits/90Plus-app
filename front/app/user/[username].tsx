@@ -25,6 +25,7 @@ import ProfileAffiliationBar from '../../components/profile/ProfileAffiliationBa
 import { ProfileCollapsedBar, bindProfileScroll } from '../../components/profile/ProfileCollapsedBar';
 import { ProfilePostsPane } from '../../components/profile/ProfilePostsPane';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
+import ProfileSocialLinksBar from '../../components/profile/ProfileSocialLinksBar';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import VideoGrid from '../../components/profile/VideoGrid';
@@ -705,7 +706,6 @@ function UserProfileScreen() {
           name={user.displayName || user.username}
           username={user.username}
           bio={showFullProfile ? user.bio : null}
-          socialLinks={showFullProfile ? socialLinks : []}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}
           userId={user.id}
@@ -822,6 +822,8 @@ function UserProfileScreen() {
             },
           ]}
         />
+
+        {showFullProfile ? <ProfileSocialLinksBar links={socialLinks} /> : null}
 
         {showFullProfile && (
           <>

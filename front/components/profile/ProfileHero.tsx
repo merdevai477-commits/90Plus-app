@@ -1,11 +1,10 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Linking,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -19,19 +18,14 @@ import { PROFILE_STADIUM_COVER, PROFILE_AVATAR_PLACEHOLDER } from './profileV2As
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 import ProfileEliteMarks from './ProfileEliteMarks';
-import { getSocialBrandIcon } from './socialBrandIcons';
-import { logger } from '../../utils/logger';
+import type { ProfileSocialLink } from './ProfileSocialLinksBar';
+
+export type { ProfileSocialLink };
 
 const COVER_HEIGHT = 222;
 const AVATAR_SIZE = 129;
 const AVATAR_GLOW_SIZE = 154;
 const SHEET_OVERLAP = 48;
-
-export interface ProfileSocialLink {
-  platform: string;
-  url: string;
-  username?: string;
-}
 
 export interface ProfileHeroProps {
   topInset: number;
@@ -39,6 +33,7 @@ export interface ProfileHeroProps {
   name: string;
   username: string;
   bio?: string | null;
+  /** @deprecated Social links render in ProfileSocialLinksBar under metrics. */
   socialLinks?: ProfileSocialLink[];
   isVerified?: boolean;
   isDeveloper?: boolean;
@@ -82,7 +77,6 @@ const ProfileHero = memo(function ProfileHero({
   name,
   username,
   bio,
-  socialLinks = [],
   isVerified = false,
   isDeveloper = false,
   userId = null,
@@ -99,31 +93,15 @@ const ProfileHero = memo(function ProfileHero({
   actionBelowName,
 }: ProfileHeroProps) {
   const { language, t } = useTranslation();
-  const { colors: C, isDark } = useProfileTheme();
+  const { colors: C } = useProfileTheme();
   const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
   const sheetWidth = Math.min(windowWidth, 456);
   const [bioExpanded, setBioExpanded] = useState(false);
-  const filledLinks = useMemo(
-    () =>
-      socialLinks
-        .filter((l) => typeof l.url === 'string' && l.url.trim().length > 0)
-        .slice(0, 8),
-    [socialLinks],
-  );
   const trimmedBio = bio?.trim() ?? '';
   const bioNeedsClamp = trimmedBio.length > 72 || trimmedBio.includes('\n');
   const viewAllLabel = viewAllBioLabel || t.profile.showMore || 'View all';
   const showLessLabel = showLessBioLabel || t.profile.showLess || 'Show less';
-
-  const openSocial = useCallback(async (url: string) => {
-    try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) await Linking.openURL(url);
-    } catch (error) {
-      logger.error('Error opening social link from profile hero', { url, error });
-    }
-  }, []);
 
   return (
     <View style={[styles.wrap, { backgroundColor: C.profileBg }]} testID="profile-hero">
@@ -254,66 +232,6 @@ const ProfileHero = memo(function ProfileHero({
                   @{username}
                 </Text>
               </View>
-
-              {filledLinks.length > 0 ? (
-                <View
-                  style={[
-                    styles.socialIsland,
-                    isAr ? styles.rowReverse : styles.rowForward,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255,255,255,0.08)'
-                        : '#FFFFFF',
-                      borderColor: isDark
-                        ? 'rgba(255,255,255,0.12)'
-                        : 'rgba(106,43,217,0.14)',
-                    },
-                  ]}
-                >
-                  {filledLinks.map((link) => {
-                    const brand = getSocialBrandIcon(link.platform);
-                    const useIon =
-                      !isDark && brand.lightInvisible && !!brand.ionicon;
-                    return (
-                      <TouchableOpacity
-                        key={`${link.platform}-${link.url}`}
-                        style={[
-                          styles.socialBtn,
-                          {
-                            backgroundColor: isDark
-                              ? 'rgba(255,255,255,0.1)'
-                              : 'rgba(106,43,217,0.08)',
-                          },
-                        ]}
-                        onPress={() => openSocial(link.url)}
-                        activeOpacity={0.85}
-                        accessibilityRole="link"
-                        accessibilityLabel={link.platform}
-                      >
-                        {useIon ? (
-                          <Ionicons
-                            name={brand.ionicon!}
-                            size={18}
-                            color={brand.brandColor || C.profilePrimary}
-                          />
-                        ) : (
-                          <Image
-                            source={brand.source}
-                            style={{
-                              width: brand.width,
-                              height: brand.height,
-                              ...( !isDark && brand.lightInvisible
-                                ? { tintColor: brand.brandColor || C.textPrimary }
-                                : null),
-                            }}
-                            contentFit="contain"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
             </View>
 
             {isOwnProfile && onEditPress ? (
@@ -539,27 +457,6 @@ const styles = StyleSheet.create({
     color: ProfileTheme.colors.profileHandle,
     fontSize: 12,
     fontWeight: '400',
-  },
-  socialIsland: {
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: '100%',
-    height: 44,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 2,
-  },
-  socialBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    flexShrink: 0,
   },
   sideActionBtn: {
     width: 40,

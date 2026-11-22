@@ -18,6 +18,7 @@ import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileAffiliationBar from '../../components/profile/ProfileAffiliationBar';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
+import ProfileSocialLinksBar from '../../components/profile/ProfileSocialLinksBar';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
@@ -1754,7 +1755,6 @@ function OwnProfileScreen() {
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
           bio={userData?.bio}
-          socialLinks={socialLinks}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
           userId={userData?.id}
@@ -1809,6 +1809,8 @@ function OwnProfileScreen() {
             },
           ]}
         />
+
+        <ProfileSocialLinksBar links={socialLinks} />
 
         <View
           onLayout={(e) => {
