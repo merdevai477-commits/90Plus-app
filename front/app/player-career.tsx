@@ -57,9 +57,6 @@ const fmt = (n: number | null | undefined): string => {
     return String(n);
 };
 
-const fmtRating = (n: number | null | undefined): string =>
-    n != null && Number.isFinite(n) ? n.toFixed(1) : '—';
-
 const parseRouteInt = (value: string | string[] | undefined): number => {
     const raw = Array.isArray(value) ? value[0] : value;
     const n = parseInt(raw || '0', 10);
@@ -245,6 +242,16 @@ export default function PlayerCareerScreen() {
             seasons: career.seasons.map((s) => ({ key: s.seasonKey, label: s.label })),
             selectedSeasonKey: shown?.seasonKey ?? null,
             season: careerSeasonSummary(career, shown?.seasonKey),
+            competitions: (shown?.competitions ?? []).map((c, idx) => ({
+                key: `${c.competitionId ?? c.competitionName}-${idx}`,
+                competitionName: c.competitionName,
+                competitionLogo: c.competitionLogo,
+                appearances: c.appearances,
+                goals: c.goals,
+                assists: c.assists,
+                minutes: c.minutes,
+                rating: c.rating,
+            })),
             detailed: careerDetailedStats(career, shown?.seasonKey),
             averageRating: careerAverageRating(career, shown?.seasonKey),
             per90: careerPer90(career, shown?.seasonKey),
@@ -417,75 +424,6 @@ export default function PlayerCareerScreen() {
                 </>
             )}
 
-            {selectedSeason && selectedSeason.competitions.length > 0 && (
-                <>
-                    <Text style={[styles.heading, { color: C.ink }]}>{pc.perCompetition}</Text>
-                    {selectedSeason.competitions.map((c, idx) => (
-                        <View
-                            key={`${c.competitionId ?? c.competitionName}-${idx}`}
-                            style={[
-                                styles.compCard,
-                                CARD_SHADOW,
-                                { backgroundColor: surface.bg, borderColor: surface.border },
-                            ]}
-                        >
-                            <View style={styles.compHeader}>
-                                {c.competitionLogo ? (
-                                    <ExpoImage
-                                        source={{ uri: c.competitionLogo }}
-                                        style={styles.compLogo}
-                                        contentFit="contain"
-                                        cachePolicy="memory-disk"
-                                        recyclingKey={c.competitionLogo}
-                                        priority="low"
-                                        transition={0}
-                                    />
-                                ) : (
-                                    <View style={[styles.compLogoFallback, { backgroundColor: C.pale }]}>
-                                        <Ionicons name="trophy-outline" size={14} color={C.primary} />
-                                    </View>
-                                )}
-                                <Text style={[styles.compName, { color: surface.text }]} numberOfLines={1}>
-                                    {c.competitionName}
-                                </Text>
-                                {c.rating != null && (
-                                    <View style={styles.ratingPill}>
-                                        <Text style={styles.ratingPillText}>{fmtRating(c.rating)}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <View style={styles.compStatsRow}>
-                                <CompStat
-                                    value={fmt(c.appearances)}
-                                    label={pc.appearances}
-                                    text={surface.text}
-                                    muted={surface.muted}
-                                />
-                                <CompStat
-                                    value={fmt(c.goals)}
-                                    label={pc.goals}
-                                    text={surface.text}
-                                    muted={surface.muted}
-                                />
-                                <CompStat
-                                    value={fmt(c.assists)}
-                                    label={pc.assists}
-                                    text={surface.text}
-                                    muted={surface.muted}
-                                />
-                                {c.minutes != null && (
-                                    <CompStat
-                                        value={fmt(c.minutes)}
-                                        label={pc.minutes}
-                                        text={surface.text}
-                                        muted={surface.muted}
-                                    />
-                                )}
-                            </View>
-                        </View>
-                    ))}
-                </>
-            )}
         </View>
     );
 
@@ -502,25 +440,6 @@ export default function PlayerCareerScreen() {
 
 function sumStat(season: Player365CareerSeason, key: 'yellowCards' | 'redCards'): number {
     return season.competitions.reduce((acc, c) => acc + (c[key] ?? 0), 0);
-}
-
-function CompStat({
-    value,
-    label,
-    text,
-    muted,
-}: {
-    value: string;
-    label: string;
-    text: string;
-    muted: string;
-}) {
-    return (
-        <View style={styles.compStat}>
-            <Text style={[styles.compStatValue, { color: text }]}>{value}</Text>
-            <Text style={[styles.compStatLabel, { color: muted }]}>{label}</Text>
-        </View>
-    );
 }
 
 function TrendChart({
@@ -655,34 +574,6 @@ const styles = StyleSheet.create({
     legendDot: { width: 8, height: 8, borderRadius: 4 },
     legendText: { fontSize: 12 },
     legendAll: { marginLeft: 'auto', fontSize: 11 },
-
-    compCard: {
-        borderRadius: 16,
-        borderWidth: 1,
-        padding: 14,
-        marginBottom: 10,
-    },
-    compHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-    compLogo: { width: 24, height: 24 },
-    compLogoFallback: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    compName: { fontSize: 14, fontWeight: '700', flex: 1 },
-    ratingPill: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 8,
-        backgroundColor: '#FDBE3D',
-    },
-    ratingPillText: { color: '#272727', fontSize: 12, fontWeight: '800' },
-    compStatsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    compStat: { alignItems: 'center', flex: 1 },
-    compStatValue: { fontSize: 16, fontWeight: '800' },
-    compStatLabel: { fontSize: 11, marginTop: 2 },
 
     compTabScroll: { marginBottom: 12, marginHorizontal: -4 },
     compTabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },

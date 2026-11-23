@@ -41,6 +41,18 @@ export interface PlayerTransferRow {
   active: boolean;
 }
 
+/** Per-competition totals for the selected season (updates when season changes). */
+export interface PlayerCompetitionStatRow {
+  key: string;
+  competitionName: string;
+  competitionLogo: string | null;
+  appearances: number | null;
+  goals: number | null;
+  assists: number | null;
+  minutes: number | null;
+  rating: number | null;
+}
+
 export interface PlayerProfileViewModel {
   name: string;
   photoCandidates: string[];
@@ -56,6 +68,7 @@ export interface PlayerProfileViewModel {
   seasons: { key: string; label: string }[];
   selectedSeasonKey: string | null;
   season: PlayerSeasonSummary | null;
+  competitions: PlayerCompetitionStatRow[];
   detailed: PlayerDetailedStats | null;
   averageRating: number | null;
   per90: PlayerPer90Stats | null;

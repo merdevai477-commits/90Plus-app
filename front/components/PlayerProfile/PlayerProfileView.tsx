@@ -27,6 +27,7 @@ import TeamBadge from '../common/TeamBadge';
 import { PP_ICON, PP_STADIUM } from './assets';
 import { getPPColors, ratingTone, type PPColors } from './theme';
 import type {
+  PlayerCompetitionStatRow,
   PlayerProfileViewModel,
   PlayerSeasonSummary,
   PlayerTransferRow,
@@ -488,6 +489,11 @@ export default function PlayerProfileView({
             <LastMatchesCard matches={recentMatches} C={C} rtl={rtl} cardShadow={cardShadow} />
           ) : null}
 
+          {/* Per competition for selected season — before transfers */}
+          {vm.competitions.length > 0 ? (
+            <CompetitionsCard competitions={vm.competitions} C={C} rtl={rtl} cardShadow={cardShadow} />
+          ) : null}
+
           {/* Transfers — Figma 2431:17554 */}
           {vm.transfers.length > 0 ? (
             <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
@@ -775,6 +781,108 @@ function fmtMatchDate(iso: string | null): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y} - ${m} - ${day}`;
+}
+
+function CompetitionsCard({
+  competitions,
+  C,
+  rtl,
+  cardShadow,
+}: {
+  competitions: PlayerCompetitionStatRow[];
+  C: PPColors;
+  rtl: boolean;
+  cardShadow: object;
+}) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  const rowDir = rtl ? 'row-reverse' : 'row';
+
+  return (
+    <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start', alignSelf: 'stretch' }}>
+      <View
+        style={[
+          styles.sectionTitleRow,
+          { flexDirection: rowDir, alignSelf: rtl ? 'flex-end' : 'flex-start' },
+        ]}
+      >
+        <Text style={[styles.sectionTitleLg, { fontFamily: fontSemi, color: C.ink }]}>
+          {pc.perCompetition}
+        </Text>
+        <Image source={PP_ICON.court} style={styles.sectionIcon} contentFit="contain" />
+      </View>
+
+      {competitions.map((c) => (
+        <View
+          key={c.key}
+          style={[styles.compCard, cardShadow, { backgroundColor: C.card, borderColor: C.border }]}
+        >
+          <View style={[styles.compHeader, { flexDirection: rowDir }]}>
+            {c.competitionLogo ? (
+              <Image
+                source={{ uri: c.competitionLogo }}
+                style={styles.compLogo}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                recyclingKey={c.competitionLogo}
+                transition={0}
+              />
+            ) : (
+              <View style={[styles.compLogoFallback, { backgroundColor: C.pale }]}>
+                <Ionicons name="trophy-outline" size={14} color={C.primary} />
+              </View>
+            )}
+            <Text
+              style={[
+                styles.compName,
+                { fontFamily: fontSemi, color: C.ink, textAlign: rtl ? 'right' : 'left' },
+              ]}
+              numberOfLines={1}
+            >
+              {c.competitionName}
+            </Text>
+            {c.rating != null && Number.isFinite(c.rating) ? (
+              <View style={[styles.compRatingPill, { backgroundColor: ratingTone(c.rating) }]}>
+                <Text style={[styles.compRatingText, { fontFamily: fontBold, color: C.ratingText }]}>
+                  {c.rating.toFixed(1)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={[styles.compStatsRow, { flexDirection: rowDir }]}>
+            <CompStatCell value={fmtNum(c.appearances)} label={pc.appearances} C={C} />
+            <CompStatCell value={fmtNum(c.goals)} label={pc.goals} C={C} />
+            <CompStatCell value={fmtNum(c.assists)} label={pc.assists} C={C} />
+            {c.minutes != null ? (
+              <CompStatCell value={fmtNum(c.minutes)} label={pc.minutes} C={C} />
+            ) : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CompStatCell({
+  value,
+  label,
+  C,
+}: {
+  value: string;
+  label: string;
+  C: PPColors;
+}) {
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  return (
+    <View style={styles.compStat}>
+      <Text style={[styles.compStatValue, { fontFamily: fontBold, color: C.ink }]}>{value}</Text>
+      <Text style={[styles.compStatLabel, { fontFamily: fontSemi, color: C.muted }]}>{label}</Text>
+    </View>
+  );
 }
 
 function LastMatchesCard({
@@ -1167,6 +1275,36 @@ const styles = StyleSheet.create({
   matchDate: { fontSize: 11, textAlign: 'center', width: '100%' },
   matchOpponent: { fontSize: 17, textAlign: 'center', width: '100%' },
   matchDivider: { width: 1, height: 81, alignSelf: 'center' },
+
+  compCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    alignSelf: 'stretch',
+    gap: 12,
+  },
+  compHeader: { alignItems: 'center', gap: 10 },
+  compLogo: { width: 24, height: 24 },
+  compLogoFallback: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compName: { fontSize: 14, flex: 1 },
+  compRatingPill: {
+    minWidth: 42,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  compRatingText: { fontSize: 12 },
+  compStatsRow: { justifyContent: 'space-between' },
+  compStat: { alignItems: 'center', flex: 1 },
+  compStatValue: { fontSize: 16 },
+  compStatLabel: { fontSize: 11, marginTop: 2 },
 
   transferCard: { borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
   transferRow: { minHeight: 57, alignItems: 'stretch', gap: 10 },
