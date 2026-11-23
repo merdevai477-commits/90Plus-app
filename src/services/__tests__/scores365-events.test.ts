@@ -35,8 +35,9 @@ describe('mapScores365Events', () => {
           {
             competitorId: 1,
             gameTime: 54,
-            playerId: 20,
-            extraPlayers: [21],
+            // 365: playerId = on, extraPlayers[0] = off
+            playerId: 21,
+            extraPlayers: [20],
             eventType: { id: 1000, name: 'Substitution' },
           },
         ],

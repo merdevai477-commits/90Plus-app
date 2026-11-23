@@ -2445,23 +2445,19 @@ export function mapScores365Events(
 
     const team = map365CompetitorToBaseTeam(teamCompetitorId, game, base, resolvedAlignment);
 
-    // API-Football: substitution player = IN, assist = OUT; goal player = scorer, assist = assister.
+    // Substitution: playerId = player coming IN; extraPlayers[0] = player going OUT
+    // (365 / sportsapipro). Map to API-Football shape: player = IN, assist = OUT.
+    // Goals: player = scorer, extraPlayers[0] = assister.
     const isSubstitution = type === 'subst';
-    const playerId = isSubstitution ? (extraMemberId ?? 0) : (ev.playerId ?? 0);
-    const playerName = isSubstitution
-      ? extraMember?.shortName || extraMember?.name || '—'
-      : primaryMember?.shortName || primaryMember?.name || '—';
-    const assistId = isSubstitution
-      ? (ev.playerId ?? null)
-      : type === 'Goal' && extraMember
-        ? extraMemberId ?? null
+    const playerId = ev.playerId ?? 0;
+    const playerName = primaryMember?.shortName || primaryMember?.name || '—';
+    const assistId =
+      isSubstitution || (type === 'Goal' && extraMember) ? (extraMemberId ?? null) : null;
+    const assistName =
+      isSubstitution || (type === 'Goal' && extraMember)
+        ? extraMember?.shortName || extraMember?.name || null
         : null;
-    const assistName = isSubstitution
-      ? primaryMember?.shortName || primaryMember?.name || null
-      : type === 'Goal' && extraMember
-        ? extraMember.shortName || extraMember.name || null
-        : null;
-    const photoMember = isSubstitution ? extraMember : primaryMember;
+    const photoMember = primaryMember;
     const photoAthleteId = photoMember?.athleteId;
     const photo =
       photoAthleteId != null && photoAthleteId > 0

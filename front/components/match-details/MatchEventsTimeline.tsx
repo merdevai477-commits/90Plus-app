@@ -271,12 +271,15 @@ function EventBody({
 function HalfTimeBreak({
   label,
   isDark,
+  spine,
 }: {
   label: string;
   isDark: boolean;
+  spine: string;
 }) {
   return (
     <View style={styles.htRow} accessibilityRole="text" accessibilityLabel={label}>
+      <View style={[styles.spineSeg, styles.htSpine, { backgroundColor: spine }]} />
       <View
         style={[
           styles.htPill,
@@ -291,6 +294,7 @@ function HalfTimeBreak({
           {label}
         </Text>
       </View>
+      <View style={[styles.spineSeg, styles.htSpine, { backgroundColor: spine }]} />
     </View>
   );
 }
@@ -337,23 +341,27 @@ export function MatchEventsTimeline({
       ]}
     >
       <View style={styles.list}>
-        {/* Figma Events list spine: muted gray axis down the center. */}
-        <View pointerEvents="none" style={[styles.centerLine, { backgroundColor: isDark ? 'rgba(107,114,128,0.55)' : SPINE }]} />
         {events.map((event, index) => {
           const homeSide = isHomeSideEvent(event, homeTeam, awayTeam);
           // Scoreboard is away | home, so away events sit left and home sit right.
           const towardCenter: 'left' | 'right' = homeSide ? 'right' : 'left';
           const isGoal = event.type === 'Goal';
           const minuteColor = isGoal ? GOAL_MINUTE : colors.textMuted;
+          const spine = isDark ? 'rgba(107,114,128,0.55)' : SPINE;
+          const cardBg = isDark ? '#0B0518' : colors.cardBg;
           // Latest-first list: insert rest marker when we cross from 2H down into 1H.
           const showHalfTime =
             index > 0 &&
             !isFirstHalfEvent(events[index - 1]) &&
             isFirstHalfEvent(event);
+          const isFirst = index === 0 && !showHalfTime;
+          const isLast = index === events.length - 1;
 
           return (
             <View key={`${event.time.elapsed}-${event.type}-${event.player?.id ?? index}-${index}`}>
-              {showHalfTime ? <HalfTimeBreak label={halfTimeLabel} isDark={isDark} /> : null}
+              {showHalfTime ? (
+                <HalfTimeBreak label={halfTimeLabel} isDark={isDark} spine={spine} />
+              ) : null}
               <View style={styles.row}>
                 <View style={[styles.side, styles.sideLeft]}>
                   {!homeSide ? (
@@ -375,9 +383,16 @@ export function MatchEventsTimeline({
                   ) : null}
                 </View>
 
-                <Text style={[styles.minute, { color: minuteColor }]} numberOfLines={1}>
-                  {formatMinute(event)}
-                </Text>
+                <View style={styles.minuteCol}>
+                  <View style={[styles.spineSeg, { backgroundColor: spine, opacity: isFirst ? 0 : 1 }]} />
+                  <Text
+                    style={[styles.minute, { color: minuteColor, backgroundColor: cardBg }]}
+                    numberOfLines={1}
+                  >
+                    {formatMinute(event)}
+                  </Text>
+                  <View style={[styles.spineSeg, { backgroundColor: spine, opacity: isLast ? 0 : 1 }]} />
+                </View>
 
                 <View style={[styles.side, styles.sideRight]}>
                   {homeSide ? (
@@ -417,19 +432,28 @@ const styles = StyleSheet.create({
   list: {
     position: 'relative',
   },
-  centerLine: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: '50%',
+  minuteCol: {
+    width: 40,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  spineSeg: {
     width: 1.5,
-    marginLeft: -0.75,
+    flex: 1,
+    minHeight: 10,
+    borderRadius: 1,
   },
   htRow: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 4,
+    gap: 0,
     zIndex: 1,
+  },
+  htSpine: {
+    flex: 0,
+    height: 12,
+    minHeight: 12,
   },
   htPill: {
     flexDirection: 'row',
@@ -475,13 +499,14 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 14,
-    gap: 12,
+    alignItems: 'stretch',
+    paddingVertical: 0,
+    gap: 10,
   },
   side: {
     flex: 1,
     minWidth: 0,
+    paddingVertical: 12,
   },
   sideLeft: {
     alignItems: 'flex-end',
@@ -490,16 +515,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   minute: {
-    width: 36,
+    width: 40,
     fontSize: 12,
     fontWeight: '400',
     textAlign: 'center',
     lineHeight: 16,
-    marginTop: 0,
+    paddingVertical: 2,
+    zIndex: 1,
   },
   eventCol: {
     gap: 5,
     maxWidth: '100%',
+    width: '100%',
   },
   playerLine: {
     flexDirection: 'row',
@@ -532,12 +559,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   clipMedia: {
-    width: CLIP_W,
-    height: CLIP_H,
+    // Stay inside the side column — fixed 163px was wider than ~149px half-width and crushed the layout.
+    width: '100%',
+    maxWidth: CLIP_W,
+    aspectRatio: CLIP_W / CLIP_H,
     borderRadius: 8,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
   },
   clipImage: {
     ...StyleSheet.absoluteFillObject,

@@ -101,8 +101,9 @@ export function normalizeApiEvents(
         const teamId = event.team?.id ?? null;
         const playerId = event.player?.id ?? null;
 
-        const playerIn = event.assist?.name || event.player?.name || '';
-        const playerOut = event.player?.name || '';
+        // API-Football / normalized 365: player = IN, assist = OUT.
+        const playerIn = event.player?.name || '';
+        const playerOut = event.assist?.name || '';
         const playerName = event.player?.name || event.assist?.name || '';
 
         const eventKey = buildMatchEventKey(fixtureId, {
