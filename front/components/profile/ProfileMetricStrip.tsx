@@ -11,7 +11,6 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
-import { useTranslation } from '../../src/i18n';
 import { formatProfileStat } from './formatProfileStat';
 
 export interface ProfileMetricItem {
@@ -27,24 +26,28 @@ interface ProfileMetricStripProps {
   variant?: 'social' | 'performance';
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Social metrics keep a fixed visual order (same in AR/EN):
+ * Followers | Following | Likes
+ */
 const ProfileMetricStrip = memo(function ProfileMetricStrip({
   items,
   variant = 'social',
 }: ProfileMetricStripProps) {
   const { colors: C } = useProfileTheme();
-  const { language } = useTranslation();
   const { width } = useWindowDimensions();
-  const isAr = language === 'ar';
   const isPerf = variant === 'performance';
   const marginH = Math.min(20, Math.max(12, Math.round(width * 0.045)));
+  const scale = clamp(width / 390, 0.88, 1.05);
+  const valueSize = Math.round((isPerf ? 16 : 18) * scale);
+  const labelSize = Math.round((isPerf ? 9 : 12) * scale);
+
   const inner = (
-    <View
-      style={[
-        styles.row,
-        isPerf && styles.perfRow,
-        isAr ? styles.rowReverse : styles.rowForward,
-      ]}
-    >
+    <View style={[styles.row, isPerf && styles.perfRow]}>
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
           {index > 0 && (
@@ -56,7 +59,14 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
               ]}
             />
           )}
-          <MetricCell item={item} compact={isPerf} social={!isPerf} colors={C} />
+          <MetricCell
+            item={item}
+            compact={isPerf}
+            social={!isPerf}
+            colors={C}
+            valueSize={valueSize}
+            labelSize={labelSize}
+          />
         </React.Fragment>
       ))}
     </View>
@@ -103,11 +113,15 @@ function MetricCell({
   compact,
   social,
   colors: C,
+  valueSize,
+  labelSize,
 }: {
   item: ProfileMetricItem;
   compact: boolean;
   social: boolean;
   colors: ReturnType<typeof useProfileTheme>['colors'];
+  valueSize: number;
+  labelSize: number;
 }) {
   const body = (
     <View style={[styles.cell, compact && styles.perfCell, social && styles.socialCell]}>
@@ -120,11 +134,19 @@ function MetricCell({
       </View>
       <View style={styles.copy}>
         <Text
-          style={[styles.value, social && styles.socialValue, { color: C.textPrimary }]}
+          style={[
+            styles.value,
+            {
+              color: C.textPrimary,
+              fontSize: valueSize,
+              lineHeight: valueSize + 2,
+            },
+          ]}
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.75}
-          maxFontSizeMultiplier={1.15}
+          minimumFontScale={0.7}
+          maxFontSizeMultiplier={1.1}
+          allowFontScaling={false}
         >
           {formatProfileStat(item.value)}
         </Text>
@@ -132,11 +154,16 @@ function MetricCell({
           style={[
             styles.label,
             compact && styles.perfLabel,
-            social && styles.socialLabel,
-            { color: social ? C.textPrimary : C.profileMuted },
+            {
+              color: social ? C.textPrimary : C.profileMuted,
+              fontSize: labelSize,
+              lineHeight: labelSize + 3,
+            },
           ]}
-          numberOfLines={compact ? 2 : 1}
-          maxFontSizeMultiplier={1.15}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
         >
           {item.label}
         </Text>
@@ -145,17 +172,19 @@ function MetricCell({
   );
 
   if (!item.onPress) {
-    return compact ? <View style={styles.perfHit}>{body}</View> : body;
+    return <View style={styles.hit}>{body}</View>;
   }
 
   return (
     <TouchableOpacity
-      style={compact ? styles.perfHit : undefined}
+      style={styles.hit}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         item.onPress?.();
       }}
       activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.value} ${item.label}`}
     >
       {body}
     </TouchableOpacity>
@@ -165,16 +194,10 @@ function MetricCell({
 export default ProfileMetricStrip;
 
 const styles = StyleSheet.create({
-  rowForward: {
-    flexDirection: 'row',
-  },
-  rowReverse: {
-    flexDirection: 'row-reverse',
-  },
   card: {
     borderRadius: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -182,7 +205,7 @@ const styles = StyleSheet.create({
   },
   socialCard: {
     marginTop: 10,
-    minHeight: 72,
+    minHeight: 76,
     borderWidth: 1,
     borderColor: 'rgba(106,43,217,0.12)',
     shadowColor: '#1E0844',
@@ -198,6 +221,7 @@ const styles = StyleSheet.create({
     borderColor: ProfileTheme.colors.profileCardBorder,
   },
   row: {
+    // Locked LTR: Followers | Following | Likes (AR + EN).
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -209,7 +233,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     width: StyleSheet.hairlineWidth,
-    height: 34,
+    height: 40,
     backgroundColor: ProfileTheme.colors.divider,
     flexShrink: 0,
   },
@@ -217,34 +241,33 @@ const styles = StyleSheet.create({
     height: 52,
     marginHorizontal: 2,
   },
-  cell: {
+  hit: {
     flex: 1,
     minWidth: 0,
+  },
+  cell: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   socialCell: {
-    gap: 0,
+    gap: 3,
   },
   perfCell: {
-    width: '100%',
-    minWidth: 0,
     paddingHorizontal: 2,
-  },
-  perfHit: {
-    flex: 1,
-    minWidth: 0,
   },
   iconBox: {
     width: 28,
     height: 28,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   socialIconBox: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
   },
   icon: {
     width: 28,
@@ -258,32 +281,21 @@ const styles = StyleSheet.create({
   copy: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
+    gap: 2,
     width: '100%',
   },
   value: {
     color: ProfileTheme.colors.textPrimary,
-    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  socialValue: {
-    fontSize: 17,
+    fontVariant: ['tabular-nums'],
   },
   label: {
     color: ProfileTheme.colors.profileMuted,
-    fontSize: 9,
     fontWeight: '500',
     textAlign: 'center',
   },
-  socialLabel: {
-    color: ProfileTheme.colors.textPrimary,
-    fontSize: 11,
-    fontWeight: '400',
-  },
   perfLabel: {
-    fontSize: 9,
-    lineHeight: 12,
-    minHeight: 24,
+    minHeight: 20,
   },
 });
