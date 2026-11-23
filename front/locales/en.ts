@@ -580,11 +580,11 @@ export const en = {
     recentAveragesBannerHint:
       'These stats reflect each team’s recent matches. Live match stats will update once kickoff starts.',
     lastNMatchesColumn: 'Last {n} matches',
-    goalsScoredAvg: 'Goals',
+    goalsScoredAvg: 'Goals scored',
     goalsConcededAvg: 'Goals conceded',
     expectedGoalsAgainst: 'Expected goals against (xGA)',
     cardsAvg: 'Cards',
-    penaltiesScoredWon: 'Penalties scored / won',
+    penaltiesScoredWon: 'Penalties scored/won',
     recentTrendsTitle: 'Trends',
     teamIndicatorsTitle: 'Team indicators',
     indicatorScoring: 'Scoring',

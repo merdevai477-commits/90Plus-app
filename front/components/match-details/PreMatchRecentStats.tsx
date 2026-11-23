@@ -1,5 +1,5 @@
 /**
- * Pre-kickoff Statistics tab — Figma 1728:12224 (same shape light + dark).
+ * Pre-kickoff Statistics tab — Figma 2495:4894 / 2495:5104 / 2495:5030 / 2495:5089.
  */
 import React from 'react';
 import { View, StyleSheet, type ImageSourcePropType } from 'react-native';
@@ -7,7 +7,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
 import {
+  formatPenaltyPair,
   formatStatAverage,
+  pickHighlightSide,
   type RecentFormAveragesPayload,
   type RecentFormAveragesNumbers,
   type RecentTeamAverages,
@@ -15,11 +17,6 @@ import {
 } from '../../utils/recentTeamFormStats';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 
-const ICON_SOCCER = require('../../assets/images/pre-match-stats/icon-soccer.svg');
-const ICON_SHIELD = require('../../assets/images/pre-match-stats/icon-shield.svg');
-const ICON_TARGET = require('../../assets/images/pre-match-stats/icon-target.svg');
-const ICON_GOALNET = require('../../assets/images/pre-match-stats/icon-goalnet.svg');
-const ICON_FLAG = require('../../assets/images/pre-match-stats/icon-flag.svg');
 const ICON_CHART = require('../../assets/images/pre-match-stats/icon-chart.svg');
 const ICON_INFO = require('../../assets/images/pre-match-stats/icon-info.svg');
 const ICON_TARGET_SM = require('../../assets/images/pre-match-stats/icon-target-sm.svg');
@@ -30,15 +27,21 @@ const ICON_CLEAN = require('../../assets/images/pre-match-stats/icon-clean-sheet
 const INK = '#24104e';
 const PRIMARY = '#6A2BD9';
 const PRIMARY_DARK = '#4B1FA3';
-const YELLOW_CARD = '#FDAC0C';
-const RED_CARD = '#B60606';
-const HOME_GOALS_TINT = '#C2D3DA';
-const AWAY_GOALS_TINT = '#F5CED3';
+const SUBTLE = '#9CA3AF';
+const ROW_BORDER = '#F2F2F2';
+const CARD_BG = '#FCFBFE';
 const VALUE_SHADOW = {
   shadowColor: '#4B1FA3',
   shadowOffset: { width: 0, height: 1 },
   shadowOpacity: 0.2,
   shadowRadius: 4,
+  elevation: 2,
+} as const;
+const CARD_SHADOW = {
+  shadowColor: '#484848',
+  shadowOffset: { width: 0, height: 0 },
+  shadowOpacity: 0.2,
+  shadowRadius: 2,
   elevation: 2,
 } as const;
 
@@ -47,10 +50,31 @@ function formatPct(trend: RecentTrend | null | undefined): string {
   return `${Math.round(trend.pct)}%`;
 }
 
-function formatCardAvg(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+function fillN(template: string, n: number): string {
+  return template.replace(/\{n\}/g, String(n));
+}
+
+function pickPenaltyHighlight(
+  homeScored: number | null | undefined,
+  homeWon: number | null | undefined,
+  awayScored: number | null | undefined,
+  awayWon: number | null | undefined,
+): 'home' | 'away' | null {
+  if (
+    homeScored == null &&
+    homeWon == null &&
+    awayScored == null &&
+    awayWon == null
+  ) {
+    return null;
+  }
+  const hs = homeScored ?? 0;
+  const as = awayScored ?? 0;
+  if (hs !== as) return hs > as ? 'home' : 'away';
+  const hw = homeWon ?? 0;
+  const aw = awayWon ?? 0;
+  if (hw === aw) return null;
+  return hw > aw ? 'home' : 'away';
 }
 
 function SectionHeader({
@@ -59,7 +83,7 @@ function SectionHeader({
   color,
 }: {
   title: string;
-  icon: ImageSourcePropType;
+  icon?: ImageSourcePropType;
   color: string;
 }) {
   return (
@@ -67,45 +91,31 @@ function SectionHeader({
       <Text style={[styles.sectionTitle, { color }]} numberOfLines={1}>
         {title}
       </Text>
-      <Image source={icon} style={styles.sectionIcon} contentFit="contain" />
+      {icon ? <Image source={icon} style={styles.sectionIcon} contentFit="contain" /> : null}
     </View>
   );
 }
 
-function ValueBox({
+function StatPill({
   value,
-  large,
-  tint,
-  watermark,
-  textColor,
-  boxBg,
+  highlighted,
+  ink,
 }: {
   value: string;
-  large?: boolean;
-  tint?: string;
-  watermark?: string | null;
-  textColor: string;
-  boxBg: string;
+  highlighted: boolean;
+  ink: string;
 }) {
   return (
     <View
       style={[
-        large ? styles.goalsBox : styles.valueBox,
-        VALUE_SHADOW,
-        { backgroundColor: tint ?? boxBg },
+        styles.statPill,
+        highlighted ? styles.statPillHighlighted : null,
       ]}
     >
-      {watermark ? (
-        <Image
-          source={{ uri: watermark }}
-          style={large ? styles.goalsWatermark : styles.hidden}
-          contentFit="contain"
-        />
-      ) : null}
       <Text
         style={[
-          large ? styles.goalsValue : styles.valueText,
-          { color: textColor },
+          styles.statPillText,
+          { color: highlighted ? '#FFFFFF' : ink },
         ]}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -116,74 +126,36 @@ function ValueBox({
   );
 }
 
-function DualValueRow({
-  homeValue,
-  awayValue,
-  homeTint,
-  awayTint,
-  homeLogo,
-  awayLogo,
-  large,
-  textColor,
-  boxBg,
+function CompareRow({
+  label,
+  leftValue,
+  rightValue,
+  highlight,
+  ink,
+  borderColor,
+  showBorder,
 }: {
-  homeValue: string;
-  awayValue: string;
-  homeTint?: string;
-  awayTint?: string;
-  homeLogo?: string | null;
-  awayLogo?: string | null;
-  large?: boolean;
-  textColor: string;
-  boxBg: string;
+  label: string;
+  leftValue: string;
+  rightValue: string;
+  /** Which side of the row (visual left = away, visual right = home). */
+  highlight: 'left' | 'right' | null;
+  ink: string;
+  borderColor: string;
+  showBorder: boolean;
 }) {
   return (
-    <View style={styles.dualRow}>
-      <ValueBox
-        value={homeValue}
-        large={large}
-        tint={homeTint}
-        watermark={large ? homeLogo : null}
-        textColor={textColor}
-        boxBg={boxBg}
-      />
-      <ValueBox
-        value={awayValue}
-        large={large}
-        tint={awayTint}
-        watermark={large ? awayLogo : null}
-        textColor={textColor}
-        boxBg={boxBg}
-      />
-    </View>
-  );
-}
-
-function CardChip({ color }: { color: string }) {
-  return <View style={[styles.cardChip, { backgroundColor: color }]} />;
-}
-
-function TeamCardsBox({
-  yellow,
-  red,
-  textColor,
-  boxBg,
-}: {
-  yellow: string;
-  red: string;
-  textColor: string;
-  boxBg: string;
-}) {
-  return (
-    <View style={[styles.cardsBox, VALUE_SHADOW, { backgroundColor: boxBg }]}>
-      <View style={styles.cardLine}>
-        <Text style={[styles.cardValue, { color: textColor }]}>{yellow}</Text>
-        <CardChip color={YELLOW_CARD} />
-      </View>
-      <View style={styles.cardLine}>
-        <Text style={[styles.cardValue, { color: textColor }]}>{red}</Text>
-        <CardChip color={RED_CARD} />
-      </View>
+    <View
+      style={[
+        styles.compareRow,
+        showBorder ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor } : null,
+      ]}
+    >
+      <StatPill value={leftValue} highlighted={highlight === 'left'} ink={ink} />
+      <Text style={[styles.compareLabel, { color: ink }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <StatPill value={rightValue} highlighted={highlight === 'right'} ink={ink} />
     </View>
   );
 }
@@ -208,52 +180,68 @@ function IndicatorLabel({
 }
 
 function DualPercentBar({
-  homePct,
-  awayPct,
-  homeLogo,
-  awayLogo,
+  leftPct,
+  rightPct,
+  leftLogo,
+  rightLogo,
   showLogos,
   isDark,
   ink,
 }: {
-  homePct: string;
-  awayPct: string;
-  homeLogo?: string | null;
-  awayLogo?: string | null;
+  leftPct: string;
+  rightPct: string;
+  leftLogo?: string | null;
+  rightLogo?: string | null;
   showLogos?: boolean;
   isDark: boolean;
   ink: string;
 }) {
-  const homeBg = isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF';
+  const leftBg = isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF';
   return (
     <View style={styles.percentRow}>
-      <View style={[styles.percentHome, VALUE_SHADOW, { backgroundColor: homeBg }]}>
-        {showLogos && homeLogo ? (
-          <Image source={{ uri: homeLogo }} style={styles.percentLogo} contentFit="contain" />
+      <View style={[styles.percentLeft, VALUE_SHADOW, { backgroundColor: leftBg }]}>
+        {showLogos && leftLogo ? (
+          <Image source={{ uri: leftLogo }} style={styles.percentLogo} contentFit="contain" />
         ) : null}
-        <Text style={[styles.percentText, { color: ink }]}>{homePct}</Text>
+        <Text style={[styles.percentText, { color: ink }]}>{leftPct}</Text>
       </View>
       <LinearGradient
         colors={[PRIMARY, PRIMARY_DARK]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.percentAway, VALUE_SHADOW]}
+        style={[styles.percentRight, VALUE_SHADOW]}
       >
-        <Text style={[styles.percentText, { color: '#FFFFFF' }]}>{awayPct}</Text>
-        {showLogos && awayLogo ? (
-          <Image source={{ uri: awayLogo }} style={styles.percentLogo} contentFit="contain" />
+        <Text style={[styles.percentText, { color: '#FFFFFF' }]}>{rightPct}</Text>
+        {showLogos && rightLogo ? (
+          <Image source={{ uri: rightLogo }} style={styles.percentLogo} contentFit="contain" />
         ) : null}
       </LinearGradient>
     </View>
   );
 }
 
+type AvgRow = {
+  key: string;
+  label: string;
+  left: string;
+  right: string;
+  highlight: 'left' | 'right' | null;
+};
+
+function toSideHighlight(
+  side: 'home' | 'away' | null,
+): 'left' | 'right' | null {
+  if (side === 'away') return 'left';
+  if (side === 'home') return 'right';
+  return null;
+}
+
 export function PreMatchRecentStats({
   lastN,
   bannerTitle: _bannerTitle,
   bannerHint,
-  title: _title,
-  columnLabel: _columnLabel,
+  title,
+  columnLabel,
   homeName: _homeName,
   awayName: _awayName,
   homeLogo,
@@ -296,21 +284,18 @@ export function PreMatchRecentStats({
     indicatorGoals: string;
   };
 }) {
-  void lastN;
   void _bannerTitle;
-  void _title;
-  void _columnLabel;
   void _homeName;
   void _awayName;
 
   const { colors, isDark } = useMatchDetailsTheme();
   const ink = isDark ? colors.textPrimary : INK;
-  const boxBg = isDark ? colors.elevatedBg : '#FFFFFF';
+  const boxBg = isDark ? colors.elevatedBg : CARD_BG;
   const bannerBg = isDark ? colors.primaryMuted : '#EFE7FD';
   const bannerText = isDark ? colors.primarySoft : PRIMARY_DARK;
-  const homeGoalsTint = isDark ? 'rgba(194,211,218,0.28)' : HOME_GOALS_TINT;
-  const awayGoalsTint = isDark ? 'rgba(245,206,211,0.28)' : AWAY_GOALS_TINT;
   const labelAccent = isDark ? colors.primarySoft : PRIMARY;
+  const rowBorder = isDark ? colors.divider : ROW_BORDER;
+  const subtle = isDark ? colors.textMuted : SUBTLE;
 
   const homeAvg: RecentFormAveragesNumbers = {
     goalsFor: enrichment?.home.averages.goalsFor ?? homeScore.avgGoalsFor,
@@ -337,10 +322,10 @@ export function PreMatchRecentStats({
     penaltiesWon: enrichment?.away.averages.penaltiesWon ?? null,
   };
 
-  const showShots = homeAvg.shots != null || awayAvg.shots != null;
-  const showSot = homeAvg.shotsOnTarget != null || awayAvg.shotsOnTarget != null;
-  const showCorners = homeAvg.corners != null || awayAvg.corners != null;
-  const showCards = homeAvg.cards != null || awayAvg.cards != null;
+  const homeGames =
+    enrichment?.home.games || homeScore.played || lastN;
+  const awayGames =
+    enrichment?.away.games || awayScore.played || lastN;
 
   const homeBtts = enrichment?.home.trends.btts ?? homeScore.btts;
   const awayBtts = enrichment?.away.trends.btts ?? awayScore.btts;
@@ -351,6 +336,53 @@ export function PreMatchRecentStats({
   const homeCs = enrichment?.home.trends.cleanSheets ?? homeScore.cleanSheets;
   const awayCs = enrichment?.away.trends.cleanSheets ?? awayScore.cleanSheets;
 
+  const avgRows: AvgRow[] = [];
+  const pushRow = (
+    key: string,
+    label: string,
+    homeVal: number | null,
+    awayVal: number | null,
+    mode: 'higher' | 'lower',
+    force = false,
+  ) => {
+    if (!force && homeVal == null && awayVal == null) return;
+    avgRows.push({
+      key,
+      label,
+      left: formatStatAverage(awayVal),
+      right: formatStatAverage(homeVal),
+      highlight: toSideHighlight(pickHighlightSide(homeVal, awayVal, mode)),
+    });
+  };
+
+  pushRow('gf', labels.goalsScored, homeAvg.goalsFor, awayAvg.goalsFor, 'higher', true);
+  pushRow('ga', labels.goalsConceded, homeAvg.goalsAgainst, awayAvg.goalsAgainst, 'lower', true);
+  pushRow('xg', labels.expectedGoals, homeAvg.xg, awayAvg.xg, 'higher');
+  pushRow('xga', labels.expectedGoalsAgainst, homeAvg.xga, awayAvg.xga, 'lower');
+  pushRow('shots', labels.shots, homeAvg.shots, awayAvg.shots, 'higher');
+  pushRow('sot', labels.shotsOnTarget, homeAvg.shotsOnTarget, awayAvg.shotsOnTarget, 'higher');
+  pushRow('corners', labels.corners, homeAvg.corners, awayAvg.corners, 'higher');
+  pushRow('cards', labels.cards, homeAvg.cards, awayAvg.cards, 'lower');
+
+  const homePen = formatPenaltyPair(homeAvg.penaltiesScored, homeAvg.penaltiesWon);
+  const awayPen = formatPenaltyPair(awayAvg.penaltiesScored, awayAvg.penaltiesWon);
+  if (homePen != null || awayPen != null) {
+    avgRows.push({
+      key: 'pen',
+      label: labels.penalties,
+      left: awayPen ?? '0/0',
+      right: homePen ?? '0/0',
+      highlight: toSideHighlight(
+        pickPenaltyHighlight(
+          homeAvg.penaltiesScored,
+          homeAvg.penaltiesWon,
+          awayAvg.penaltiesScored,
+          awayAvg.penaltiesWon,
+        ),
+      ),
+    });
+  }
+
   return (
     <View style={styles.root}>
       <View style={[styles.banner, { backgroundColor: bannerBg }]}>
@@ -359,94 +391,31 @@ export function PreMatchRecentStats({
       </View>
 
       <View style={styles.block}>
-        <SectionHeader title={labels.goalsScored} icon={ICON_SOCCER} color={ink} />
-        <DualValueRow
-          homeValue={formatStatAverage(homeAvg.goalsFor)}
-          awayValue={formatStatAverage(awayAvg.goalsFor)}
-          homeTint={homeGoalsTint}
-          awayTint={awayGoalsTint}
-          homeLogo={homeLogo}
-          awayLogo={awayLogo}
-          large
-          textColor={ink}
-          boxBg={boxBg}
-        />
-      </View>
-
-      <View style={styles.statsStack}>
-        <View style={styles.block}>
-          <SectionHeader title={labels.goalsConceded} icon={ICON_SHIELD} color={ink} />
-          <DualValueRow
-            homeValue={formatStatAverage(homeAvg.goalsAgainst)}
-            awayValue={formatStatAverage(awayAvg.goalsAgainst)}
-            textColor={ink}
-            boxBg={boxBg}
-          />
+        <SectionHeader title={title} color={ink} />
+        <View style={[styles.avgCard, CARD_SHADOW, { backgroundColor: boxBg }]}>
+          <View style={[styles.avgHeader, { borderBottomColor: rowBorder }]}>
+            <Text style={[styles.avgHeaderText, { color: subtle }]} numberOfLines={1}>
+              {fillN(columnLabel, awayGames)}
+            </Text>
+            <Text style={[styles.avgHeaderText, { color: subtle }]} numberOfLines={1}>
+              {fillN(columnLabel, homeGames)}
+            </Text>
+          </View>
+          <View style={styles.avgRows}>
+            {avgRows.map((row, index) => (
+              <CompareRow
+                key={row.key}
+                label={row.label}
+                leftValue={row.left}
+                rightValue={row.right}
+                highlight={row.highlight}
+                ink={ink}
+                borderColor={rowBorder}
+                showBorder={index < avgRows.length - 1}
+              />
+            ))}
+          </View>
         </View>
-
-        {showShots ? (
-          <View style={styles.block}>
-            <SectionHeader title={labels.shots} icon={ICON_TARGET} color={ink} />
-            <DualValueRow
-              homeValue={formatStatAverage(homeAvg.shots)}
-              awayValue={formatStatAverage(awayAvg.shots)}
-              textColor={ink}
-              boxBg={boxBg}
-            />
-          </View>
-        ) : null}
-
-        {showSot ? (
-          <View style={styles.block}>
-            <SectionHeader title={labels.shotsOnTarget} icon={ICON_GOALNET} color={ink} />
-            <DualValueRow
-              homeValue={formatStatAverage(homeAvg.shotsOnTarget)}
-              awayValue={formatStatAverage(awayAvg.shotsOnTarget)}
-              textColor={ink}
-              boxBg={boxBg}
-            />
-          </View>
-        ) : null}
-
-        {showCorners ? (
-          <View style={styles.block}>
-            <SectionHeader title={labels.corners} icon={ICON_FLAG} color={ink} />
-            <DualValueRow
-              homeValue={formatStatAverage(homeAvg.corners)}
-              awayValue={formatStatAverage(awayAvg.corners)}
-              textColor={ink}
-              boxBg={boxBg}
-            />
-          </View>
-        ) : null}
-
-        {showCards ? (
-          <View style={styles.block}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: ink }]} numberOfLines={1}>
-                {labels.cards}
-              </Text>
-              <View style={styles.cardsHeaderIcon}>
-                <View style={[styles.cardChipSmall, styles.cardChipRedTilt, { backgroundColor: RED_CARD }]} />
-                <View style={[styles.cardChipSmall, { backgroundColor: YELLOW_CARD }]} />
-              </View>
-            </View>
-            <View style={styles.dualRow}>
-              <TeamCardsBox
-                yellow={formatCardAvg(homeAvg.cards)}
-                red="—"
-                textColor={ink}
-                boxBg={boxBg}
-              />
-              <TeamCardsBox
-                yellow={formatCardAvg(awayAvg.cards)}
-                red="—"
-                textColor={ink}
-                boxBg={boxBg}
-              />
-            </View>
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.block}>
@@ -455,10 +424,10 @@ export function PreMatchRecentStats({
           <View style={styles.indicatorBlock}>
             <IndicatorLabel title={labels.scoring} icon={ICON_TARGET_SM} color={labelAccent} />
             <DualPercentBar
-              homePct={formatPct(homeBtts)}
-              awayPct={formatPct(awayBtts)}
-              homeLogo={homeLogo}
-              awayLogo={awayLogo}
+              leftPct={formatPct(awayBtts)}
+              rightPct={formatPct(homeBtts)}
+              leftLogo={awayLogo}
+              rightLogo={homeLogo}
               showLogos
               isDark={isDark}
               ink={ink}
@@ -467,8 +436,8 @@ export function PreMatchRecentStats({
           <View style={styles.indicatorBlock}>
             <IndicatorLabel title={labels.indicatorGoals} icon={ICON_SOCCER_SM} color={labelAccent} />
             <DualPercentBar
-              homePct={formatPct(homeOver)}
-              awayPct={formatPct(awayOver)}
+              leftPct={formatPct(awayOver)}
+              rightPct={formatPct(homeOver)}
               isDark={isDark}
               ink={ink}
             />
@@ -476,8 +445,8 @@ export function PreMatchRecentStats({
           <View style={styles.indicatorBlock}>
             <IndicatorLabel title={labels.winOrDraw} icon={ICON_TROPHY_SM} color={labelAccent} />
             <DualPercentBar
-              homePct={formatPct(homeDc)}
-              awayPct={formatPct(awayDc)}
+              leftPct={formatPct(awayDc)}
+              rightPct={formatPct(homeDc)}
               isDark={isDark}
               ink={ink}
             />
@@ -485,8 +454,8 @@ export function PreMatchRecentStats({
           <View style={styles.indicatorBlock}>
             <IndicatorLabel title={labels.cleanSheets} icon={ICON_CLEAN} color={labelAccent} />
             <DualPercentBar
-              homePct={formatPct(homeCs)}
-              awayPct={formatPct(awayCs)}
+              leftPct={formatPct(awayCs)}
+              rightPct={formatPct(homeCs)}
               isDark={isDark}
               ink={ink}
             />
@@ -527,11 +496,7 @@ const styles = StyleSheet.create({
   },
   block: {
     width: '100%',
-    gap: 14,
-  },
-  statsStack: {
-    width: '100%',
-    gap: 22,
+    gap: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -551,98 +516,71 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
   },
-  dualRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  avgCard: {
     width: '100%',
-    gap: 12,
-    direction: 'ltr',
-  },
-  valueBox: {
-    flex: 1,
-    height: 58,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    overflow: 'hidden',
-  },
-  goalsBox: {
-    flex: 1,
-    height: 121,
     borderRadius: 16,
+    paddingVertical: 16,
+    gap: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
   },
-  goalsWatermark: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.18,
-    margin: 12,
-  },
-  hidden: {
-    display: 'none',
-  },
-  goalsValue: {
-    fontSize: 48,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  valueText: {
-    fontSize: 32,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  cardsBox: {
-    flex: 1,
-    height: 105,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 23,
-    gap: 14,
-  },
-  cardLine: {
+  avgHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    gap: 8,
+    height: 29,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     direction: 'ltr',
   },
-  cardValue: {
-    fontSize: 32,
+  avgHeaderText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  avgRows: {
+    width: '100%',
+    gap: 4,
+  },
+  compareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    height: 40,
+    paddingHorizontal: 16,
+    direction: 'ltr',
+  },
+  compareLabel: {
+    flexShrink: 1,
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+    paddingHorizontal: 8,
   },
-  cardChip: {
-    width: 18,
-    height: 23.4,
-    borderRadius: 3,
-  },
-  cardsHeaderIcon: {
-    width: 24,
-    height: 24,
+  statPill: {
+    minWidth: 50,
+    height: 23,
+    paddingHorizontal: 20,
+    paddingVertical: 2,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardChipSmall: {
-    width: 15,
-    height: 20,
-    borderRadius: 3,
-    position: 'absolute',
+  statPillHighlighted: {
+    backgroundColor: PRIMARY,
   },
-  cardChipRedTilt: {
-    transform: [{ rotate: '20deg' }],
-    left: 5,
-    top: 0,
+  statPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   indicatorsCard: {
     width: '100%',
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     gap: 8,
   },
   indicatorBlock: {
@@ -674,7 +612,7 @@ const styles = StyleSheet.create({
     width: '100%',
     direction: 'ltr',
   },
-  percentHome: {
+  percentLeft: {
     flex: 1,
     height: 40,
     marginRight: -38,
@@ -690,7 +628,7 @@ const styles = StyleSheet.create({
     paddingRight: 23,
     paddingLeft: 12,
   },
-  percentAway: {
+  percentRight: {
     flex: 1,
     height: 40,
     borderTopLeftRadius: 500,
