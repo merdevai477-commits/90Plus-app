@@ -2419,6 +2419,7 @@ export const en = {
     title: 'Profile',
     myProfile: 'My Profile',
     editProfile: 'Edit Profile',
+    editProfileShort: 'Edit Profile',
     shareProfile: 'Share Profile',
     coverImageTitle: 'Cover image',
     avatarImageTitle: 'Profile picture',

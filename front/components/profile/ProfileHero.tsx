@@ -23,9 +23,11 @@ import type { ProfileSocialLink } from './ProfileSocialLinksBar';
 export type { ProfileSocialLink };
 
 const COVER_HEIGHT = 222;
-const AVATAR_SIZE = 129;
-const AVATAR_GLOW_SIZE = 154;
-const SHEET_OVERLAP = 48;
+/** Matches Figma profile hero — avatar overlaps cover into the sheet. */
+const AVATAR_SIZE = 112;
+const AVATAR_RING = 4;
+const AVATAR_OUTER = AVATAR_SIZE + AVATAR_RING * 2;
+const SHEET_OVERLAP = 52;
 
 export interface ProfileHeroProps {
   topInset: number;
@@ -202,6 +204,17 @@ const ProfileHero = memo(function ProfileHero({
                     contentFit="contain"
                   />
                 )}
+                {isVerified ? (
+                  <View
+                    style={[
+                      styles.avatarBadge,
+                      isAr ? styles.avatarBadgeStart : styles.avatarBadgeEnd,
+                    ]}
+                    pointerEvents="box-none"
+                  >
+                    <VerifiedBadge size={22} />
+                  </View>
+                ) : null}
                 {isAvatarUploading ? (
                   <View style={styles.avatarBusy}>
                     <ActivityIndicator color={C.profilePrimary} />
@@ -216,18 +229,18 @@ const ProfileHero = memo(function ProfileHero({
                   <Text
                     style={[styles.name, { textAlign: isAr ? 'right' : 'left', color: C.nameColor }]}
                     numberOfLines={1}
-                    maxFontSizeMultiplier={1.2}
+                    maxFontSizeMultiplier={1.15}
                   >
                     {name}
                   </Text>
-                  {isVerified ? <VerifiedBadge size={16} /> : null}
-                  {isDeveloper ? <DeveloperBadge size={16} /> : null}
+                  {isVerified ? <VerifiedBadge size={18} /> : null}
+                  {isDeveloper ? <DeveloperBadge size={18} /> : null}
                   <ProfileEliteMarks userId={userId} />
                 </View>
                 <Text
                   style={[styles.handle, { textAlign: isAr ? 'right' : 'left', color: C.profileHandle }]}
                   numberOfLines={1}
-                  maxFontSizeMultiplier={1.2}
+                  maxFontSizeMultiplier={1.15}
                 >
                   @{username}
                 </Text>
@@ -237,10 +250,11 @@ const ProfileHero = memo(function ProfileHero({
             {isOwnProfile && onEditPress ? (
               <TouchableOpacity
                 style={[
-                  styles.sideActionBtn,
+                  styles.editPill,
                   {
                     backgroundColor: C.profilePrimarySoft,
                     borderColor: C.embossBorder,
+                    flexDirection: isAr ? 'row-reverse' : 'row',
                   },
                 ]}
                 onPress={onEditPress}
@@ -248,12 +262,19 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole="button"
                 accessibilityLabel={t.profile.editProfile}
               >
-                <Ionicons name="pencil" size={18} color={C.profilePrimary} />
+                <Ionicons name="pencil" size={14} color={C.profilePrimary} />
+                <Text
+                  style={[styles.editPillText, { color: C.profilePrimary }]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={1.1}
+                >
+                  {t.profile.editProfileShort || t.profile.editProfile}
+                </Text>
               </TouchableOpacity>
             ) : !isOwnProfile && onSharePress ? (
               <TouchableOpacity
                 style={[
-                  styles.sideActionBtn,
+                  styles.shareBtn,
                   {
                     backgroundColor: C.profilePrimarySoft,
                     borderColor: C.embossBorder,
@@ -264,7 +285,7 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole="button"
                 accessibilityLabel={t.profile.shareProfile}
               >
-                <Ionicons name="share-social-outline" size={20} color={C.profilePrimary} />
+                <Ionicons name="share-social-outline" size={18} color={C.profilePrimary} />
               </TouchableOpacity>
             ) : (
               <View style={styles.editBtnSpacer} />
@@ -364,13 +385,14 @@ const styles = StyleSheet.create({
   },
   identityBlock: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 12,
   },
   identityRow: {
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 10,
-    marginTop: -56,
+    gap: 12,
+    marginTop: -(AVATAR_OUTER * 0.48),
+    minHeight: AVATAR_OUTER,
   },
   identityRowRtl: {
     flexDirection: 'row-reverse',
@@ -391,14 +413,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   avatarColumn: {
-    width: AVATAR_GLOW_SIZE,
-    height: AVATAR_GLOW_SIZE,
+    width: AVATAR_OUTER,
+    height: AVATAR_OUTER,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarWrap: {
-    width: AVATAR_GLOW_SIZE,
-    height: AVATAR_GLOW_SIZE,
+    width: AVATAR_OUTER,
+    height: AVATAR_OUTER,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -406,14 +428,14 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 3,
+    borderWidth: AVATAR_RING,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
     shadowColor: '#6A2BD9',
-    shadowOpacity: Platform.OS === 'ios' ? 0.35 : 0.2,
-    shadowRadius: Platform.OS === 'ios' ? 10 : 6,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: Platform.OS === 'android' ? 4 : 8,
+    shadowOpacity: Platform.OS === 'ios' ? 0.35 : 0.22,
+    shadowRadius: Platform.OS === 'ios' ? 12 : 7,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: Platform.OS === 'android' ? 5 : 8,
     backgroundColor: '#FAF5FF',
   },
   avatar: {
@@ -421,25 +443,37 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   avatarPlaceholder: {
-    width: AVATAR_GLOW_SIZE,
-    height: AVATAR_GLOW_SIZE,
+    width: AVATAR_OUTER,
+    height: AVATAR_OUTER,
   },
   avatarBusy: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: AVATAR_GLOW_SIZE / 2,
+    borderRadius: AVATAR_OUTER / 2,
     backgroundColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 2,
+    zIndex: 2,
+  },
+  avatarBadgeEnd: {
+    right: 2,
+  },
+  avatarBadgeStart: {
+    left: 2,
+  },
   metaColumn: {
     flex: 1,
     minWidth: 0,
-    paddingTop: 70,
-    gap: 12,
+    paddingBottom: 10,
+    justifyContent: 'flex-end',
+    gap: 2,
   },
   nameBlock: {
     width: '100%',
-    gap: 6,
+    gap: 2,
   },
   nameRow: {
     flexDirection: 'row',
@@ -450,26 +484,46 @@ const styles = StyleSheet.create({
   name: {
     flexShrink: 1,
     color: '#000000',
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   handle: {
     color: ProfileTheme.colors.profileHandle,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '400',
+    lineHeight: 16,
   },
-  sideActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+  editPill: {
+    height: 36,
+    minWidth: 108,
+    maxWidth: 140,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    marginBottom: 8,
+    flexShrink: 0,
+  },
+  editPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  shareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    marginTop: 70,
+    marginBottom: 8,
   },
   editBtnSpacer: {
     width: 8,
-    marginTop: 70,
+    height: 36,
+    marginBottom: 8,
   },
   bioWrap: {
     width: '100%',

@@ -2373,6 +2373,7 @@ export const ar = {
     title: 'الملف الشخصي',
     myProfile: 'ملفي الشخصي',
     editProfile: 'تعديل الملف الشخصي',
+    editProfileShort: 'تعديل الملف',
     shareProfile: 'مشاركة الملف الشخصي',
     coverImageTitle: 'صورة الغلاف',
     avatarImageTitle: 'صورة البروفايل',
