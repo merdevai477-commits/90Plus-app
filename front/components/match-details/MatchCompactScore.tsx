@@ -54,11 +54,12 @@ export function MatchCompactScore({
 
   return (
     <View style={styles.wrap}>
+      {/* Same visual order as MatchHeader: away left, home right (Arabic home-on-right). */}
       <View style={styles.row}>
-        <Text style={[styles.name, styles.nameHome, { color: nameColor }]} numberOfLines={1}>
-          {homeTeam}
+        <Text style={[styles.name, styles.nameAway, { color: nameColor }]} numberOfLines={1}>
+          {awayTeam}
         </Text>
-        <CompactLogo uri={homeLogo} />
+        <CompactLogo uri={awayLogo} />
         <Text
           style={[
             styles.score,
@@ -67,11 +68,11 @@ export function MatchCompactScore({
           ]}
           numberOfLines={1}
         >
-          {hasScore ? `${homeScore} - ${awayScore}` : (statusInput.vsLabel || 'VS')}
+          {hasScore ? `${awayScore} - ${homeScore}` : (statusInput.vsLabel || 'VS')}
         </Text>
-        <CompactLogo uri={awayLogo} />
-        <Text style={[styles.name, styles.nameAway, { color: nameColor }]} numberOfLines={1}>
-          {awayTeam}
+        <CompactLogo uri={homeLogo} />
+        <Text style={[styles.name, styles.nameHome, { color: nameColor }]} numberOfLines={1}>
+          {homeTeam}
         </Text>
       </View>
       {statusLine ? (
@@ -160,6 +161,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     width: '100%',
     gap: 6,
@@ -169,10 +171,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  nameHome: {
+  nameAway: {
     textAlign: 'right',
   },
-  nameAway: {
+  nameHome: {
     textAlign: 'left',
   },
   logo: {
