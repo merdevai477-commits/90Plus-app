@@ -156,7 +156,7 @@ export const CHAT_THEME: { dark: ChatColors; light: ChatColors } = {
     aiBubbleBorder: 'rgba(75,31,163,0.28)',
     aiGlow: 'rgba(106,43,217,0.18)',
     composerBarTint: 'rgba(252,252,252,0.85)',
-    composerFieldTint: 'rgba(75,31,163,0.92)',
+    composerFieldTint: 'rgba(14,165,233,0.95)',
     composerInputTint: 'rgba(255,255,255,0.94)',
     composerBorder: 'rgba(75,31,163,0.34)',
     composerGlow: 'rgba(75,31,163,0.14)',
