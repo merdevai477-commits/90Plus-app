@@ -117,7 +117,28 @@ const PLAYBACK_PROBE = `
 true;
 `;
 
-/** Detect watch-page dead ends (real geo / removed) so we can fall through to Open in YouTube. */
+/**
+ * Watch page plays when iframe embed is blocked — strip the rest of YouTube chrome
+ * so the in-app sheet looks like a player-only surface.
+ */
+const WATCH_PAGE_CHROME_CSS = `
+html,body{background:#000!important;overflow:hidden!important;height:100%!important;margin:0!important;padding:0!important}
+ytd-masthead,#masthead-container,#guide-button,#guide,#guide-content,#secondary,#related,#comments,
+ytd-watch-metadata,#below,#chat,#chat-container,ytd-live-chat-frame,tp-yt-paper-dialog,ytd-popup-container,
+#ticket-shelf,ytd-merch-shelf-renderer,ytd-watch-next-secondary-results-renderer,#columns > #secondary,
+ytm-mobile-topbar-renderer,.mobile-topbar-header,ytm-pivot-bar-renderer,ytm-item-section-renderer,
+ytm-slim-video-metadata-section-renderer,ytm-slim-owner-renderer,ytm-engagement-panel,
+ytm-comment-section-renderer,bottom-sheet-container,.ytm-bottom-sheet-overlay,
+.open-app-button,ytm-companion-slot,ytm-promoted-sparkles-web-renderer,#appbar-content,
+#header,header,nav,.ytp-chrome-top-buttons,ytd-mealbar-promo-renderer,
+#clarify-box,ytd-info-panel-content-renderer{display:none!important;height:0!important;max-height:0!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important}
+#player,#player-container-outer,#player-container-inner,ytd-player,#movie_player,#player-container,
+.html5-video-player,#player-theater-container,#player-container-id,#ytd-player,
+#player-api,.player-container,.html5-video-container{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-height:100vh!important;z-index:2147483646!important;margin:0!important;padding:0!important;background:#000!important;transform:none!important}
+video.html5-main-video,video{object-fit:contain!important;width:100%!important;height:100%!important}
+#content,#page-manager,ytd-watch-flexy,#columns,#primary,#primary-inner{margin:0!important;padding:0!important;max-width:none!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important}
+`;
+
 const WATCH_PAGE_PROBE = `
 (function () {
   function send(reason) {
@@ -125,7 +146,27 @@ const WATCH_PAGE_PROBE = `
       window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
     }
   }
-  function check() {
+  function injectChrome() {
+    try {
+      if (!document.getElementById('hl-yt-chrome-hide')) {
+        var style = document.createElement('style');
+        style.id = 'hl-yt-chrome-hide';
+        style.type = 'text/css';
+        style.appendChild(document.createTextNode(${JSON.stringify(WATCH_PAGE_CHROME_CSS)}));
+        (document.head || document.documentElement).appendChild(style);
+      }
+      document.documentElement.style.background = '#000';
+      if (document.body) {
+        document.body.style.background = '#000';
+        document.body.style.overflow = 'hidden';
+      }
+      var player = document.querySelector('#movie_player, ytd-player, #player, #player-container-id, .html5-video-player');
+      if (player && player.requestFullscreen && !document.fullscreenElement) {
+        /* Prefer in-page fullscreen look without leaving the WebView. */
+      }
+    } catch (e) {}
+  }
+  function checkUnavailable() {
     var text = '';
     try { text = (document.body && document.body.innerText) || ''; } catch (e) {}
     if (/video player configuration error|error\\s*153/i.test(text)) {
@@ -144,9 +185,31 @@ const WATCH_PAGE_PROBE = `
       send('EMBED_UNAVAILABLE');
     }
   }
-  setTimeout(check, 1200);
-  setTimeout(check, 3000);
-  setTimeout(check, 6000);
+  injectChrome();
+  checkUnavailable();
+  try {
+    var obs = new MutationObserver(function () { injectChrome(); });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+  } catch (e) {}
+  setTimeout(injectChrome, 200);
+  setTimeout(injectChrome, 800);
+  setTimeout(function () { injectChrome(); checkUnavailable(); }, 1200);
+  setTimeout(function () { injectChrome(); checkUnavailable(); }, 3000);
+  setTimeout(checkUnavailable, 6000);
+})();
+true;
+`;
+
+/** Early CSS so the full YouTube chrome never flashes before the probe runs. */
+const WATCH_PAGE_BEFORE_LOAD = `
+(function () {
+  try {
+    var style = document.createElement('style');
+    style.id = 'hl-yt-chrome-hide-early';
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode(${JSON.stringify(WATCH_PAGE_CHROME_CSS)}));
+    (document.head || document.documentElement).appendChild(style);
+  } catch (e) {}
 })();
 true;
 `;
@@ -520,6 +583,9 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               allowsFullscreenVideo={isWatchTier ? true : youtubeAllowsFullscreenVideo()}
               javaScriptEnabled
               domStorageEnabled
+              injectedJavaScriptBeforeContentLoaded={
+                isWatchTier ? WATCH_PAGE_BEFORE_LOAD : undefined
+              }
               injectedJavaScript={isWatchTier ? WATCH_PAGE_PROBE : PLAYBACK_PROBE}
               onLoadEnd={() => {
                 // Watch page plays without account/embed — clear spinner as soon as it paints.
