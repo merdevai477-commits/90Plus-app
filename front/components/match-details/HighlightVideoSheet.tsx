@@ -275,6 +275,9 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
             }
       : null;
   const isWatchTier = youtubeTier === 'watch';
+  // Keep stable names for layout math (avoids stale HMR refs to removed locals).
+  const youtubePlayerWidth = playerWidth;
+  const youtubePlayerHeight = playerHeight;
 
   const matchDetailsText = t.matchDetails as unknown as Record<string, string | undefined>;
 
@@ -495,7 +498,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
             style={
               isWatchTier
                 ? styles.watchShell
-                : [styles.player, { width: playerWidth, height: playerHeight }]
+                : [styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]
             }
           >
             <WebView
@@ -597,8 +600,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           <DirectClipPlayer
             key={`${playableDirectUrl || fileUrl}:${sessionNonce}`}
             url={playableDirectUrl || fileUrl}
-            width={playerWidth}
-            height={playerHeight}
+            width={youtubePlayerWidth}
+            height={youtubePlayerHeight}
             sessionId={sessionId.current}
             retryCount={retryCount}
             startedAt={sessionStartedAt.current}
@@ -615,7 +618,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           </View>
         ) : null}
         {visible && failed ? (
-          <View style={[styles.player, { width: playerWidth, height: playerHeight }]}>
+          <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
             <View pointerEvents="none" style={styles.playerPlate} />
             <Text style={styles.error}>{messageFor(failureReason ?? 'UNKNOWN_ERROR')}</Text>
             {showRetry ? (
