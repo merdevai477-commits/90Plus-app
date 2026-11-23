@@ -59,6 +59,8 @@ export default function TeamBadge({
           backgroundColor:
             shouldShowLogo && !isTransparent ? 'rgba(255,255,255,0.05)' : color,
           borderWidth: isTransparent ? 0 : 2,
+          // Transparent crest cells must not clip shield tips on iOS.
+          overflow: isTransparent ? 'visible' : 'hidden',
         },
       ]}
     >
@@ -94,7 +96,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.1)',
-    overflow: 'hidden',
   },
   logo: {
     borderRadius: 0,

@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { View, TouchableOpacity, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Text } from './MatchText';
+import TeamBadge from '../common/TeamBadge';
 import type { Standing } from '../../services/apiFootball';
 import { displayMatchTeamName, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { standingRowMatchesTeam } from '../../utils/standingsHelpers';
@@ -127,9 +128,11 @@ function MatchStandingsTableComponent({
               <Text style={[styles.rankText, { color: rowText }]}>{team.rank}</Text>
             </View>
             <View style={styles.teamCell}>
-              <Image
-                source={{ uri: presentTeamLogo(team.team.name, team.team.logo, team.team.id) }}
-                style={styles.logo}
+              <TeamBadge
+                name={team.team.name}
+                logo={presentTeamLogo(team.team.name, team.team.logo, team.team.id)}
+                size={24}
+                color="transparent"
               />
               <Text style={[styles.teamName, { color: rowText }]} numberOfLines={1}>
                 {displayMatchTeamName(team.team.name, language as Language, team.team.id, team.team.logo)}
@@ -241,10 +244,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'left',
-  },
-  logo: {
-    width: 22,
-    height: 22,
   },
   cell: {
     fontSize: 12,
