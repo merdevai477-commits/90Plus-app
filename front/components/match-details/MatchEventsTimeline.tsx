@@ -5,7 +5,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text } from './MatchText';
 import { MatchEventIcon } from './MatchEventIcon';
 import type { FixtureEvent } from '../../services/apiFootball';
-import { getLocalizedEventLabel } from '../../utils/i18nHelpers';
+import { getLocalizedEventLabel, getPersonDisplayName } from '../../utils/i18nHelpers';
 import { displayMatchTeamName } from '../../utils/maskedNationalTeam';
 import { assignGoalClips, type GoalClipMedia } from '../../utils/assignGoalClips';
 import { buildGoalClipPlaybackCandidates } from '../../utils/goalClipPlaybackCandidates';
@@ -186,8 +186,8 @@ function EventBody({
 }) {
   const isSynthetic = event._synthetic === true;
   const teamName = displayMatchTeamName(event.team.name, language, event.team.id, event.team.logo);
-  const playerName = event.player?.name?.trim() ?? '';
-  const outName = event.assist?.name?.trim() ?? '';
+  const playerName = getPersonDisplayName(event.player?.name, language);
+  const outName = getPersonDisplayName(event.assist?.name, language);
   const alignItems = towardCenter === 'right' ? 'flex-start' : 'flex-end';
 
   if (event.type === 'subst' && (playerName || outName)) {

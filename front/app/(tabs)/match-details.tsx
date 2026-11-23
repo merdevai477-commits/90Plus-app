@@ -34,7 +34,12 @@ import ApiFootballService, {
   Injury,
 } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType } from '../../utils/i18nHelpers';
+import {
+  getLeagueDisplayName,
+  getLocalizedMatchStatus,
+  getLocalizedStatType,
+  getPersonDisplayName,
+} from '../../utils/i18nHelpers';
 import { displayMatchTeamName as getTeamDisplayName, isIsraelSeniorNationalTeam, presentTeamLogo } from '../../utils/maskedNationalTeam';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
@@ -397,7 +402,7 @@ const MatchDetailsScreen = () => {
     const homeId = fixture?.teams?.home?.id;
     const awayId = fixture?.teams?.away?.id;
     const toScorer = (e: FixtureEvent) => ({
-      name: e.player?.name ?? '',
+      name: getPersonDisplayName(e.player?.name, language),
       minute: formatMinute(e.time?.elapsed, e.time?.extra),
     });
     // Score-delta goals carry no scorer; the header list would show blank rows.
@@ -407,7 +412,7 @@ const MatchDetailsScreen = () => {
       home: events.filter((e) => isGoal(e) && e.team?.id === homeId).map(toScorer),
       away: events.filter((e) => isGoal(e) && e.team?.id === awayId).map(toScorer),
     };
-  }, [events, fixture?.teams?.home?.id, fixture?.teams?.away?.id]);
+  }, [events, fixture?.teams?.home?.id, fixture?.teams?.away?.id, language]);
 
   const is365Fixture = useMemo(() => {
     const leagueId = fixture?.league?.id ?? 0;
@@ -578,6 +583,15 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, getToken]);
 
+  /** Pop the details screen; never push Matches (that remounts the list as if opened from outside). */
+  const handleMatchBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/matches' as never);
+  }, [router]);
+
   const handleToggleMatchNotifications = useCallback(async () => {
     if (!fixtureId || matchSubLoading) return;
     if (isFinishedMatch()) {
@@ -668,7 +682,11 @@ const MatchDetailsScreen = () => {
       ...(l.startXI?.map((p) => p.player?.name) ?? []),
       ...(l.substitutes?.map((p) => p.player?.name) ?? []),
     ]);
-    const eventNames = events.map((e) => e.team?.name);
+    const eventNames = events.flatMap((e) => [
+      e.team?.name,
+      e.player?.name,
+      e.assist?.name,
+    ]);
     prefetchFootballTranslations(
       collectUniqueStrings(
         fixture?.teams?.home?.name,
@@ -799,6 +817,22 @@ const MatchDetailsScreen = () => {
       setDetailsFetching(false);
     }
   }, [fixtureId, t]);
+
+  // 365 overlays names in the active language; drop the in-memory snapshot so a
+  // language switch cannot keep Arabic player names while the UI is English (or vice versa).
+  const detailsLanguageRef = useRef(language);
+  useEffect(() => {
+    if (!fixtureId || !translationsReady) return;
+    if (detailsLanguageRef.current === language) return;
+    detailsLanguageRef.current = language;
+    useLiveFixtureStore.setState((state) => {
+      if (!state.snapshots[fixtureId]) return state;
+      const snapshots = { ...state.snapshots };
+      delete snapshots[fixtureId];
+      return { snapshots };
+    });
+    void loadMatchDetails();
+  }, [language, fixtureId, translationsReady, loadMatchDetails]);
 
   useEffect(() => {
     if (!translationsReady) return;
@@ -3120,7 +3154,7 @@ const MatchDetailsScreen = () => {
           title={t.matchDetails.navTitle || t.matchDetails.title}
           backLabel={t.matchDetails.backToMatches}
           notificationsLabel={t.matchDetails.notifications || 'Notifications'}
-          onBack={() => router.push('/(tabs)/matches' as any)}
+          onBack={handleMatchBack}
           onNotifications={handleToggleMatchNotifications}
           isSubscribed={isMatchSubscribed}
           notificationsDisabled={isFinishedMatch()}
@@ -3486,7 +3520,7 @@ const MatchDetailsScreen = () => {
         title={tabs[activeTabIndex]?.label || t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
         backLabel={t.matchDetails.backToMatches}
         notificationsLabel={t.matchDetails.notifications || 'Notifications'}
-        onBack={() => router.push('/(tabs)/matches' as any)}
+        onBack={handleMatchBack}
         onNotifications={handleToggleMatchNotifications}
         isSubscribed={isMatchSubscribed}
         notificationsDisabled={isFinishedMatch()}

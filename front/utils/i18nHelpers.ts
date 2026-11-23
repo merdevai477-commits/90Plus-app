@@ -107,6 +107,25 @@ export function getCountryDisplayName(
   return getTeamDisplayName(originalName, language);
 }
 
+/**
+ * Player / coach display name for the active locale.
+ * Arabic: use cached EN→AR football translations (and queue misses).
+ * English: return the API string as-is (365 structural payload is English).
+ */
+export function getPersonDisplayName(
+  originalName: string | null | undefined,
+  language: Language,
+): string {
+  const name = stripTranslationMarkup(originalName);
+  if (!name) return '';
+  if (language === 'ar') {
+    const cached = getCachedFootballTranslation(name);
+    if (cached) return stripTranslationMarkup(cached);
+    queueFootballTranslation(name, language);
+  }
+  return name;
+}
+
 const KNOWN_LEAGUE_ARABIC_KEYS = new Set(
   LEAGUES.map((l) => l.name.toLowerCase()).concat([
     'championship',
