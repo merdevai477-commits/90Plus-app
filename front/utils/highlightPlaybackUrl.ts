@@ -111,11 +111,12 @@ export function youtubeHostedPlayerUrl(pageUrlOrId: string): string | null {
   return `${YOUTUBE_EMBED_ORIGIN}/embed/youtube.html?v=${encodeURIComponent(id)}`;
 }
 
-/** Mobile YouTube watch page — last in-app WebView tier before external Linking. */
+/** YouTube watch page for in-app WebView (full page, not iframe embed). */
 export function youtubeMobileWatchUrl(pageUrlOrId: string): string | null {
   const id = youtubeVideoId(pageUrlOrId) || (/^[\w-]{6,}$/.test(pageUrlOrId.trim()) ? pageUrlOrId.trim() : null);
   if (!id) return null;
-  return `https://m.youtube.com/watch?v=${encodeURIComponent(id)}&playsinline=1`;
+  // Use www (not m.) so the WebView gets a normal viewport; m.youtube often paints as a thin strip in RN.
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}&playsinline=1`;
 }
 
 export type YoutubeEmbedDocumentOptions = {

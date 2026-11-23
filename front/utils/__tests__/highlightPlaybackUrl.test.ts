@@ -35,7 +35,7 @@ describe('resolveHighlightPlaybackUrl', () => {
       'https://90plus.pro/embed/youtube.html?v=qjEXEEBQgqo',
     );
     expect(youtubeMobileWatchUrl('qjEXEEBQgqo')).toBe(
-      'https://m.youtube.com/watch?v=qjEXEEBQgqo&playsinline=1',
+      'https://www.youtube.com/watch?v=qjEXEEBQgqo&playsinline=1',
     );
     const doc = youtubeEmbedDocument('_jxHAw-yH3E', { requireTap: true });
     expect(doc).toContain("videoId:'_jxHAw-yH3E'");

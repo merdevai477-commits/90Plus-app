@@ -117,6 +117,40 @@ const PLAYBACK_PROBE = `
 true;
 `;
 
+/** Detect watch-page dead ends (real geo / removed) so we can fall through to Open in YouTube. */
+const WATCH_PAGE_PROBE = `
+(function () {
+  function send(reason) {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
+    }
+  }
+  function check() {
+    var text = '';
+    try { text = (document.body && document.body.innerText) || ''; } catch (e) {}
+    if (/video player configuration error|error\\s*153/i.test(text)) {
+      send('EMBED_UNAVAILABLE');
+      return;
+    }
+    if (/playback on other websites has been disabled/i.test(text)) {
+      send('EMBED_UNAVAILABLE');
+      return;
+    }
+    if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(text)) {
+      send('EMBED_UNAVAILABLE');
+      return;
+    }
+    if (/video unavailable/i.test(text) && /country|region|بلد|uploader/i.test(text)) {
+      send('EMBED_UNAVAILABLE');
+    }
+  }
+  setTimeout(check, 1200);
+  setTimeout(check, 3000);
+  setTimeout(check, 6000);
+})();
+true;
+`;
+
 const FALLBACK_MESSAGES: Record<string, string> = {
   playbackGeoRestricted: 'This video cannot play inside the app — open it in YouTube.',
   playbackSourceUnavailable: 'This video is currently unavailable.',
@@ -146,7 +180,7 @@ function resetSessionRefs(refs: {
 /** Plays highlight / goal clips with typed failures, timeouts, and URL fallback. */
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const { t } = useTranslation();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth } = useWindowDimensions();
   const playerWidth = Math.max(280, screenWidth - 48);
   const playerHeight = Math.round(playerWidth * 9 / 16);
   const [index, setIndex] = useState(0);
@@ -240,11 +274,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               baseUrl: 'https://90plus.pro',
             }
       : null;
-  const youtubePlayerWidth = youtubeTier === 'watch' ? Math.max(320, screenWidth) : playerWidth;
-  const youtubePlayerHeight =
-    youtubeTier === 'watch'
-      ? Math.round(Math.min(Math.max(screenHeight * 0.62, playerHeight), screenHeight - 120))
-      : playerHeight;
+  const isWatchTier = youtubeTier === 'watch';
 
   const matchDetailsText = t.matchDetails as unknown as Record<string, string | undefined>;
 
@@ -461,16 +491,17 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
         {showSurface && embedUrl && youtubeWebSource && !failed ? (
-          <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
+          <View
+            style={
+              isWatchTier
+                ? styles.watchShell
+                : [styles.player, { width: playerWidth, height: playerHeight }]
+            }
+          >
             <WebView
               key={`${listKey}:${embedUrl}:${youtubeTier}:${sessionNonce}`}
               source={youtubeWebSource}
-              style={{
-                width: youtubePlayerWidth,
-                height: youtubePlayerHeight,
-                opacity: 0.99,
-                backgroundColor: '#000000',
-              }}
+              style={isWatchTier ? styles.watchWebView : styles.webView}
               androidLayerType="hardware"
               userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
@@ -483,13 +514,13 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
               // Watch page needs native fullscreen controls; embed stays modal-safe on iOS.
-              allowsFullscreenVideo={youtubeTier === 'watch' ? true : youtubeAllowsFullscreenVideo()}
+              allowsFullscreenVideo={isWatchTier ? true : youtubeAllowsFullscreenVideo()}
               javaScriptEnabled
               domStorageEnabled
-              injectedJavaScript={youtubeTier === 'watch' ? undefined : PLAYBACK_PROBE}
+              injectedJavaScript={isWatchTier ? WATCH_PAGE_PROBE : PLAYBACK_PROBE}
               onLoadEnd={() => {
                 // Watch page plays without account/embed — clear spinner as soon as it paints.
-                if (youtubeTier === 'watch') {
+                if (isWatchTier) {
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
                   setUiPhase('ready');
@@ -890,6 +921,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     backgroundColor: '#000000',
+    // YouTube UI is LTR; an RTL root collapses the watch WebView into a thin right strip.
+    direction: 'ltr',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -901,6 +934,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+  /** Full-bleed shell for youtube.com/watch — no 16:9 box (that crushed the page into a strip). */
+  watchShell: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    direction: 'ltr',
+  },
+  watchWebView: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000000',
+    opacity: 0.99,
   },
   playerPlate: {
     ...StyleSheet.absoluteFillObject,
