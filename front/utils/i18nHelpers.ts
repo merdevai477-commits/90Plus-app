@@ -28,6 +28,7 @@ import {
   getCachedFootballTranslation,
   queueFootballTranslation,
 } from '../src/stores/footballTranslationStore';
+import { stripTranslationMarkup } from './stripTranslationMarkup';
 
 // ─── Team name localization ───────────────────────────────────────────────────
 
@@ -78,9 +79,9 @@ export function getTeamDisplayName(
     ?? 'Unknown';
 
   const byId = getCompetitorDisplayName(competitorId, language === 'ar' ? 'ar' : 'en');
-  if (byId) return byId;
+  if (byId) return stripTranslationMarkup(byId);
 
-  const name = (originalName ?? '').trim();
+  const name = stripTranslationMarkup(originalName);
   if (!name) return fallback;
 
   // Already masked on the server. Don't send it through country lookup or translation.
@@ -90,9 +91,9 @@ export function getTeamDisplayName(
 
   if (language === 'ar') {
     const ar = lookupArabicLabel(name);
-    if (ar) return ar;
+    if (ar) return stripTranslationMarkup(ar);
     const cached = getCachedFootballTranslation(name);
-    if (cached) return cached;
+    if (cached) return stripTranslationMarkup(cached);
     queueFootballTranslation(name, language);
   }
   return name;
@@ -195,16 +196,16 @@ export function getLeagueDisplayName(
     ?? translations.en.common.unknown
     ?? 'Unknown';
 
-  const name = (originalName ?? '').trim();
+  const name = stripTranslationMarkup(originalName);
   if (!name && !leagueId) return fallback;
 
   if (language === 'ar') {
     const curated = lookupCuratedLeagueArabic(name, leagueId, country);
-    if (curated) return curated;
+    if (curated) return stripTranslationMarkup(curated);
 
     if (name && !shouldSkipAutoLeagueTranslation(name, leagueId, country)) {
       const cached = getCachedFootballTranslation(name);
-      if (cached) return cached;
+      if (cached) return stripTranslationMarkup(cached);
       queueFootballTranslation(name, language);
     }
   }

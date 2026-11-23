@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Language } from '../i18n/types';
 import { fetchFootballNameTranslations } from '../../services/footballTranslationService';
+import { stripTranslationMarkup } from '../../utils/stripTranslationMarkup';
 
 interface FootballTranslationState {
   /** en source → ar display */
@@ -18,7 +19,17 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const flushQueue = new Set<string>();
 
 function normalizeKey(text: string): string {
-  return text.trim();
+  return stripTranslationMarkup(text);
+}
+
+function cleanCacheMap(map: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(map)) {
+    const cleanKey = stripTranslationMarkup(key);
+    const cleanValue = stripTranslationMarkup(value);
+    if (cleanKey && cleanValue) next[cleanKey] = cleanValue;
+  }
+  return next;
 }
 
 export const useFootballTranslationStore = create<FootballTranslationState>()(
@@ -50,9 +61,10 @@ export const useFootballTranslationStore = create<FootballTranslationState>()(
             const chunk = missing.slice(i, i + CHUNK);
             const translations = await fetchFootballNameTranslations(chunk, language);
             if (Object.keys(translations).length === 0) continue;
+            const cleaned = cleanCacheMap(translations);
 
             set((state) => {
-              const next = { ...state.cache, ...translations };
+              const next = { ...state.cache, ...cleaned };
               return { cache: next, revision: state.revision + 1 };
             });
           }
@@ -63,7 +75,8 @@ export const useFootballTranslationStore = create<FootballTranslationState>()(
       },
     }),
     {
-      name: 'football-name-translations-v1',
+      // v2: drop polluted MT markup (`<g id="N">…`) from prior cache entries
+      name: 'football-name-translations-v2',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ cache: state.cache }),
     },

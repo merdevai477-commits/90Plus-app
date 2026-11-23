@@ -30,6 +30,7 @@ import {
 } from '../utils/scores365-athlete-photo';
 import { normalizeAthletesStatsBoards } from '../utils/scores365-athletes-stats';
 import { teamNamesLooselyMatch } from '../utils/team-name-match.util';
+import { stripTranslationMarkup } from '../utils/strip-translation-markup';
 import {
   competitionIndexRecords,
   DEFAULT_ARABIC_COUNTRY_ID,
@@ -1923,9 +1924,9 @@ export class ThreeSixFiveScoresService {
       .filter((a) => a.sportId == null || a.sportId === 1)
       .map((a) => ({
         athleteId: a.id,
-        name: a.name ?? '—',
-        shortName: a.shortName ?? a.name ?? '—',
-        clubName: a.clubName ?? null,
+        name: stripTranslationMarkup(a.name) || '—',
+        shortName: stripTranslationMarkup(a.shortName ?? a.name) || '—',
+        clubName: a.clubName ? stripTranslationMarkup(a.clubName) || null : null,
         clubId: a.clubId ?? null,
         nationalityId: a.nationalityId ?? null,
         sportId: a.sportId ?? null,
@@ -1997,12 +1998,14 @@ export class ThreeSixFiveScoresService {
         competitorId: c.id,
         sportId: c.sportId ?? 1,
         type: c.type ?? 1,
-        name: c.name ?? '—',
-        longName: c.longName ?? null,
-        symbolicName: c.symbolicName ?? null,
+        name: stripTranslationMarkup(c.name) || '—',
+        longName: c.longName ? stripTranslationMarkup(c.longName) || null : null,
+        symbolicName: c.symbolicName ? stripTranslationMarkup(c.symbolicName) || null : null,
         nameForURL: c.nameForURL ?? null,
         countryId: c.countryId ?? null,
-        country: c.countryId != null ? (countriesById.get(c.countryId) ?? null) : null,
+        country: c.countryId != null
+          ? stripTranslationMarkup(countriesById.get(c.countryId) ?? null) || null
+          : null,
         logo: buildCompetitorLogoUrl(c.id, c.imageVersion),
         color: c.color ?? null,
         awayColor: c.awayColor ?? null,
@@ -3537,15 +3540,17 @@ export class ThreeSixFiveScoresService {
     );
     const toCompetitor = (c: NonNullable<SearchAllPayload['competitors']>[number]) => ({
       competitorId: c.id,
-      name: c.name ?? '—',
+      name: stripTranslationMarkup(c.name) || '—',
       type: c.type ?? 1,
       countryId: c.countryId ?? null,
-      country: c.countryId != null ? (countriesById.get(c.countryId) ?? null) : null,
+      country: c.countryId != null
+        ? stripTranslationMarkup(countriesById.get(c.countryId) ?? null) || null
+        : null,
       logo: buildCompetitorLogoUrl(c.id, c.imageVersion, 64),
       isNationalTeam: c.type === 2,
       popularityRank: c.popularityRank ?? null,
-      longName: c.longName ?? null,
-      symbolicName: c.symbolicName ?? null,
+      longName: c.longName ? stripTranslationMarkup(c.longName) || null : null,
+      symbolicName: c.symbolicName ? stripTranslationMarkup(c.symbolicName) || null : null,
     });
 
     const clubs = competitors.filter((c) => (c.type ?? 1) === 1).map(toCompetitor);
@@ -3554,9 +3559,9 @@ export class ThreeSixFiveScoresService {
       .filter((a) => a.sportId == null || a.sportId === 1)
       .map((a) => ({
         athleteId: a.id,
-        name: a.name ?? '—',
-        shortName: a.shortName ?? a.name ?? '—',
-        clubName: a.clubName ?? null,
+        name: stripTranslationMarkup(a.name) || '—',
+        shortName: stripTranslationMarkup(a.shortName ?? a.name) || '—',
+        clubName: a.clubName ? stripTranslationMarkup(a.clubName) || null : null,
         clubId: a.clubId ?? null,
         nationalityId: a.nationalityId ?? null,
         sportId: a.sportId ?? null,

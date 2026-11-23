@@ -15,6 +15,7 @@ import {
   getCuratedArabicLeagueName,
   isAmbiguousLeagueName,
 } from '../data/league-translations';
+import { stripTranslationMarkup } from '../utils/strip-translation-markup';
 
 const CACHE_PREFIX = 'ft:en:ar:';
 const CACHE_TTL_SEC = 90 * 24 * 60 * 60; // 90 days
@@ -27,6 +28,10 @@ function hasArabicScript(text: string): boolean {
   return /[\u0600-\u06FF]/.test(text);
 }
 
+function cleanTranslatedName(text: string): string {
+  return stripTranslationMarkup(text);
+}
+
 function cacheKey(text: string): string {
   const hash = crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex').slice(0, 32);
   return `${CACHE_PREFIX}${hash}`;
@@ -35,15 +40,16 @@ function cacheKey(text: string): string {
 async function readCache(text: string): Promise<string | null> {
   const key = cacheKey(text);
   const mem = memoryCache.get(key);
-  if (mem) return mem;
+  if (mem) return cleanTranslatedName(mem);
 
   const redis = getRedisClient();
   if (redis && isRedisConnected()) {
     try {
       const val = await redis.get(key);
       if (val) {
-        memoryCache.set(key, val);
-        return val;
+        const cleaned = cleanTranslatedName(val);
+        memoryCache.set(key, cleaned);
+        return cleaned;
       }
     } catch (err) {
       logger.warn('football-translation Redis read failed:', err);
@@ -53,13 +59,15 @@ async function readCache(text: string): Promise<string | null> {
 }
 
 async function writeCache(source: string, translated: string): Promise<void> {
+  const cleaned = cleanTranslatedName(translated);
+  if (!cleaned) return;
   const key = cacheKey(source);
-  memoryCache.set(key, translated);
+  memoryCache.set(key, cleaned);
 
   const redis = getRedisClient();
   if (redis && isRedisConnected()) {
     try {
-      await redis.setex(key, CACHE_TTL_SEC, translated);
+      await redis.setex(key, CACHE_TTL_SEC, cleaned);
     } catch (err) {
       logger.warn('football-translation Redis write failed:', err);
     }
@@ -129,7 +137,8 @@ Rules:
     for (const text of texts) {
       const val = map[text] ?? map[text.toLowerCase()];
       if (typeof val === 'string' && val.trim()) {
-        out[text] = val.trim();
+        const cleaned = cleanTranslatedName(val);
+        if (cleaned) out[text] = cleaned;
       }
     }
     return out;
@@ -152,7 +161,7 @@ async function translateOneMyMemory(text: string): Promise<string | null> {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data = (await res.json()) as { responseData?: { translatedText?: string } };
-    const translated = data.responseData?.translatedText?.trim();
+    const translated = cleanTranslatedName(data.responseData?.translatedText ?? '');
     if (!translated || translated.toUpperCase() === text.toUpperCase()) return null;
     return translated;
   } catch {
@@ -192,40 +201,51 @@ export async function translateFootballNames(
   const unique = [...new Set(texts.map((t) => t.trim()).filter(Boolean))].slice(0, MAX_TEXTS_PER_REQUEST);
   const output: Record<string, string> = {};
   const missing: string[] = [];
+  /** original request key → cleaned English source used for cache/translate */
+  const pendingOriginals = new Map<string, string[]>();
 
   for (const text of unique) {
-    if (hasArabicScript(text)) {
-      output[text] = text;
+    const cleanedSource = cleanTranslatedName(text);
+    if (!cleanedSource) continue;
+
+    if (hasArabicScript(cleanedSource)) {
+      output[text] = cleanedSource;
       continue;
     }
 
-    const curated = getCuratedArabicLeagueName(text);
+    const curated = getCuratedArabicLeagueName(cleanedSource);
     if (curated) {
-      output[text] = curated;
+      output[text] = cleanTranslatedName(curated);
       continue;
     }
 
-    if (isAmbiguousLeagueName(text)) {
-      output[text] = text;
+    if (isAmbiguousLeagueName(cleanedSource)) {
+      output[text] = cleanedSource;
       continue;
     }
 
-    const cached = await readCache(text);
+    const cached = await readCache(cleanedSource);
     if (cached) {
       output[text] = cached;
     } else {
-      missing.push(text);
+      if (!pendingOriginals.has(cleanedSource)) {
+        pendingOriginals.set(cleanedSource, []);
+        missing.push(cleanedSource);
+      }
+      pendingOriginals.get(cleanedSource)!.push(text);
     }
   }
 
   if (missing.length === 0) return output;
 
   const fresh = await translateMissing(missing);
-  for (const text of missing) {
-    const translated = fresh[text] ?? text;
-    output[text] = translated;
-    if (translated !== text) {
-      await writeCache(text, translated);
+  for (const cleanedSource of missing) {
+    const translated = cleanTranslatedName(fresh[cleanedSource] ?? cleanedSource);
+    for (const original of pendingOriginals.get(cleanedSource) ?? [cleanedSource]) {
+      output[original] = translated;
+    }
+    if (translated !== cleanedSource) {
+      await writeCache(cleanedSource, translated);
     }
   }
 

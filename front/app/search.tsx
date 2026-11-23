@@ -26,6 +26,7 @@ import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/them
 import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
+import { stripTranslationMarkup } from '../utils/stripTranslationMarkup';
 import { useHaptic } from '../hooks/useHaptic';
 import { useFavoriteLeagues } from '../hooks/useFavoriteLeagues';
 import ApiFootballService, {
@@ -127,11 +128,11 @@ function PlayerRow({
             <CachedAthletePhoto uri={item.imageUrl} size={40} recyclingKey={item.athleteId} />
             <View style={styles.rowInfo}>
                 <Text style={[styles.rowTitle, { color: ink }]} numberOfLines={1}>
-                    {item.name}
+                    {stripTranslationMarkup(item.name)}
                 </Text>
                 {item.clubName ? (
                     <Text style={[styles.rowSub, { color: muted }]} numberOfLines={1}>
-                        {item.clubName}
+                        {stripTranslationMarkup(item.clubName)}
                     </Text>
                 ) : null}
             </View>
