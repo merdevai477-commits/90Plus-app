@@ -24,14 +24,27 @@ const CORNER_ICON = require('../../assets/images/match-events/legend-corner.svg'
 const VAR_ICON = require('../../assets/images/match-events/legend-var.svg');
 const INJURY_SUB_ICON = require('../../assets/images/match-events/legend-injury-sub.svg');
 const GOAL_PLAY = require('../../assets/images/match-events/goal-play.svg');
+const HALFTIME_WHISTLE = require('../../assets/images/match-events/halftime-whistle.svg');
 
 const GOAL_MINUTE = '#A20000';
+const SPINE = '#6B7280';
 const ICON = 16;
 const CLIP_W = 163;
 const CLIP_H = 92;
 
 const LRM = '\u200E';
 const isolate = (s: string) => `\u2068${s}\u2069`;
+
+/** API elapsed stays ≤45 through first-half stoppage; 2H starts at 46. */
+function isFirstHalfEvent(event: FixtureEvent): boolean {
+  return (event.time?.elapsed ?? 0) <= 45;
+}
+
+function clipDurationLabel(clip: GoalClipMedia): string | null {
+  const text = `${clip.title} ${clip.description ?? ''}`;
+  const match = text.match(/\b(\d{1,2}):(\d{2})\b/);
+  return match ? `${match[1]}:${match[2]}` : null;
+}
 
 type Props = {
   events: FixtureEvent[];
@@ -44,6 +57,8 @@ type Props = {
   awayTeamLogo?: string | null;
   goalForLabel: string;
   detailsUnavailableLabel: string;
+  /** Centered rest marker between 1H and 2H (e.g. استراحة / Half-time). */
+  halfTimeLabel?: string;
   goalClips?: GoalClipMedia[];
   goalClipScorerLabel?: string;
   goalClipPlayLabel?: string;
@@ -209,6 +224,7 @@ function EventBody({
   }
 
   const playUrl = clip?.url || clip?.embedUrl || '';
+  const durationLabel = clip ? clipDurationLabel(clip) : null;
 
   return (
     <View style={[styles.eventCol, { alignItems }]}>
@@ -241,8 +257,40 @@ function EventBody({
           )}
           <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']} style={styles.clipShade} />
           <ExpoImage source={GOAL_PLAY} style={styles.clipPlay} contentFit="contain" />
+          {durationLabel ? (
+            <View style={styles.clipDuration}>
+              <Text style={styles.clipDurationText}>{durationLabel}</Text>
+            </View>
+          ) : null}
         </Pressable>
       ) : null}
+    </View>
+  );
+}
+
+function HalfTimeBreak({
+  label,
+  isDark,
+}: {
+  label: string;
+  isDark: boolean;
+}) {
+  return (
+    <View style={styles.htRow} accessibilityRole="text" accessibilityLabel={label}>
+      <View
+        style={[
+          styles.htPill,
+          {
+            backgroundColor: isDark ? 'rgba(188,123,250,0.14)' : 'rgba(106,43,217,0.08)',
+            borderColor: isDark ? 'rgba(188,123,250,0.4)' : 'rgba(106,43,217,0.28)',
+          },
+        ]}
+      >
+        <ExpoImage source={HALFTIME_WHISTLE} style={styles.htIcon} contentFit="contain" />
+        <Text style={[styles.htLabel, { color: isDark ? '#E9D5FF' : '#4B1FA3' }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -258,6 +306,7 @@ export function MatchEventsTimeline({
   awayTeamLogo,
   goalForLabel,
   detailsUnavailableLabel,
+  halfTimeLabel = 'Half-time',
   goalClips = [],
   goalClipPlayLabel = 'Play {player} goal',
   onPlayClip,
@@ -288,66 +337,67 @@ export function MatchEventsTimeline({
       ]}
     >
       <View style={styles.list}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(139,92,246,0)', '#2C253D', '#422F6E', 'rgba(139,92,246,0)']}
-          locations={[0, 0.490385, 0.788607, 1]}
-          style={styles.centerLine}
-        />
+        {/* Figma Events list spine: muted gray axis down the center. */}
+        <View pointerEvents="none" style={[styles.centerLine, { backgroundColor: isDark ? 'rgba(107,114,128,0.55)' : SPINE }]} />
         {events.map((event, index) => {
           const homeSide = isHomeSideEvent(event, homeTeam, awayTeam);
           // Scoreboard is away | home, so away events sit left and home sit right.
           const towardCenter: 'left' | 'right' = homeSide ? 'right' : 'left';
           const isGoal = event.type === 'Goal';
           const minuteColor = isGoal ? GOAL_MINUTE : colors.textMuted;
+          // Latest-first list: insert rest marker when we cross from 2H down into 1H.
+          const showHalfTime =
+            index > 0 &&
+            !isFirstHalfEvent(events[index - 1]) &&
+            isFirstHalfEvent(event);
 
           return (
-            <View
-              key={`${event.time.elapsed}-${event.type}-${event.player?.id ?? index}-${index}`}
-              style={styles.row}
-            >
-              <View style={[styles.side, styles.sideLeft]}>
-                {!homeSide ? (
-                  <EventBody
-                    event={event}
-                    language={language}
-                    towardCenter={towardCenter}
-                    textColor={colors.textPrimary}
-                    mutedColor={colors.textMuted}
-                    goalForLabel={goalForLabel}
-                    detailsUnavailableLabel={detailsUnavailableLabel}
-                    clip={clipsByEvent[index]}
-                    goalClipPlayLabel={goalClipPlayLabel}
-                    onPlayClip={onPlayClip}
-                    events={events}
-                    index={index}
-                    goalClips={goalClips}
-                  />
-                ) : null}
-              </View>
+            <View key={`${event.time.elapsed}-${event.type}-${event.player?.id ?? index}-${index}`}>
+              {showHalfTime ? <HalfTimeBreak label={halfTimeLabel} isDark={isDark} /> : null}
+              <View style={styles.row}>
+                <View style={[styles.side, styles.sideLeft]}>
+                  {!homeSide ? (
+                    <EventBody
+                      event={event}
+                      language={language}
+                      towardCenter={towardCenter}
+                      textColor={colors.textPrimary}
+                      mutedColor={colors.textMuted}
+                      goalForLabel={goalForLabel}
+                      detailsUnavailableLabel={detailsUnavailableLabel}
+                      clip={clipsByEvent[index]}
+                      goalClipPlayLabel={goalClipPlayLabel}
+                      onPlayClip={onPlayClip}
+                      events={events}
+                      index={index}
+                      goalClips={goalClips}
+                    />
+                  ) : null}
+                </View>
 
-              <Text style={[styles.minute, { color: minuteColor }]} numberOfLines={1}>
-                {formatMinute(event)}
-              </Text>
+                <Text style={[styles.minute, { color: minuteColor }]} numberOfLines={1}>
+                  {formatMinute(event)}
+                </Text>
 
-              <View style={[styles.side, styles.sideRight]}>
-                {homeSide ? (
-                  <EventBody
-                    event={event}
-                    language={language}
-                    towardCenter={towardCenter}
-                    textColor={colors.textPrimary}
-                    mutedColor={colors.textMuted}
-                    goalForLabel={goalForLabel}
-                    detailsUnavailableLabel={detailsUnavailableLabel}
-                    clip={clipsByEvent[index]}
-                    goalClipPlayLabel={goalClipPlayLabel}
-                    onPlayClip={onPlayClip}
-                    events={events}
-                    index={index}
-                    goalClips={goalClips}
-                  />
-                ) : null}
+                <View style={[styles.side, styles.sideRight]}>
+                  {homeSide ? (
+                    <EventBody
+                      event={event}
+                      language={language}
+                      towardCenter={towardCenter}
+                      textColor={colors.textPrimary}
+                      mutedColor={colors.textMuted}
+                      goalForLabel={goalForLabel}
+                      detailsUnavailableLabel={detailsUnavailableLabel}
+                      clip={clipsByEvent[index]}
+                      goalClipPlayLabel={goalClipPlayLabel}
+                      onPlayClip={onPlayClip}
+                      events={events}
+                      index={index}
+                      goalClips={goalClips}
+                    />
+                  ) : null}
+                </View>
               </View>
             </View>
           );
@@ -372,8 +422,32 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: '50%',
-    width: 1,
-    marginLeft: -0.5,
+    width: 1.5,
+    marginLeft: -0.75,
+  },
+  htRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    zIndex: 1,
+  },
+  htPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  htIcon: {
+    width: 18,
+    height: 18,
+  },
+  htLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   secondYellowWrap: {
     width: 16,
@@ -478,5 +552,23 @@ const styles = StyleSheet.create({
   clipPlay: {
     width: 26,
     height: 26,
+  },
+  clipDuration: {
+    position: 'absolute',
+    top: 12,
+    left: 9,
+    minWidth: 32,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#0C0C0C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipDurationText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '500',
+    lineHeight: 12,
   },
 });

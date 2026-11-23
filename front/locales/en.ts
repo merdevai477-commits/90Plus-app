@@ -621,6 +621,7 @@ export const en = {
     playbackRetry: 'Retry',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
+    eventsHalftime: 'Half-time',
     last5Matches: 'Last 5 Matches',
     headToHead: 'Head to Head',
     headToHeadBothTeams: 'Both teams',

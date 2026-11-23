@@ -860,6 +860,7 @@ export const ar = {
     eventsNoneRecorded: 'لم تُسجَّل أحداث لهذه المباراة',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',
+    eventsHalftime: 'استراحة',
     last5Matches: 'آخر 5 مباريات',
     headToHead: 'المواجهات المباشرة',
     headToHeadBothTeams: 'الفريقين ضد بعض',

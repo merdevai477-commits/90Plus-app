@@ -2180,6 +2180,7 @@ const MatchDetailsScreen = () => {
                 awayTeamLogo={awayTeamLogo}
                 goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
                 detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
+                halfTimeLabel={t.matchDetails.eventsHalftime || 'Half-time'}
                 goalClips={goalClips}
                 goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
                 goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
