@@ -53,8 +53,13 @@ import {
   youtubeVideoId,
 } from '../../utils/highlightPlaybackUrl';
 
-/** In-app YouTube surfaces, tried in order on iPhone before external Linking. */
-type YoutubeSurfaceTier = 'hosted' | 'html' | 'watch';
+/**
+ * In-app YouTube surfaces before external Linking.
+ * Watch-first: Premier League / rights-claimed clips fail iframe embed (Error 153 /
+ * fake "unavailable in your country") while the normal YouTube watch page plays
+ * without signing in — verified in browser for LFC highlights.
+ */
+type YoutubeSurfaceTier = 'watch' | 'hosted' | 'html';
 
 type Props = {
   visible: boolean;
@@ -81,7 +86,7 @@ const PLAYBACK_PROBE = `
     var text = pageText(document);
     var frames = document.querySelectorAll('iframe');
     for (var i = 0; i < frames.length; i++) text += ' ' + pageText(frames[i].contentDocument);
-    if (/playback on other websites has been disabled/i.test(text)) {
+    if (/playback on other websites has been disabled|video player configuration error|error\\s*153/i.test(text)) {
       send('EMBED_UNAVAILABLE');
       return;
     }
@@ -95,14 +100,14 @@ const PLAYBACK_PROBE = `
   }
   window.addEventListener('message', function (event) {
     var raw = typeof event.data === 'string' ? event.data : JSON.stringify(event.data || '');
-    var info = raw.match(/"info"\\s*:\\s*(100|101|150)/);
+    var info = raw.match(/"info"\\s*:\\s*(100|101|150|153)/);
     if (info) {
       var code = info[1];
       if (code === '100') send('SOURCE_NOT_FOUND');
       else send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/onError/.test(raw) && /150|101/.test(raw)) send('EMBED_UNAVAILABLE');
+    if (/onError/.test(raw) && /150|153|101/.test(raw)) send('EMBED_UNAVAILABLE');
     else if (/onError/.test(raw) && /100/.test(raw)) send('SOURCE_NOT_FOUND');
   });
   setTimeout(check, 800);
@@ -141,7 +146,7 @@ function resetSessionRefs(refs: {
 /** Plays highlight / goal clips with typed failures, timeouts, and URL fallback. */
 export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
   const { t } = useTranslation();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const playerWidth = Math.max(280, screenWidth - 48);
   const playerHeight = Math.round(playerWidth * 9 / 16);
   const [index, setIndex] = useState(0);
@@ -154,7 +159,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [sessionNonce, setSessionNonce] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [youtubeLoaded, setYoutubeLoaded] = useState(false);
-  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('hosted');
+  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('watch');
 
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
@@ -178,7 +183,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setDirectReady(false);
     setPlayableDirectUrl('');
     setYoutubeLoaded(false);
-    setYoutubeTier('hosted');
+    setYoutubeTier('watch');
     setUiPhase(visible ? 'initializing' : 'idle');
   }
 
@@ -226,15 +231,20 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const sourceType = classifyHighlightSourceType(fileUrl || url);
   const youtubeWebSource =
     embedUrl && videoId
-      ? youtubeTier === 'hosted' && hostedPlayerUrl
-        ? { uri: hostedPlayerUrl }
-        : youtubeTier === 'watch' && mobileWatchUrl
-          ? { uri: mobileWatchUrl }
+      ? youtubeTier === 'watch' && mobileWatchUrl
+        ? { uri: mobileWatchUrl }
+        : youtubeTier === 'hosted' && hostedPlayerUrl
+          ? { uri: hostedPlayerUrl }
           : {
               html: youtubeEmbedDocument(videoId, { requireTap: Platform.OS === 'ios' }),
               baseUrl: 'https://90plus.pro',
             }
       : null;
+  const youtubePlayerWidth = youtubeTier === 'watch' ? Math.max(320, screenWidth) : playerWidth;
+  const youtubePlayerHeight =
+    youtubeTier === 'watch'
+      ? Math.round(Math.min(Math.max(screenHeight * 0.62, playerHeight), screenHeight - 120))
+      : playerHeight;
 
   const matchDetailsText = t.matchDetails as unknown as Record<string, string | undefined>;
 
@@ -282,15 +292,15 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           reason === 'NETWORK_ERROR' ||
           reason === 'UNKNOWN_ERROR');
       if (youtubeRecoverable) {
-        if (youtubeTier === 'hosted') {
+        if (youtubeTier === 'watch') {
           setYoutubeLoaded(false);
-          setYoutubeTier('html');
+          setYoutubeTier('hosted');
           setUiPhase('loading');
           return;
         }
-        if (youtubeTier === 'html') {
+        if (youtubeTier === 'hosted') {
           setYoutubeLoaded(false);
-          setYoutubeTier('watch');
+          setYoutubeTier('html');
           setUiPhase('loading');
           return;
         }
@@ -313,7 +323,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       if (index + 1 < urls.length) {
         setDirectReady(false);
         setYoutubeLoaded(false);
-        setYoutubeTier('hosted');
+        setYoutubeTier('watch');
         setUiPhase('loading');
         setIndex((current) => current + 1);
       } else {
@@ -408,7 +418,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setFailureReason(null);
     setDirectReady(false);
     setYoutubeLoaded(false);
-    setYoutubeTier('hosted');
+    setYoutubeTier('watch');
     setIndex(0);
     setUiPhase('initializing');
     setSessionNonce((nonce) => nonce + 1);
@@ -451,11 +461,16 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
         {showSurface && embedUrl && youtubeWebSource && !failed ? (
-          <View style={[styles.player, { width: playerWidth, height: playerHeight }]}>
+          <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
             <WebView
               key={`${listKey}:${embedUrl}:${youtubeTier}:${sessionNonce}`}
               source={youtubeWebSource}
-              style={{ width: playerWidth, height: playerHeight, opacity: 0.99, backgroundColor: '#000000' }}
+              style={{
+                width: youtubePlayerWidth,
+                height: youtubePlayerHeight,
+                opacity: 0.99,
+                backgroundColor: '#000000',
+              }}
               androidLayerType="hardware"
               userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
@@ -467,14 +482,16 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               sharedCookiesEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              allowsFullscreenVideo={youtubeAllowsFullscreenVideo()}
+              // Watch page needs native fullscreen controls; embed stays modal-safe on iOS.
+              allowsFullscreenVideo={youtubeTier === 'watch' ? true : youtubeAllowsFullscreenVideo()}
               javaScriptEnabled
               domStorageEnabled
               injectedJavaScript={youtubeTier === 'watch' ? undefined : PLAYBACK_PROBE}
               onLoadEnd={() => {
-                // Hosted/html: wait for PLAYER_READY. Watch page: treat paint as interactive.
+                // Watch page plays without account/embed — clear spinner as soon as it paints.
                 if (youtubeTier === 'watch') {
                   setYoutubeLoaded(true);
+                  youtubeLoadedRef.current = true;
                   setUiPhase('ready');
                   return;
                 }

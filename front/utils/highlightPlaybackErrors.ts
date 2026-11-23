@@ -108,6 +108,10 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
   if (/"info"\s*:\s*150\b/.test(text) || /\berror\s*150\b/i.test(text) || /\binfo["']?\s*[:=]\s*150\b/i.test(text)) {
     return 'EMBED_UNAVAILABLE';
   }
+  // Error 153 = embed player configuration / rights block (watch page often still works).
+  if (/"info"\s*:\s*153\b/.test(text) || /\berror\s*153\b/i.test(text) || /video player configuration error/i.test(text)) {
+    return 'EMBED_UNAVAILABLE';
+  }
   if (/"info"\s*:\s*101\b/.test(text) || /\berror\s*101\b/i.test(text)) {
     return 'EMBED_UNAVAILABLE';
   }
@@ -130,7 +134,7 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
 
   if (youtubeFakeCountryOrEmbed) return 'EMBED_UNAVAILABLE';
 
-  if (/onError/i.test(text) && /150|101/.test(text)) return 'EMBED_UNAVAILABLE';
+  if (/onError/i.test(text) && /150|153|101/.test(text)) return 'EMBED_UNAVAILABLE';
   if (/onError/i.test(text) && /100/.test(text)) return 'SOURCE_NOT_FOUND';
 
   if (lower.includes('network') || lower.includes('timeout')) {
@@ -141,7 +145,7 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
 }
 
 export function classifyYouTubeErrorCode(code: number): PlaybackFailureReason {
-  if (code === 150 || code === 101) return 'EMBED_UNAVAILABLE';
+  if (code === 150 || code === 153 || code === 101) return 'EMBED_UNAVAILABLE';
   if (code === 100) return 'SOURCE_NOT_FOUND';
   return 'UNKNOWN_ERROR';
 }
