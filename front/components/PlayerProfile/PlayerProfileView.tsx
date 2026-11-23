@@ -260,18 +260,18 @@ export default function PlayerProfileView({
             />
           </View>
 
-          {/* Cutout stays on the photo edge so he faces the identity panel with a clear gap */}
+          {/* Cutout on the photo edge — keep under ~half width so the name panel never collides on iPhone */}
           <Pressable
             style={[
               styles.heroCutoutWrap,
               {
-                width: Math.round(Math.min(width * 1.0, 270 * scale)),
-                height: Math.round(heroHeight * 1.18),
+                width: Math.round(Math.min(width * 0.5, 216 * scale)),
+                height: Math.round(heroHeight * 1.12),
                 bottom: Math.round(-1 * scale),
               },
               rtl
-                ? { left: Math.round(9 * scale) }
-                : { right: Math.round(4 * scale) },
+                ? { left: Math.round(-4 * scale) }
+                : { right: Math.round(-4 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
@@ -303,23 +303,25 @@ export default function PlayerProfileView({
             style={[
               styles.heroIdentity,
               {
-                top: Math.max(insets.top, 10) + Math.round(22 * scale),
-                // Wider panel so long names (e.g. ليونيل ميسي) stay readable over the cutout
-                width: Math.round(Math.min(width * 0.5, 220 * scale)),
-                gap: Math.round(10 * scale),
+                // Vertically center identity against the cutout; keep clear of the photo edge
+                top: Math.max(insets.top, 10) + Math.round(36 * scale),
+                bottom: Math.round(28 * scale),
+                width: Math.round(Math.min(width * 0.46, 198 * scale)),
+                gap: Math.round(8 * scale),
                 alignItems: 'flex-end',
+                justifyContent: 'center',
               },
               rtl
-                ? { right: Math.round(14 * scale) }
-                : { left: Math.round(14 * scale) },
+                ? { right: Math.round(16 * scale) }
+                : { left: Math.round(16 * scale) },
             ]}
           >
             <View
               style={{
                 width: '100%',
-                justifyContent: 'flex-start',
+                justifyContent: 'center',
                 alignItems: 'flex-end',
-                gap: Math.round(10 * scale),
+                gap: Math.round(8 * scale),
               }}
             >
               {vm.nationality ? (
@@ -976,15 +978,18 @@ export function SectionHeader({
   trailing,
   trailingNode,
   rtl,
+  colors,
 }: {
   icon: number;
   title: string;
   trailing?: string | null;
   trailingNode?: ReactNode;
   rtl: boolean;
+  /** When the host screen is locked to dark (match player profile), pass dark tokens explicitly. */
+  colors?: PPColors;
 }) {
   const { isDark } = useResolvedAppScheme();
-  const C = getPPColors(isDark);
+  const C = colors ?? getPPColors(isDark);
   const fontBold = useAppFont(700);
   return (
     <View style={[styles.legacySectionHeader, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
@@ -1157,13 +1162,13 @@ const styles = StyleSheet.create({
   heroNameRow: {
     flexDirection: 'row',
     direction: 'ltr',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 6,
     width: '100%',
   },
   heroName: { flexShrink: 1, flexGrow: 1, textAlign: 'right' },
-  verifiedBadge: { width: 22, height: 22, marginTop: 4 },
+  verifiedBadge: { width: 22, height: 22 },
   heroClubRow: {
     flexDirection: 'row',
     direction: 'ltr',

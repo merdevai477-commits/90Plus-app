@@ -1165,7 +1165,7 @@ export default function PlayerProfileScreen() {
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
                     {is365Source && (
                         <>
-                            <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} />
+                            <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} colors={B} />
                             {loading && !matchReport365 ? (
                                 <View style={[styles.card, styles.loadingCard]}>
                                     <ActivityIndicator size="small" color={B.primary} />
@@ -1227,7 +1227,7 @@ export default function PlayerProfileScreen() {
 
                             {matchEvents.length > 0 && (
                                 <>
-                                    <SectionHeader icon={PP_ICON.time} title={pp.eventsSection} rtl={rtl} />
+                                    <SectionHeader icon={PP_ICON.time} title={pp.eventsSection} rtl={rtl} colors={B} />
                                     <View style={[styles.eventsWrap, { flexDirection: row }]}>
                                         {matchEvents.map((line, idx) => (
                                             <View key={`${line}-${idx}`} style={styles.eventChip}>
@@ -1248,6 +1248,7 @@ export default function PlayerProfileScreen() {
                                 title={pp.seasonTotal}
                                 trailing={`${seasonYear}/${seasonYear + 1}`}
                                 rtl={rtl}
+                                colors={B}
                             />
                             <View style={[styles.card, styles.totalRow, { flexDirection: row }]}>
                                 <MiniStat label={pp.matches} value={seasonTotals.appearences} />
@@ -1268,7 +1269,7 @@ export default function PlayerProfileScreen() {
                     {/* Per-league stats */}
                     {!is365Source && (
                         <>
-                            <SectionHeader icon={PP_ICON.court} title={pp.competitions} rtl={rtl} />
+                            <SectionHeader icon={PP_ICON.court} title={pp.competitions} rtl={rtl} colors={B} />
                             {leagueStats.length === 0 ? (
                                 <View style={[styles.card, styles.emptyCard]}>
                                     <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
@@ -1292,7 +1293,7 @@ export default function PlayerProfileScreen() {
                     {/* Personal info — API-Football only (365 has no DOB/height in match context) */}
                     {!is365Source && (
                         <>
-                            <SectionHeader icon={PP_ICON.position} title={pp.personalInfo} rtl={rtl} />
+                            <SectionHeader icon={PP_ICON.position} title={pp.personalInfo} rtl={rtl} colors={B} />
                             <View style={[styles.card, styles.infoCard]}>
                                 <View style={[styles.infoGrid, { flexDirection: row }]}>
                                     <InfoTile icon="calendar-outline" label={pp.dateOfBirth} value={heroPlayer.birth?.date ? formatDate(heroPlayer.birth.date, language) : 'N/A'} />
@@ -1367,8 +1368,8 @@ const styles = StyleSheet.create({
         color: B.jersey,
         opacity: 0.85,
     },
-    heroRow: { alignItems: 'center', gap: 16 },
-    photoWrap: { alignItems: 'center' },
+    heroRow: { alignItems: 'center', gap: 14, paddingHorizontal: 2 },
+    photoWrap: { alignItems: 'center', zIndex: 2 },
     ratingMedal: {
         position: 'absolute',
         bottom: -8,
@@ -1382,11 +1383,11 @@ const styles = StyleSheet.create({
         borderColor: B.bg,
     },
     ratingMedalText: { color: '#0b0518', fontSize: 13 },
-    heroInfo: { flex: 1 },
+    heroInfo: { flex: 1, justifyContent: 'center', minWidth: 0, zIndex: 3 },
     inlineRow: { alignItems: 'center', gap: 6 },
     flag: { width: 18, height: 12, borderRadius: 2 },
     heroMeta: { color: B.soft, fontSize: 13, flexShrink: 1 },
-    playerName: { color: '#fff', fontSize: 22, flexShrink: 1 },
+    playerName: { color: '#fff', fontSize: 22, flexShrink: 1, lineHeight: 28 },
     verified: { width: 20, height: 20 },
     injuredBadge: {
         alignItems: 'center',

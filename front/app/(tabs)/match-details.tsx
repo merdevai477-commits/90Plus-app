@@ -2687,6 +2687,34 @@ const MatchDetailsScreen = () => {
       return false;
     };
 
+    const formatH2hMatchDate = (dateStr: string): string => {
+      const d = safeParseDate(dateStr);
+      if (!d) return '';
+      try {
+        return d.toLocaleDateString(
+          language?.toLowerCase().startsWith('ar') ? 'ar-EG' : 'en-GB',
+          { year: 'numeric', month: 'short', day: 'numeric' },
+        );
+      } catch {
+        try {
+          return d.toISOString().slice(0, 10);
+        } catch {
+          return '';
+        }
+      }
+    };
+
+    const h2hMetaLabel = (row: TeamFixture): string => {
+      const leagueLabel = getLeagueDisplayName(
+        row.league.name,
+        language,
+        row.league.id,
+        undefined,
+      );
+      const dateLabel = formatH2hMatchDate(row.fixture.date);
+      return dateLabel ? `${leagueLabel}  ·  ${dateLabel}` : leagueLabel;
+    };
+
     const selectedLastFixtures =
       selectedTeamSide === 'home' ? homeLastFixtures : awayLastFixtures;
 
@@ -2791,12 +2819,7 @@ const MatchDetailsScreen = () => {
                   </View>
                   <View style={styles.h2hMetaRow}>
                     <Text style={[styles.h2hMetaText, { color: mdColors.textMuted }]} numberOfLines={1}>
-                      {getLeagueDisplayName(
-                        row.league.name,
-                        language,
-                        row.league.id,
-                        undefined,
-                      )}
+                      {h2hMetaLabel(row)}
                     </Text>
                     <ExpoImage
                       source={require('../../assets/images/match-form/calendar.svg')}
