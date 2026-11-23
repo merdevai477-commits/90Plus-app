@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Linking,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +33,10 @@ const ProfileSocialLinksBar = memo(function ProfileSocialLinksBar({
 }: ProfileSocialLinksBarProps) {
   const { colors: C, isDark } = useProfileTheme();
   const { language, t } = useTranslation();
+  const { width } = useWindowDimensions();
   const isAr = language === 'ar';
+  const marginH = Math.min(20, Math.max(12, Math.round(width * 0.045)));
+  const labelMax = width < 360 ? 112 : 148;
 
   const filledLinks = useMemo(
     () =>
@@ -64,12 +68,18 @@ const ProfileSocialLinksBar = memo(function ProfileSocialLinksBar({
           backgroundColor: C.profileCard,
           borderColor: C.embossBorder,
           flexDirection: isAr ? 'row-reverse' : 'row',
+          marginHorizontal: marginH,
         },
       ]}
       accessibilityRole="summary"
       accessibilityLabel={label}
     >
-      <View style={[styles.labelSide, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+      <View
+        style={[
+          styles.labelSide,
+          { flexDirection: isAr ? 'row-reverse' : 'row', maxWidth: labelMax },
+        ]}
+      >
         <Image
           source={PROFILE_ICONS.link}
           style={[styles.chainIcon, { tintColor: C.profilePrimary }]}
@@ -81,10 +91,11 @@ const ProfileSocialLinksBar = memo(function ProfileSocialLinksBar({
             {
               color: C.textPrimary,
               textAlign: isAr ? 'right' : 'left',
+              fontSize: width < 360 ? 11 : 12,
             },
           ]}
           numberOfLines={2}
-          maxFontSizeMultiplier={1.15}
+          maxFontSizeMultiplier={1.1}
         >
           {label}
         </Text>
@@ -155,15 +166,14 @@ export default ProfileSocialLinksBar;
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 20,
     marginTop: 10,
     minHeight: 56,
     borderRadius: 18,
     borderWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: ProfileTheme.colors.profileCard,
     shadowColor: '#1E0844',
     shadowOpacity: 0.1,
@@ -173,9 +183,9 @@ const styles = StyleSheet.create({
   },
   labelSide: {
     flexShrink: 1,
+    minWidth: 0,
     alignItems: 'center',
-    gap: 8,
-    maxWidth: 148,
+    gap: 6,
   },
   chainIcon: {
     width: 18,

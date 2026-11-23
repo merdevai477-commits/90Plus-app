@@ -23,11 +23,12 @@ import type { ProfileSocialLink } from './ProfileSocialLinksBar';
 export type { ProfileSocialLink };
 
 const COVER_HEIGHT = 222;
-/** Matches Figma profile hero — avatar overlaps cover into the sheet. */
-const AVATAR_SIZE = 112;
 const AVATAR_RING = 4;
-const AVATAR_OUTER = AVATAR_SIZE + AVATAR_RING * 2;
 const SHEET_OVERLAP = 52;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
 
 export interface ProfileHeroProps {
   topInset: number;
@@ -99,6 +100,12 @@ const ProfileHero = memo(function ProfileHero({
   const isAr = language === 'ar';
   const { width: windowWidth } = useWindowDimensions();
   const sheetWidth = Math.min(windowWidth, 456);
+  const scale = clamp(windowWidth / 390, 0.86, 1.06);
+  const avatarSize = Math.round(clamp(windowWidth < 360 ? 96 : 112, 92, 120) * (windowWidth < 360 ? 1 : scale));
+  const avatarOuter = avatarSize + AVATAR_RING * 2;
+  const padH = Math.round(clamp(windowWidth * 0.045, 14, 20));
+  const nameSize = Math.round(clamp(17 * scale, 15, 19));
+  const handleSize = Math.round(clamp(12.5 * scale, 11, 14));
   const [bioExpanded, setBioExpanded] = useState(false);
   const trimmedBio = bio?.trim() ?? '';
   const bioNeedsClamp = trimmedBio.length > 72 || trimmedBio.includes('\n');
@@ -107,7 +114,7 @@ const ProfileHero = memo(function ProfileHero({
 
   return (
     <View style={[styles.wrap, { backgroundColor: C.profileBg }]} testID="profile-hero">
-      <View style={styles.coverHit} pointerEvents="none" testID="profile-cover">
+      <View style={[styles.coverHit, { height: COVER_HEIGHT + 40 }]} pointerEvents="none" testID="profile-cover">
         <Image
           source={PROFILE_STADIUM_COVER}
           style={styles.cover}
@@ -123,7 +130,7 @@ const ProfileHero = memo(function ProfileHero({
       </View>
 
       <View
-        style={[styles.topBar, styles.rowForward, { paddingTop: topInset + 8 }]}
+        style={[styles.topBar, styles.rowForward, { paddingTop: topInset + 8, paddingHorizontal: padH }]}
         pointerEvents="box-none"
       >
         {onBackPress ? (
@@ -172,11 +179,17 @@ const ProfileHero = memo(function ProfileHero({
           },
         ]}
       >
-        <View style={styles.identityBlock}>
-          <View style={[styles.identityRow, isAr ? styles.identityRowRtl : styles.identityRowLtr]}>
-            <View style={styles.avatarColumn}>
+        <View style={[styles.identityBlock, { paddingHorizontal: padH }]}>
+          <View
+            style={[
+              styles.identityRow,
+              isAr ? styles.identityRowRtl : styles.identityRowLtr,
+              { marginTop: -(avatarOuter * 0.48), minHeight: avatarOuter },
+            ]}
+          >
+            <View style={[styles.avatarColumn, { width: avatarOuter, height: avatarOuter }]}>
               <TouchableOpacity
-                style={styles.avatarWrap}
+                style={[styles.avatarWrap, { width: avatarOuter, height: avatarOuter }]}
                 onPress={onAvatarPress}
                 activeOpacity={0.9}
                 disabled={!onAvatarPress}
@@ -186,7 +199,13 @@ const ProfileHero = memo(function ProfileHero({
                   <View
                     style={[
                       styles.avatarGlow,
-                      { borderColor: C.avatarRing, shadowColor: C.avatarGlow },
+                      {
+                        width: avatarSize,
+                        height: avatarSize,
+                        borderRadius: avatarSize / 2,
+                        borderColor: C.avatarRing,
+                        shadowColor: C.avatarGlow,
+                      },
                     ]}
                   >
                     <Image
@@ -200,7 +219,7 @@ const ProfileHero = memo(function ProfileHero({
                 ) : (
                   <Image
                     source={PROFILE_AVATAR_PLACEHOLDER}
-                    style={styles.avatarPlaceholder}
+                    style={{ width: avatarOuter, height: avatarOuter }}
                     contentFit="contain"
                   />
                 )}
@@ -212,11 +231,11 @@ const ProfileHero = memo(function ProfileHero({
                     ]}
                     pointerEvents="box-none"
                   >
-                    <VerifiedBadge size={22} />
+                    <VerifiedBadge size={Math.round(20 * scale)} />
                   </View>
                 ) : null}
                 {isAvatarUploading ? (
-                  <View style={styles.avatarBusy}>
+                  <View style={[styles.avatarBusy, { borderRadius: avatarOuter / 2 }]}>
                     <ActivityIndicator color={C.profilePrimary} />
                   </View>
                 ) : null}
@@ -227,20 +246,38 @@ const ProfileHero = memo(function ProfileHero({
               <View style={[styles.nameBlock, isAr ? styles.alignEnd : styles.alignStart]}>
                 <View style={[styles.nameRow, isAr ? styles.rowEnd : styles.rowStart]}>
                   <Text
-                    style={[styles.name, { textAlign: isAr ? 'right' : 'left', color: C.nameColor }]}
+                    style={[
+                      styles.name,
+                      {
+                        textAlign: isAr ? 'right' : 'left',
+                        color: C.nameColor,
+                        fontSize: nameSize,
+                        lineHeight: nameSize + 4,
+                      },
+                    ]}
                     numberOfLines={1}
-                    maxFontSizeMultiplier={1.15}
+                    maxFontSizeMultiplier={1.1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
                   >
                     {name}
                   </Text>
-                  {isVerified ? <VerifiedBadge size={18} /> : null}
-                  {isDeveloper ? <DeveloperBadge size={18} /> : null}
+                  {isVerified ? <VerifiedBadge size={Math.round(16 * scale)} /> : null}
+                  {isDeveloper ? <DeveloperBadge size={Math.round(16 * scale)} /> : null}
                   <ProfileEliteMarks userId={userId} />
                 </View>
                 <Text
-                  style={[styles.handle, { textAlign: isAr ? 'right' : 'left', color: C.profileHandle }]}
+                  style={[
+                    styles.handle,
+                    {
+                      textAlign: isAr ? 'right' : 'left',
+                      color: C.profileHandle,
+                      fontSize: handleSize,
+                      lineHeight: handleSize + 3,
+                    },
+                  ]}
                   numberOfLines={1}
-                  maxFontSizeMultiplier={1.15}
+                  maxFontSizeMultiplier={1.1}
                 >
                   @{username}
                 </Text>
@@ -324,7 +361,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: COVER_HEIGHT + 40,
   },
   cover: {
     width: '100%',
@@ -336,7 +372,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 4,
-    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -376,15 +411,12 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   identityBlock: {
-    paddingHorizontal: 20,
     gap: 12,
   },
   identityRow: {
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: -(AVATAR_OUTER * 0.48),
-    minHeight: AVATAR_OUTER,
+    gap: 10,
   },
   identityRowRtl: {
     flexDirection: 'row-reverse',
@@ -405,21 +437,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   avatarColumn: {
-    width: AVATAR_OUTER,
-    height: AVATAR_OUTER,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarWrap: {
-    width: AVATAR_OUTER,
-    height: AVATAR_OUTER,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarGlow: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
     borderWidth: AVATAR_RING,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
@@ -434,13 +460,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  avatarPlaceholder: {
-    width: AVATAR_OUTER,
-    height: AVATAR_OUTER,
-  },
   avatarBusy: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: AVATAR_OUTER / 2,
     backgroundColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -470,21 +491,18 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     maxWidth: '100%',
   },
   name: {
     flexShrink: 1,
+    minWidth: 0,
     color: '#000000',
-    fontSize: 18,
     fontWeight: '700',
-    lineHeight: 22,
   },
   handle: {
     color: ProfileTheme.colors.profileHandle,
-    fontSize: 13,
     fontWeight: '400',
-    lineHeight: 16,
   },
   editIconBtn: {
     width: 36,
@@ -507,9 +525,9 @@ const styles = StyleSheet.create({
   },
   bio: {
     color: '#434343',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    lineHeight: 20,
+    lineHeight: 19,
   },
   bioToggle: {
     alignSelf: 'flex-end',

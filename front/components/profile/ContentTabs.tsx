@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useProfileTheme } from '../../hooks/useProfileTheme';
 import { useTranslation } from '../../src/i18n';
@@ -20,7 +20,9 @@ const ContentTabs = memo(function ContentTabs({
 }: ContentTabsProps) {
   const { t, language } = useTranslation();
   const { colors: C } = useProfileTheme();
+  const { width } = useWindowDimensions();
   const isAr = language === 'ar';
+  const marginH = Math.min(20, Math.max(12, Math.round(width * 0.045)));
   const tabs = [
     {
       id: 'posts',
@@ -46,7 +48,7 @@ const ContentTabs = memo(function ContentTabs({
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { marginHorizontal: marginH }]}>
       <View
         style={[
           styles.tabsWrapper,
@@ -72,10 +74,16 @@ const ContentTabs = memo(function ContentTabs({
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? C.profilePrimary : C.profileMuted },
+                  {
+                    color: isActive ? C.profilePrimary : C.profileMuted,
+                    fontSize: width < 360 ? 11 : 12,
+                  },
                   isActive && styles.tabLabelActive,
                 ]}
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
               >
                 {tab.label}
               </Text>
@@ -103,7 +111,6 @@ export default ContentTabs;
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 20,
     marginTop: 18,
   },
   tabsWrapper: {

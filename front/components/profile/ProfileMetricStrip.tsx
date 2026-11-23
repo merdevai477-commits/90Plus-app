@@ -1,5 +1,12 @@
 import React, { memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ImageSourcePropType } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ImageSourcePropType,
+  useWindowDimensions,
+} from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -26,8 +33,10 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
 }: ProfileMetricStripProps) {
   const { colors: C } = useProfileTheme();
   const { language } = useTranslation();
+  const { width } = useWindowDimensions();
   const isAr = language === 'ar';
   const isPerf = variant === 'performance';
+  const marginH = Math.min(20, Math.max(12, Math.round(width * 0.045)));
   const inner = (
     <View
       style={[
@@ -62,6 +71,7 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
           {
             backgroundColor: C.profileCard,
             borderColor: C.profileCardBorder,
+            marginHorizontal: marginH,
           },
         ]}
       >
@@ -79,6 +89,7 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
           backgroundColor: C.profileCard,
           borderColor: C.embossBorder,
           shadowColor: C.embossShadow,
+          marginHorizontal: marginH,
         },
       ]}
     >
@@ -161,10 +172,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
   },
   card: {
-    marginHorizontal: 20,
     borderRadius: 18,
     paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -172,7 +182,7 @@ const styles = StyleSheet.create({
   },
   socialCard: {
     marginTop: 10,
-    height: 72,
+    minHeight: 72,
     borderWidth: 1,
     borderColor: 'rgba(106,43,217,0.12)',
     shadowColor: '#1E0844',
@@ -190,8 +200,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     width: '100%',
   },
   perfRow: {
@@ -199,22 +208,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   divider: {
-    width: 1,
+    width: StyleSheet.hairlineWidth,
     height: 34,
     backgroundColor: ProfileTheme.colors.divider,
+    flexShrink: 0,
   },
   perfDivider: {
     height: 52,
     marginHorizontal: 2,
   },
   cell: {
-    width: 56,
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    paddingHorizontal: 2,
   },
   socialCell: {
-    width: 110,
     gap: 0,
   },
   perfCell: {
@@ -257,7 +268,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   socialValue: {
-    fontSize: 18,
+    fontSize: 17,
   },
   label: {
     color: ProfileTheme.colors.profileMuted,
@@ -267,7 +278,7 @@ const styles = StyleSheet.create({
   },
   socialLabel: {
     color: ProfileTheme.colors.textPrimary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '400',
   },
   perfLabel: {
