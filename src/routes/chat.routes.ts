@@ -868,16 +868,33 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     if (!res.writableEnded) abort.abort();
                 });
 
-                const agentResult = await runFootballAgent({
-                    systemPrompt: agentSystemPrompt,
-                    history: historyForAgent,
-                    userMessage: trimmedMessage,
-                    language: messageLanguage,
-                    onToken: (token) => {
-                        if (!clientClosed) sendToken(token);
-                    },
-                    signal: abort.signal,
-                });
+                // Keep proxies/load-balancers from idle-closing the SSE while
+                // tools run (before the first answer token). Clients ignore
+                // comment lines; only `data:` events are parsed.
+                const heartbeat = setInterval(() => {
+                    if (clientClosed || res.writableEnded) return;
+                    try {
+                        res.write(': ping\n\n');
+                    } catch {
+                        /* ignore write-after-close */
+                    }
+                }, 12_000);
+
+                let agentResult: Awaited<ReturnType<typeof runFootballAgent>>;
+                try {
+                    agentResult = await runFootballAgent({
+                        systemPrompt: agentSystemPrompt,
+                        history: historyForAgent,
+                        userMessage: trimmedMessage,
+                        language: messageLanguage,
+                        onToken: (token) => {
+                            if (!clientClosed) sendToken(token);
+                        },
+                        signal: abort.signal,
+                    });
+                } finally {
+                    clearInterval(heartbeat);
+                }
 
                 if (agentResult.fullText.trim().length > 0 && !clientClosed) {
                     const navLinks = agentResult.navLinks ?? [];

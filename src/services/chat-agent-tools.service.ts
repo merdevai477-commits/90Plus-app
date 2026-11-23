@@ -856,17 +856,20 @@ async function resolveBest365Player(
 
   let athletes: PlayerCandidate[] = [];
   const byId = new Map<number, PlayerCandidate>();
-  for (const q of queries.slice(0, 4)) {
-    try {
-      const search = await threeSixFiveScoresService.searchAthletes(q, language);
-      for (const a of (search.data ?? []) as PlayerCandidate[]) {
-        if (a?.athleteId && !byId.has(a.athleteId)) byId.set(a.athleteId, a);
+  // Parallel athlete lookups — sequential round-trips were the main pre-stream delay.
+  const searchResults = await Promise.all(
+    queries.slice(0, 4).map(async (q) => {
+      try {
+        return await threeSixFiveScoresService.searchAthletes(q, language);
+      } catch (err) {
+        logger.warn('[chat-agent] searchAthletes failed:', (err as Error)?.message);
+        return null;
       }
-      const hasBoostedStar =
-        boostedIds.size === 0 || [...boostedIds].some((id) => byId.has(id));
-      if (byId.size >= 3 && hasBoostedStar) break;
-    } catch (err) {
-      logger.warn('[chat-agent] searchAthletes failed:', (err as Error)?.message);
+    }),
+  );
+  for (const search of searchResults) {
+    for (const a of (search?.data ?? []) as PlayerCandidate[]) {
+      if (a?.athleteId && !byId.has(a.athleteId)) byId.set(a.athleteId, a);
     }
   }
   athletes = [...byId.values()];

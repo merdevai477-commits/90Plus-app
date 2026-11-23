@@ -86,23 +86,21 @@ const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
  *
  * The model can dump multiple paragraphs in a single SSE event. Rendering
  * them straight to React state produces "block dumps" instead of typing.
- * We split chunks into words, queue them, and reveal a few per tick. This
- * mirrors ChatGPT's progressive feel.
+ * We split chunks into words, queue them, and reveal a few per tick.
  *
- * Adaptive speed:
- *   - Small backlog  → 1 word per tick (slow, deliberate typing)
- *   - Medium backlog → 2-3 words per tick (normal speed)
- *   - Large backlog  → 4-8 words per tick (catch up so we don't fall behind)
- *   - Network done   → whatever step finishes the rest in TYPING_DRAIN_* time,
- *     so a reply that arrives in one burst still types out instead of popping in.
+ * Kept snappy so tool/LLM latency isn't compounded by a long artificial drain:
+ *   - Small backlog  → 2 words per tick
+ *   - Medium backlog → 3-5 words per tick
+ *   - Large backlog  → 8-14 words per tick (catch up)
+ *   - Network done   → finish remaining words within TYPING_DRAIN_* (~0.1–0.7s)
  */
-const TYPING_TICK_MS = 25;
-const TYPING_BACKLOG_LARGE = 60;   // queue length above which we accelerate
-const TYPING_BACKLOG_HUGE = 200;   // queue length above which we sprint
-const TYPING_DRAIN_TICK_MS = 33;
-const TYPING_DRAIN_MS_PER_WORD = 22;
-const TYPING_DRAIN_MIN_MS = 500;
-const TYPING_DRAIN_MAX_MS = 2600;
+const TYPING_TICK_MS = 16;
+const TYPING_BACKLOG_LARGE = 40;
+const TYPING_BACKLOG_HUGE = 120;
+const TYPING_DRAIN_TICK_MS = 16;
+const TYPING_DRAIN_MS_PER_WORD = 6;
+const TYPING_DRAIN_MIN_MS = 100;
+const TYPING_DRAIN_MAX_MS = 700;
 const CODE_BLOCK_REGEX = /```|\|/;
 
 export interface ChatLabels {
@@ -701,11 +699,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
    */
   const computeWordsPerTick = useCallback((queueLen: number): number => {
     if (networkDoneRef.current) return drainStepRef.current;
-    if (queueLen > TYPING_BACKLOG_HUGE) return 8;
-    if (queueLen > TYPING_BACKLOG_LARGE) return 4;
-    if (queueLen > 20) return 3;
-    if (queueLen > 8) return 2;
-    return 1;
+    if (queueLen > TYPING_BACKLOG_HUGE) return 14;
+    if (queueLen > TYPING_BACKLOG_LARGE) return 8;
+    if (queueLen > 20) return 5;
+    if (queueLen > 8) return 3;
+    return 2;
   }, []);
 
   /** One typing tick — pull a few tokens off the queue and apply to state. */
@@ -1115,7 +1113,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
       xhr.onerror = handleDisconnect;
       xhr.ontimeout = handleDisconnect;
-      xhr.timeout = 60_000;
+      // Agent tool loops (search + hydrate + final LLM) can exceed 60s on cold paths.
+      // Timing out mid-reply looked like a truncated answer; give the stream room.
+      xhr.timeout = 120_000;
       try {
         xhr.send(body);
       } catch {

@@ -19,6 +19,7 @@ describe('chatStreamText', () => {
   });
 
   it('paints the first token before later pieces are batched', () => {
+    jest.useFakeTimers();
     const seen: string[] = [];
     const unsubscribe = subscribeChatStream(() => {
       seen.push(peekChatStream('a'));
@@ -27,7 +28,10 @@ describe('chatStreamText', () => {
     appendChatStream('a', ' there');
     expect(seen).toEqual(['hi']);
     expect(peekChatStream('a')).toBe('hi there');
+    jest.advanceTimersByTime(40);
+    expect(seen.at(-1)).toBe('hi there');
     unsubscribe();
+    jest.useRealTimers();
   });
 
   it('returns the visible reply once and then clears it', () => {

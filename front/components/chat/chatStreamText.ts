@@ -26,7 +26,8 @@ export function peekChatStream(id: string): string {
   return activeId === id ? text : '';
 }
 
-const FLUSH_MS = 80;
+/** Coalesce markdown re-layouts without making Arabic replies feel sticky. */
+const FLUSH_MS = 32;
 
 export function appendChatStream(id: string, piece: string): void {
   if (!piece) return;

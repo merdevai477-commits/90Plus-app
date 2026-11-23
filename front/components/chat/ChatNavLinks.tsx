@@ -276,7 +276,31 @@ function CandidateMedia({
     setIdx(0);
     setLoaded(false);
     setFailedAll(!uris.length);
-  }, [key, uris.length]);
+    if (!uris.length) return;
+
+    let cancelled = false;
+    // Race CDN candidates in parallel instead of waiting on sequential onError
+    // timeouts — that was the main “photo is slow” feel after a reply lands.
+    // If every prefetch misses, keep index 0 and let onError walk the list.
+    void (async () => {
+      try {
+        const winner = await Promise.any(
+          uris.map(async (u, i) => {
+            const ok = await Image.prefetch(u);
+            if (!ok) throw new Error('prefetch-miss');
+            return i;
+          }),
+        );
+        if (!cancelled) setIdx(winner);
+      } catch {
+        /* keep idx 0 + onError fallback */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
 
   const uri = !failedAll ? uris[idx] : undefined;
   if (!uri) return <>{fallback}</>;
@@ -290,6 +314,7 @@ function CandidateMedia({
         contentFit={contentFit}
         cachePolicy="memory-disk"
         recyclingKey={uri}
+        priority="high"
         onLoad={() => setLoaded(true)}
         onError={() => {
           if (idx + 1 < uris.length) {

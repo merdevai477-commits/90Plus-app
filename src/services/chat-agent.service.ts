@@ -33,10 +33,10 @@ import {
 const MAX_STEPS = 3;
 /** Tool-selection turn only needs enough room for one call, not an essay. */
 const AGENT_STREAM_MAX_TOKENS = 360;
-/** Enough to finish a table without dragging the reply out. */
-const AGENT_FINAL_MAX_TOKENS = 680;
-/** Legend bios (career + titles table) get cut mid-table at the default cap. */
-const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 920;
+/** Finish full player/club briefs + tables without cutting mid-reply. */
+const AGENT_FINAL_MAX_TOKENS = 1400;
+/** Legend bios (career + titles table) need headroom past the default final cap. */
+const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 1800;
 const AGENT_TOOL_TEMPERATURE = 0.15;
 const AGENT_ANSWER_TEMPERATURE = 0.35;
 
@@ -60,7 +60,8 @@ async function createAgentCompletion(
   } catch (err) {
     if (!isCreditBudgetError(err)) throw err;
     const current = Number(body.max_tokens ?? AGENT_STREAM_MAX_TOKENS);
-    const reduced = Math.max(256, Math.min(current, 512));
+    // Credit-budget fallback: shrink, but keep enough room to finish a short table.
+    const reduced = Math.max(400, Math.min(current, 900));
     if (reduced >= current) throw err;
     logger.warn(
       `[chat-agent] OpenRouter credit budget hit — retrying with max_tokens=${reduced}`,
