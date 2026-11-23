@@ -149,7 +149,7 @@ export default function LeagueShowcaseScreen() {
     [router],
   );
 
-  const cardWidth = Math.min(width * 0.78, 340);
+  const cardWidth = Math.min(width * (width < 360 ? 0.82 : 0.78), width < 390 ? 300 : 340);
   const cardHeight = cardWidth * (256 / 234);
 
   const renderPage: ListRenderItem<TsfCompetitionKey> = useCallback(
@@ -177,12 +177,31 @@ export default function LeagueShowcaseScreen() {
     <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       <StatusBar barStyle={colors.statusBar === 'light' ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>{copy.title}</Text>
+        <Text
+          style={[styles.title, { color: colors.text, fontFamily: fontSemi, fontSize: width < 360 ? 18 : 20 }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.2}
+        >
+          {copy.title}
+        </Text>
         <TsfIslandBack onPress={() => router.back()} label={copy.back} rtl={isAr} />
       </View>
-      <Text style={[styles.subtitle, { color: colors.muted, fontFamily: fontRegular }]}>{pick.showcaseSubtitle}</Text>
+      <Text
+        style={[
+          styles.subtitle,
+          {
+            color: colors.muted,
+            fontFamily: fontRegular,
+            fontSize: width < 360 ? 12 : 13,
+            marginHorizontal: width < 360 ? 18 : 28,
+          },
+        ]}
+        maxFontSizeMultiplier={1.2}
+      >
+        {pick.showcaseSubtitle}
+      </Text>
 
-      <View style={styles.heroWrap}>
+      <View style={[styles.heroWrap, { marginHorizontal: width < 360 ? 12 : 16 }]}>
         <TsfPointsHero
           title={copy.ranking.totalPoints}
           points={points}
