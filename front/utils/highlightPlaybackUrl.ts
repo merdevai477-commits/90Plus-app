@@ -4,6 +4,12 @@ const STREAMIN_CDN_HOSTS = ['w-cdn.streamin.top', 'c-cdn.streamin.top'];
 
 export const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
 
+/**
+ * YouTube requires a non-empty HTTPS Referer in WebView embeds (Error 153 otherwise).
+ * Format: https://{bundleId} — see YouTube API Required Minimum Functionality.
+ */
+export const YOUTUBE_APP_REFERER = 'https://com.mhmdsh1892.ninetyplusapp';
+
 export function streaminClipId(pageUrl: string): string | null {
   try {
     const parsed = new URL(pageUrl.trim());
@@ -80,9 +86,9 @@ function sanitizeYoutubeId(videoId: string): string {
   return videoId.replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
-/** Player-only embed. No watch-page title, share row, or recommendations. */
+/** Player-only embed URI (pair with {@link youtubeWebViewEmbedSource} Referer headers). */
 export function youtubeEmbedUrl(pageUrl: string): string | null {
-  const id = youtubeVideoId(pageUrl);
+  const id = youtubeVideoId(pageUrl) || (/^[\w-]{6,}$/.test(pageUrl.trim()) ? pageUrl.trim() : null);
   if (!id) return null;
   const params = new URLSearchParams({
     autoplay: '1',
@@ -92,12 +98,25 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
     modestbranding: '1',
     controls: '1',
     iv_load_policy: '3',
-    enablejsapi: '1',
-    origin: YOUTUBE_EMBED_ORIGIN,
-    widget_referrer: YOUTUBE_EMBED_ORIGIN,
+    fs: '1',
   });
-  // youtube-nocookie reduces some embed/claim edge cases in WKWebView.
-  return `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`;
+  // www.youtube.com + app Referer header is the supported WebView path (fixes Error 153).
+  return `https://www.youtube.com/embed/${id}?${params.toString()}`;
+}
+
+/** WebView `source` for in-app embed — Referer is required or YouTube returns Error 153. */
+export function youtubeWebViewEmbedSource(
+  pageUrlOrId: string,
+): { uri: string; headers: Record<string, string> } | null {
+  const uri = youtubeEmbedUrl(pageUrlOrId);
+  if (!uri) return null;
+  return {
+    uri,
+    headers: {
+      Referer: YOUTUBE_APP_REFERER,
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    },
+  };
 }
 
 /**

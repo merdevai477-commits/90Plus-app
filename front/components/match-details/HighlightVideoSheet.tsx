@@ -46,20 +46,19 @@ import {
   isDirectHighlightFile,
   resolveHighlightPlaybackUrl,
   streaminPlaybackCandidates,
-  youtubeEmbedDocument,
   youtubeEmbedUrl,
-  youtubeHostedPlayerUrl,
   youtubeMobileWatchUrl,
   youtubeVideoId,
+  youtubeWebViewEmbedSource,
 } from '../../utils/highlightPlaybackUrl';
 
 /**
  * In-app YouTube surfaces before external Linking.
- * Watch-first: Premier League / rights-claimed clips fail iframe embed (Error 153 /
- * fake "unavailable in your country") while the normal YouTube watch page plays
- * without signing in — verified in browser for LFC highlights.
+ * 1) embed + app Referer — fixes Error 153 in RN WebView
+ * 2) watch page — rights-claimed clips that block iframe but play on youtube.com
+ * 3) open YouTube app/site — hard fail only
  */
-type YoutubeSurfaceTier = 'watch' | 'hosted' | 'html';
+type YoutubeSurfaceTier = 'embed' | 'watch';
 
 type Props = {
   visible: boolean;
@@ -74,6 +73,8 @@ type Props = {
  */
 const PLAYBACK_PROBE = `
 (function () {
+  var reportedPlaying = false;
+  var reportedFail = false;
   function send(reason) {
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
@@ -82,37 +83,69 @@ const PLAYBACK_PROBE = `
   function pageText(doc) {
     try { return (doc && doc.body && doc.body.innerText) || ''; } catch (e) { return ''; }
   }
+  function hasPlayableVideo() {
+    try {
+      var video = document.querySelector('video.html5-main-video, #movie_player video, video');
+      if (video && video.readyState >= 2 && !video.error) return true;
+      var mp = document.querySelector('#movie_player');
+      if (mp && mp.classList && (mp.classList.contains('playing-mode') || mp.classList.contains('paused-mode'))) return true;
+      if (mp && !document.querySelector('.ytp-error')) return true;
+    } catch (e) {}
+    return false;
+  }
   function check() {
+    if (!reportedPlaying && hasPlayableVideo()) {
+      reportedPlaying = true;
+      send('PLAYER_READY');
+      send('PLAYING');
+      return;
+    }
+    if (reportedFail || reportedPlaying) return;
     var text = pageText(document);
-    var frames = document.querySelectorAll('iframe');
-    for (var i = 0; i < frames.length; i++) text += ' ' + pageText(frames[i].contentDocument);
-    if (/playback on other websites has been disabled|video player configuration error|error\\s*153/i.test(text)) {
+    var err = '';
+    try {
+      var node = document.querySelector('.ytp-error, .ytp-error-content, .ytp-error-content-wrap-subreason');
+      err = node ? (node.innerText || '') : '';
+    } catch (e) {}
+    var blob = text + ' ' + err;
+    if (/playback on other websites has been disabled|video player configuration error|error\\s*153/i.test(blob)) {
+      reportedFail = true;
       send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(text)) {
+    if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(blob)) {
+      reportedFail = true;
       send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/video unavailable/i.test(text) && /country|region|بلد/i.test(text)) {
+    if (/video unavailable/i.test(blob) && /country|region|بلد|uploader/i.test(blob)) {
+      reportedFail = true;
       send('EMBED_UNAVAILABLE');
     }
   }
   window.addEventListener('message', function (event) {
+    if (reportedFail || reportedPlaying) return;
     var raw = typeof event.data === 'string' ? event.data : JSON.stringify(event.data || '');
     var info = raw.match(/"info"\\s*:\\s*(100|101|150|153)/);
     if (info) {
       var code = info[1];
+      reportedFail = true;
       if (code === '100') send('SOURCE_NOT_FOUND');
       else send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/onError/.test(raw) && /150|153|101/.test(raw)) send('EMBED_UNAVAILABLE');
-    else if (/onError/.test(raw) && /100/.test(raw)) send('SOURCE_NOT_FOUND');
+    if (/onError/.test(raw) && /150|153|101/.test(raw)) {
+      reportedFail = true;
+      send('EMBED_UNAVAILABLE');
+    } else if (/onError/.test(raw) && /100/.test(raw)) {
+      reportedFail = true;
+      send('SOURCE_NOT_FOUND');
+    }
   });
-  setTimeout(check, 800);
-  setTimeout(check, 2000);
-  setTimeout(check, 4500);
+  setTimeout(check, 600);
+  setTimeout(check, 1600);
+  setTimeout(check, 3500);
+  setTimeout(check, 6000);
 })();
 true;
 `;
@@ -141,6 +174,8 @@ video.html5-main-video,video{object-fit:contain!important;width:100%!important;h
 
 const WATCH_PAGE_PROBE = `
 (function () {
+  var reportedPlaying = false;
+  var reportedFail = false;
   function send(reason) {
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
@@ -160,42 +195,56 @@ const WATCH_PAGE_PROBE = `
         document.body.style.background = '#000';
         document.body.style.overflow = 'hidden';
       }
-      var player = document.querySelector('#movie_player, ytd-player, #player, #player-container-id, .html5-video-player');
-      if (player && player.requestFullscreen && !document.fullscreenElement) {
-        /* Prefer in-page fullscreen look without leaving the WebView. */
-      }
     } catch (e) {}
   }
-  function checkUnavailable() {
-    var text = '';
-    try { text = (document.body && document.body.innerText) || ''; } catch (e) {}
-    if (/video player configuration error|error\\s*153/i.test(text)) {
+  function hasPlayableVideo() {
+    try {
+      var video = document.querySelector('video.html5-main-video, #movie_player video, video');
+      if (video && video.readyState >= 2 && !video.error) return true;
+      var mp = document.querySelector('#movie_player');
+      if (mp && mp.classList && (mp.classList.contains('playing-mode') || mp.classList.contains('paused-mode'))) return true;
+      if (mp && !document.querySelector('.ytp-error')) return true;
+    } catch (e) {}
+    return false;
+  }
+  function playerErrorText() {
+    try {
+      var err = document.querySelector('.ytp-error, .ytp-error-content, .ytp-error-content-wrap-subreason');
+      return err ? (err.innerText || '') : '';
+    } catch (e) { return ''; }
+  }
+  function check() {
+    injectChrome();
+    if (!reportedPlaying && hasPlayableVideo()) {
+      reportedPlaying = true;
+      send('PLAYER_READY');
+      send('PLAYING');
+      return;
+    }
+    if (reportedFail || reportedPlaying) return;
+    // Only fail on hard player errors — never on page-wide "country" copy (false positives).
+    var errText = playerErrorText();
+    if (/configuration error|error\\s*153|playback on other websites has been disabled/i.test(errText)) {
+      reportedFail = true;
       send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/playback on other websites has been disabled/i.test(text)) {
-      send('EMBED_UNAVAILABLE');
-      return;
-    }
-    if (/not made this video available in your country|unavailable in your country|isn't available in your country|is not available in your country|غير متاح في بلدك|غير متاح في بلدكم/i.test(text)) {
-      send('EMBED_UNAVAILABLE');
-      return;
-    }
-    if (/video unavailable/i.test(text) && /country|region|بلد|uploader/i.test(text)) {
+    if (/video unavailable/i.test(errText) && /uploader|country|region/i.test(errText)) {
+      reportedFail = true;
       send('EMBED_UNAVAILABLE');
     }
   }
   injectChrome();
-  checkUnavailable();
+  check();
   try {
-    var obs = new MutationObserver(function () { injectChrome(); });
+    var obs = new MutationObserver(function () { check(); });
     obs.observe(document.documentElement, { childList: true, subtree: true });
   } catch (e) {}
-  setTimeout(injectChrome, 200);
-  setTimeout(injectChrome, 800);
-  setTimeout(function () { injectChrome(); checkUnavailable(); }, 1200);
-  setTimeout(function () { injectChrome(); checkUnavailable(); }, 3000);
-  setTimeout(checkUnavailable, 6000);
+  setTimeout(check, 200);
+  setTimeout(check, 800);
+  setTimeout(check, 1600);
+  setTimeout(check, 3200);
+  setTimeout(check, 6000);
 })();
 true;
 `;
@@ -256,7 +305,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [sessionNonce, setSessionNonce] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [youtubeLoaded, setYoutubeLoaded] = useState(false);
-  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('watch');
+  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('embed');
 
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
@@ -280,7 +329,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setDirectReady(false);
     setPlayableDirectUrl('');
     setYoutubeLoaded(false);
-    setYoutubeTier('watch');
+    setYoutubeTier('embed');
     setUiPhase(visible ? 'initializing' : 'idle');
   }
 
@@ -321,23 +370,18 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
   const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
   const videoId = url ? youtubeVideoId(url) : null;
-  const hostedPlayerUrl = videoId ? youtubeHostedPlayerUrl(videoId) : null;
   const mobileWatchUrl = videoId ? youtubeMobileWatchUrl(videoId) : null;
+  const embedWebSource = videoId ? youtubeWebViewEmbedSource(videoId) : null;
   const showSurface = visible && surfaceReady;
   const unsupported = Boolean(url) && !embedUrl && !direct;
   const sourceType = classifyHighlightSourceType(fileUrl || url);
+  const isWatchTier = youtubeTier === 'watch';
   const youtubeWebSource =
     embedUrl && videoId
-      ? youtubeTier === 'watch' && mobileWatchUrl
+      ? isWatchTier && mobileWatchUrl
         ? { uri: mobileWatchUrl }
-        : youtubeTier === 'hosted' && hostedPlayerUrl
-          ? { uri: hostedPlayerUrl }
-          : {
-              html: youtubeEmbedDocument(videoId, { requireTap: Platform.OS === 'ios' }),
-              baseUrl: 'https://90plus.pro',
-            }
+        : embedWebSource
       : null;
-  const isWatchTier = youtubeTier === 'watch';
   // Keep stable names for layout math (avoids stale HMR refs to removed locals).
   const youtubePlayerWidth = playerWidth;
   const youtubePlayerHeight = playerHeight;
@@ -353,12 +397,16 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     [matchDetailsText],
   );
 
+  const openYouTubeExternally = useCallback((candidateUrl: string) => {
+    const id = youtubeVideoId(candidateUrl);
+    if (!id) return false;
+    const watch = `https://www.youtube.com/watch?v=${id}`;
+    void Linking.openURL(watch);
+    return true;
+  }, []);
+
   const finishWithReasons = useCallback(() => {
     const finalReason = pickFinalPlaybackReason(failureReasons.current);
-    setFailureReason(finalReason);
-    setFailed(true);
-    setDirectReady(false);
-    setUiPhase(highlightUiPhaseForFailure(finalReason));
     emitHighlightPlaybackDiagnostic({
       sessionId: sessionId.current,
       stage: 'PLAYBACK_ERROR',
@@ -369,7 +417,28 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       retryCount,
       initMs: Date.now() - sessionStartedAt.current,
     });
-  }, [fileUrl, retryCount, sourceType, url]);
+
+    const ytCandidate =
+      [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate)) ||
+      (youtubeVideoId(url) ? url : '');
+
+    // Don't leave the user on a dead error sheet — open YouTube and close.
+    if (
+      ytCandidate &&
+      (finalReason === 'EMBED_UNAVAILABLE' ||
+        finalReason === 'GEO_RESTRICTED' ||
+        finalReason === 'PLAYBACK_TIMEOUT') &&
+      openYouTubeExternally(ytCandidate)
+    ) {
+      onClose();
+      return;
+    }
+
+    setFailureReason(finalReason);
+    setFailed(true);
+    setDirectReady(false);
+    setUiPhase(highlightUiPhaseForFailure(finalReason));
+  }, [fileUrl, onClose, openYouTubeExternally, retryCount, sourceType, url]);
 
   const skipWithReason = useCallback(
     (reason: PlaybackFailureReason) => {
@@ -379,27 +448,28 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
         return;
       }
 
-      // Exhaust YouTube in-app surfaces before leaving this candidate URL.
-      const youtubeRecoverable =
-        Boolean(videoId) &&
-        (reason === 'PLAYBACK_TIMEOUT' ||
-          reason === 'EMBED_UNAVAILABLE' ||
+      // Embed blocked (153 / rights) → try the full watch page in-app before giving up.
+      if (
+        embedUrl &&
+        youtubeTier === 'embed' &&
+        (reason === 'EMBED_UNAVAILABLE' ||
           reason === 'GEO_RESTRICTED' ||
-          reason === 'NETWORK_ERROR' ||
-          reason === 'UNKNOWN_ERROR');
-      if (youtubeRecoverable) {
-        if (youtubeTier === 'watch') {
-          setYoutubeLoaded(false);
-          setYoutubeTier('hosted');
-          setUiPhase('loading');
-          return;
-        }
-        if (youtubeTier === 'hosted') {
-          setYoutubeLoaded(false);
-          setYoutubeTier('html');
-          setUiPhase('loading');
-          return;
-        }
+          reason === 'PLAYBACK_TIMEOUT')
+      ) {
+        failureReasons.current.push(reason);
+        emitHighlightPlaybackDiagnostic({
+          sessionId: sessionId.current,
+          stage: reason === 'PLAYBACK_TIMEOUT' ? 'PLAYER_TIMEOUT' : 'PLAYBACK_ERROR',
+          errorCategory: reason,
+          sourceType,
+          provider: 'youtube',
+          sourceHost: sanitizePlaybackUrlForDiagnostics(url),
+          retryCount,
+        });
+        setYoutubeLoaded(false);
+        setYoutubeTier('watch');
+        setUiPhase('loading');
+        return;
       }
 
       if (attempted.current.includes(url)) return;
@@ -419,14 +489,24 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       if (index + 1 < urls.length) {
         setDirectReady(false);
         setYoutubeLoaded(false);
-        setYoutubeTier('watch');
+        setYoutubeTier('embed');
         setUiPhase('loading');
         setIndex((current) => current + 1);
       } else {
         finishWithReasons();
       }
     },
-    [finishWithReasons, index, retryCount, sourceType, url, urls.length, videoId, youtubeTier],
+    [
+      embedUrl,
+      finishWithReasons,
+      index,
+      retryCount,
+      sourceType,
+      url,
+      urls.length,
+      videoId,
+      youtubeTier,
+    ],
   );
 
   // Unsupported hosts: advance with typed reason (never show geo).
@@ -488,7 +568,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
 
   useEffect(() => {
     if (!visible || failed || !embedUrl || !showSurface) return;
-    // Hosted/html need PLAYER_READY soon; watch page may take longer to paint.
+    // Watch page can take longer to paint the player; embed should be ready sooner.
     const waitMs =
       youtubeTier === 'watch'
         ? HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS + 10_000
@@ -514,7 +594,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setFailureReason(null);
     setDirectReady(false);
     setYoutubeLoaded(false);
-    setYoutubeTier('watch');
+    setYoutubeTier('embed');
     setIndex(0);
     setUiPhase('initializing');
     setSessionNonce((nonce) => nonce + 1);
@@ -588,14 +668,10 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               }
               injectedJavaScript={isWatchTier ? WATCH_PAGE_PROBE : PLAYBACK_PROBE}
               onLoadEnd={() => {
-                // Watch page plays without account/embed — clear spinner as soon as it paints.
-                if (isWatchTier) {
-                  setYoutubeLoaded(true);
-                  youtubeLoadedRef.current = true;
-                  setUiPhase('ready');
-                  return;
-                }
-                setUiPhase('loading');
+                // Clear spinner once the surface paints; probes still catch hard player errors.
+                setYoutubeLoaded(true);
+                youtubeLoadedRef.current = true;
+                setUiPhase('ready');
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
@@ -609,9 +685,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                     stage: 'PLAYER_INITIALIZING',
                     sourceType: 'youtube',
                     provider: 'youtube',
-                    sourceHost: sanitizePlaybackUrlForDiagnostics(
-                      hostedPlayerUrl || embedUrl || url,
-                    ),
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl || url),
                     retryCount,
                   });
                   return;
@@ -626,9 +700,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                     stage: 'PLAYER_READY',
                     sourceType: 'youtube',
                     provider: 'youtube',
-                    sourceHost: sanitizePlaybackUrlForDiagnostics(
-                      hostedPlayerUrl || embedUrl || url,
-                    ),
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl || url),
                     readyMs: Date.now() - sessionStartedAt.current,
                     retryCount,
                   });
@@ -647,10 +719,10 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 if (status < 400) return;
                 const mainDocument =
                   !failedUrl ||
-                  (Boolean(hostedPlayerUrl) && failedUrl.startsWith(hostedPlayerUrl)) ||
                   failedUrl.startsWith(embedUrl) ||
                   (Boolean(mobileWatchUrl) && failedUrl.startsWith(mobileWatchUrl)) ||
-                  (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`));
+                  (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`)) ||
+                  (Boolean(videoId) && failedUrl.includes(`watch?v=${videoId}`));
                 // YouTube loads ads and thumbnails that 403/404. Those are not a failed video.
                 if (!mainDocument) return;
                 if (status === 404) skipWithReason('SOURCE_NOT_FOUND');
@@ -702,11 +774,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 accessibilityRole="button"
                 accessibilityLabel={openInYouTubeLabel}
                 onPress={() => {
-                  const watch =
-                    lastYouTubeUrl.includes('youtube') || lastYouTubeUrl.includes('youtu.be')
-                      ? lastYouTubeUrl
-                      : `https://www.youtube.com/watch?v=${youtubeVideoId(lastYouTubeUrl)}`;
-                  void Linking.openURL(watch);
+                  if (openYouTubeExternally(lastYouTubeUrl)) onClose();
                 }}
                 style={styles.openYoutube}
               >

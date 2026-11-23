@@ -2,10 +2,12 @@ import {
   isDirectHighlightFile,
   preferDirectHighlightUrls,
   resolveHighlightPlaybackUrl,
+  YOUTUBE_APP_REFERER,
   youtubeEmbedDocument,
   youtubeEmbedUrl,
   youtubeHostedPlayerUrl,
   youtubeMobileWatchUrl,
+  youtubeWebViewEmbedSource,
 } from '../highlightPlaybackUrl';
 
 describe('resolveHighlightPlaybackUrl', () => {
@@ -26,11 +28,16 @@ describe('resolveHighlightPlaybackUrl', () => {
 
   it('builds a player-only YouTube embed from a watch link', () => {
     const embed = youtubeEmbedUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo');
-    expect(embed).toContain('youtube-nocookie.com/embed/qjEXEEBQgqo?');
+    expect(embed).toContain('youtube.com/embed/qjEXEEBQgqo?');
     expect(embed).toContain('mute=1');
-    expect(embed).toContain('origin=https%3A%2F%2F90plus.pro');
-    expect(embed).toContain('widget_referrer=https%3A%2F%2F90plus.pro');
     expect(youtubeEmbedUrl('https://youtu.be/6Nk3FShw4XM')).toContain('/embed/6Nk3FShw4XM?');
+    expect(youtubeWebViewEmbedSource('qjEXEEBQgqo')).toEqual({
+      uri: expect.stringContaining('youtube.com/embed/qjEXEEBQgqo?'),
+      headers: {
+        Referer: YOUTUBE_APP_REFERER,
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    });
     expect(youtubeHostedPlayerUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo')).toBe(
       'https://90plus.pro/embed/youtube.html?v=qjEXEEBQgqo',
     );
