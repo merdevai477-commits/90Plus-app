@@ -45,7 +45,8 @@ import {
     SectionHeader,
 } from '../components/PlayerProfile/PlayerProfileView';
 import { PP_ICON, PP_STADIUM } from '../components/PlayerProfile/assets';
-import { PP_COLORS as B, ratingTone } from '../components/PlayerProfile/theme';
+import { getPPColors, ratingTone } from '../components/PlayerProfile/theme';
+import { useResolvedAppScheme } from '../hooks/useResolvedAppScheme';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -224,7 +225,7 @@ const TEAM_COLORS: { [key: string]: readonly [string, string, ...string[]] } = {
     'Juventus': ['#000000', '#FFFFFF'],
     'Al Ahly': ['#C8102E', '#8B0000'],
     'Zamalek': ['#FFFFFF', '#000000'],
-    'default': [B.primary, B.primaryDeep],
+    'default': ['#6a2bd9', '#2e146a'],
 };
 
 const getTeamColors = (teamName: string): readonly [string, string, ...string[]] => {
@@ -306,6 +307,8 @@ function PlayerHeroPhoto({
     const [viewerOpen, setViewerOpen] = useState(false);
     const viewerUrl = toFullscreenPhotoUrl(uri) ?? uri;
     const hasPhoto = !!uri && uriIndex < candidates.length;
+    const { isDark } = useResolvedAppScheme();
+    const B = useMemo(() => getPPColors(isDark), [isDark]);
 
     return (
         <>
@@ -313,11 +316,14 @@ function PlayerHeroPhoto({
                 colors={[B.primarySoft, B.primary, B.primaryDeep]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={heroPhotoStyles.ring}
+                style={[
+                    heroPhotoStyles.ring,
+                    { shadowColor: B.primary },
+                ]}
             >
                 {hasPhoto ? (
                     <TouchableOpacity
-                        style={heroPhotoStyles.circle}
+                        style={[heroPhotoStyles.circle, { backgroundColor: B.card }]}
                         onPress={() => setViewerOpen(true)}
                         activeOpacity={0.85}
                         accessibilityRole="imagebutton"
@@ -340,7 +346,7 @@ function PlayerHeroPhoto({
                         />
                     </TouchableOpacity>
                 ) : (
-                    <View style={heroPhotoStyles.circle}>
+                    <View style={[heroPhotoStyles.circle, { backgroundColor: B.card }]}>
                         <PlayerAvatar name={name} position={position} size={98} colors={colors} />
                     </View>
                 )}
@@ -362,7 +368,6 @@ const heroPhotoStyles = StyleSheet.create({
         height: 106,
         borderRadius: 53,
         padding: 3,
-        shadowColor: B.primary,
         shadowOpacity: 0.7,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: 0 },
@@ -372,7 +377,6 @@ const heroPhotoStyles = StyleSheet.create({
         flex: 1,
         borderRadius: 50,
         overflow: 'hidden',
-        backgroundColor: B.card,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -385,12 +389,19 @@ const heroPhotoStyles = StyleSheet.create({
 function MiniStat({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
     const fontBold = useAppFont(700);
     const fontReg = useAppFont(400);
+    const { isDark } = useResolvedAppScheme();
+    const B = useMemo(() => getPPColors(isDark), [isDark]);
     return (
         <View style={miniStatStyles.box}>
-            <Text style={[miniStatStyles.value, { fontFamily: fontBold }, tone ? { color: tone } : null]}>
+            <Text
+                style={[
+                    miniStatStyles.value,
+                    { fontFamily: fontBold, color: tone ?? B.ink },
+                ]}
+            >
                 {value}
             </Text>
-            <Text style={[miniStatStyles.label, { fontFamily: fontReg }]} numberOfLines={1}>
+            <Text style={[miniStatStyles.label, { fontFamily: fontReg, color: B.muted }]} numberOfLines={1}>
                 {label}
             </Text>
         </View>
@@ -412,6 +423,8 @@ function LeagueStatCard({
 }) {
     const fontBold = useAppFont(700);
     const fontReg = useAppFont(400);
+    const { isDark } = useResolvedAppScheme();
+    const B = useMemo(() => getPPColors(isDark), [isDark]);
     const row = rtl ? 'row-reverse' : 'row';
     const textAlign = rtl ? 'right' : 'left';
     const leagueName = getLeagueDisplayName(
@@ -446,7 +459,7 @@ function LeagueStatCard({
     }
 
     return (
-        <View style={leagueCardStyles.card}>
+        <View style={[leagueCardStyles.card, { backgroundColor: B.card, borderColor: B.border }]}>
             <View style={[leagueCardStyles.header, { flexDirection: row }]}>
                 <LeagueIcon
                     name={stat.league.name}
@@ -456,10 +469,16 @@ function LeagueStatCard({
                     color={teamColor}
                 />
                 <View style={leagueCardStyles.headerText}>
-                    <Text style={[leagueCardStyles.leagueName, { fontFamily: fontBold, textAlign }]} numberOfLines={2}>
+                    <Text
+                        style={[leagueCardStyles.leagueName, { fontFamily: fontBold, textAlign, color: B.ink }]}
+                        numberOfLines={2}
+                    >
                         {leagueName}
                     </Text>
-                    <Text style={[leagueCardStyles.leagueMeta, { fontFamily: fontReg, textAlign }]} numberOfLines={1}>
+                    <Text
+                        style={[leagueCardStyles.leagueMeta, { fontFamily: fontReg, textAlign, color: B.muted }]}
+                        numberOfLines={1}
+                    >
                         {stat.league.country}{seasonLabel ? ` • ${seasonLabel}` : ''}
                     </Text>
                 </View>
@@ -470,19 +489,24 @@ function LeagueStatCard({
                         size={28}
                         logo={stat.team.logo}
                     />
-                    <Text style={[leagueCardStyles.teamName, { fontFamily: fontReg }]} numberOfLines={1}>
+                    <Text style={[leagueCardStyles.teamName, { fontFamily: fontReg, color: B.muted }]} numberOfLines={1}>
                         {getTeamDisplayName(stat.team.name, language)}
                     </Text>
                 </View>
             </View>
 
-            <View style={[leagueCardStyles.statsRow, { flexDirection: row }]}>
+            <View
+                style={[
+                    leagueCardStyles.statsRow,
+                    { flexDirection: row, borderColor: B.divider, backgroundColor: isDark ? 'rgba(139,92,246,0.06)' : B.pale },
+                ]}
+            >
                 <MiniStat label={labels.matches} value={statNum(stat.games.appearences)} />
-                <View style={leagueCardStyles.statsDivider} />
+                <View style={[leagueCardStyles.statsDivider, { backgroundColor: B.divider }]} />
                 <MiniStat label={labels.goals} value={statNum(stat.goals.total)} />
-                <View style={leagueCardStyles.statsDivider} />
+                <View style={[leagueCardStyles.statsDivider, { backgroundColor: B.divider }]} />
                 <MiniStat label={labels.assists} value={statNum(stat.goals.assists)} />
-                <View style={leagueCardStyles.statsDivider} />
+                <View style={[leagueCardStyles.statsDivider, { backgroundColor: B.divider }]} />
                 <MiniStat
                     label={labels.rating}
                     value={rating}
@@ -492,23 +516,51 @@ function LeagueStatCard({
 
             <View style={[leagueCardStyles.detailsRow, { flexDirection: row }]}>
                 {details.map((d) => (
-                    <View key={d.text} style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                    <View
+                        key={d.text}
+                        style={[
+                            leagueCardStyles.detailChip,
+                            {
+                                flexDirection: row,
+                                borderColor: B.divider,
+                                backgroundColor: isDark ? 'rgba(139,92,246,0.08)' : B.pale,
+                            },
+                        ]}
+                    >
                         <Ionicons name={d.icon} size={13} color={B.primarySoft} />
-                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>{d.text}</Text>
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg, color: B.soft }]}>{d.text}</Text>
                     </View>
                 ))}
                 {statNum(stat.cards.yellow) > 0 && (
-                    <View style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                    <View
+                        style={[
+                            leagueCardStyles.detailChip,
+                            {
+                                flexDirection: row,
+                                borderColor: B.divider,
+                                backgroundColor: isDark ? 'rgba(139,92,246,0.08)' : B.pale,
+                            },
+                        ]}
+                    >
                         <View style={[leagueCardStyles.cardDot, { backgroundColor: '#FACC15' }]} />
-                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg, color: B.soft }]}>
                             {statNum(stat.cards.yellow)} {labels.yellowCards}
                         </Text>
                     </View>
                 )}
                 {statNum(stat.cards.red) > 0 && (
-                    <View style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                    <View
+                        style={[
+                            leagueCardStyles.detailChip,
+                            {
+                                flexDirection: row,
+                                borderColor: B.divider,
+                                backgroundColor: isDark ? 'rgba(139,92,246,0.08)' : B.pale,
+                            },
+                        ]}
+                    >
                         <View style={[leagueCardStyles.cardDot, { backgroundColor: '#EF4444' }]} />
-                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg, color: B.soft }]}>
                             {statNum(stat.cards.red)} {labels.redCards}
                         </Text>
                     </View>
@@ -520,32 +572,28 @@ function LeagueStatCard({
 
 const miniStatStyles = StyleSheet.create({
     box: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2 },
-    value: { fontSize: 22, color: '#fff' },
-    label: { fontSize: 11, color: B.muted, marginTop: 4, textAlign: 'center' },
+    value: { fontSize: 22 },
+    label: { fontSize: 11, marginTop: 4, textAlign: 'center' },
 });
 
 const leagueCardStyles = StyleSheet.create({
     card: {
-        backgroundColor: B.card,
         borderRadius: 16,
         padding: 14,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: B.border,
     },
     header: { alignItems: 'center', marginBottom: 12, gap: 12 },
     headerText: { flex: 1 },
-    leagueName: { fontSize: 15, color: '#fff' },
-    leagueMeta: { fontSize: 12, color: B.muted, marginTop: 2 },
+    leagueName: { fontSize: 15 },
+    leagueMeta: { fontSize: 12, marginTop: 2 },
     teamChip: { alignItems: 'center', maxWidth: 72, gap: 4 },
-    teamName: { fontSize: 10, color: B.muted, textAlign: 'center' },
+    teamName: { fontSize: 10, textAlign: 'center' },
     statsRow: {
-        backgroundColor: 'rgba(139,92,246,0.06)',
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: B.divider,
     },
-    statsDivider: { width: 1, backgroundColor: B.divider, marginVertical: 10 },
+    statsDivider: { width: 1, marginVertical: 10 },
     detailsRow: { flexWrap: 'wrap', gap: 8, marginTop: 12 },
     detailChip: {
         alignItems: 'center',
@@ -553,11 +601,9 @@ const leagueCardStyles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 999,
-        backgroundColor: 'rgba(139,92,246,0.08)',
         borderWidth: 1,
-        borderColor: B.divider,
     },
-    detailText: { fontSize: 11, color: B.soft },
+    detailText: { fontSize: 11 },
     cardDot: { width: 7, height: 10, borderRadius: 1.5 },
 });
 
@@ -566,6 +612,8 @@ export default function PlayerProfileScreen() {
     const params = useLocalSearchParams() as unknown as PlayerParams;
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
+    const { isDark } = useResolvedAppScheme();
+    const B = useMemo(() => getPPColors(isDark), [isDark]);
 
     const playerId = parseInt(params.id || '0');
     const contextAthleteId = parseInt(params.athleteId || params.id || '0', 10);
@@ -1028,9 +1076,13 @@ export default function PlayerProfileScreen() {
     if (heroPlayer.age != null && heroPlayer.age > 0) chips.push({ key: 'age', icon: PP_ICON.cake, text: `${heroPlayer.age} ${pp.years}` });
     if (!is365Source) chips.push({ key: 'season', icon: PP_ICON.seasonStats, text: `${seasonYear}/${seasonYear + 1}` });
 
+    const heroWash = isDark
+        ? (['rgba(12,5,26,0.55)', 'rgba(12,5,26,0.88)', B.bg] as const)
+        : (['rgba(249,246,254,0.42)', 'rgba(249,246,254,0.88)', B.bg] as const);
+
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
+        <View style={[styles.container, { backgroundColor: B.bg }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 refreshControl={
@@ -1050,13 +1102,17 @@ export default function PlayerProfileScreen() {
                 <View style={[styles.hero, { paddingTop: headerHeight + 12 }]}>
                     <ExpoImage source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
                     <LinearGradient
-                        colors={['rgba(12,5,26,0.55)', 'rgba(12,5,26,0.88)', B.bg]}
+                        colors={[...heroWash]}
                         locations={[0, 0.65, 1]}
                         style={StyleSheet.absoluteFill}
                     />
                     {jerseyNumber != null ? (
                         <Text
-                            style={[styles.heroJersey, { fontFamily: fontBold, top: headerHeight - 6 }, rtl ? { left: 14 } : { right: 14 }]}
+                            style={[
+                                styles.heroJersey,
+                                { fontFamily: fontBold, top: headerHeight - 6, color: B.jersey },
+                                rtl ? { left: 14 } : { right: 14 },
+                            ]}
                             allowFontScaling={false}
                         >
                             {`#${jerseyNumber}`}
@@ -1076,7 +1132,12 @@ export default function PlayerProfileScreen() {
                                     photoSource={is365Source ? '365' : 'api'}
                                 />
                                 {matchStats.rating != null ? (
-                                    <View style={[styles.ratingMedal, { backgroundColor: ratingTone(matchStats.rating) }]}>
+                                    <View
+                                        style={[
+                                            styles.ratingMedal,
+                                            { backgroundColor: ratingTone(matchStats.rating), borderColor: B.bg },
+                                        ]}
+                                    >
                                         <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
                                             {matchStats.rating.toFixed(1)}
                                         </Text>
@@ -1096,14 +1157,20 @@ export default function PlayerProfileScreen() {
                                                 transition={0}
                                             />
                                         ) : null}
-                                        <Text style={[styles.heroMeta, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                        <Text
+                                            style={[styles.heroMeta, { fontFamily: fontSemi, color: B.soft }]}
+                                            numberOfLines={1}
+                                        >
                                             {heroPlayer.nationality}
                                         </Text>
                                     </View>
                                 ) : null}
                                 <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4 }]}>
                                     <Text
-                                        style={[styles.playerName, { fontFamily: fontExtraBold, textAlign }]}
+                                        style={[
+                                            styles.playerName,
+                                            { fontFamily: fontExtraBold, textAlign, color: B.ink },
+                                        ]}
                                         numberOfLines={2}
                                     >
                                         {heroPlayer.name}
@@ -1125,7 +1192,10 @@ export default function PlayerProfileScreen() {
                                             logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
                                             highQuality
                                         />
-                                        <Text style={[styles.heroTeamName, { fontFamily: fontBold }]} numberOfLines={1}>
+                                        <Text
+                                            style={[styles.heroTeamName, { fontFamily: fontBold, color: B.soft }]}
+                                            numberOfLines={1}
+                                        >
                                             {getTeamDisplayName(primaryTeam.name, language)}
                                         </Text>
                                     </View>
@@ -1136,11 +1206,24 @@ export default function PlayerProfileScreen() {
                         {chips.length > 0 ? (
                             <View style={[styles.chipsRow, { flexDirection: row }]}>
                                 {chips.map((c) => (
-                                    <View key={c.key} style={[styles.chip, { flexDirection: row }]}>
+                                    <View
+                                        key={c.key}
+                                        style={[
+                                            styles.chip,
+                                            {
+                                                flexDirection: row,
+                                                backgroundColor: isDark ? 'rgba(11,5,24,0.85)' : 'rgba(255,255,255,0.92)',
+                                                borderColor: B.border,
+                                            },
+                                        ]}
+                                    >
                                         {c.icon != null ? (
                                             <ExpoImage source={c.icon} style={styles.chipIcon} contentFit="contain" />
                                         ) : null}
-                                        <Text style={[styles.chipText, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                        <Text
+                                            style={[styles.chipText, { fontFamily: fontSemi, color: B.ink }]}
+                                            numberOfLines={1}
+                                        >
                                             {c.text}
                                         </Text>
                                     </View>
@@ -1149,7 +1232,11 @@ export default function PlayerProfileScreen() {
                         ) : null}
 
                         {is365Source && athleteId365 > 0 && (
-                            <TouchableOpacity activeOpacity={0.85} style={styles.careerButtonWrap} onPress={openCareer}>
+                            <TouchableOpacity
+                                activeOpacity={0.85}
+                                style={[styles.careerButtonWrap, { shadowColor: B.primary }]}
+                                onPress={openCareer}
+                            >
                                 <LinearGradient
                                     colors={[B.primary, B.primaryDeep]}
                                     start={{ x: 0, y: 0 }}
@@ -1170,7 +1257,7 @@ export default function PlayerProfileScreen() {
                         <>
                             <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} colors={B} />
                             {loading && !matchReport365 ? (
-                                <View style={[styles.card, styles.loadingCard]}>
+                                <View style={[styles.card, styles.loadingCard, { backgroundColor: B.card, borderColor: B.border }]}>
                                     <ActivityIndicator size="small" color={B.primary} />
                                 </View>
                             ) : matchStats.total > 0 ? (
@@ -1178,18 +1265,34 @@ export default function PlayerProfileScreen() {
                                     {matchStats.featured.length > 0 && (
                                         <View style={[styles.featuredGrid, { flexDirection: row }]}>
                                             {matchStats.featured.map((s) => (
-                                                <View key={s.key} style={[styles.featuredTile, { alignItems: alignStart }]}>
+                                                <View
+                                                    key={s.key}
+                                                    style={[
+                                                        styles.featuredTile,
+                                                        {
+                                                            alignItems: alignStart,
+                                                            backgroundColor: B.card,
+                                                            borderColor: B.border,
+                                                        },
+                                                    ]}
+                                                >
                                                     <LinearGradient
                                                         colors={[B.primary, 'rgba(139,92,246,0)']}
                                                         start={{ x: rtl ? 1 : 0, y: 0 }}
                                                         end={{ x: rtl ? 0 : 1, y: 0 }}
                                                         style={styles.featuredAccent}
                                                     />
-                                                    <Text style={[styles.featuredValue, { fontFamily: fontBold }]} numberOfLines={1}>
+                                                    <Text
+                                                        style={[styles.featuredValue, { fontFamily: fontBold, color: B.ink }]}
+                                                        numberOfLines={1}
+                                                    >
                                                         {s.value}
                                                     </Text>
                                                     <Text
-                                                        style={[styles.featuredLabel, { fontFamily: fontReg, textAlign }]}
+                                                        style={[
+                                                            styles.featuredLabel,
+                                                            { fontFamily: fontReg, textAlign, color: B.muted },
+                                                        ]}
                                                         numberOfLines={2}
                                                     >
                                                         {s.label}
@@ -1199,32 +1302,56 @@ export default function PlayerProfileScreen() {
                                         </View>
                                     )}
                                     {matchStats.list.length > 0 && (
-                                        <View style={[styles.card, styles.listCard]}>
+                                        <View
+                                            style={[
+                                                styles.card,
+                                                styles.listCard,
+                                                { backgroundColor: B.card, borderColor: B.border },
+                                            ]}
+                                        >
                                             {matchStats.list.map((s, idx) => (
                                                 <View
                                                     key={s.key}
                                                     style={[
                                                         styles.statRow,
                                                         { flexDirection: row },
-                                                        idx < matchStats.list.length - 1 && styles.statRowDivider,
+                                                        idx < matchStats.list.length - 1 && [
+                                                            styles.statRowDivider,
+                                                            { borderBottomColor: B.divider },
+                                                        ],
                                                     ]}
                                                 >
                                                     <Text
-                                                        style={[styles.statLabel, { fontFamily: fontReg, textAlign }]}
+                                                        style={[
+                                                            styles.statLabel,
+                                                            { fontFamily: fontReg, textAlign, color: B.soft },
+                                                        ]}
                                                         numberOfLines={2}
                                                     >
                                                         {s.label}
                                                     </Text>
-                                                    <Text style={[styles.statValue, { fontFamily: fontBold }]}>{s.value}</Text>
+                                                    <Text
+                                                        style={[styles.statValue, { fontFamily: fontBold, color: B.ink }]}
+                                                    >
+                                                        {s.value}
+                                                    </Text>
                                                 </View>
                                             ))}
                                         </View>
                                     )}
                                 </>
                             ) : (
-                                <View style={[styles.card, styles.emptyCard]}>
+                                <View
+                                    style={[
+                                        styles.card,
+                                        styles.emptyCard,
+                                        { backgroundColor: B.card, borderColor: B.border },
+                                    ]}
+                                >
                                     <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
-                                    <Text style={[styles.emptyText, { fontFamily: fontReg }]}>{pp.noCompetitionStats}</Text>
+                                    <Text style={[styles.emptyText, { fontFamily: fontReg, color: B.soft }]}>
+                                        {pp.noCompetitionStats}
+                                    </Text>
                                 </View>
                             )}
 
@@ -1233,8 +1360,21 @@ export default function PlayerProfileScreen() {
                                     <SectionHeader icon={PP_ICON.time} title={pp.eventsSection} rtl={rtl} colors={B} />
                                     <View style={[styles.eventsWrap, { flexDirection: row }]}>
                                         {matchEvents.map((line, idx) => (
-                                            <View key={`${line}-${idx}`} style={styles.eventChip}>
-                                                <Text style={[styles.eventText, { fontFamily: fontSemi }]}>{line}</Text>
+                                            <View
+                                                key={`${line}-${idx}`}
+                                                style={[
+                                                    styles.eventChip,
+                                                    {
+                                                        backgroundColor: isDark ? 'rgba(139,92,246,0.1)' : B.pale,
+                                                        borderColor: B.border,
+                                                    },
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={[styles.eventText, { fontFamily: fontSemi, color: B.ink }]}
+                                                >
+                                                    {line}
+                                                </Text>
                                             </View>
                                         ))}
                                     </View>
@@ -1253,13 +1393,19 @@ export default function PlayerProfileScreen() {
                                 rtl={rtl}
                                 colors={B}
                             />
-                            <View style={[styles.card, styles.totalRow, { flexDirection: row }]}>
+                            <View
+                                style={[
+                                    styles.card,
+                                    styles.totalRow,
+                                    { flexDirection: row, backgroundColor: B.card, borderColor: B.border },
+                                ]}
+                            >
                                 <MiniStat label={pp.matches} value={seasonTotals.appearences} />
-                                <View style={styles.vDivider} />
+                                <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
                                 <MiniStat label={pp.goals} value={seasonTotals.goals} />
-                                <View style={styles.vDivider} />
+                                <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
                                 <MiniStat label={pp.assists} value={seasonTotals.assists} />
-                                <View style={styles.vDivider} />
+                                <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
                                 <MiniStat
                                     label={pp.rating}
                                     value={seasonTotals.rating ? parseFloat(seasonTotals.rating).toFixed(1) : '—'}
@@ -1274,9 +1420,17 @@ export default function PlayerProfileScreen() {
                         <>
                             <SectionHeader icon={PP_ICON.court} title={pp.competitions} rtl={rtl} colors={B} />
                             {leagueStats.length === 0 ? (
-                                <View style={[styles.card, styles.emptyCard]}>
+                                <View
+                                    style={[
+                                        styles.card,
+                                        styles.emptyCard,
+                                        { backgroundColor: B.card, borderColor: B.border },
+                                    ]}
+                                >
                                     <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
-                                    <Text style={[styles.emptyText, { fontFamily: fontReg }]}>{pp.noCompetitionStats}</Text>
+                                    <Text style={[styles.emptyText, { fontFamily: fontReg, color: B.soft }]}>
+                                        {pp.noCompetitionStats}
+                                    </Text>
                                 </View>
                             ) : (
                                 leagueStats.map((stat) => (
@@ -1297,28 +1451,36 @@ export default function PlayerProfileScreen() {
                     {!is365Source && (
                         <>
                             <SectionHeader icon={PP_ICON.position} title={pp.personalInfo} rtl={rtl} colors={B} />
-                            <View style={[styles.card, styles.infoCard]}>
+                            <View
+                                style={[
+                                    styles.card,
+                                    styles.infoCard,
+                                    { backgroundColor: B.card, borderColor: B.border },
+                                ]}
+                            >
                                 <View style={[styles.infoGrid, { flexDirection: row }]}>
                                     <InfoTile icon="calendar-outline" label={pp.dateOfBirth} value={heroPlayer.birth?.date ? formatDate(heroPlayer.birth.date, language) : 'N/A'} />
-                                    <View style={styles.vDivider} />
+                                    <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
                                     <InfoTile icon="location-outline" label={pp.birthPlace} value={heroPlayer.birth?.place || 'N/A'} />
                                 </View>
-                                <View style={styles.hDivider} />
+                                <View style={[styles.hDivider, { backgroundColor: B.divider }]} />
                                 <View style={[styles.infoGrid, { flexDirection: row }]}>
                                     <InfoTile icon="resize-outline" label={pp.height} value={heroPlayer.height || 'N/A'} />
-                                    <View style={styles.vDivider} />
+                                    <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
                                     <InfoTile icon="barbell-outline" label={pp.weight} value={heroPlayer.weight || 'N/A'} />
                                 </View>
                                 {(preferredFoot || leagueStats.some((s) => s.games.captain)) && (
                                     <>
-                                        <View style={styles.hDivider} />
+                                        <View style={[styles.hDivider, { backgroundColor: B.divider }]} />
                                         <View style={[styles.infoGrid, { flexDirection: row }]}>
                                             {preferredFoot && (
                                                 <InfoTile icon="footsteps-outline" label={pp.preferredFoot} value={preferredFoot} />
                                             )}
                                             {leagueStats.some((s) => s.games.captain) && (
                                                 <>
-                                                    {preferredFoot && <View style={styles.vDivider} />}
+                                                    {preferredFoot && (
+                                                        <View style={[styles.vDivider, { backgroundColor: B.divider }]} />
+                                                    )}
                                                     <InfoTile icon="star" label={pp.captain} value={pp.yes} tone="#FACC15" />
                                                 </>
                                             )}
@@ -1331,7 +1493,7 @@ export default function PlayerProfileScreen() {
                 </Animated.View>
             </Animated.ScrollView>
 
-            <PlayerProfileHeader onBack={goBack} scrollY={scrollY} />
+            <PlayerProfileHeader onBack={goBack} scrollY={scrollY} colors={B} />
         </View>
     );
 }
@@ -1349,11 +1511,16 @@ function InfoTile({
 }) {
     const fontBold = useAppFont(700);
     const fontReg = useAppFont(400);
+    const { isDark } = useResolvedAppScheme();
+    const B = useMemo(() => getPPColors(isDark), [isDark]);
     return (
         <View style={styles.infoTile}>
             <Ionicons name={icon} size={18} color={tone ?? B.primarySoft} />
-            <Text style={[styles.infoLabel, { fontFamily: fontReg }]}>{label}</Text>
-            <Text style={[styles.infoValue, { fontFamily: fontBold }, tone ? { color: tone } : null]} numberOfLines={2}>
+            <Text style={[styles.infoLabel, { fontFamily: fontReg, color: B.muted }]}>{label}</Text>
+            <Text
+                style={[styles.infoValue, { fontFamily: fontBold, color: tone ?? B.ink }]}
+                numberOfLines={2}
+            >
                 {value}
             </Text>
         </View>
@@ -1361,14 +1528,13 @@ function InfoTile({
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: B.bg },
+    container: { flex: 1 },
 
     hero: { paddingHorizontal: 18, paddingTop: 22, paddingBottom: 20, overflow: 'hidden' },
     heroJersey: {
         position: 'absolute',
         top: -6,
         fontSize: 110,
-        color: B.jersey,
         opacity: 0.85,
     },
     heroRow: { alignItems: 'center', gap: 16 },
@@ -1383,7 +1549,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
-        borderColor: B.bg,
         overflow: 'hidden',
     },
     ratingMedalText: {
@@ -1398,8 +1563,8 @@ const styles = StyleSheet.create({
     heroInfo: { flex: 1 },
     inlineRow: { alignItems: 'center', gap: 6 },
     flag: { width: 18, height: 12, borderRadius: 2 },
-    heroMeta: { color: B.soft, fontSize: 13, flexShrink: 1 },
-    playerName: { color: '#fff', fontSize: 24, flexShrink: 1, lineHeight: 30 },
+    heroMeta: { fontSize: 13, flexShrink: 1 },
+    playerName: { fontSize: 24, flexShrink: 1, lineHeight: 30 },
     verified: { width: 20, height: 20 },
     injuredBadge: {
         alignItems: 'center',
@@ -1413,7 +1578,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(239,68,68,0.45)',
     },
     injuredText: { fontSize: 11, color: '#fca5a5' },
-    heroTeamName: { color: B.soft, fontSize: 14, flexShrink: 1 },
+    heroTeamName: { fontSize: 14, flexShrink: 1 },
 
     chipsRow: { flexWrap: 'wrap', gap: 8, marginTop: 18 },
     chip: {
@@ -1422,17 +1587,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: 999,
-        backgroundColor: 'rgba(11,5,24,0.85)',
         borderWidth: 1,
-        borderColor: B.border,
     },
     chipIcon: { width: 14, height: 14 },
-    chipText: { color: '#fff', fontSize: 12 },
+    chipText: { fontSize: 12 },
 
     careerButtonWrap: {
         marginTop: 14,
         borderRadius: 12,
-        shadowColor: B.primary,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.6,
         shadowRadius: 12,
@@ -1452,56 +1614,50 @@ const styles = StyleSheet.create({
     body: { paddingHorizontal: 18 },
 
     card: {
-        backgroundColor: B.card,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: B.border,
     },
     loadingCard: { paddingVertical: 28, alignItems: 'center' },
     emptyCard: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 16, gap: 10 },
-    emptyText: { fontSize: 14, color: B.soft, textAlign: 'center' },
+    emptyText: { fontSize: 14, textAlign: 'center' },
 
     featuredGrid: { flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 10 },
     featuredTile: {
         width: '48.5%',
-        backgroundColor: B.card,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: B.border,
         paddingHorizontal: 14,
         paddingTop: 16,
         paddingBottom: 14,
         overflow: 'hidden',
     },
     featuredAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
-    featuredValue: { color: '#fff', fontSize: 26 },
-    featuredLabel: { color: B.muted, fontSize: 12, marginTop: 4 },
+    featuredValue: { fontSize: 26 },
+    featuredLabel: { fontSize: 12, marginTop: 4 },
 
     listCard: { paddingHorizontal: 14 },
     statRow: { alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 13 },
-    statRowDivider: { borderBottomWidth: 1, borderBottomColor: B.divider },
-    statLabel: { flex: 1, color: B.soft, fontSize: 14 },
-    statValue: { color: '#fff', fontSize: 15 },
+    statRowDivider: { borderBottomWidth: 1 },
+    statLabel: { flex: 1, fontSize: 14 },
+    statValue: { fontSize: 15 },
 
     eventsWrap: { flexWrap: 'wrap', gap: 8 },
     eventChip: {
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: 999,
-        backgroundColor: 'rgba(139,92,246,0.1)',
         borderWidth: 1,
-        borderColor: B.border,
     },
-    eventText: { color: '#fff', fontSize: 12 },
+    eventText: { fontSize: 12 },
 
     totalRow: { overflow: 'hidden' },
-    vDivider: { width: 1, backgroundColor: B.divider, marginVertical: 10 },
-    hDivider: { height: 1, backgroundColor: B.divider, marginVertical: 14 },
+    vDivider: { width: 1, marginVertical: 10 },
+    hDivider: { height: 1, marginVertical: 14 },
 
     infoCard: { padding: 16 },
     infoGrid: { alignItems: 'stretch' },
     infoTile: { flex: 1, alignItems: 'center', gap: 6, paddingHorizontal: 4 },
-    infoLabel: { fontSize: 11, color: B.muted, textAlign: 'center' },
-    infoValue: { fontSize: 14, color: '#fff', textAlign: 'center' },
+    infoLabel: { fontSize: 11, textAlign: 'center' },
+    infoValue: { fontSize: 14, textAlign: 'center' },
 
 });
