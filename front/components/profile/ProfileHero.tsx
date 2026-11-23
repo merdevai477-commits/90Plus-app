@@ -250,11 +250,10 @@ const ProfileHero = memo(function ProfileHero({
             {isOwnProfile && onEditPress ? (
               <TouchableOpacity
                 style={[
-                  styles.editPill,
+                  styles.editIconBtn,
                   {
                     backgroundColor: C.profilePrimarySoft,
                     borderColor: C.embossBorder,
-                    flexDirection: isAr ? 'row-reverse' : 'row',
                   },
                 ]}
                 onPress={onEditPress}
@@ -262,19 +261,12 @@ const ProfileHero = memo(function ProfileHero({
                 accessibilityRole="button"
                 accessibilityLabel={t.profile.editProfile}
               >
-                <Ionicons name="pencil" size={14} color={C.profilePrimary} />
-                <Text
-                  style={[styles.editPillText, { color: C.profilePrimary }]}
-                  numberOfLines={1}
-                  maxFontSizeMultiplier={1.1}
-                >
-                  {t.profile.editProfileShort || t.profile.editProfile}
-                </Text>
+                <Ionicons name="pencil" size={16} color={C.profilePrimary} />
               </TouchableOpacity>
             ) : !isOwnProfile && onSharePress ? (
               <TouchableOpacity
                 style={[
-                  styles.shareBtn,
+                  styles.editIconBtn,
                   {
                     backgroundColor: C.profilePrimarySoft,
                     borderColor: C.embossBorder,
@@ -494,24 +486,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 16,
   },
-  editPill: {
-    height: 36,
-    minWidth: 108,
-    maxWidth: 140,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    marginBottom: 8,
-    flexShrink: 0,
-  },
-  editPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  shareBtn: {
+  editIconBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
@@ -519,6 +494,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     marginBottom: 8,
+    flexShrink: 0,
   },
   editBtnSpacer: {
     width: 8,
