@@ -304,8 +304,8 @@ export default function PlayerProfileView({
               styles.heroIdentity,
               {
                 top: Math.max(insets.top, 10) + Math.round(22 * scale),
-                // Keep identity clear of the cutout (~40% photo + ~12% air + ~42% text)
-                width: Math.round(Math.min(width * 0.42, 188 * scale)),
+                // Wider panel so long names (e.g. ليونيل ميسي) stay readable over the cutout
+                width: Math.round(Math.min(width * 0.5, 220 * scale)),
                 gap: Math.round(10 * scale),
                 alignItems: 'flex-end',
               },
@@ -351,11 +351,11 @@ export default function PlayerProfileView({
                       fontFamily: fontBold,
                       color: C.ink,
                       fontSize: Math.round(26 * scale),
-                      lineHeight: Math.round(32 * scale),
+                      lineHeight: Math.round(30 * scale),
                       letterSpacing: -0.3,
                     },
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {vm.name}
                 </Text>
@@ -1157,13 +1157,13 @@ const styles = StyleSheet.create({
   heroNameRow: {
     flexDirection: 'row',
     direction: 'ltr',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'flex-end',
     gap: 6,
     width: '100%',
   },
-  heroName: { flexShrink: 1, textAlign: 'right' },
-  verifiedBadge: { width: 22, height: 22 },
+  heroName: { flexShrink: 1, flexGrow: 1, textAlign: 'right' },
+  verifiedBadge: { width: 22, height: 22, marginTop: 4 },
   heroClubRow: {
     flexDirection: 'row',
     direction: 'ltr',
