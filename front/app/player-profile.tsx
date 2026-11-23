@@ -8,6 +8,7 @@ import {
     Animated,
     StatusBar,
     RefreshControl,
+    Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -940,6 +941,7 @@ export default function PlayerProfileScreen() {
     const pp = t.playerProfile;
     const rtl = language === 'ar';
     const fontBold = useAppFont(700);
+    const fontExtraBold = useAppFont(800);
     const fontSemi = useAppFont(600);
     const fontReg = useAppFont(400);
 
@@ -1101,7 +1103,7 @@ export default function PlayerProfileScreen() {
                                 ) : null}
                                 <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4 }]}>
                                     <Text
-                                        style={[styles.playerName, { fontFamily: fontBold, textAlign }]}
+                                        style={[styles.playerName, { fontFamily: fontExtraBold, textAlign }]}
                                         numberOfLines={2}
                                     >
                                         {heroPlayer.name}
@@ -1118,11 +1120,12 @@ export default function PlayerProfileScreen() {
                                     <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
                                         <TeamBadge
                                             name={primaryTeam.name}
-                                            color={teamColors[0]}
-                                            size={24}
+                                            color="transparent"
+                                            size={30}
                                             logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                            highQuality
                                         />
-                                        <Text style={[styles.heroTeamName, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                        <Text style={[styles.heroTeamName, { fontFamily: fontBold }]} numberOfLines={1}>
                                             {getTeamDisplayName(primaryTeam.name, language)}
                                         </Text>
                                     </View>
@@ -1368,8 +1371,8 @@ const styles = StyleSheet.create({
         color: B.jersey,
         opacity: 0.85,
     },
-    heroRow: { alignItems: 'center', gap: 14, paddingHorizontal: 2 },
-    photoWrap: { alignItems: 'center', zIndex: 2 },
+    heroRow: { alignItems: 'center', gap: 16 },
+    photoWrap: { alignItems: 'center' },
     ratingMedal: {
         position: 'absolute',
         bottom: -8,
@@ -1381,13 +1384,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 2,
         borderColor: B.bg,
+        overflow: 'hidden',
     },
-    ratingMedalText: { color: '#0b0518', fontSize: 13 },
-    heroInfo: { flex: 1, justifyContent: 'center', minWidth: 0, zIndex: 3 },
+    ratingMedalText: {
+        color: '#0b0518',
+        fontSize: 13,
+        lineHeight: 16,
+        textAlign: 'center',
+        includeFontPadding: false,
+        textAlignVertical: 'center',
+        ...Platform.select({ ios: { transform: [{ translateY: 1 }] }, default: {} }),
+    },
+    heroInfo: { flex: 1 },
     inlineRow: { alignItems: 'center', gap: 6 },
     flag: { width: 18, height: 12, borderRadius: 2 },
     heroMeta: { color: B.soft, fontSize: 13, flexShrink: 1 },
-    playerName: { color: '#fff', fontSize: 22, flexShrink: 1, lineHeight: 28 },
+    playerName: { color: '#fff', fontSize: 24, flexShrink: 1, lineHeight: 30 },
     verified: { width: 20, height: 20 },
     injuredBadge: {
         alignItems: 'center',

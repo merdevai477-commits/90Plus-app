@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Animated,
   Linking,
+  Platform,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -192,6 +193,7 @@ export default function PlayerProfileView({
   const { isDark } = useResolvedAppScheme();
   const C = useMemo(() => getPPColors(isDark), [isDark]);
   const fontBold = useAppFont(700);
+  const fontExtraBold = useAppFont(800);
   const fontSemi = useAppFont(600);
 
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -260,18 +262,18 @@ export default function PlayerProfileView({
             />
           </View>
 
-          {/* Cutout on the photo edge — keep under ~half width so the name panel never collides on iPhone */}
+          {/* Cutout stays on the photo edge so he faces the identity panel with a clear gap */}
           <Pressable
             style={[
               styles.heroCutoutWrap,
               {
-                width: Math.round(Math.min(width * 0.5, 216 * scale)),
-                height: Math.round(heroHeight * 1.12),
+                width: Math.round(Math.min(width * 1.0, 270 * scale)),
+                height: Math.round(heroHeight * 1.18),
                 bottom: Math.round(-1 * scale),
               },
               rtl
-                ? { left: Math.round(-4 * scale) }
-                : { right: Math.round(-4 * scale) },
+                ? { left: Math.round(9 * scale) }
+                : { right: Math.round(4 * scale) },
             ]}
             onPress={() => photoUri && !photoFailed && setViewerOpen(true)}
             accessibilityRole="imagebutton"
@@ -303,25 +305,23 @@ export default function PlayerProfileView({
             style={[
               styles.heroIdentity,
               {
-                // Vertically center identity against the cutout; keep clear of the photo edge
-                top: Math.max(insets.top, 10) + Math.round(36 * scale),
-                bottom: Math.round(28 * scale),
-                width: Math.round(Math.min(width * 0.46, 198 * scale)),
-                gap: Math.round(8 * scale),
+                top: Math.max(insets.top, 10) + Math.round(22 * scale),
+                // Wider panel so long names (e.g. ليونيل ميسي) stay readable over the cutout
+                width: Math.round(Math.min(width * 0.5, 220 * scale)),
+                gap: Math.round(10 * scale),
                 alignItems: 'flex-end',
-                justifyContent: 'center',
               },
               rtl
-                ? { right: Math.round(16 * scale) }
-                : { left: Math.round(16 * scale) },
+                ? { right: Math.round(14 * scale) }
+                : { left: Math.round(14 * scale) },
             ]}
           >
             <View
               style={{
                 width: '100%',
-                justifyContent: 'center',
+                justifyContent: 'flex-start',
                 alignItems: 'flex-end',
-                gap: Math.round(8 * scale),
+                gap: Math.round(10 * scale),
               }}
             >
               {vm.nationality ? (
@@ -350,11 +350,11 @@ export default function PlayerProfileView({
                   style={[
                     styles.heroName,
                     {
-                      fontFamily: fontBold,
+                      fontFamily: fontExtraBold,
                       color: C.ink,
-                      fontSize: Math.round(26 * scale),
-                      lineHeight: Math.round(30 * scale),
-                      letterSpacing: -0.3,
+                      fontSize: Math.round(28 * scale),
+                      lineHeight: Math.round(32 * scale),
+                      letterSpacing: -0.2,
                     },
                   ]}
                   numberOfLines={2}
@@ -370,7 +370,7 @@ export default function PlayerProfileView({
                     style={[
                       styles.heroClub,
                       {
-                        fontFamily: fontSemi,
+                        fontFamily: fontBold,
                         color: isDark ? C.soft : '#373737',
                         fontSize: Math.round(18 * scale),
                         lineHeight: Math.round(23 * scale),
@@ -383,8 +383,9 @@ export default function PlayerProfileView({
                   <TeamBadge
                     name={vm.clubName}
                     logo={vm.clubLogo || undefined}
-                    size={Math.round(26 * scale)}
+                    size={Math.round(32 * scale)}
                     color="transparent"
+                    highQuality
                   />
                 </View>
               ) : null}
@@ -901,6 +902,7 @@ function LastMatchesCard({
   const { t } = useTranslation();
   const pc = t.playerCareer;
   const fontSemi = useAppFont(600);
+  const fontBold = useAppFont(700);
   const ordered = rtl ? matches : [...matches].reverse();
 
   return (
@@ -941,15 +943,19 @@ function LastMatchesCard({
                   ]}
                 >
                   <View style={[styles.ratingPill, { backgroundColor: tone }]}>
-                    <Text style={[styles.ratingPillText, { fontFamily: fontSemi, color: C.ratingText }]}>
+                    <Text
+                      style={[styles.ratingPillText, { fontFamily: fontBold, color: C.ratingText }]}
+                      allowFontScaling={false}
+                    >
                       {rating.toFixed(1)}
                     </Text>
                   </View>
                   <TeamBadge
                     name={match.opponentName || '—'}
                     logo={match.opponentLogo || undefined}
-                    size={30}
+                    size={34}
                     color="transparent"
+                    highQuality
                   />
                 </View>
                 <View style={styles.matchMeta}>
@@ -957,7 +963,7 @@ function LastMatchesCard({
                     {fmtMatchDate(match.startTime)}
                   </Text>
                   <Text
-                    style={[styles.matchOpponent, { fontFamily: fontSemi, color: C.ink }]}
+                    style={[styles.matchOpponent, { fontFamily: fontBold, color: C.ink }]}
                     numberOfLines={1}
                   >
                     {shortOpponent(match.opponentName)}
@@ -1162,13 +1168,13 @@ const styles = StyleSheet.create({
   heroNameRow: {
     flexDirection: 'row',
     direction: 'ltr',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'flex-end',
     gap: 6,
     width: '100%',
   },
   heroName: { flexShrink: 1, flexGrow: 1, textAlign: 'right' },
-  verifiedBadge: { width: 22, height: 22 },
+  verifiedBadge: { width: 22, height: 22, marginTop: 4 },
   heroClubRow: {
     flexDirection: 'row',
     direction: 'ltr',
@@ -1270,12 +1276,21 @@ const styles = StyleSheet.create({
   matchTop: { alignItems: 'flex-start', justifyContent: 'flex-end', gap: 8, width: '100%' },
   ratingPill: {
     width: 54,
-    height: 27,
+    height: 28,
     borderRadius: 56,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  ratingPillText: { fontSize: 18 },
+  ratingPillText: {
+    fontSize: 15,
+    lineHeight: 18,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    // Cairo/Inter optical center sits high inside fixed pills on iOS
+    ...Platform.select({ ios: { transform: [{ translateY: 1.5 }] }, default: {} }),
+  },
   matchMeta: { alignItems: 'center', gap: 4, width: '100%' },
   matchDate: { fontSize: 11, textAlign: 'center', width: '100%' },
   matchOpponent: { fontSize: 17, textAlign: 'center', width: '100%' },
