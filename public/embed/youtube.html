@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+  <meta name="referrer" content="origin" />
+  <title>90Plus Highlight</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #player {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #tap {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.35);
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    #tap[hidden] { display: none !important; }
+    #tap .disc {
+      width: 72px;
+      height: 72px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+    #tap .tri {
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 12px 0 12px 20px;
+      border-color: transparent transparent transparent #1a0b3a;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <button id="tap" type="button" aria-label="Play">
+    <span class="disc"><span class="tri"></span></span>
+  </button>
+  <script>
+(function () {
+  var params = new URLSearchParams(location.search || '');
+  var id = String(params.get('v') || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  window.__HL_VID = id;
+
+  function post(reason) {
+    try {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(
+          'reason:' + reason + ':' + id + ':' + location.href
+        );
+      }
+    } catch (e) {}
+  }
+
+  if (!id) {
+    post('SOURCE_NOT_FOUND');
+    return;
+  }
+
+  var player = null;
+  var started = false;
+  var tap = document.getElementById('tap');
+
+  function hideTap() {
+    if (tap) tap.hidden = true;
+  }
+
+  function tryPlay(fromGesture) {
+    if (!player) return;
+    try {
+      // Muted start is more reliable inside WKWebView; unmute after a real gesture.
+      if (fromGesture) {
+        try { player.unMute(); } catch (e1) {}
+        try { player.setVolume(100); } catch (e2) {}
+      } else {
+        try { player.mute(); } catch (e3) {}
+      }
+      player.playVideo();
+    } catch (e4) {}
+  }
+
+  if (tap) {
+    tap.addEventListener('click', function () {
+      hideTap();
+      tryPlay(true);
+      post('USER_PLAY');
+    }, { passive: true });
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    try {
+      player = new YT.Player('player', {
+        width: '100%',
+        height: '100%',
+        videoId: id,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          controls: 1,
+          iv_load_policy: 3,
+          enablejsapi: 1,
+          origin: location.origin,
+          widget_referrer: location.origin
+        },
+        events: {
+          onReady: function () {
+            post('PLAYER_READY');
+            tryPlay(false);
+            // Keep the tap overlay until real playback, so iOS always has a gesture path.
+            setTimeout(function () {
+              if (!started && tap) tap.hidden = false;
+            }, 700);
+          },
+          onStateChange: function (e) {
+            if (e && e.data === 1) {
+              started = true;
+              hideTap();
+              post('PLAYING');
+            }
+          },
+          onError: function (e) {
+            var c = String(e && e.data);
+            post(c === '100' ? 'SOURCE_NOT_FOUND' : 'EMBED_UNAVAILABLE');
+          }
+        }
+      });
+    } catch (err) {
+      post('EMBED_UNAVAILABLE');
+    }
+  };
+
+  var tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+})();
+  </script>
+</body>
+</html>

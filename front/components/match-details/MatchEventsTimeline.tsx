@@ -248,7 +248,11 @@ function EventBody({
             const urls = candidates.length ? candidates : playUrl ? [playUrl] : [];
             if (urls.length) onPlayClip?.(urls);
           }}
-          style={styles.clipMedia}
+          style={[
+            styles.clipMedia,
+            // Pack the thumb toward the spine (same edge as the player name), not full-column stretch.
+            { alignSelf: towardCenter === 'right' ? 'flex-start' : 'flex-end' },
+          ]}
         >
           {clip.thumbnail ? (
             <ExpoImage source={{ uri: clip.thumbnail }} style={styles.clipImage} contentFit="cover" />
@@ -559,15 +563,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   clipMedia: {
-    // Stay inside the side column — fixed 163px was wider than ~149px half-width and crushed the layout.
-    width: '100%',
-    maxWidth: CLIP_W,
+    // Cap width so the thumb stays under the name column and does not crush the spine on iPhone.
+    width: CLIP_W,
+    maxWidth: '100%',
     aspectRatio: CLIP_W / CLIP_H,
     borderRadius: 8,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'stretch',
   },
   clipImage: {
     ...StyleSheet.absoluteFillObject,

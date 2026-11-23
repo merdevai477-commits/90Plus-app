@@ -2,6 +2,8 @@ const STREAMIN_HOSTS = new Set(['streamin.link', 'streamin.me']);
 /** Streamin moved live files off c-cdn. Try the current host first, then the old one. */
 const STREAMIN_CDN_HOSTS = ['w-cdn.streamin.top', 'c-cdn.streamin.top'];
 
+export const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
+
 export function streaminClipId(pageUrl: string): string | null {
   try {
     const parsed = new URL(pageUrl.trim());
@@ -74,7 +76,9 @@ export function youtubeVideoId(pageUrl: string): string | null {
   return null;
 }
 
-const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
+function sanitizeYoutubeId(videoId: string): string {
+  return videoId.replace(/[^a-zA-Z0-9_-]/g, '');
+}
 
 /** Player-only embed. No watch-page title, share row, or recommendations. */
 export function youtubeEmbedUrl(pageUrl: string): string | null {
@@ -82,6 +86,7 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
   if (!id) return null;
   const params = new URLSearchParams({
     autoplay: '1',
+    mute: '1',
     playsinline: '1',
     rel: '0',
     modestbranding: '1',
@@ -96,6 +101,29 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
 }
 
 /**
+ * First-party page on 90plus.pro that hosts the YouTube IFrame API.
+ * Loading this as WebView `uri` (not injected HTML) gives a real Referer and
+ * is the most reliable in-app path on iPhone WKWebView.
+ */
+export function youtubeHostedPlayerUrl(pageUrlOrId: string): string | null {
+  const id = youtubeVideoId(pageUrlOrId) || (/^[\w-]{6,}$/.test(pageUrlOrId.trim()) ? pageUrlOrId.trim() : null);
+  if (!id) return null;
+  return `${YOUTUBE_EMBED_ORIGIN}/embed/youtube.html?v=${encodeURIComponent(id)}`;
+}
+
+/** Mobile YouTube watch page — last in-app WebView tier before external Linking. */
+export function youtubeMobileWatchUrl(pageUrlOrId: string): string | null {
+  const id = youtubeVideoId(pageUrlOrId) || (/^[\w-]{6,}$/.test(pageUrlOrId.trim()) ? pageUrlOrId.trim() : null);
+  if (!id) return null;
+  return `https://m.youtube.com/watch?v=${encodeURIComponent(id)}&playsinline=1`;
+}
+
+export type YoutubeEmbedDocumentOptions = {
+  /** When true, show an explicit play overlay (required for reliable iOS WKWebView playback). */
+  requireTap?: boolean;
+};
+
+/**
  * Local page so the WebView sends a Referer and the embed is allowed to paint.
  * Uses the IFrame API so iOS can report PLAYER_READY / PLAYING / typed errors
  * instead of treating the wrapper HTML load as "video ready".
@@ -104,23 +132,31 @@ export function youtubeEmbedUrl(pageUrl: string): string | null {
  * inside WKWebView when eurl/referer is missing. base + origin + widget_referrer
  * mitigate that; failures still fall through to Open in YouTube.
  */
-export function youtubeEmbedDocument(videoId: string): string {
-  const id = videoId.replace(/[^a-zA-Z0-9_-]/g, '');
-  return `<!DOCTYPE html><html><head><base href="${YOUTUBE_EMBED_ORIGIN}/"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#player{position:absolute;inset:0;width:100%;height:100%}</style></head><body><div id="player"></div><script>
+export function youtubeEmbedDocument(
+  videoId: string,
+  options: YoutubeEmbedDocumentOptions = {},
+): string {
+  const id = sanitizeYoutubeId(videoId);
+  const requireTap = options.requireTap === true;
+  return `<!DOCTYPE html><html><head><base href="${YOUTUBE_EMBED_ORIGIN}/"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden;-webkit-tap-highlight-color:transparent}#player{position:absolute;inset:0;width:100%;height:100%}#tap{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);border:0;padding:0}#tap[hidden]{display:none!important}#tap .disc{width:72px;height:72px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center}#tap .tri{width:0;height:0;border-style:solid;border-width:12px 0 12px 20px;border-color:transparent transparent transparent #1a0b3a;margin-left:4px}</style></head><body><div id="player"></div><button id="tap" type="button" aria-label="Play"${requireTap ? '' : ' hidden'}><span class="disc"><span class="tri"></span></span></button><script>
 window.__HL_VID='${id}';
+var player=null,started=false,tap=document.getElementById('tap');
+function post(reason){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('reason:'+reason+':${id}:'+location.href);}catch(e){}}
+function hideTap(){if(tap)tap.hidden=true;}
+function tryPlay(fromGesture){if(!player)return;try{if(fromGesture){try{player.unMute();}catch(e1){}try{player.setVolume(100);}catch(e2){}}else{try{player.mute();}catch(e3){}}player.playVideo();}catch(e4){}}
+if(tap){tap.addEventListener('click',function(){hideTap();tryPlay(true);post('USER_PLAY');},{passive:true});}
 var tag=document.createElement('script');
 tag.src='https://www.youtube.com/iframe_api';
 document.head.appendChild(tag);
-function post(reason){try{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage('reason:'+reason+':${id}:'+location.href);}catch(e){}}
 function onYouTubeIframeAPIReady(){
   try{
-    new YT.Player('player',{
+    player=new YT.Player('player',{
       width:'100%',height:'100%',videoId:'${id}',
       host:'https://www.youtube-nocookie.com',
-      playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,controls:1,iv_load_policy:3,enablejsapi:1,origin:'${YOUTUBE_EMBED_ORIGIN}',widget_referrer:'${YOUTUBE_EMBED_ORIGIN}'},
+      playerVars:{autoplay:1,mute:1,playsinline:1,rel:0,modestbranding:1,controls:1,iv_load_policy:3,enablejsapi:1,origin:'${YOUTUBE_EMBED_ORIGIN}',widget_referrer:'${YOUTUBE_EMBED_ORIGIN}'},
       events:{
-        onReady:function(e){try{e.target.playVideo();}catch(x){}post('PLAYER_READY');},
-        onStateChange:function(e){if(e&&e.data===1)post('PLAYING');},
+        onReady:function(){post('PLAYER_READY');tryPlay(false);setTimeout(function(){if(!started&&tap)tap.hidden=false;},700);},
+        onStateChange:function(e){if(e&&e.data===1){started=true;hideTap();post('PLAYING');}},
         onError:function(e){var c=String(e&&e.data);post(c==='100'?'SOURCE_NOT_FOUND':'EMBED_UNAVAILABLE');}
       }
     });
@@ -128,4 +164,3 @@ function onYouTubeIframeAPIReady(){
 }
 </script></body></html>`;
 }
-

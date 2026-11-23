@@ -4,6 +4,8 @@ import {
   resolveHighlightPlaybackUrl,
   youtubeEmbedDocument,
   youtubeEmbedUrl,
+  youtubeHostedPlayerUrl,
+  youtubeMobileWatchUrl,
 } from '../highlightPlaybackUrl';
 
 describe('resolveHighlightPlaybackUrl', () => {
@@ -25,10 +27,17 @@ describe('resolveHighlightPlaybackUrl', () => {
   it('builds a player-only YouTube embed from a watch link', () => {
     const embed = youtubeEmbedUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo');
     expect(embed).toContain('youtube-nocookie.com/embed/qjEXEEBQgqo?');
+    expect(embed).toContain('mute=1');
     expect(embed).toContain('origin=https%3A%2F%2F90plus.pro');
     expect(embed).toContain('widget_referrer=https%3A%2F%2F90plus.pro');
     expect(youtubeEmbedUrl('https://youtu.be/6Nk3FShw4XM')).toContain('/embed/6Nk3FShw4XM?');
-    const doc = youtubeEmbedDocument('_jxHAw-yH3E');
+    expect(youtubeHostedPlayerUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo')).toBe(
+      'https://90plus.pro/embed/youtube.html?v=qjEXEEBQgqo',
+    );
+    expect(youtubeMobileWatchUrl('qjEXEEBQgqo')).toBe(
+      'https://m.youtube.com/watch?v=qjEXEEBQgqo&playsinline=1',
+    );
+    const doc = youtubeEmbedDocument('_jxHAw-yH3E', { requireTap: true });
     expect(doc).toContain("videoId:'_jxHAw-yH3E'");
     expect(doc).toContain('iframe_api');
     expect(doc).toContain("post('PLAYER_READY')");
@@ -36,6 +45,8 @@ describe('resolveHighlightPlaybackUrl', () => {
     expect(doc).toContain('<base href="https://90plus.pro/">');
     expect(doc).toContain("host:'https://www.youtube-nocookie.com'");
     expect(doc).toContain("reason:'+reason+':_jxHAw-yH3E:");
+    expect(doc).toContain('id="tap"');
+    expect(doc).toContain('mute:1');
   });
 
   it('orders direct MP4 ahead of YouTube', () => {

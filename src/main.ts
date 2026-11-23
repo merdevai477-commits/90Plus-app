@@ -673,6 +673,19 @@ app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
     });
 });
 
+// First-party YouTube host page for in-app WKWebView (iOS highlights / summaries).
+app.get(['/embed/youtube', '/embed/youtube.html'], (_req: Request, res: Response) => {
+    const filePath = path.join(publicPath, 'embed', 'youtube.html');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Referrer-Policy', 'origin');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send YouTube embed page:', err);
+            res.status(500).send('Embed page unavailable');
+        }
+    });
+});
+
 // Unmatched public paths → landing page (deep links open in app; browsers get home)
 const LANDING_PAGE_URL = 'https://90plus.pro';
 const CATCH_ALL_EXCLUDED_PREFIXES = [
@@ -680,6 +693,7 @@ const CATCH_ALL_EXCLUDED_PREFIXES = [
     '/.well-known',
     '/apple-app-site-association',
     '/health',
+    '/embed',
 ];
 app.get('*', (req: Request, res: Response, next: NextFunction) => {
     const isExcluded = CATCH_ALL_EXCLUDED_PREFIXES.some((prefix) =>
