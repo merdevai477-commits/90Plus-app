@@ -119,6 +119,8 @@ function SendButton({
         glow={FIELD_CAUSTIC}
         strength={0.14}
         sheen={0.12}
+        // Keep UIBlur + tint on iOS so the sky send color is not lost to Liquid Glass.
+        blurIntensity={Platform.OS === 'ios' ? 18 : undefined}
         blurTarget={blurTarget}
         blurTint={blurTint}
         elevate={elevate}

@@ -150,6 +150,7 @@ export function LiquidWaterSurface({
         {...({
           style: [{ borderRadius: radius, overflow: 'hidden' }, elevateStyle, style],
           tint,
+          tintColor: tint,
           effect: 'regular',
           interactive: true,
         } as object)}
