@@ -125,12 +125,13 @@ export function TsfPointsHero({
 export function TsfIslandBack({
   onPress,
   label,
-  rtl,
+  rtl: _rtl,
   light,
 }: {
   onPress: () => void;
   label: string;
-  rtl: boolean;
+  /** Kept for callers; the control stays on the left in both languages. */
+  rtl?: boolean;
   light?: boolean;
 }) {
   return (
@@ -139,9 +140,9 @@ export function TsfIslandBack({
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      style={[styles.island, rtl ? styles.islandEnd : styles.islandStart, light && styles.islandOnDark]}
+      style={[styles.island, styles.islandStart, light && styles.islandOnDark]}
     >
-      <Ionicons name={rtl ? 'chevron-forward' : 'chevron-back'} size={22} color={light ? '#FFFFFF' : '#24104E'} />
+      <Ionicons name="chevron-back" size={22} color={light ? '#FFFFFF' : '#24104E'} />
     </TouchableOpacity>
   );
 }
@@ -229,5 +230,4 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
   },
   islandStart: { left: 12 },
-  islandEnd: { right: 12 },
 });
