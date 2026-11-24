@@ -1,7 +1,7 @@
 /**
  * Floating capsule switcher for ملك التوقعات — same liquid-glass system as
- * خماسي الهدافين / ملك المدربين. Tab order stays fixed so the active bubble
- * moves; labels never swap places between play and ranking.
+ * خماسي الهدافين. Fixed order: مباريات / ترتيب / سجل so the bubble moves
+ * and labels never swap places.
  */
 
 import { useMemo } from 'react';
@@ -16,13 +16,20 @@ import {
   type GlassCapsuleItem,
 } from '../navigation/GlassCapsuleNav';
 
-export type KingTabKey = 'play' | 'ranking';
+export type KingTabKey = 'matches' | 'ranking' | 'history';
 
 /** Height of the open capsule slot — keep list padding in sync. */
 export const KING_NAV_HEIGHT = 58;
 
 export function kingNavBottom(insetBottom: number): number {
   return Math.max(insetBottom, 12) + 8;
+}
+
+export function parseKingTab(value: string | string[] | undefined): KingTabKey | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === 'matches' || raw === 'ranking' || raw === 'history') return raw;
+  if (raw === 'play') return 'matches';
+  return null;
 }
 
 type KingNavProps = {
@@ -39,40 +46,55 @@ export function KingNav({ activeTab, onChange }: KingNavProps) {
 
   /** Arabic design order (left → right); English reads the other way. */
   const items = useMemo<GlassCapsuleItem<KingTabKey>[]>(() => {
-    const order: KingTabKey[] = language === 'ar' ? ['ranking', 'play'] : ['play', 'ranking'];
+    const order: KingTabKey[] =
+      language === 'ar' ? ['history', 'ranking', 'matches'] : ['matches', 'ranking', 'history'];
     const iconColor = (isActive: boolean) => (isActive ? navColors.iconActive : navColors.iconIdle);
+    const labelOf = (key: KingTabKey) => {
+      switch (key) {
+        case 'matches':
+          return copy.tabMatches;
+        case 'ranking':
+          return copy.tabRanking;
+        case 'history':
+          return copy.tabHistory;
+      }
+    };
     return order.map((key) => ({
       key,
-      // Arabic: سجل + ترتيب (fixed order). English keeps Predict + Ranking.
-      label:
-        key === 'play'
-          ? language === 'ar'
-            ? copy.tabHistory
-            : copy.tabPredict
-          : copy.tabRanking,
+      label: labelOf(key),
       renderIcon: (isActive, size) => {
-        if (key === 'ranking') {
-          return (
-            <Ionicons
-              name={isActive ? 'trophy' : 'trophy-outline'}
-              size={size}
-              color={iconColor(isActive)}
-            />
-          );
+        switch (key) {
+          case 'matches':
+            return (
+              <Ionicons
+                name={isActive ? 'calendar' : 'calendar-outline'}
+                size={size}
+                color={iconColor(isActive)}
+              />
+            );
+          case 'ranking':
+            return (
+              <Ionicons
+                name={isActive ? 'trophy' : 'trophy-outline'}
+                size={size}
+                color={iconColor(isActive)}
+              />
+            );
+          case 'history':
+            return (
+              <Ionicons
+                name={isActive ? 'time' : 'time-outline'}
+                size={size}
+                color={iconColor(isActive)}
+              />
+            );
         }
-        const playIcon =
-          language === 'ar'
-            ? isActive
-              ? ('time' as const)
-              : ('time-outline' as const)
-            : ('sparkles' as const);
-        return <Ionicons name={playIcon} size={size} color={iconColor(isActive)} />;
       },
       testID: `king-nav-${key}`,
     }));
   }, [
     copy.tabHistory,
-    copy.tabPredict,
+    copy.tabMatches,
     copy.tabRanking,
     language,
     navColors.iconActive,
@@ -85,8 +107,8 @@ export function KingNav({ activeTab, onChange }: KingNavProps) {
         items={items}
         activeKey={activeTab}
         onChange={onChange}
-        scale={0.92}
-        maxWidth={Math.min(width - 40, 280)}
+        scale={0.88}
+        maxWidth={Math.min(width - 24, 360)}
       />
     </View>
   );

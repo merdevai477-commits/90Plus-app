@@ -49,7 +49,8 @@ import {
   peekKingMatches,
   type KingRouteMode,
 } from './shared';
-import { KingNav, KING_NAV_HEIGHT, kingNavBottom, type KingTabKey } from './KingNav';
+import { KingHistoryList } from './HistoryList';
+import { KingNav, KING_NAV_HEIGHT, kingNavBottom, parseKingTab, type KingTabKey } from './KingNav';
 import { KingToast, type KingToastState } from './KingToast';
 
 const SIDE = 20;
@@ -84,9 +85,11 @@ function parseScore(text: string): number | null {
 export function KingPlayScreen({
   mode: modeParam,
   date,
+  tab: tabParam,
 }: {
   mode: string | string[] | undefined;
   date?: string | string[];
+  tab?: string | string[];
 }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
   const isGame = mode === 'game';
@@ -109,6 +112,16 @@ export function KingPlayScreen({
   const fontRegular = useAppFont(400);
   const { isDark } = useResolvedAppScheme();
   const theme = useMemo(() => getKingPlayTheme(isDark), [isDark]);
+
+  const openingTab = parseKingTab(tabParam) ?? 'matches';
+  const [tab, setTab] = useState<Exclude<KingTabKey, 'ranking'>>(
+    openingTab === 'ranking' ? 'matches' : openingTab,
+  );
+
+  useEffect(() => {
+    const next = parseKingTab(tabParam);
+    if (next === 'matches' || next === 'history') setTab(next);
+  }, [tabParam]);
 
   const openingDate = dateKey || cairoTodayKey();
   const openingMatches = (peekKingMatches(openingDate)?.matches ?? []).filter(isPlausibleFootballMatch);
@@ -377,8 +390,13 @@ export function KingPlayScreen({
     router.replace({ pathname: '/king-of-predictions/leaderboard', params: { mode } } as never);
   };
 
-  const onNavChange = (tab: KingTabKey) => {
-    if (tab === 'ranking') openBoard();
+  const onNavChange = (next: KingTabKey) => {
+    if (next === 'ranking') {
+      openBoard();
+      return;
+    }
+    setTab(next);
+    router.setParams({ tab: next } as never);
   };
 
   const goBack = () => {
@@ -386,7 +404,8 @@ export function KingPlayScreen({
     else router.replace('/(tabs)/rank' as never);
   };
 
-  const title = isGame ? copy.playModePredictions : copy.hubResultsTitle;
+  const title =
+    tab === 'history' ? copy.tabHistory : isGame ? copy.playModePredictions : copy.hubResultsTitle;
   const cardCopy = {
     predictNow: copy.predictNow,
     predicted: copy.predicted,
@@ -413,125 +432,135 @@ export function KingPlayScreen({
 
       <KingPlayHeader title={title} onBack={goBack} backLabel={copy.back} theme={theme} />
 
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: listBottom }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.refresh} />
-        }
+      <View
+        style={[
+          styles.modeTrack,
+          {
+            marginHorizontal: SIDE,
+            marginTop: 8,
+            backgroundColor: theme.modeTrackBg,
+            borderColor: theme.modeTrackBorder,
+          },
+        ]}
       >
-        <Image source={KING_ART.promoBanner} style={styles.banner} contentFit="cover" />
+        <ModeTab
+          label={copy.playModePredictions}
+          active={mode === 'game'}
+          theme={theme}
+          font={fontSemi}
+          onPress={() => switchMode('game')}
+        />
+        <ModeTab
+          label={copy.hubResultsTitle}
+          active={mode === 'results'}
+          theme={theme}
+          font={fontSemi}
+          onPress={() => switchMode('results')}
+        />
+      </View>
 
-        <View
-          style={[
-            styles.modeTrack,
-            {
-              backgroundColor: theme.modeTrackBg,
-              borderColor: theme.modeTrackBorder,
-            },
-          ]}
+      {tab === 'history' ? (
+        <KingHistoryList
+          mode={mode}
+          bottomPadding={listBottom}
+          onPredict={() => onNavChange('matches')}
+        />
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.scroll, { paddingBottom: listBottom, paddingTop: 12 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.refresh} />
+          }
         >
-          <ModeTab
-            label={copy.playModePredictions}
-            active={mode === 'game'}
-            theme={theme}
-            font={fontSemi}
-            onPress={() => switchMode('game')}
-          />
-          <ModeTab
-            label={copy.hubResultsTitle}
-            active={mode === 'results'}
-            theme={theme}
-            font={fontSemi}
-            onPress={() => switchMode('results')}
-          />
-        </View>
+          <Image source={KING_ART.promoBanner} style={styles.banner} contentFit="cover" />
 
-        <View style={[styles.infoBox, { backgroundColor: theme.infoBg, direction: 'ltr' }]}>
-          <Text style={[styles.infoText, { color: theme.infoText, fontFamily: fontMedium }]}>
-            {copy.playHint}
-          </Text>
-          <Ionicons name="information-circle-outline" size={17} color={theme.infoIcon} />
-        </View>
-
-        <View style={styles.sectionHead}>
-          <View style={[styles.progress, { backgroundColor: theme.progressBg }]}>
-            <Text style={[styles.progressText, { color: theme.progressText, fontFamily: fontSemi }]}>
-              {copy.progressDone
-                .replace('{done}', String(completedCount))
-                .replace('{total}', String(matches.length || DAILY_LIMIT))}
+          <View style={[styles.infoBox, { backgroundColor: theme.infoBg, direction: 'ltr' }]}>
+            <Text style={[styles.infoText, { color: theme.infoText, fontFamily: fontMedium }]}>
+              {copy.playHint}
             </Text>
+            <Ionicons name="information-circle-outline" size={17} color={theme.infoIcon} />
           </View>
-          <View style={styles.sectionTitleRow}>
-            <Text style={[styles.sectionTitle, { color: theme.sectionTitle, fontFamily: fontSemi }]}>
-              {copy.matchesTitle}
+
+          <View style={styles.sectionHead}>
+            <View style={[styles.progress, { backgroundColor: theme.progressBg }]}>
+              <Text style={[styles.progressText, { color: theme.progressText, fontFamily: fontSemi }]}>
+                {copy.progressDone
+                  .replace('{done}', String(completedCount))
+                  .replace('{total}', String(matches.length || DAILY_LIMIT))}
+              </Text>
+            </View>
+            <View style={styles.sectionTitleRow}>
+              <Text style={[styles.sectionTitle, { color: theme.sectionTitle, fontFamily: fontSemi }]}>
+                {copy.matchesTitle}
+              </Text>
+              <Image source={KING_ART.courtIcon} style={styles.courtIcon} contentFit="contain" />
+            </View>
+          </View>
+
+          {loading && matches.length === 0 ? (
+            <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
+          ) : error && matches.length === 0 ? (
+            <Pressable
+              onPress={() => {
+                setLoading(true);
+                void load()
+                  .catch(() => setError(true))
+                  .finally(() => setLoading(false));
+              }}
+              style={styles.center}
+            >
+              <Text style={[{ color: theme.muted, fontFamily: fontMedium }, styles.centerText]}>{copy.loadError}</Text>
+              <Text style={[{ color: theme.primary, fontFamily: fontSemi }, styles.retry]}>{copy.retry}</Text>
+            </Pressable>
+          ) : matches.length === 0 ? (
+            <Text style={[{ color: theme.muted, fontFamily: fontMedium }, styles.centerText, styles.center]}>
+              {copy.noMatches}
             </Text>
-            <Image source={KING_ART.courtIcon} style={styles.courtIcon} contentFit="contain" />
-          </View>
-        </View>
+          ) : (
+            matches.map((match, index) => {
+              const phase = phaseOf(match);
+              const prev = pickFor(match.id);
+              const button = kingCardButton({
+                dayPassed,
+                started: started(match) || isPostponed(match),
+                live: match.status === 'live',
+                verdict:
+                  prev?.correct === true
+                    ? 'correct'
+                    : prev?.correct === false
+                      ? 'wrong'
+                      : prev
+                        ? 'pending'
+                        : null,
+              });
+              const draft = scoreDisplay(match);
+              return (
+                <PlayMatchCard
+                  key={`${apiMode}-${match.id}`}
+                  match={match}
+                  index={index}
+                  isGame={isGame}
+                  theme={theme}
+                  phase={phase}
+                  pick={prev?.type ?? null}
+                  homeScore={draft.home}
+                  awayScore={draft.away}
+                  homeName={teamName(match.homeTeam)}
+                  awayName={teamName(match.awayTeam)}
+                  pickLabel={pickLabelOf(match)}
+                  fonts={{ bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular }}
+                  copy={cardCopy}
+                  locked={button.locked || isPostponed(match)}
+                  onPress={() => openSheet(match)}
+                />
+              );
+            })
+          )}
+        </ScrollView>
+      )}
 
-        {loading && matches.length === 0 ? (
-          <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
-        ) : error && matches.length === 0 ? (
-          <Pressable
-            onPress={() => {
-              setLoading(true);
-              void load()
-                .catch(() => setError(true))
-                .finally(() => setLoading(false));
-            }}
-            style={styles.center}
-          >
-            <Text style={[{ color: theme.muted, fontFamily: fontMedium }, styles.centerText]}>{copy.loadError}</Text>
-            <Text style={[{ color: theme.primary, fontFamily: fontSemi }, styles.retry]}>{copy.retry}</Text>
-          </Pressable>
-        ) : matches.length === 0 ? (
-          <Text style={[{ color: theme.muted, fontFamily: fontMedium }, styles.centerText, styles.center]}>
-            {copy.noMatches}
-          </Text>
-        ) : (
-          matches.map((match, index) => {
-            const phase = phaseOf(match);
-            const prev = pickFor(match.id);
-            const button = kingCardButton({
-              dayPassed,
-              started: started(match) || isPostponed(match),
-              live: match.status === 'live',
-              verdict:
-                prev?.correct === true
-                  ? 'correct'
-                  : prev?.correct === false
-                    ? 'wrong'
-                    : prev
-                      ? 'pending'
-                      : null,
-            });
-            const draft = scoreDisplay(match);
-            return (
-              <PlayMatchCard
-                key={`${apiMode}-${match.id}`}
-                match={match}
-                index={index}
-                isGame={isGame}
-                theme={theme}
-                phase={phase}
-                pick={prev?.type ?? null}
-                homeScore={draft.home}
-                awayScore={draft.away}
-                homeName={teamName(match.homeTeam)}
-                awayName={teamName(match.awayTeam)}
-                pickLabel={pickLabelOf(match)}
-                fonts={{ bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular }}
-                copy={cardCopy}
-                locked={button.locked || isPostponed(match)}
-                onPress={() => openSheet(match)}
-              />
-            );
-          })
-        )}
-      </ScrollView>
-
-      <KingNav activeTab="play" onChange={onNavChange} />
+      <KingNav activeTab={tab} onChange={onNavChange} />
 
       <Modal visible={sheetMatch != null} transparent animationType="fade" onRequestClose={closeSheet}>
         <KeyboardAvoidingView

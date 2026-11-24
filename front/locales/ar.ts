@@ -1359,6 +1359,7 @@ export const ar = {
     noMatches: 'لا توجد مباريات في هذا اليوم',
     noOpenMatches: 'لا توجد مباريات مفتوحة للتوقع الآن',
     tabPredict: 'التوقع',
+    tabMatches: 'مباريات',
     tabHistory: 'السجل',
     filterAll: 'الكل',
     filterCorrect: 'الناجحة',

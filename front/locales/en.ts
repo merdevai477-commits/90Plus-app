@@ -1273,6 +1273,7 @@ export const en = {
     noMatches: 'No matches on this day',
     noOpenMatches: 'No matches open for prediction right now',
     tabPredict: 'Predict',
+    tabMatches: 'Matches',
     tabHistory: 'History',
     filterAll: 'All',
     filterCorrect: 'Correct',

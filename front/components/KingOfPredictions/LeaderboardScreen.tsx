@@ -113,12 +113,12 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
     else router.replace({ pathname: '/king-of-predictions', params: { mode } } as never);
   };
 
-  const openPlay = () => {
-    router.replace({ pathname: '/king-of-predictions', params: { mode } } as never);
+  const openPlay = (tab: 'matches' | 'history' = 'matches') => {
+    router.replace({ pathname: '/king-of-predictions', params: { mode, tab } } as never);
   };
 
-  const onNavChange = (tab: KingTabKey) => {
-    if (tab === 'play') openPlay();
+  const onNavChange = (next: KingTabKey) => {
+    if (next === 'matches' || next === 'history') openPlay(next);
   };
 
   const navBottom = kingNavBottom(insets.bottom);
@@ -138,7 +138,7 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
           title={copy.emptyTitle}
           actionLabel={copy.predictNow}
           style={{ marginTop: 80 }}
-          onAction={openPlay}
+          onAction={() => openPlay('matches')}
         />
       ) : (
         <ScrollView
