@@ -609,6 +609,64 @@ app.get(
     },
 );
 
+/**
+ * Hosted YouTube IFrame player for in-app WebViews.
+ * MUST be registered before express.static(publicPath): otherwise static serves
+ * public/embed/youtube.html under the global Helmet CSP (script-src 'self') and
+ * default Referrer-Policy (no-referrer), which blocks iframe_api and breaks Referer.
+ *
+ * Scope: only these two paths. Global API/site CSP is unchanged.
+ */
+const YOUTUBE_EMBED_CSP = helmet.contentSecurityPolicy({
+    useDefaults: false,
+    directives: {
+        defaultSrc: ["'self'"],
+        // Inline bootstrap in youtube.html + YouTube IFrame API / widget assets.
+        scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://www.youtube.com',
+            'https://www.youtube-nocookie.com',
+            'https://s.ytimg.com',
+        ],
+        // YT.Player host is youtube-nocookie.com (see public/embed/youtube.html).
+        frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com'],
+        connectSrc: [
+            "'self'",
+            'https://www.youtube.com',
+            'https://www.youtube-nocookie.com',
+            'https://s.ytimg.com',
+            'https://*.googlevideo.com',
+        ],
+        imgSrc: ["'self'", 'data:', 'https://i.ytimg.com', 'https://*.ytimg.com'],
+        mediaSrc: ["'self'", 'blob:', 'https://*.googlevideo.com'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+    },
+});
+
+app.get(
+    ['/embed/youtube', '/embed/youtube.html'],
+    YOUTUBE_EMBED_CSP,
+    (_req: Request, res: Response) => {
+        const filePath = path.join(publicPath, 'embed', 'youtube.html');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        // YouTube embed config expects a usable HTTPS Referer (not no-referrer).
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.sendFile(filePath, (err) => {
+            if (err) {
+                logger.error('Failed to send YouTube embed page:', err);
+                if (!res.headersSent) {
+                    res.status(500).send('Embed page unavailable');
+                }
+            }
+        });
+    },
+);
+
 // Serve static files from public directory
 app.use(express.static(publicPath));
 app.use(express.static(resolveWebDistDir(), { index: false }));
@@ -670,19 +728,6 @@ app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
             health: `${API_PREFIX}/health`,
             users: `${API_PREFIX}/users (authenticated routes)`,
         },
-    });
-});
-
-// First-party YouTube host page for in-app WKWebView (iOS highlights / summaries).
-app.get(['/embed/youtube', '/embed/youtube.html'], (_req: Request, res: Response) => {
-    const filePath = path.join(publicPath, 'embed', 'youtube.html');
-    res.set('Cache-Control', 'public, max-age=300');
-    res.set('Referrer-Policy', 'origin');
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send YouTube embed page:', err);
-            res.status(500).send('Embed page unavailable');
-        }
     });
 });
 
