@@ -2,6 +2,7 @@ import {
   classifyHttpStatusForDirectSource,
   classifyYouTubeErrorCode,
   classifyYouTubeProbeSignal,
+  isYouTubeBridgeDiagnosticSignal,
   isYouTubePlaybackProgressSignal,
   isYouTubePlayerReadySignal,
   isYouTubePlayingSignal,
@@ -9,6 +10,7 @@ import {
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
   shouldOfferOpenInYouTube,
+  youtubeBridgeMessageKind,
 } from '../highlightPlaybackErrors';
 
 describe('highlightPlaybackErrors', () => {
@@ -97,6 +99,27 @@ describe('highlightPlaybackErrors', () => {
       expect(
         classifyYouTubeProbeSignal('reason:EMBED_UNAVAILABLE:qjEXEEBQgqo:https://90plus.pro/'),
       ).toBe('EMBED_UNAVAILABLE');
+    });
+
+    it('treats bridge diagnostics as non-failure progress', () => {
+      expect(isYouTubeBridgeDiagnosticSignal('reason:BRIDGE_HELLO:vid:https://90plus.pro/')).toBe(
+        true,
+      );
+      expect(isYouTubeBridgeDiagnosticSignal('reason:PAGE_SCRIPT_START:vid:https://90plus.pro/')).toBe(
+        true,
+      );
+      expect(isYouTubeBridgeDiagnosticSignal('reason:PAGE_LOADED:vid:https://90plus.pro/')).toBe(true);
+      expect(parseYouTubeProbeMessage('reason:BRIDGE_HELLO:vid:https://90plus.pro/')).toEqual({
+        reason: null,
+        youtubeErrorCode: null,
+        isProgress: true,
+      });
+      expect(youtubeBridgeMessageKind('reason:YT_ERROR:153:vid:https://90plus.pro/?rn_sid=1')).toBe(
+        'YT_ERROR:153',
+      );
+      expect(youtubeBridgeMessageKind('reason:PLAYER_READY:vid:https://90plus.pro/')).toBe(
+        'PLAYER_READY',
+      );
     });
   });
 

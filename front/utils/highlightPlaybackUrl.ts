@@ -123,11 +123,19 @@ export function youtubeWebViewEmbedSource(
  * First-party page on 90plus.pro that hosts the YouTube IFrame API.
  * Loading this as WebView `uri` (not injected HTML) gives a real Referer and
  * is the most reliable in-app path on iPhone WKWebView.
+ *
+ * Optional `sessionId` is stamped as `rn_sid` so RN can ignore stale WebView posts.
  */
-export function youtubeHostedPlayerUrl(pageUrlOrId: string): string | null {
+export function youtubeHostedPlayerUrl(
+  pageUrlOrId: string,
+  options?: { sessionId?: string | null },
+): string | null {
   const id = youtubeVideoId(pageUrlOrId) || (/^[\w-]{6,}$/.test(pageUrlOrId.trim()) ? pageUrlOrId.trim() : null);
   if (!id) return null;
-  return `${YOUTUBE_EMBED_ORIGIN}/embed/youtube.html?v=${encodeURIComponent(id)}`;
+  const sid = options?.sessionId?.trim();
+  const params = new URLSearchParams({ v: id });
+  if (sid) params.set('rn_sid', sid);
+  return `${YOUTUBE_EMBED_ORIGIN}/embed/youtube.html?${params.toString()}`;
 }
 
 /** YouTube watch page for in-app WebView (full page, not iframe embed). */

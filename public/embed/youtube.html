@@ -60,19 +60,93 @@
   </button>
   <script>
 (function () {
+  // Keep retry/queue behavior aligned with front/utils/youtubeHostedBridgeQueue.ts
+  var QUEUE_MAX = 20;
+  var RETRY_MS = 50;
+  var RETRY_WINDOW_MS = 5000;
+
   var params = new URLSearchParams(location.search || '');
   var id = String(params.get('v') || '').replace(/[^a-zA-Z0-9_-]/g, '');
   window.__HL_VID = id;
 
-  function post(reason) {
+  var queue = [];
+  var queuedOrSent = {};
+  var flushTimer = null;
+  var flushDeadline = 0;
+
+  function isOnceReason(reason) {
+    if (
+      reason === 'BRIDGE_HELLO' ||
+      reason === 'PAGE_SCRIPT_START' ||
+      reason === 'PAGE_LOADED' ||
+      reason === 'PLAYER_READY' ||
+      reason === 'PLAYING' ||
+      reason === 'SOURCE_NOT_FOUND' ||
+      reason === 'EMBED_UNAVAILABLE' ||
+      reason === 'USER_PLAY'
+    ) {
+      return true;
+    }
+    return /^YT_ERROR:\d+$/.test(reason);
+  }
+
+  function trySend(payload) {
     try {
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(
-          'reason:' + reason + ':' + id + ':' + location.href
-        );
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(payload);
+        return true;
       }
     } catch (e) {}
+    return false;
   }
+
+  function stopFlushTimer() {
+    if (flushTimer) {
+      clearInterval(flushTimer);
+      flushTimer = null;
+    }
+  }
+
+  function flushQueue() {
+    while (queue.length) {
+      if (!trySend(queue[0])) return;
+      queue.shift();
+    }
+    stopFlushTimer();
+  }
+
+  function ensureFlushTimer() {
+    if (flushTimer) return;
+    flushDeadline = Date.now() + RETRY_WINDOW_MS;
+    flushTimer = setInterval(function () {
+      flushQueue();
+      if (!queue.length) {
+        stopFlushTimer();
+        return;
+      }
+      if (Date.now() >= flushDeadline) {
+        queue.length = 0;
+        stopFlushTimer();
+      }
+    }, RETRY_MS);
+  }
+
+  function post(reason) {
+    if (isOnceReason(reason) && queuedOrSent[reason]) return;
+    var payload = 'reason:' + reason + ':' + id + ':' + location.href;
+    if (trySend(payload)) {
+      if (isOnceReason(reason)) queuedOrSent[reason] = true;
+      return;
+    }
+    if (isOnceReason(reason)) queuedOrSent[reason] = true;
+    if (queue.length >= QUEUE_MAX) queue.shift();
+    if (queue.indexOf(payload) === -1) queue.push(payload);
+    ensureFlushTimer();
+  }
+
+  // Diagnostics — do not delay YouTube init below.
+  post('PAGE_SCRIPT_START');
+  post('BRIDGE_HELLO');
 
   if (!id) {
     post('SOURCE_NOT_FOUND');
@@ -107,6 +181,15 @@
       tryPlay(true);
       post('USER_PLAY');
     }, { passive: true });
+  }
+
+  function onDomReady() {
+    post('PAGE_LOADED');
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onDomReady, { once: true });
+  } else {
+    onDomReady();
   }
 
   window.onYouTubeIframeAPIReady = function () {

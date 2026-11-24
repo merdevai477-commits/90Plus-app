@@ -71,9 +71,23 @@ export function isYouTubePlayingSignal(raw: string): boolean {
   return /^reason:PLAYING:/i.test(raw.trim());
 }
 
+/** Bridge/page lifecycle probes — must never clear the play watchdog or map to failure. */
+export function isYouTubeBridgeDiagnosticSignal(raw: string): boolean {
+  return /^reason:(BRIDGE_HELLO|PAGE_SCRIPT_START|PAGE_LOADED):/i.test(raw.trim());
+}
+
 /** @deprecated Prefer isYouTubePlayingSignal — READY alone used to clear watchdogs too early. */
 export function isYouTubePlaybackProgressSignal(raw: string): boolean {
   return isYouTubePlayingSignal(raw) || isYouTubePlayerReadySignal(raw);
+}
+
+/** Extract a short message kind for Sentry (never the full URL). */
+export function youtubeBridgeMessageKind(raw: string): string {
+  const text = raw.trim();
+  const ytError = text.match(/^reason:YT_ERROR:(\d+)/i);
+  if (ytError) return `YT_ERROR:${ytError[1]}`;
+  const kind = text.match(/^reason:([A-Z_]+)/i);
+  return kind ? kind[1].toUpperCase() : 'UNKNOWN';
 }
 
 /**
@@ -103,7 +117,11 @@ export function parseYouTubeProbeMessage(raw: string): YouTubeProbeParseResult {
   const text = raw.trim();
   if (!text) return { reason: null, youtubeErrorCode: null, isProgress: false };
 
-  if (isYouTubePlaybackProgressSignal(text) || /^reason:USER_PLAY:/i.test(text)) {
+  if (
+    isYouTubePlaybackProgressSignal(text) ||
+    isYouTubeBridgeDiagnosticSignal(text) ||
+    /^reason:USER_PLAY:/i.test(text)
+  ) {
     return { reason: null, youtubeErrorCode: null, isProgress: true };
   }
 

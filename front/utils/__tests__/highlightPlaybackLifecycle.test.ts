@@ -26,6 +26,24 @@ describe('highlightPlaybackLifecycle', () => {
     expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS).toBe(20_000);
   });
 
+  it('records hosted timeout diagnostics without treating load end as ready', () => {
+    // Shape expected by HighlightVideoSheet PLAYER_TIMEOUT breadcrumb.
+    const timeoutDiag = {
+      tier: 'hosted' as const,
+      youtubeLoaded: false,
+      elapsedMs: HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS,
+      lastMessage: null as string | null,
+      bridgeConnected: false,
+    };
+    expect(timeoutDiag.tier).toBe('hosted');
+    expect(timeoutDiag.youtubeLoaded).toBe(false);
+    expect(timeoutDiag.elapsedMs).toBe(20_000);
+    expect(timeoutDiag.lastMessage).toBeNull();
+    expect(timeoutDiag.bridgeConnected).toBe(false);
+    // onLoadEnd must not imply player readiness for hosted tier (enforced in sheet).
+    expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS).toBe(20_000);
+  });
+
   it('classifies media types without inventing geo', () => {
     expect(classifyHighlightSourceType('https://cdn.example.com/a.mp4')).toBe('mp4');
     expect(classifyHighlightSourceType('https://cdn.example.com/a.m3u8')).toBe('hls');

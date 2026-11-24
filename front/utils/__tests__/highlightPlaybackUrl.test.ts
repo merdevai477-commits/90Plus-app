@@ -41,6 +41,9 @@ describe('resolveHighlightPlaybackUrl', () => {
     expect(youtubeHostedPlayerUrl('https://www.youtube.com/watch?v=qjEXEEBQgqo')).toBe(
       'https://90plus.pro/embed/youtube.html?v=qjEXEEBQgqo',
     );
+    expect(youtubeHostedPlayerUrl('qjEXEEBQgqo', { sessionId: 'hl_1_0' })).toBe(
+      'https://90plus.pro/embed/youtube.html?v=qjEXEEBQgqo&rn_sid=hl_1_0',
+    );
     expect(youtubeMobileWatchUrl('qjEXEEBQgqo')).toBe(
       'https://www.youtube.com/watch?v=qjEXEEBQgqo&playsinline=1',
     );

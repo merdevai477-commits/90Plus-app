@@ -28,6 +28,7 @@ import {
   shouldOfferOpenInYouTube,
   type PlaybackFailureReason,
 } from '../../utils/highlightPlaybackErrors';
+import * as HighlightPlaybackErrors from '../../utils/highlightPlaybackErrors';
 import {
   buildHighlightVideoSource,
   classifyHighlightSourceType,
@@ -49,11 +50,25 @@ import {
   resolveHighlightPlaybackUrl,
   streaminPlaybackCandidates,
   youtubeEmbedUrl,
-  youtubeHostedPlayerUrl,
   youtubeMobileWatchUrl,
   youtubeVideoId,
   youtubeWebViewEmbedSource,
+  YOUTUBE_EMBED_ORIGIN,
 } from '../../utils/highlightPlaybackUrl';
+
+/**
+ * Hosted IFrame URL (90plus.pro). Built locally so Fast Refresh cannot drop a
+ * named `youtubeHostedPlayerUrl` import binding (Hermes ReferenceError).
+ */
+function hostedYoutubePlayerUrl(
+  videoId: string,
+  sessionToken?: string | null,
+): string {
+  const params = new URLSearchParams({ v: videoId });
+  const sid = sessionToken?.trim();
+  if (sid) params.set('rn_sid', sid);
+  return `${YOUTUBE_EMBED_ORIGIN}/embed/youtube.html?${params.toString()}`;
+}
 
 /**
  * In-app YouTube surfaces (embeddable clips only).
@@ -213,6 +228,10 @@ export function HighlightVideoSheet({
   const attempted = useRef<string[]>([]);
   const failureReasons = useRef<PlaybackFailureReason[]>([]);
   const lastYoutubeErrorCode = useRef<number | null>(null);
+  const lastBridgeMessageKind = useRef<string | null>(null);
+  const bridgeConnectedRef = useRef(false);
+  const handledPlayerReadyRef = useRef(false);
+  const handledPlayingRef = useRef(false);
   const sessionId = useRef(createHighlightPlaybackSessionId());
   const sessionStartedAt = useRef(Date.now());
   const listKey = urls.join('|');
@@ -222,6 +241,10 @@ export function HighlightVideoSheet({
   if (seenKey !== openKey) {
     resetSessionRefs({ skippedId, attempted, failureReasons });
     lastYoutubeErrorCode.current = null;
+    lastBridgeMessageKind.current = null;
+    bridgeConnectedRef.current = false;
+    handledPlayerReadyRef.current = false;
+    handledPlayingRef.current = false;
     if (visible) {
       sessionId.current = createHighlightPlaybackSessionId();
       sessionStartedAt.current = Date.now();
@@ -275,7 +298,10 @@ export function HighlightVideoSheet({
   const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
   const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
   const videoId = url ? youtubeVideoId(url) : null;
-  const hostedPlayerUrl = videoId ? youtubeHostedPlayerUrl(videoId) : null;
+  const playbackSessionToken = `${sessionId.current}_${sessionNonce}`;
+  const hostedPlayerUrl = videoId
+    ? hostedYoutubePlayerUrl(videoId, playbackSessionToken)
+    : null;
   const embedWebSource = videoId ? youtubeWebViewEmbedSource(videoId) : null;
   const showSurface = visible && surfaceReady;
   const unsupported = Boolean(url) && !embedUrl && !direct;
@@ -467,18 +493,50 @@ export function HighlightVideoSheet({
   useEffect(() => {
     setYoutubeLoaded(false);
     youtubeLoadedRef.current = false;
+    handledPlayerReadyRef.current = false;
+    handledPlayingRef.current = false;
+    // Keep bridgeConnected across hosted→embed escalate within same session token;
+    // full openKey reset clears it above.
   }, [embedUrl, index, sessionNonce, youtubeTier]);
 
   useEffect(() => {
     if (!visible || failed || !embedUrl || !showSurface) return;
     const waitMs = HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS;
+    const startedAt = Date.now();
     const timer = setTimeout(() => {
       if (!youtubeLoadedRef.current) {
+        emitHighlightPlaybackDiagnostic({
+          sessionId: sessionId.current,
+          stage: 'PLAYER_TIMEOUT',
+          timeoutStage: 'youtube_load',
+          errorCategory: 'PLAYBACK_TIMEOUT',
+          tier: youtubeTier,
+          sessionNonce,
+          youtubeLoaded: false,
+          bridgeConnected: bridgeConnectedRef.current,
+          lastMessage: lastBridgeMessageKind.current,
+          elapsedMs: Date.now() - startedAt,
+          sourceType: 'youtube',
+          sourceHost: sanitizePlaybackUrlForDiagnostics(hostedPlayerUrl || embedUrl || url),
+          retryCount,
+        });
         skipWithReason(resolveTimeoutReason('youtube_load'));
       }
     }, waitMs);
     return () => clearTimeout(timer);
-  }, [visible, failed, embedUrl, showSurface, index, sessionNonce, skipWithReason, youtubeTier]);
+  }, [
+    visible,
+    failed,
+    embedUrl,
+    showSurface,
+    index,
+    sessionNonce,
+    skipWithReason,
+    youtubeTier,
+    hostedPlayerUrl,
+    url,
+    retryCount,
+  ]);
 
   const handleRetry = useCallback(() => {
     emitHighlightPlaybackDiagnostic({
@@ -486,10 +544,18 @@ export function HighlightVideoSheet({
       stage: 'PLAYER_RETRY',
       errorCategory: failureReason ?? undefined,
       errorCode: youtubeErrorCode != null ? String(youtubeErrorCode) : undefined,
+      tier: youtubeTier,
+      sessionNonce,
+      lastMessage: lastBridgeMessageKind.current,
+      bridgeConnected: bridgeConnectedRef.current,
       retryCount: retryCount + 1,
     });
     resetSessionRefs({ skippedId, attempted, failureReasons });
     lastYoutubeErrorCode.current = null;
+    lastBridgeMessageKind.current = null;
+    bridgeConnectedRef.current = false;
+    handledPlayerReadyRef.current = false;
+    handledPlayingRef.current = false;
     setRetryCount((count) => count + 1);
     setFailed(false);
     setFailureReason(null);
@@ -500,7 +566,7 @@ export function HighlightVideoSheet({
     setIndex(0);
     setUiPhase('initializing');
     setSessionNonce((nonce) => nonce + 1);
-  }, [failureReason, retryCount, youtubeErrorCode]);
+  }, [failureReason, retryCount, youtubeErrorCode, youtubeTier, sessionNonce]);
 
   const openInYouTubeLabel = matchDetailsText.openInYouTube || FALLBACK_MESSAGES.openInYouTube;
   const loadingLabel =
@@ -547,6 +613,35 @@ export function HighlightVideoSheet({
               userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
                 setUiPhase('loading');
+                emitHighlightPlaybackDiagnostic({
+                  sessionId: sessionId.current,
+                  stage: 'PLAYER_INITIALIZING',
+                  sourceType: 'youtube',
+                  provider: 'youtube',
+                  tier: youtubeTier,
+                  sessionNonce,
+                  sourceHost: sanitizePlaybackUrlForDiagnostics(
+                    hostedPlayerUrl || embedUrl || url,
+                  ),
+                  playerStatus: 'load_start',
+                  retryCount,
+                });
+              }}
+              onLoadProgress={(event) => {
+                const progress = event.nativeEvent.progress;
+                if (progress < 0.25 || progress >= 1) {
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYER_INITIALIZING',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    loadProgress: progress,
+                    playerStatus: 'load_progress',
+                    retryCount,
+                  });
+                }
               }}
               originWhitelist={['*']}
               setSupportMultipleWindows={false}
@@ -559,7 +654,22 @@ export function HighlightVideoSheet({
               domStorageEnabled
               injectedJavaScript={isHostedTier ? undefined : PLAYBACK_PROBE}
               onLoadEnd={() => {
-                // Hosted IFrame posts PLAYER_READY/PLAYING; clear spinner on paint for embed URI.
+                emitHighlightPlaybackDiagnostic({
+                  sessionId: sessionId.current,
+                  stage: 'PLAYER_INITIALIZING',
+                  sourceType: 'youtube',
+                  provider: 'youtube',
+                  tier: youtubeTier,
+                  sessionNonce,
+                  playerStatus: 'load_end',
+                  youtubeLoaded: youtubeLoadedRef.current,
+                  sourceHost: sanitizePlaybackUrlForDiagnostics(
+                    hostedPlayerUrl || embedUrl || url,
+                  ),
+                  retryCount,
+                });
+                // Hosted IFrame posts PLAYER_READY/PLAYING; clear spinner on paint for embed URI only.
+                // Never treat onLoadEnd as hosted player readiness.
                 if (!isHostedTier) {
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
@@ -568,7 +678,44 @@ export function HighlightVideoSheet({
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
+                // Ignore posts from a previous WebView session (rn_sid stamped into hosted URL).
+                if (
+                  isHostedTier &&
+                  playbackSessionToken &&
+                  !data.includes(`rn_sid=${playbackSessionToken}`) &&
+                  !data.includes(`rn_sid%3D${encodeURIComponent(playbackSessionToken)}`)
+                ) {
+                  return;
+                }
+
+                const kind = HighlightPlaybackErrors.youtubeBridgeMessageKind(data);
+                lastBridgeMessageKind.current = kind;
+                emitHighlightPlaybackDiagnostic({
+                  sessionId: sessionId.current,
+                  stage: 'PLAYER_INITIALIZING',
+                  sourceType: 'youtube',
+                  provider: 'youtube',
+                  tier: youtubeTier,
+                  sessionNonce,
+                  messageKind: kind,
+                  lastMessage: kind,
+                  bridgeConnected: bridgeConnectedRef.current,
+                  playerStatus: 'bridge_message',
+                  retryCount,
+                });
+
+                if (
+                  HighlightPlaybackErrors.isYouTubeBridgeDiagnosticSignal(data) ||
+                  kind === 'BRIDGE_HELLO'
+                ) {
+                  bridgeConnectedRef.current = true;
+                  return;
+                }
+
                 if (isYouTubePlayerReadySignal(data) || /reason:USER_PLAY:/i.test(data)) {
+                  if (isYouTubePlayerReadySignal(data) && handledPlayerReadyRef.current) return;
+                  if (isYouTubePlayerReadySignal(data)) handledPlayerReadyRef.current = true;
+                  bridgeConnectedRef.current = true;
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
                   setUiPhase('ready');
@@ -577,6 +724,11 @@ export function HighlightVideoSheet({
                     stage: 'PLAYER_INITIALIZING',
                     sourceType: 'youtube',
                     provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    messageKind: kind,
+                    bridgeConnected: true,
+                    youtubeLoaded: true,
                     sourceHost: sanitizePlaybackUrlForDiagnostics(
                       hostedPlayerUrl || embedUrl || url,
                     ),
@@ -585,6 +737,9 @@ export function HighlightVideoSheet({
                   return;
                 }
                 if (isYouTubePlayingSignal(data)) {
+                  if (handledPlayingRef.current) return;
+                  handledPlayingRef.current = true;
+                  bridgeConnectedRef.current = true;
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
                   setUiPhase('playing');
@@ -593,6 +748,11 @@ export function HighlightVideoSheet({
                     stage: 'PLAYER_READY',
                     sourceType: 'youtube',
                     provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    messageKind: 'PLAYING',
+                    bridgeConnected: true,
+                    youtubeLoaded: true,
                     sourceHost: sanitizePlaybackUrlForDiagnostics(
                       hostedPlayerUrl || embedUrl || url,
                     ),
@@ -604,6 +764,7 @@ export function HighlightVideoSheet({
                 const parsed = parseYouTubeProbeMessage(data);
                 if (parsed.isProgress || !parsed.reason) return;
                 if (!/^reason:/i.test(data.trim()) && videoId && !data.includes(videoId)) return;
+                bridgeConnectedRef.current = true;
                 skipWithReason(parsed.reason, parsed.youtubeErrorCode);
               }}
               onHttpError={(event) => {
@@ -612,7 +773,7 @@ export function HighlightVideoSheet({
                 if (status < 400) return;
                 const mainDocument =
                   !failedUrl ||
-                  (Boolean(hostedPlayerUrl) && failedUrl.startsWith(hostedPlayerUrl)) ||
+                  (Boolean(hostedPlayerUrl) && failedUrl.startsWith(hostedPlayerUrl.split('?')[0])) ||
                   failedUrl.startsWith(embedUrl) ||
                   (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`));
                 // YouTube loads ads and thumbnails that 403/404. Those are not a failed video.

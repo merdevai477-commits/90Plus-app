@@ -53,6 +53,16 @@ export type HighlightPlaybackDiagnosticPayload = {
   timeoutStage?: 'initialization' | 'playback_start' | 'youtube_load';
   /** Sanitized URL host/path only — never signed query tokens. */
   sourceHost?: string;
+  /** hosted | embed — YouTube surface tier */
+  tier?: 'hosted' | 'embed' | string;
+  sessionNonce?: number;
+  youtubeLoaded?: boolean;
+  bridgeConnected?: boolean;
+  /** Short kind only (e.g. PLAYER_READY), never a full URL */
+  lastMessage?: string | null;
+  messageKind?: string;
+  elapsedMs?: number;
+  loadProgress?: number;
 };
 
 const RECOVERABLE: ReadonlySet<PlaybackFailureReason> = new Set([
