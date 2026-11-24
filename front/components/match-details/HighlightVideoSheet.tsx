@@ -12,6 +12,8 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { useEvent } from 'expo';
@@ -83,6 +85,9 @@ function hostedYoutubePlayerUrl(
  * Non-embeddable clips → in-app fallback card (user-initiated Watch on YouTube).
  */
 type YoutubeSurfaceTier = 'hosted' | 'embed';
+
+/** Temporary marker so a screenshot proves this JS (0e18+) is what the device ran. */
+const HL_DIAG_BUILD_MARKER = 'hl-diag-0e18-v1';
 
 type Props = {
   visible: boolean;
@@ -246,6 +251,17 @@ export function HighlightVideoSheet({
   const bridgeConnectedRef = useRef(false);
   const youtubeLoadedRef = useRef(false);
   const youtubeWebViewRef = useRef<WebView>(null);
+  /** Temporary on-screen / logcat sequence for black-screen investigation. */
+  const [bridgeEventLog, setBridgeEventLog] = useState<string[]>([]);
+  const pushBridgeEvent = useCallback((kind: string) => {
+    const stamp = `${Date.now() % 100000}:${kind}`;
+    lastBridgeMessageKind.current = kind;
+    setBridgeEventLog((prev) => [...prev.slice(-14), stamp]);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[HL-BRIDGE]', kind);
+    }
+  }, []);
   const sessionId = useRef(createHighlightPlaybackSessionId());
   const sessionStartedAt = useRef(Date.now());
   const listKey = urls.join('|');
@@ -278,6 +294,7 @@ export function HighlightVideoSheet({
     setPlayableDirectUrl('');
     setYtSession(createInitialYoutubePlaybackSession());
     setYoutubeTier('hosted');
+    setBridgeEventLog(visible ? [`${Date.now() % 100000}:SESSION_OPEN`] : []);
     setUiPhase(visible ? 'initializing' : 'idle');
   }
 
@@ -698,6 +715,24 @@ export function HighlightVideoSheet({
     !failed &&
     (showYoutubeLoadingSpinner || (direct && !directReady) || uiPhase === 'initializing');
 
+  const nativeAppVersion =
+    Platform.OS === 'android'
+      ? String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? '?')
+      : String(Constants.nativeBuildVersion ?? Constants.expoConfig?.ios?.buildNumber ?? '?');
+  const diagLines = [
+    HL_DIAG_BUILD_MARKER,
+    `native=${Constants.nativeAppVersion ?? '?'}/${nativeAppVersion}`,
+    `runtime=${Updates.runtimeVersion ?? Constants.expoConfig?.runtimeVersion ?? '?'}`,
+    `update=${Updates.updateId ?? 'null'} ch=${Updates.channel ?? 'null'}`,
+    `uiPhase=${uiPhase} yt=${ytSession.phase}`,
+    `ready=${ytSession.playerReady ? 1 : 0} playing=${ytSession.playing ? 1 : 0} failed=${failed ? 1 : 0}`,
+    `loadChrome=${showLoadingChrome ? 1 : 0} playAff=${showPlayAffordance ? 1 : 0}`,
+    `ytLoaded=${youtubeLoaded ? 1 : 0} tier=${youtubeTier}`,
+    `affStyle=z2 fill opacity1 disc=72`,
+    `bridge=${bridgeConnectedRef.current ? 1 : 0} last=${lastBridgeMessageKind.current ?? '-'}`,
+    ...bridgeEventLog.slice(-8),
+  ];
+
   return (
     <Modal
       visible={visible && urls.length > 0}
@@ -787,11 +822,14 @@ export function HighlightVideoSheet({
                   !data.includes(`rn_sid=${playbackSessionToken}`) &&
                   !data.includes(`rn_sid%3D${encodeURIComponent(playbackSessionToken)}`)
                 ) {
+                  pushBridgeEvent(
+                    `DROP_SID:${HighlightPlaybackErrors.youtubeBridgeMessageKind(data)}`,
+                  );
                   return;
                 }
 
                 const kind = HighlightPlaybackErrors.youtubeBridgeMessageKind(data);
-                lastBridgeMessageKind.current = kind;
+                pushBridgeEvent(kind);
                 emitHighlightPlaybackDiagnostic({
                   sessionId: sessionId.current,
                   stage: 'PLAYER_INITIALIZING',
@@ -996,6 +1034,16 @@ export function HighlightVideoSheet({
               </Pressable>
             ) : null}
             <CloseButton onClose={onClose} label={closeLabel} />
+          </View>
+        ) : null}
+        {/* Temporary black-screen investigation HUD — remove after session captured. */}
+        {visible ? (
+          <View pointerEvents="none" style={styles.diagHud}>
+            {diagLines.map((line, idx) => (
+              <Text key={`${idx}:${line}`} style={styles.diagHudText}>
+                {line}
+              </Text>
+            ))}
           </View>
         ) : null}
       </View>
@@ -1411,5 +1459,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     zIndex: 2,
+  },
+  diagHud: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 28,
+    zIndex: 50,
+    elevation: 50,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+  },
+  diagHudText: {
+    color: '#7CFFB2',
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 13,
   },
 });

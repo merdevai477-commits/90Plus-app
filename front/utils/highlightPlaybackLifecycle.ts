@@ -150,10 +150,21 @@ export function youtubeAllowsFullscreenVideo(): boolean {
 
 export function emitHighlightPlaybackDiagnostic(payload: HighlightPlaybackDiagnosticPayload): void {
   try {
-    addBreadcrumb(payload.stage, 'highlight-playback', payload.stage.includes('ERROR') || payload.stage.includes('TIMEOUT') ? 'error' : 'info', {
+    const enriched = {
       ...payload,
       platform: payload.platform ?? Platform.OS,
-    });
+    };
+    // Temporary: surface the session sequence in Metro/logcat while black-screen is investigated.
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[HL-DIAG]', enriched.stage, enriched);
+    }
+    addBreadcrumb(
+      payload.stage,
+      'highlight-playback',
+      payload.stage.includes('ERROR') || payload.stage.includes('TIMEOUT') ? 'error' : 'info',
+      enriched,
+    );
   } catch {
     /* diagnostics must never break playback */
   }
