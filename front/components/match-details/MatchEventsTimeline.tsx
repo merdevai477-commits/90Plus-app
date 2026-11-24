@@ -63,7 +63,10 @@ type Props = {
   goalClipScorerLabel?: string;
   goalClipPlayLabel?: string;
   /** Ordered candidate URLs for the selected goal (same fixture / same event). */
-  onPlayClip?: (urls: string[]) => void;
+  onPlayClip?: (
+    urls: string[],
+    meta?: { title?: string | null; thumbnailUrl?: string | null },
+  ) => void;
 };
 
 function formatMinute(event: FixtureEvent): string {
@@ -179,7 +182,10 @@ function EventBody({
   detailsUnavailableLabel: string;
   clip: GoalClipMedia | null;
   goalClipPlayLabel: string;
-  onPlayClip?: (urls: string[]) => void;
+  onPlayClip?: (
+    urls: string[],
+    meta?: { title?: string | null; thumbnailUrl?: string | null },
+  ) => void;
   events: FixtureEvent[];
   index: number;
   goalClips: GoalClipMedia[];
@@ -246,7 +252,12 @@ function EventBody({
           onPress={() => {
             const candidates = buildGoalClipPlaybackCandidates(events, index, goalClips);
             const urls = candidates.length ? candidates : playUrl ? [playUrl] : [];
-            if (urls.length) onPlayClip?.(urls);
+            if (urls.length) {
+              onPlayClip?.(urls, {
+                title: clip.title,
+                thumbnailUrl: clip.thumbnail,
+              });
+            }
           }}
           style={[
             styles.clipMedia,

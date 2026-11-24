@@ -55,6 +55,17 @@ describe('highlight storage eligibility', () => {
     });
   });
 
+  it('defaults to Streamin CDN hosts when storage is enabled without an allowlist', () => {
+    const enabledEmpty = { VIDEO_STORAGE_ENABLED: 'true', VIDEO_STORAGE_ALLOWED_HOSTS: '' } as NodeJS.ProcessEnv;
+    expect(classifySourceUrl('https://streamin.link/v/abc123', enabledEmpty).ok).toBe(true);
+    expect(classifySourceUrl('https://www.youtube.com/watch?v=abcdefghijk', enabledEmpty)).toMatchObject({
+      code: 'YOUTUBE_EXCLUDED',
+    });
+    expect(classifySourceUrl('https://evil.example/a.mp4', enabledEmpty)).toMatchObject({
+      code: 'HOST_NOT_ALLOWLISTED',
+    });
+  });
+
   it('rejects illegal status jumps', () => {
     expect(() => assertIngestionTransition('EXTERNAL_ONLY', 'VERIFIED')).toThrow(/INVALID_TRANSITION/);
     expect(() => assertIngestionTransition('UPLOADING', 'VERIFIED')).not.toThrow();

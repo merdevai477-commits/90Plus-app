@@ -38,15 +38,25 @@ export function assertIngestionTransition(from: IngestionStatus, to: IngestionSt
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'm.youtube.com']);
 const BLOCKED_HOSTS = new Set(['streama.in', 'x.com', 'twitter.com']);
 
+/**
+ * Highlightly-linked Streamin CDN hosts we are authorized to copy when storage
+ * is enabled and VIDEO_STORAGE_ALLOWED_HOSTS is unset. Never includes YouTube.
+ */
+export const DEFAULT_AUTHORIZED_CDN_HOSTS = ['w-cdn.streamin.top', 'c-cdn.streamin.top'] as const;
+
 export function videoStorageEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.VIDEO_STORAGE_ENABLED === 'true';
 }
 
 export function allowedHosts(env: NodeJS.ProcessEnv = process.env): string[] {
-  return (env.VIDEO_STORAGE_ALLOWED_HOSTS || '')
+  const configured = (env.VIDEO_STORAGE_ALLOWED_HOSTS || '')
     .split(',')
     .map((host) => host.trim().toLowerCase().replace(/^\./, ''))
     .filter(Boolean);
+  if (configured.length) return configured;
+  // Enabled + empty allowlist → default to known Highlightly Streamin CDNs only.
+  if (videoStorageEnabled(env)) return [...DEFAULT_AUTHORIZED_CDN_HOSTS];
+  return [];
 }
 
 export function maxFileBytes(env: NodeJS.ProcessEnv = process.env): number {
@@ -63,7 +73,12 @@ export function canonicalizeHighlightSource(pageUrl: string): string {
     const parsed = new URL(trimmed);
     const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
     if (host === 'streamin.link' || host === 'streamin.me' || host.endsWith('.streamin.link') || host.endsWith('.streamin.me')) {
-      const id = parsed.pathname.split('/').filter(Boolean).pop() ?? '';
+      const id = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/\.mp4$/i, '') ?? '';
+      if (/^[a-z0-9]+$/i.test(id)) return `https://w-cdn.streamin.top/uploads/${id}.mp4`;
+    }
+    // Already on a Streamin CDN path — normalize to the primary host for allowlisting.
+    if (host === 'c-cdn.streamin.top' || host === 'w-cdn.streamin.top') {
+      const id = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/\.mp4$/i, '') ?? '';
       if (/^[a-z0-9]+$/i.test(id)) return `https://w-cdn.streamin.top/uploads/${id}.mp4`;
     }
   } catch {
@@ -75,6 +90,20 @@ export function canonicalizeHighlightSource(pageUrl: string): string {
 export function hostAllowed(hostname: string, hosts: string[]): boolean {
   const host = hostname.replace(/^www\./, '').toLowerCase();
   return hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+}
+
+/** Authorized Streamin CDN mirrors for a clip (primary first). Never invents YouTube URLs. */
+export function authorizedDirectPlaybackCandidates(pageUrl: string): string[] {
+  const canonical = canonicalizeHighlightSource(pageUrl);
+  const match = canonical.match(
+    /^https:\/\/(?:w|c)-cdn\.streamin\.top\/uploads\/([a-z0-9]+)\.mp4$/i,
+  );
+  if (!match) return canonical ? [canonical] : [];
+  const id = match[1];
+  return [
+    `https://w-cdn.streamin.top/uploads/${id}.mp4`,
+    `https://c-cdn.streamin.top/uploads/${id}.mp4`,
+  ];
 }
 
 export type Eligibility =

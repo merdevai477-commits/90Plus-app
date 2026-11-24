@@ -177,7 +177,7 @@ function onYouTubeIframeAPIReady(){
       events:{
         onReady:function(){post('PLAYER_READY');tryPlay(false);setTimeout(function(){if(!started&&tap)tap.hidden=false;},700);},
         onStateChange:function(e){if(e&&e.data===1){started=true;hideTap();post('PLAYING');}},
-        onError:function(e){var c=String(e&&e.data);post(c==='100'?'SOURCE_NOT_FOUND':'EMBED_UNAVAILABLE');/* 101/150/153 = embed blocked */}
+        onError:function(e){var c=String(e&&e.data!=null?e.data:'');if(/^(2|5|100|101|150|153)$/.test(c)){post('YT_ERROR:'+c);return;}post('EMBED_UNAVAILABLE');}
       }
     });
   }catch(err){post('EMBED_UNAVAILABLE');}

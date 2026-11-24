@@ -308,6 +308,10 @@ const MatchDetailsScreen = () => {
   const [matchSummary, setMatchSummary] = useState<GoalClipMedia | null>(null);
   const [summaryUrls, setSummaryUrls] = useState<string[]>([]);
   const [highlightVideoUrls, setHighlightVideoUrls] = useState<string[]>([]);
+  const [highlightPlaybackMeta, setHighlightPlaybackMeta] = useState<{
+    title?: string | null;
+    thumbnailUrl?: string | null;
+  }>({});
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const runDetailsPull = useCallback(async () => {
@@ -2157,6 +2161,10 @@ const MatchDetailsScreen = () => {
             url={matchSummary.url || matchSummary.embedUrl}
             playLabel={t.matchDetails.matchSummaryPlay || 'تشغيل ملخص المباراة'}
             onPlay={() => {
+              setHighlightPlaybackMeta({
+                title: matchSummary.title,
+                thumbnailUrl: matchSummary.thumbnail,
+              });
               if (summaryUrls.length) {
                 setHighlightVideoUrls(summaryUrls);
                 return;
@@ -2218,7 +2226,13 @@ const MatchDetailsScreen = () => {
                 goalClips={goalClips}
                 goalClipScorerLabel={t.matchDetails.goalClipScorer || 'سجل الهدف: {player}'}
                 goalClipPlayLabel={t.matchDetails.goalClipPlay || 'Play {player} goal'}
-                onPlayClip={(urls) => setHighlightVideoUrls(urls)}
+                onPlayClip={(urls, meta) => {
+                  setHighlightPlaybackMeta({
+                    title: meta?.title ?? null,
+                    thumbnailUrl: meta?.thumbnailUrl ?? null,
+                  });
+                  setHighlightVideoUrls(urls);
+                }}
               />
               <MatchEventsLegend
                 language={language}
@@ -2241,7 +2255,12 @@ const MatchDetailsScreen = () => {
         <HighlightVideoSheet
           visible={highlightVideoUrls.length > 0}
           urls={highlightVideoUrls}
-          onClose={() => setHighlightVideoUrls([])}
+          title={highlightPlaybackMeta.title}
+          thumbnailUrl={highlightPlaybackMeta.thumbnailUrl}
+          onClose={() => {
+            setHighlightVideoUrls([]);
+            setHighlightPlaybackMeta({});
+          }}
           closeLabel={language === 'ar' ? 'إغلاق' : 'Close'}
         />
       </ScrollView>

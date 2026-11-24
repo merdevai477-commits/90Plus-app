@@ -61,10 +61,6 @@ export function classifyHttpStatusForDirectSource(status: number): PlaybackFailu
   return 'UNKNOWN_ERROR';
 }
 
-/**
- * Classify YouTube embed probe payloads.
- * Only confirmed country/region phrasing becomes GEO_RESTRICTED.
- */
 /** Player iframe constructed — NOT proof the clip can play (errors often follow). */
 export function isYouTubePlayerReadySignal(raw: string): boolean {
   return /^reason:PLAYER_READY:/i.test(raw.trim());
@@ -80,19 +76,108 @@ export function isYouTubePlaybackProgressSignal(raw: string): boolean {
   return isYouTubePlayingSignal(raw) || isYouTubePlayerReadySignal(raw);
 }
 
+/**
+ * YouTube IFrame API onError codes:
+ * 2 invalid request, 5 HTML5/player error, 100 not found,
+ * 101/150 embedding disabled, 153 player configuration / referer.
+ */
+export function classifyYouTubeErrorCode(code: number): PlaybackFailureReason {
+  if (code === 100) return 'SOURCE_NOT_FOUND';
+  if (code === 101 || code === 150 || code === 153) return 'EMBED_UNAVAILABLE';
+  if (code === 5 || code === 2) return 'PLAYER_INITIALIZATION_FAILED';
+  return 'UNKNOWN_ERROR';
+}
+
+export type YouTubeProbeParseResult = {
+  reason: PlaybackFailureReason | null;
+  /** Raw numeric YouTube onError code when known (5, 100, 101, 150, 153, …). */
+  youtubeErrorCode: number | null;
+  isProgress: boolean;
+};
+
+/**
+ * Parse WebView bridge messages from the hosted IFrame page / DOM probes.
+ * Preserves raw YouTube error codes for Sentry; maps them to typed reasons.
+ */
+export function parseYouTubeProbeMessage(raw: string): YouTubeProbeParseResult {
+  const text = raw.trim();
+  if (!text) return { reason: null, youtubeErrorCode: null, isProgress: false };
+
+  if (isYouTubePlaybackProgressSignal(text) || /^reason:USER_PLAY:/i.test(text)) {
+    return { reason: null, youtubeErrorCode: null, isProgress: true };
+  }
+
+  const ytError = text.match(/^reason:YT_ERROR:(\d+)(?::|$)/i);
+  if (ytError) {
+    const code = Number.parseInt(ytError[1], 10);
+    return {
+      reason: classifyYouTubeErrorCode(code),
+      youtubeErrorCode: Number.isFinite(code) ? code : null,
+      isProgress: false,
+    };
+  }
+
+  const reasonWithCode = text.match(/^reason:([A-Z_]+):(\d+)(?::|$)/i);
+  if (reasonWithCode) {
+    const label = reasonWithCode[1].toUpperCase();
+    const code = Number.parseInt(reasonWithCode[2], 10);
+    if (label === 'YT_ERROR' || Number.isFinite(code)) {
+      const fromCode = Number.isFinite(code) ? classifyYouTubeErrorCode(code) : null;
+      if (
+        label === 'YT_ERROR' ||
+        (fromCode &&
+          (label === 'EMBED_UNAVAILABLE' ||
+            label === 'SOURCE_NOT_FOUND' ||
+            label === 'PLAYER_INITIALIZATION_FAILED'))
+      ) {
+        return {
+          reason: fromCode ?? classifyYouTubeProbeSignal(text),
+          youtubeErrorCode: Number.isFinite(code) ? code : null,
+          isProgress: false,
+        };
+      }
+    }
+  }
+
+  const inlineCode =
+    text.match(/"info"\s*:\s*(2|5|100|101|150|153)\b/) ||
+    text.match(/\berror\s*(2|5|100|101|150|153)\b/i) ||
+    text.match(/\binfo["']?\s*[:=]\s*(2|5|100|101|150|153)\b/i);
+  if (inlineCode) {
+    const code = Number.parseInt(inlineCode[1], 10);
+    return {
+      reason: classifyYouTubeErrorCode(code),
+      youtubeErrorCode: code,
+      isProgress: false,
+    };
+  }
+
+  return {
+    reason: classifyYouTubeProbeSignal(text),
+    youtubeErrorCode: null,
+    isProgress: false,
+  };
+}
+
 export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason | null {
   const text = raw.trim();
   if (!text) return null;
 
-  // Success / progress messages must never map to a failure reason.
   if (isYouTubePlaybackProgressSignal(text)) return null;
 
   const reasonPrefix = text.match(/^reason:([A-Z_]+):/i);
   if (reasonPrefix) {
-    const code = reasonPrefix[1].toUpperCase() as PlaybackFailureReason;
-    // Legacy probes sent GEO_RESTRICTED for YouTube's fake country banner.
-    if (code === 'GEO_RESTRICTED') return 'EMBED_UNAVAILABLE';
-    if ((PLAYBACK_FAILURE_REASONS as readonly string[]).includes(code)) return code;
+    const code = reasonPrefix[1].toUpperCase();
+    if (code === 'YT_ERROR') {
+      const num = text.match(/^reason:YT_ERROR:(\d+)/i);
+      if (num) return classifyYouTubeErrorCode(Number.parseInt(num[1], 10));
+      return 'UNKNOWN_ERROR';
+    }
+    // Explicit GEO from the hosted player (rare). Do not remap — distinguish from embed blocks.
+    if (code === 'GEO_RESTRICTED') return 'GEO_RESTRICTED';
+    if ((PLAYBACK_FAILURE_REASONS as readonly string[]).includes(code)) {
+      return code as PlaybackFailureReason;
+    }
   }
 
   if (text.startsWith('unavailable:')) {
@@ -108,7 +193,6 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
   if (/"info"\s*:\s*150\b/.test(text) || /\berror\s*150\b/i.test(text) || /\binfo["']?\s*[:=]\s*150\b/i.test(text)) {
     return 'EMBED_UNAVAILABLE';
   }
-  // Error 153 = embed player configuration / rights block (watch page often still works).
   if (/"info"\s*:\s*153\b/.test(text) || /\berror\s*153\b/i.test(text) || /video player configuration error/i.test(text)) {
     return 'EMBED_UNAVAILABLE';
   }
@@ -118,11 +202,12 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
   if (/"info"\s*:\s*100\b/.test(text) || /\berror\s*100\b/i.test(text)) {
     return 'SOURCE_NOT_FOUND';
   }
+  if (/"info"\s*:\s*5\b/.test(text) || /\berror\s*5\b/i.test(text)) {
+    return 'PLAYER_INITIALIZATION_FAILED';
+  }
 
-  // YouTube embeds (esp. iOS WKWebView + rights-claimed clips) often show a
-  // *fake* "unavailable in your country" banner for embed/eurl failures while
-  // the same watch URL plays fine. Treat as embed-unavailable so we offer
-  // Open in YouTube instead of a misleading geo message.
+  // DOM "unavailable in your country" without a numeric YT error is usually a
+  // fake banner for embed/referer failures — treat as embed, not geo.
   const youtubeFakeCountryOrEmbed =
     /not made this video available in your country/i.test(text) ||
     /unavailable in your country/i.test(text) ||
@@ -136,6 +221,7 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
 
   if (/onError/i.test(text) && /150|153|101/.test(text)) return 'EMBED_UNAVAILABLE';
   if (/onError/i.test(text) && /100/.test(text)) return 'SOURCE_NOT_FOUND';
+  if (/onError/i.test(text) && /\b5\b/.test(text)) return 'PLAYER_INITIALIZATION_FAILED';
 
   if (lower.includes('network') || lower.includes('timeout')) {
     return lower.includes('timeout') ? 'PLAYBACK_TIMEOUT' : 'NETWORK_ERROR';
@@ -144,19 +230,13 @@ export function classifyYouTubeProbeSignal(raw: string): PlaybackFailureReason |
   return null;
 }
 
-export function classifyYouTubeErrorCode(code: number): PlaybackFailureReason {
-  if (code === 150 || code === 153 || code === 101) return 'EMBED_UNAVAILABLE';
-  if (code === 100) return 'SOURCE_NOT_FOUND';
-  return 'UNKNOWN_ERROR';
-}
-
 /** Prefer actionable reasons when collapsing a list of failures. */
 export function pickFinalPlaybackReason(
   reasons: PlaybackFailureReason[],
 ): PlaybackFailureReason {
   if (!reasons.length) return 'UNKNOWN_ERROR';
-  // Prefer EMBED_UNAVAILABLE over GEO: YouTube often labels embed blocks as
-  // "unavailable in your country" while the same watch URL still plays.
+  // Prefer EMBED_UNAVAILABLE over GEO when both appear: rights/embed blocks
+  // often ship with misleading country copy.
   const priority: PlaybackFailureReason[] = [
     'EMBED_UNAVAILABLE',
     'GEO_RESTRICTED',
@@ -173,4 +253,14 @@ export function pickFinalPlaybackReason(
     if (reasons.includes(candidate)) return candidate;
   }
   return reasons[reasons.length - 1] ?? 'UNKNOWN_ERROR';
+}
+
+/** User-initiated YouTube open is appropriate for these outcomes. */
+export function shouldOfferOpenInYouTube(reason: PlaybackFailureReason | null): boolean {
+  return (
+    reason === 'EMBED_UNAVAILABLE' ||
+    reason === 'GEO_RESTRICTED' ||
+    reason === 'PLAYBACK_TIMEOUT' ||
+    reason === 'PLAYER_INITIALIZATION_FAILED'
+  );
 }

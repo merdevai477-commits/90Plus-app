@@ -13,17 +13,19 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
 import { holdHighlightReplay, releaseHighlightReplay } from '../../services/sentry.service';
 import { useTranslation } from '../../src/i18n';
 import {
-  classifyYouTubeProbeSignal,
   isYouTubePlayerReadySignal,
   isYouTubePlayingSignal,
+  parseYouTubeProbeMessage,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
+  shouldOfferOpenInYouTube,
   type PlaybackFailureReason,
 } from '../../utils/highlightPlaybackErrors';
 import {
@@ -47,24 +49,29 @@ import {
   resolveHighlightPlaybackUrl,
   streaminPlaybackCandidates,
   youtubeEmbedUrl,
+  youtubeHostedPlayerUrl,
   youtubeMobileWatchUrl,
   youtubeVideoId,
   youtubeWebViewEmbedSource,
 } from '../../utils/highlightPlaybackUrl';
 
 /**
- * In-app YouTube surfaces before external Linking.
- * 1) embed + app Referer — fixes Error 153 in RN WebView
- * 2) watch page — rights-claimed clips that block iframe but play on youtube.com
- * 3) open YouTube app/site — hard fail only
+ * In-app YouTube surfaces (embeddable clips only).
+ * 1) Hosted IFrame API page on 90plus.pro (real origin + raw onError codes)
+ * 2) Direct youtube.com/embed URI with app Referer (Error 153 mitigation)
+ * Non-embeddable clips → in-app fallback card (user-initiated Watch on YouTube).
  */
-type YoutubeSurfaceTier = 'embed' | 'watch';
+type YoutubeSurfaceTier = 'hosted' | 'embed';
 
 type Props = {
   visible: boolean;
   urls: string[];
   onClose: () => void;
   closeLabel?: string;
+  /** Optional clip title for the in-app fallback card. */
+  title?: string | null;
+  /** Optional thumbnail for the in-app fallback card. */
+  thumbnailUrl?: string | null;
 };
 
 /**
@@ -150,130 +157,17 @@ const PLAYBACK_PROBE = `
 true;
 `;
 
-/**
- * Watch page plays when iframe embed is blocked — strip the rest of YouTube chrome
- * so the in-app sheet looks like a player-only surface.
- */
-const WATCH_PAGE_CHROME_CSS = `
-html,body{background:#000!important;overflow:hidden!important;height:100%!important;margin:0!important;padding:0!important}
-ytd-masthead,#masthead-container,#guide-button,#guide,#guide-content,#secondary,#related,#comments,
-ytd-watch-metadata,#below,#chat,#chat-container,ytd-live-chat-frame,tp-yt-paper-dialog,ytd-popup-container,
-#ticket-shelf,ytd-merch-shelf-renderer,ytd-watch-next-secondary-results-renderer,#columns > #secondary,
-ytm-mobile-topbar-renderer,.mobile-topbar-header,ytm-pivot-bar-renderer,ytm-item-section-renderer,
-ytm-slim-video-metadata-section-renderer,ytm-slim-owner-renderer,ytm-engagement-panel,
-ytm-comment-section-renderer,bottom-sheet-container,.ytm-bottom-sheet-overlay,
-.open-app-button,ytm-companion-slot,ytm-promoted-sparkles-web-renderer,#appbar-content,
-#header,header,nav,.ytp-chrome-top-buttons,ytd-mealbar-promo-renderer,
-#clarify-box,ytd-info-panel-content-renderer{display:none!important;height:0!important;max-height:0!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important}
-#player,#player-container-outer,#player-container-inner,ytd-player,#movie_player,#player-container,
-.html5-video-player,#player-theater-container,#player-container-id,#ytd-player,
-#player-api,.player-container,.html5-video-container{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-height:100vh!important;z-index:2147483646!important;margin:0!important;padding:0!important;background:#000!important;transform:none!important}
-video.html5-main-video,video{object-fit:contain!important;width:100%!important;height:100%!important}
-#content,#page-manager,ytd-watch-flexy,#columns,#primary,#primary-inner{margin:0!important;padding:0!important;max-width:none!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important}
-`;
-
-const WATCH_PAGE_PROBE = `
-(function () {
-  var reportedPlaying = false;
-  var reportedFail = false;
-  function send(reason) {
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
-    }
-  }
-  function injectChrome() {
-    try {
-      if (!document.getElementById('hl-yt-chrome-hide')) {
-        var style = document.createElement('style');
-        style.id = 'hl-yt-chrome-hide';
-        style.type = 'text/css';
-        style.appendChild(document.createTextNode(${JSON.stringify(WATCH_PAGE_CHROME_CSS)}));
-        (document.head || document.documentElement).appendChild(style);
-      }
-      document.documentElement.style.background = '#000';
-      if (document.body) {
-        document.body.style.background = '#000';
-        document.body.style.overflow = 'hidden';
-      }
-    } catch (e) {}
-  }
-  function hasPlayableVideo() {
-    try {
-      var video = document.querySelector('video.html5-main-video, #movie_player video, video');
-      if (video && video.readyState >= 2 && !video.error) return true;
-      var mp = document.querySelector('#movie_player');
-      if (mp && mp.classList && (mp.classList.contains('playing-mode') || mp.classList.contains('paused-mode'))) return true;
-      if (mp && !document.querySelector('.ytp-error')) return true;
-    } catch (e) {}
-    return false;
-  }
-  function playerErrorText() {
-    try {
-      var err = document.querySelector('.ytp-error, .ytp-error-content, .ytp-error-content-wrap-subreason');
-      return err ? (err.innerText || '') : '';
-    } catch (e) { return ''; }
-  }
-  function check() {
-    injectChrome();
-    if (!reportedPlaying && hasPlayableVideo()) {
-      reportedPlaying = true;
-      send('PLAYER_READY');
-      send('PLAYING');
-      return;
-    }
-    if (reportedFail || reportedPlaying) return;
-    // Only fail on hard player errors — never on page-wide "country" copy (false positives).
-    var errText = playerErrorText();
-    if (/configuration error|error\\s*153|playback on other websites has been disabled/i.test(errText)) {
-      reportedFail = true;
-      send('EMBED_UNAVAILABLE');
-      return;
-    }
-    if (/video unavailable/i.test(errText) && /uploader|country|region/i.test(errText)) {
-      reportedFail = true;
-      send('EMBED_UNAVAILABLE');
-    }
-  }
-  injectChrome();
-  check();
-  try {
-    var obs = new MutationObserver(function () { check(); });
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-  } catch (e) {}
-  setTimeout(check, 200);
-  setTimeout(check, 800);
-  setTimeout(check, 1600);
-  setTimeout(check, 3200);
-  setTimeout(check, 6000);
-})();
-true;
-`;
-
-/** Early CSS so the full YouTube chrome never flashes before the probe runs. */
-const WATCH_PAGE_BEFORE_LOAD = `
-(function () {
-  try {
-    var style = document.createElement('style');
-    style.id = 'hl-yt-chrome-hide-early';
-    style.type = 'text/css';
-    style.appendChild(document.createTextNode(${JSON.stringify(WATCH_PAGE_CHROME_CSS)}));
-    (document.head || document.documentElement).appendChild(style);
-  } catch (e) {}
-})();
-true;
-`;
-
 const FALLBACK_MESSAGES: Record<string, string> = {
-  playbackGeoRestricted: 'This video cannot play inside the app — open it in YouTube.',
+  playbackGeoRestricted: 'This video is not available in your region inside the app.',
   playbackSourceUnavailable: 'This video is currently unavailable.',
   playbackSourceExpired: 'This video is currently unavailable.',
   playbackUnsupportedProvider: 'This video source is not supported.',
   playbackNetworkError: 'Unable to load the video. Please try again.',
   playbackPlayerFailed: 'Unable to play this video.',
-  playbackEmbedUnavailable: 'This video cannot play inside the app — open it in YouTube.',
+  playbackEmbedUnavailable: 'This highlight cannot play inside the app. Watch it on YouTube.',
   playbackTimeout: 'Unable to load the video. Please try again.',
   playbackUnknownError: 'Something went wrong. Please try again.',
-  openInYouTube: 'Open in YouTube',
+  openInYouTube: 'Watch on YouTube',
   playbackLoading: 'Loading video…',
   playbackInitializing: 'Preparing player…',
   playbackRetry: 'Retry',
@@ -290,7 +184,14 @@ function resetSessionRefs(refs: {
 }
 
 /** Plays highlight / goal clips with typed failures, timeouts, and URL fallback. */
-export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Close' }: Props) {
+export function HighlightVideoSheet({
+  visible,
+  urls,
+  onClose,
+  closeLabel = 'Close',
+  title = null,
+  thumbnailUrl = null,
+}: Props) {
   const { t } = useTranslation();
   const { width: screenWidth } = useWindowDimensions();
   const playerWidth = Math.max(280, screenWidth - 48);
@@ -298,6 +199,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const [failureReason, setFailureReason] = useState<PlaybackFailureReason | null>(null);
+  const [youtubeErrorCode, setYoutubeErrorCode] = useState<number | null>(null);
   const [surfaceReady, setSurfaceReady] = useState(false);
   const [directReady, setDirectReady] = useState(false);
   const [playableDirectUrl, setPlayableDirectUrl] = useState('');
@@ -305,11 +207,12 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const [sessionNonce, setSessionNonce] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [youtubeLoaded, setYoutubeLoaded] = useState(false);
-  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('embed');
+  const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('hosted');
 
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
   const failureReasons = useRef<PlaybackFailureReason[]>([]);
+  const lastYoutubeErrorCode = useRef<number | null>(null);
   const sessionId = useRef(createHighlightPlaybackSessionId());
   const sessionStartedAt = useRef(Date.now());
   const listKey = urls.join('|');
@@ -318,6 +221,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
 
   if (seenKey !== openKey) {
     resetSessionRefs({ skippedId, attempted, failureReasons });
+    lastYoutubeErrorCode.current = null;
     if (visible) {
       sessionId.current = createHighlightPlaybackSessionId();
       sessionStartedAt.current = Date.now();
@@ -326,10 +230,11 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     setIndex(0);
     setFailed(false);
     setFailureReason(null);
+    setYoutubeErrorCode(null);
     setDirectReady(false);
     setPlayableDirectUrl('');
     setYoutubeLoaded(false);
-    setYoutubeTier('embed');
+    setYoutubeTier('hosted');
     setUiPhase(visible ? 'initializing' : 'idle');
   }
 
@@ -370,16 +275,16 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
   const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
   const videoId = url ? youtubeVideoId(url) : null;
-  const mobileWatchUrl = videoId ? youtubeMobileWatchUrl(videoId) : null;
+  const hostedPlayerUrl = videoId ? youtubeHostedPlayerUrl(videoId) : null;
   const embedWebSource = videoId ? youtubeWebViewEmbedSource(videoId) : null;
   const showSurface = visible && surfaceReady;
   const unsupported = Boolean(url) && !embedUrl && !direct;
   const sourceType = classifyHighlightSourceType(fileUrl || url);
-  const isWatchTier = youtubeTier === 'watch';
+  const isHostedTier = youtubeTier === 'hosted';
   const youtubeWebSource =
     embedUrl && videoId
-      ? isWatchTier && mobileWatchUrl
-        ? { uri: mobileWatchUrl }
+      ? isHostedTier && hostedPlayerUrl
+        ? { uri: hostedPlayerUrl }
         : embedWebSource
       : null;
   // Keep stable names for layout math (avoids stale HMR refs to removed locals).
@@ -400,7 +305,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
   const openYouTubeExternally = useCallback((candidateUrl: string) => {
     const id = youtubeVideoId(candidateUrl);
     if (!id) return false;
-    const watch = `https://www.youtube.com/watch?v=${id}`;
+    const watch = youtubeMobileWatchUrl(id) || `https://www.youtube.com/watch?v=${id}`;
     void Linking.openURL(watch);
     return true;
   }, []);
@@ -411,6 +316,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       sessionId: sessionId.current,
       stage: 'PLAYBACK_ERROR',
       errorCategory: finalReason,
+      errorCode:
+        lastYoutubeErrorCode.current != null ? String(lastYoutubeErrorCode.current) : undefined,
       sourceType,
       provider: inferHighlightProvider(url || fileUrl),
       sourceHost: sanitizePlaybackUrlForDiagnostics(url || fileUrl),
@@ -418,56 +325,48 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       initMs: Date.now() - sessionStartedAt.current,
     });
 
-    const ytCandidate =
-      [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate)) ||
-      (youtubeVideoId(url) ? url : '');
-
-    // Don't leave the user on a dead error sheet — open YouTube and close.
-    if (
-      ytCandidate &&
-      (finalReason === 'EMBED_UNAVAILABLE' ||
-        finalReason === 'GEO_RESTRICTED' ||
-        finalReason === 'PLAYBACK_TIMEOUT') &&
-      openYouTubeExternally(ytCandidate)
-    ) {
-      onClose();
-      return;
-    }
-
+    // Stay inside match details — never auto-redirect. Show in-app fallback card.
     setFailureReason(finalReason);
+    setYoutubeErrorCode(lastYoutubeErrorCode.current);
     setFailed(true);
     setDirectReady(false);
     setUiPhase(highlightUiPhaseForFailure(finalReason));
-  }, [fileUrl, onClose, openYouTubeExternally, retryCount, sourceType, url]);
+  }, [fileUrl, retryCount, sourceType, url]);
 
   const skipWithReason = useCallback(
-    (reason: PlaybackFailureReason) => {
+    (reason: PlaybackFailureReason, code?: number | null) => {
+      if (code != null && Number.isFinite(code)) {
+        lastYoutubeErrorCode.current = code;
+      }
+
       if (!url) {
         failureReasons.current.push(reason);
         finishWithReasons();
         return;
       }
 
-      // Embed blocked (153 / rights) → try the full watch page in-app before giving up.
+      // Hosted IFrame failed → try direct embed URI + app Referer (may fix Error 153).
       if (
         embedUrl &&
-        youtubeTier === 'embed' &&
+        youtubeTier === 'hosted' &&
         (reason === 'EMBED_UNAVAILABLE' ||
-          reason === 'GEO_RESTRICTED' ||
-          reason === 'PLAYBACK_TIMEOUT')
+          reason === 'PLAYBACK_TIMEOUT' ||
+          reason === 'PLAYER_INITIALIZATION_FAILED' ||
+          reason === 'NETWORK_ERROR')
       ) {
         failureReasons.current.push(reason);
         emitHighlightPlaybackDiagnostic({
           sessionId: sessionId.current,
           stage: reason === 'PLAYBACK_TIMEOUT' ? 'PLAYER_TIMEOUT' : 'PLAYBACK_ERROR',
           errorCategory: reason,
+          errorCode: code != null ? String(code) : undefined,
           sourceType,
           provider: 'youtube',
           sourceHost: sanitizePlaybackUrlForDiagnostics(url),
           retryCount,
         });
         setYoutubeLoaded(false);
-        setYoutubeTier('watch');
+        setYoutubeTier('embed');
         setUiPhase('loading');
         return;
       }
@@ -481,6 +380,9 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
         sessionId: sessionId.current,
         stage: reason === 'PLAYBACK_TIMEOUT' ? 'PLAYER_TIMEOUT' : 'PLAYBACK_ERROR',
         errorCategory: reason,
+        errorCode: code != null ? String(code) : lastYoutubeErrorCode.current != null
+          ? String(lastYoutubeErrorCode.current)
+          : undefined,
         sourceType,
         provider: inferHighlightProvider(url),
         sourceHost: sanitizePlaybackUrlForDiagnostics(url),
@@ -489,7 +391,8 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       if (index + 1 < urls.length) {
         setDirectReady(false);
         setYoutubeLoaded(false);
-        setYoutubeTier('embed');
+        setYoutubeTier('hosted');
+        lastYoutubeErrorCode.current = null;
         setUiPhase('loading');
         setIndex((current) => current + 1);
       } else {
@@ -568,11 +471,7 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
 
   useEffect(() => {
     if (!visible || failed || !embedUrl || !showSurface) return;
-    // Watch page can take longer to paint the player; embed should be ready sooner.
-    const waitMs =
-      youtubeTier === 'watch'
-        ? HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS + 10_000
-        : HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS;
+    const waitMs = HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS;
     const timer = setTimeout(() => {
       if (!youtubeLoadedRef.current) {
         skipWithReason(resolveTimeoutReason('youtube_load'));
@@ -586,19 +485,22 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       sessionId: sessionId.current,
       stage: 'PLAYER_RETRY',
       errorCategory: failureReason ?? undefined,
+      errorCode: youtubeErrorCode != null ? String(youtubeErrorCode) : undefined,
       retryCount: retryCount + 1,
     });
     resetSessionRefs({ skippedId, attempted, failureReasons });
+    lastYoutubeErrorCode.current = null;
     setRetryCount((count) => count + 1);
     setFailed(false);
     setFailureReason(null);
+    setYoutubeErrorCode(null);
     setDirectReady(false);
     setYoutubeLoaded(false);
-    setYoutubeTier('embed');
+    setYoutubeTier('hosted');
     setIndex(0);
     setUiPhase('initializing');
     setSessionNonce((nonce) => nonce + 1);
-  }, [failureReason, retryCount]);
+  }, [failureReason, retryCount, youtubeErrorCode]);
 
   const openInYouTubeLabel = matchDetailsText.openInYouTube || FALLBACK_MESSAGES.openInYouTube;
   const loadingLabel =
@@ -611,15 +513,14 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
     [...attempted.current].reverse().find((candidate) => youtubeVideoId(candidate)) ||
     (videoId ? url : '');
 
-  // YouTube watch often works when the in-app embed reports geo/embed/timeout.
   const showOpenInYouTube =
     failed &&
-    (failureReason === 'EMBED_UNAVAILABLE' ||
-      failureReason === 'GEO_RESTRICTED' ||
-      failureReason === 'PLAYBACK_TIMEOUT') &&
+    shouldOfferOpenInYouTube(failureReason) &&
     Boolean(lastYouTubeUrl && youtubeVideoId(lastYouTubeUrl));
 
   const showRetry = failed && failureReason != null && isRecoverablePlaybackFailure(failureReason);
+  const fallbackTitle = (title || '').trim();
+  const fallbackThumb = (thumbnailUrl || '').trim();
 
   const showLoadingChrome =
     visible &&
@@ -637,17 +538,11 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={closeLabel} />
         {showSurface && embedUrl && youtubeWebSource && !failed ? (
-          <View
-            style={
-              isWatchTier
-                ? styles.watchShell
-                : [styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]
-            }
-          >
+          <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
             <WebView
               key={`${listKey}:${embedUrl}:${youtubeTier}:${sessionNonce}`}
               source={youtubeWebSource}
-              style={isWatchTier ? styles.watchWebView : styles.webView}
+              style={styles.webView}
               androidLayerType="hardware"
               userAgent={youtubeWebViewUserAgent()}
               onLoadStart={() => {
@@ -659,23 +554,20 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
               sharedCookiesEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              // Watch page needs native fullscreen controls; embed stays modal-safe on iOS.
-              allowsFullscreenVideo={isWatchTier ? true : youtubeAllowsFullscreenVideo()}
+              allowsFullscreenVideo={youtubeAllowsFullscreenVideo()}
               javaScriptEnabled
               domStorageEnabled
-              injectedJavaScriptBeforeContentLoaded={
-                isWatchTier ? WATCH_PAGE_BEFORE_LOAD : undefined
-              }
-              injectedJavaScript={isWatchTier ? WATCH_PAGE_PROBE : PLAYBACK_PROBE}
+              injectedJavaScript={isHostedTier ? undefined : PLAYBACK_PROBE}
               onLoadEnd={() => {
-                // Clear spinner once the surface paints; probes still catch hard player errors.
-                setYoutubeLoaded(true);
-                youtubeLoadedRef.current = true;
-                setUiPhase('ready');
+                // Hosted IFrame posts PLAYER_READY/PLAYING; clear spinner on paint for embed URI.
+                if (!isHostedTier) {
+                  setYoutubeLoaded(true);
+                  youtubeLoadedRef.current = true;
+                  setUiPhase('ready');
+                }
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
-                // PLAYER_READY = iframe ready. Clear spinner so the user can tap Play on iOS.
                 if (isYouTubePlayerReadySignal(data) || /reason:USER_PLAY:/i.test(data)) {
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
@@ -685,12 +577,13 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                     stage: 'PLAYER_INITIALIZING',
                     sourceType: 'youtube',
                     provider: 'youtube',
-                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl || url),
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(
+                      hostedPlayerUrl || embedUrl || url,
+                    ),
                     retryCount,
                   });
                   return;
                 }
-                // PLAYING = real playback confirmed.
                 if (isYouTubePlayingSignal(data)) {
                   setYoutubeLoaded(true);
                   youtubeLoadedRef.current = true;
@@ -700,18 +593,18 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                     stage: 'PLAYER_READY',
                     sourceType: 'youtube',
                     provider: 'youtube',
-                    sourceHost: sanitizePlaybackUrlForDiagnostics(embedUrl || url),
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(
+                      hostedPlayerUrl || embedUrl || url,
+                    ),
                     readyMs: Date.now() - sessionStartedAt.current,
                     retryCount,
                   });
                   return;
                 }
-                const reason = classifyYouTubeProbeSignal(data);
-                if (!reason) return;
-                // Accept bridge messages even when href is 90plus.pro (no videoId in URL).
-                // Drop only clearly unrelated noise that is not a reason: payload.
+                const parsed = parseYouTubeProbeMessage(data);
+                if (parsed.isProgress || !parsed.reason) return;
                 if (!/^reason:/i.test(data.trim()) && videoId && !data.includes(videoId)) return;
-                skipWithReason(reason);
+                skipWithReason(parsed.reason, parsed.youtubeErrorCode);
               }}
               onHttpError={(event) => {
                 const status = event.nativeEvent.statusCode;
@@ -719,10 +612,9 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 if (status < 400) return;
                 const mainDocument =
                   !failedUrl ||
+                  (Boolean(hostedPlayerUrl) && failedUrl.startsWith(hostedPlayerUrl)) ||
                   failedUrl.startsWith(embedUrl) ||
-                  (Boolean(mobileWatchUrl) && failedUrl.startsWith(mobileWatchUrl)) ||
-                  (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`)) ||
-                  (Boolean(videoId) && failedUrl.includes(`watch?v=${videoId}`));
+                  (Boolean(videoId) && failedUrl.includes(`/embed/${videoId}`));
                 // YouTube loads ads and thumbnails that 403/404. Those are not a failed video.
                 if (!mainDocument) return;
                 if (status === 404) skipWithReason('SOURCE_NOT_FOUND');
@@ -756,9 +648,23 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
           </View>
         ) : null}
         {visible && failed ? (
-          <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
-            <View pointerEvents="none" style={styles.playerPlate} />
+          <View style={[styles.fallbackCard, { width: youtubePlayerWidth }]}>
+            {fallbackThumb ? (
+              <ExpoImage
+                source={{ uri: fallbackThumb }}
+                style={[styles.fallbackThumb, { height: youtubePlayerHeight }]}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.fallbackThumbPlaceholder, { height: youtubePlayerHeight }]}>
+                <Ionicons name="videocam-off-outline" size={36} color="#9CA3AF" />
+              </View>
+            )}
+            {fallbackTitle ? <Text style={styles.fallbackTitle}>{fallbackTitle}</Text> : null}
             <Text style={styles.error}>{messageFor(failureReason ?? 'UNKNOWN_ERROR')}</Text>
+            {youtubeErrorCode != null ? (
+              <Text style={styles.fallbackMeta}>YouTube error {youtubeErrorCode}</Text>
+            ) : null}
             {showRetry ? (
               <Pressable
                 accessibilityRole="button"
@@ -774,9 +680,10 @@ export function HighlightVideoSheet({ visible, urls, onClose, closeLabel = 'Clos
                 accessibilityRole="button"
                 accessibilityLabel={openInYouTubeLabel}
                 onPress={() => {
-                  if (openYouTubeExternally(lastYouTubeUrl)) onClose();
+                  // User-initiated only — keep the sheet open so closing returns to match details.
+                  openYouTubeExternally(lastYouTubeUrl);
                 }}
-                style={styles.openYoutube}
+                style={[styles.openYoutube, styles.openYoutubePrimary]}
               >
                 <Text style={styles.openYoutubeText}>{openInYouTubeLabel}</Text>
               </Pressable>
@@ -1072,18 +979,37 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
-  /** Full-bleed shell for youtube.com/watch — no 16:9 box (that crushed the page into a strip). */
-  watchShell: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000',
-    direction: 'ltr',
+  fallbackCard: {
+    marginHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: 16,
+    backgroundColor: '#111111',
+    paddingBottom: 16,
   },
-  watchWebView: {
-    flex: 1,
+  fallbackThumb: {
     width: '100%',
-    height: '100%',
     backgroundColor: '#000000',
-    opacity: 0.99,
+  },
+  fallbackThumbPlaceholder: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+  },
+  fallbackTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  fallbackMeta: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 6,
   },
   playerPlate: {
     ...StyleSheet.absoluteFillObject,
@@ -1125,6 +1051,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  openYoutubePrimary: {
+    backgroundColor: '#FF0033',
   },
   openYoutubeText: {
     color: '#FFFFFF',

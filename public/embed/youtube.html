@@ -145,9 +145,13 @@
             }
           },
           onError: function (e) {
-            var c = String(e && e.data);
-            // 100 missing, 101/150/153 embed/rights blocks — watch page still works.
-            post(c === '100' ? 'SOURCE_NOT_FOUND' : 'EMBED_UNAVAILABLE');
+            // Preserve raw IFrame API codes (2, 5, 100, 101, 150, 153) for RN/Sentry.
+            var c = String(e && e.data != null ? e.data : '');
+            if (/^(2|5|100|101|150|153)$/.test(c)) {
+              post('YT_ERROR:' + c);
+              return;
+            }
+            post('EMBED_UNAVAILABLE');
           }
         }
       });

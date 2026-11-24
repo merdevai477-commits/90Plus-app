@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger';
 import { downloadAuthorizedVideo } from './download';
 import {
   assertIngestionTransition,
+  authorizedDirectPlaybackCandidates,
   classifySourceUrl,
   type IngestionStatus,
   videoStorageEnabled,
@@ -119,7 +120,18 @@ export async function processHighlightIngestion(
       return;
     }
     const download = deps.download ?? downloadAuthorizedVideo;
-    const downloaded = await download({ url: row.originalUrl });
+    const candidates = authorizedDirectPlaybackCandidates(row.originalUrl);
+    let downloaded: Awaited<ReturnType<typeof downloadAuthorizedVideo>> | null = null;
+    let lastDownloadError: unknown = null;
+    for (const candidate of candidates) {
+      try {
+        downloaded = await download({ url: candidate });
+        break;
+      } catch (error) {
+        lastDownloadError = error;
+      }
+    }
+    if (!downloaded) throw lastDownloadError instanceof Error ? lastDownloadError : new Error('DOWNLOAD_FAILED');
     const allowed = await storageBudgetAllows(downloaded.bytes);
     if (!allowed) {
       await setStatus(highlightlyId, fromStatus, 'FAILED', { lastErrorCode: 'BUDGET_EXCEEDED' });

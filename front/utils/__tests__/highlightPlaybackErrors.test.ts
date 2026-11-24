@@ -5,8 +5,10 @@ import {
   isYouTubePlaybackProgressSignal,
   isYouTubePlayerReadySignal,
   isYouTubePlayingSignal,
+  parseYouTubeProbeMessage,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
+  shouldOfferOpenInYouTube,
 } from '../highlightPlaybackErrors';
 
 describe('highlightPlaybackErrors', () => {
@@ -31,12 +33,12 @@ describe('highlightPlaybackErrors', () => {
   });
 
   describe('classifyYouTubeProbeSignal', () => {
-    it('maps YouTube fake-country / legacy GEO probes to EMBED_UNAVAILABLE', () => {
+    it('keeps explicit GEO_RESTRICTED distinct from fake-country DOM copy', () => {
       expect(
         classifyYouTubeProbeSignal(
-          'reason:GEO_RESTRICTED:https://www.youtube-nocookie.com/embed/abc',
+          'reason:GEO_RESTRICTED:abc:https://www.youtube-nocookie.com/embed/abc',
         ),
-      ).toBe('EMBED_UNAVAILABLE');
+      ).toBe('GEO_RESTRICTED');
       expect(
         classifyYouTubeProbeSignal(
           'The owner has not made this video available in your country',
@@ -54,11 +56,28 @@ describe('highlightPlaybackErrors', () => {
       expect(classifyYouTubeProbeSignal('onError {"info": 150}')).toBe('EMBED_UNAVAILABLE');
     });
 
-    it('maps YouTube error 100 to SOURCE_NOT_FOUND', () => {
+    it('maps YouTube IFrame error codes including 5 and 153', () => {
       expect(classifyYouTubeProbeSignal('onError {"info": 100}')).toBe('SOURCE_NOT_FOUND');
       expect(classifyYouTubeErrorCode(100)).toBe('SOURCE_NOT_FOUND');
       expect(classifyYouTubeErrorCode(150)).toBe('EMBED_UNAVAILABLE');
       expect(classifyYouTubeErrorCode(101)).toBe('EMBED_UNAVAILABLE');
+      expect(classifyYouTubeErrorCode(153)).toBe('EMBED_UNAVAILABLE');
+      expect(classifyYouTubeErrorCode(5)).toBe('PLAYER_INITIALIZATION_FAILED');
+      expect(parseYouTubeProbeMessage('reason:YT_ERROR:153:vid:https://90plus.pro/')).toEqual({
+        reason: 'EMBED_UNAVAILABLE',
+        youtubeErrorCode: 153,
+        isProgress: false,
+      });
+      expect(parseYouTubeProbeMessage('reason:YT_ERROR:101:vid:https://90plus.pro/').youtubeErrorCode).toBe(
+        101,
+      );
+      expect(parseYouTubeProbeMessage('reason:YT_ERROR:5:vid:https://90plus.pro/')).toEqual({
+        reason: 'PLAYER_INITIALIZATION_FAILED',
+        youtubeErrorCode: 5,
+        isProgress: false,
+      });
+      expect(shouldOfferOpenInYouTube('EMBED_UNAVAILABLE')).toBe(true);
+      expect(shouldOfferOpenInYouTube('SOURCE_NOT_FOUND')).toBe(false);
     });
 
     it('does not invent geo from bare video unavailable text', () => {
