@@ -618,6 +618,7 @@ export const en = {
     openInYouTube: 'Watch on YouTube',
     playbackLoading: 'Loading video…',
     playbackInitializing: 'Preparing player…',
+    playbackTapToPlay: 'Tap to play',
     playbackRetry: 'Retry',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',

@@ -28,6 +28,7 @@ describe('highlightPlaybackLifecycle', () => {
 
   it('records hosted timeout diagnostics without treating load end as ready', () => {
     // Shape expected by HighlightVideoSheet PLAYER_TIMEOUT breadcrumb.
+    // youtubeLoaded here means playback confirmed (PLAYING), not PLAYER_READY.
     const timeoutDiag = {
       tier: 'hosted' as const,
       youtubeLoaded: false,
@@ -40,8 +41,9 @@ describe('highlightPlaybackLifecycle', () => {
     expect(timeoutDiag.elapsedMs).toBe(20_000);
     expect(timeoutDiag.lastMessage).toBeNull();
     expect(timeoutDiag.bridgeConnected).toBe(false);
-    // onLoadEnd must not imply player readiness for hosted tier (enforced in sheet).
+    // onLoadEnd / PLAYER_READY must not imply playback success (enforced in sheet + youtubePlaybackSession).
     expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS).toBe(20_000);
+    expect(HIGHLIGHT_PLAYBACK_TIMEOUTS.PLAYBACK_START_MS).toBe(15_000);
   });
 
   it('classifies media types without inventing geo', () => {

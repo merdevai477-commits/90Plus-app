@@ -856,6 +856,7 @@ export const ar = {
     openInYouTube: 'مشاهدة على يوتيوب',
     playbackLoading: 'جاري تحميل الفيديو…',
     playbackInitializing: 'جاري تجهيز المشغّل…',
+    playbackTapToPlay: 'اضغط للتشغيل',
     playbackRetry: 'إعادة المحاولة',
     eventsNoneRecorded: 'لم تُسجَّل أحداث لهذه المباراة',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',

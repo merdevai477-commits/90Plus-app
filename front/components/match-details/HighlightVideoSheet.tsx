@@ -55,6 +55,12 @@ import {
   youtubeWebViewEmbedSource,
   YOUTUBE_EMBED_ORIGIN,
 } from '../../utils/highlightPlaybackUrl';
+import {
+  createInitialYoutubePlaybackSession,
+  reduceYoutubePlaybackSession,
+  youtubeSessionShowsLoadingSpinner,
+  type YoutubePlaybackSessionEvent,
+} from '../../utils/youtubePlaybackSession';
 
 /**
  * Hosted IFrame URL (90plus.pro). Built locally so Fast Refresh cannot drop a
@@ -185,6 +191,7 @@ const FALLBACK_MESSAGES: Record<string, string> = {
   openInYouTube: 'Watch on YouTube',
   playbackLoading: 'Loading video…',
   playbackInitializing: 'Preparing player…',
+  playbackTapToPlay: 'Tap to play',
   playbackRetry: 'Retry',
 };
 
@@ -221,8 +228,8 @@ export function HighlightVideoSheet({
   const [uiPhase, setUiPhase] = useState<HighlightUiPhase>('idle');
   const [sessionNonce, setSessionNonce] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
-  const [youtubeLoaded, setYoutubeLoaded] = useState(false);
   const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('hosted');
+  const [ytSession, setYtSession] = useState(createInitialYoutubePlaybackSession);
 
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
@@ -230,21 +237,22 @@ export function HighlightVideoSheet({
   const lastYoutubeErrorCode = useRef<number | null>(null);
   const lastBridgeMessageKind = useRef<string | null>(null);
   const bridgeConnectedRef = useRef(false);
-  const handledPlayerReadyRef = useRef(false);
-  const handledPlayingRef = useRef(false);
+  const youtubeWebViewRef = useRef<WebView>(null);
   const sessionId = useRef(createHighlightPlaybackSessionId());
   const sessionStartedAt = useRef(Date.now());
   const listKey = urls.join('|');
   const openKey = visible ? `${listKey}#${sessionNonce}` : '';
   const [seenKey, setSeenKey] = useState(openKey);
 
+  const dispatchYt = useCallback((event: YoutubePlaybackSessionEvent) => {
+    setYtSession((prev) => reduceYoutubePlaybackSession(prev, event));
+  }, []);
+
   if (seenKey !== openKey) {
     resetSessionRefs({ skippedId, attempted, failureReasons });
     lastYoutubeErrorCode.current = null;
     lastBridgeMessageKind.current = null;
     bridgeConnectedRef.current = false;
-    handledPlayerReadyRef.current = false;
-    handledPlayingRef.current = false;
     if (visible) {
       sessionId.current = createHighlightPlaybackSessionId();
       sessionStartedAt.current = Date.now();
@@ -256,7 +264,7 @@ export function HighlightVideoSheet({
     setYoutubeErrorCode(null);
     setDirectReady(false);
     setPlayableDirectUrl('');
-    setYoutubeLoaded(false);
+    setYtSession(createInitialYoutubePlaybackSession());
     setYoutubeTier('hosted');
     setUiPhase(visible ? 'initializing' : 'idle');
   }
@@ -391,7 +399,7 @@ export function HighlightVideoSheet({
           sourceHost: sanitizePlaybackUrlForDiagnostics(url),
           retryCount,
         });
-        setYoutubeLoaded(false);
+        setYtSession(createInitialYoutubePlaybackSession());
         setYoutubeTier('embed');
         setUiPhase('loading');
         return;
@@ -416,7 +424,7 @@ export function HighlightVideoSheet({
       });
       if (index + 1 < urls.length) {
         setDirectReady(false);
-        setYoutubeLoaded(false);
+        setYtSession(createInitialYoutubePlaybackSession());
         setYoutubeTier('hosted');
         lastYoutubeErrorCode.current = null;
         setUiPhase('loading');
@@ -484,44 +492,44 @@ export function HighlightVideoSheet({
     };
   }, [visible, failed, direct, fileUrl, index, skipWithReason, sourceType, retryCount]);
 
-  // YouTube WebView load watchdog (ref avoids stale closures / duplicate timers).
-  const youtubeLoadedRef = useRef(false);
+  // Reset YouTube session when surface / tier / clip changes.
+  // Keep bridgeConnected across hosted→embed escalate within same session token;
+  // full openKey reset clears it above.
   useEffect(() => {
-    youtubeLoadedRef.current = youtubeLoaded;
-  }, [youtubeLoaded]);
-
-  useEffect(() => {
-    setYoutubeLoaded(false);
-    youtubeLoadedRef.current = false;
-    handledPlayerReadyRef.current = false;
-    handledPlayingRef.current = false;
-    // Keep bridgeConnected across hosted→embed escalate within same session token;
-    // full openKey reset clears it above.
+    setYtSession(createInitialYoutubePlaybackSession());
   }, [embedUrl, index, sessionNonce, youtubeTier]);
 
+  const ytSessionRef = useRef(ytSession);
+  useEffect(() => {
+    ytSessionRef.current = ytSession;
+  }, [ytSession]);
+
+  // HTML / player-init watchdog — stops only after PLAYER_READY or PLAYING (or fail).
   useEffect(() => {
     if (!visible || failed || !embedUrl || !showSurface) return;
+    if (!ytSession.loadWatchdogActive) return;
     const waitMs = HIGHLIGHT_PLAYBACK_TIMEOUTS.YOUTUBE_LOAD_MS;
     const startedAt = Date.now();
     const timer = setTimeout(() => {
-      if (!youtubeLoadedRef.current) {
-        emitHighlightPlaybackDiagnostic({
-          sessionId: sessionId.current,
-          stage: 'PLAYER_TIMEOUT',
-          timeoutStage: 'youtube_load',
-          errorCategory: 'PLAYBACK_TIMEOUT',
-          tier: youtubeTier,
-          sessionNonce,
-          youtubeLoaded: false,
-          bridgeConnected: bridgeConnectedRef.current,
-          lastMessage: lastBridgeMessageKind.current,
-          elapsedMs: Date.now() - startedAt,
-          sourceType: 'youtube',
-          sourceHost: sanitizePlaybackUrlForDiagnostics(hostedPlayerUrl || embedUrl || url),
-          retryCount,
-        });
-        skipWithReason(resolveTimeoutReason('youtube_load'));
-      }
+      const prev = ytSessionRef.current;
+      if (!prev.loadWatchdogActive || prev.playerReady || prev.playing || prev.failed) return;
+      dispatchYt({ type: 'LOAD_TIMEOUT' });
+      emitHighlightPlaybackDiagnostic({
+        sessionId: sessionId.current,
+        stage: 'PLAYER_TIMEOUT',
+        timeoutStage: 'youtube_load',
+        errorCategory: 'PLAYBACK_TIMEOUT',
+        tier: youtubeTier,
+        sessionNonce,
+        youtubeLoaded: false,
+        bridgeConnected: bridgeConnectedRef.current,
+        lastMessage: lastBridgeMessageKind.current,
+        elapsedMs: Date.now() - startedAt,
+        sourceType: 'youtube',
+        sourceHost: sanitizePlaybackUrlForDiagnostics(hostedPlayerUrl || embedUrl || url),
+        retryCount,
+      });
+      skipWithReason(resolveTimeoutReason('youtube_load'));
     }, waitMs);
     return () => clearTimeout(timer);
   }, [
@@ -536,6 +544,63 @@ export function HighlightVideoSheet({
     hostedPlayerUrl,
     url,
     retryCount,
+    ytSession.loadWatchdogActive,
+    dispatchYt,
+  ]);
+
+  // Playback-start watchdog — armed after autoplay attempt (PLAYER_READY) or USER_PLAY.
+  // Does NOT clear merely because the player initialized; only PLAYING clears it.
+  useEffect(() => {
+    if (!visible || failed || !embedUrl || !showSurface) return;
+    if (!ytSession.playbackWatchdogActive || ytSession.playing) return;
+    const waitMs = HIGHLIGHT_PLAYBACK_TIMEOUTS.PLAYBACK_START_MS;
+    const startedAt = Date.now();
+    const epoch = ytSession.playbackWatchdogEpoch;
+    const timer = setTimeout(() => {
+      const prev = ytSessionRef.current;
+      if (
+        prev.playbackWatchdogEpoch !== epoch ||
+        !prev.playbackWatchdogActive ||
+        prev.playing ||
+        prev.failed
+      ) {
+        return;
+      }
+      dispatchYt({ type: 'PLAYBACK_TIMEOUT' });
+      emitHighlightPlaybackDiagnostic({
+        sessionId: sessionId.current,
+        stage: 'PLAYER_TIMEOUT',
+        timeoutStage: 'playback_start',
+        errorCategory: 'PLAYBACK_TIMEOUT',
+        tier: youtubeTier,
+        sessionNonce,
+        youtubeLoaded: prev.playerReady,
+        bridgeConnected: bridgeConnectedRef.current,
+        lastMessage: lastBridgeMessageKind.current,
+        elapsedMs: Date.now() - startedAt,
+        sourceType: 'youtube',
+        sourceHost: sanitizePlaybackUrlForDiagnostics(hostedPlayerUrl || embedUrl || url),
+        retryCount,
+      });
+      skipWithReason(resolveTimeoutReason('playback_start'));
+    }, waitMs);
+    return () => clearTimeout(timer);
+  }, [
+    visible,
+    failed,
+    embedUrl,
+    showSurface,
+    index,
+    sessionNonce,
+    skipWithReason,
+    youtubeTier,
+    hostedPlayerUrl,
+    url,
+    retryCount,
+    ytSession.playbackWatchdogActive,
+    ytSession.playbackWatchdogEpoch,
+    ytSession.playing,
+    dispatchYt,
   ]);
 
   const handleRetry = useCallback(() => {
@@ -554,25 +619,45 @@ export function HighlightVideoSheet({
     lastYoutubeErrorCode.current = null;
     lastBridgeMessageKind.current = null;
     bridgeConnectedRef.current = false;
-    handledPlayerReadyRef.current = false;
-    handledPlayingRef.current = false;
     setRetryCount((count) => count + 1);
     setFailed(false);
     setFailureReason(null);
     setYoutubeErrorCode(null);
     setDirectReady(false);
-    setYoutubeLoaded(false);
+    setYtSession(createInitialYoutubePlaybackSession());
     setYoutubeTier('hosted');
     setIndex(0);
     setUiPhase('initializing');
     setSessionNonce((nonce) => nonce + 1);
   }, [failureReason, retryCount, youtubeErrorCode, youtubeTier, sessionNonce]);
 
+  const handlePlayAffordancePress = useCallback(() => {
+    dispatchYt({ type: 'USER_PLAY' });
+    // Prefer the hosted page's own tap control (posts USER_PLAY + tryPlay(true)).
+    youtubeWebViewRef.current?.injectJavaScript(`
+(function(){
+  try {
+    var t = document.getElementById('tap');
+    if (t) { t.hidden = false; t.click(); }
+    else {
+      var v = document.querySelector('video');
+      if (v) { try { v.muted = false; } catch (e1) {} v.play(); }
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage('reason:USER_PLAY:' + (window.__HL_VID || '') + ':' + location.href);
+      }
+    }
+  } catch (e) {}
+  true;
+})();`);
+  }, [dispatchYt]);
+
   const openInYouTubeLabel = matchDetailsText.openInYouTube || FALLBACK_MESSAGES.openInYouTube;
   const loadingLabel =
     uiPhase === 'initializing'
       ? matchDetailsText.playbackInitializing || FALLBACK_MESSAGES.playbackInitializing
       : matchDetailsText.playbackLoading || FALLBACK_MESSAGES.playbackLoading;
+  const tapToPlayLabel =
+    matchDetailsText.playbackTapToPlay || FALLBACK_MESSAGES.playbackTapToPlay;
   const retryLabel = matchDetailsText.playbackRetry || FALLBACK_MESSAGES.playbackRetry;
 
   const lastYouTubeUrl =
@@ -588,10 +673,18 @@ export function HighlightVideoSheet({
   const fallbackTitle = (title || '').trim();
   const fallbackThumb = (thumbnailUrl || '').trim();
 
+  const showYoutubeLoadingSpinner =
+    Boolean(embedUrl) && youtubeSessionShowsLoadingSpinner(ytSession);
+  const showPlayAffordance =
+    visible &&
+    !failed &&
+    Boolean(embedUrl) &&
+    ytSession.showPlayAffordance &&
+    !ytSession.playing;
   const showLoadingChrome =
     visible &&
     !failed &&
-    ((Boolean(embedUrl) && !youtubeLoaded) || (direct && !directReady) || uiPhase === 'initializing');
+    (showYoutubeLoadingSpinner || (direct && !directReady) || uiPhase === 'initializing');
 
   return (
     <Modal
@@ -606,6 +699,7 @@ export function HighlightVideoSheet({
         {showSurface && embedUrl && youtubeWebSource && !failed ? (
           <View style={[styles.player, { width: youtubePlayerWidth, height: youtubePlayerHeight }]}>
             <WebView
+              ref={youtubeWebViewRef}
               key={`${listKey}:${embedUrl}:${youtubeTier}:${sessionNonce}`}
               source={youtubeWebSource}
               style={styles.webView}
@@ -662,19 +756,14 @@ export function HighlightVideoSheet({
                   tier: youtubeTier,
                   sessionNonce,
                   playerStatus: 'load_end',
-                  youtubeLoaded: youtubeLoadedRef.current,
+                  youtubeLoaded: ytSession.playerReady || ytSession.playing,
                   sourceHost: sanitizePlaybackUrlForDiagnostics(
                     hostedPlayerUrl || embedUrl || url,
                   ),
                   retryCount,
                 });
-                // Hosted IFrame posts PLAYER_READY/PLAYING; clear spinner on paint for embed URI only.
-                // Never treat onLoadEnd as hosted player readiness.
-                if (!isHostedTier) {
-                  setYoutubeLoaded(true);
-                  youtubeLoadedRef.current = true;
-                  setUiPhase('ready');
-                }
+                // Never treat HTML paint as playback success (hosted or embed).
+                // Hosted posts PLAYER_READY/PLAYING; embed probe posts the same.
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
@@ -712,12 +801,32 @@ export function HighlightVideoSheet({
                   return;
                 }
 
-                if (isYouTubePlayerReadySignal(data) || /reason:USER_PLAY:/i.test(data)) {
-                  if (isYouTubePlayerReadySignal(data) && handledPlayerReadyRef.current) return;
-                  if (isYouTubePlayerReadySignal(data)) handledPlayerReadyRef.current = true;
+                if (isYouTubePlayerReadySignal(data)) {
                   bridgeConnectedRef.current = true;
-                  setYoutubeLoaded(true);
-                  youtubeLoadedRef.current = true;
+                  // Init only — do not claim playback success or disable playback watchdog.
+                  dispatchYt({ type: 'PLAYER_READY' });
+                  setUiPhase('ready');
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYER_READY',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    messageKind: kind,
+                    bridgeConnected: true,
+                    youtubeLoaded: false,
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(
+                      hostedPlayerUrl || embedUrl || url,
+                    ),
+                    readyMs: Date.now() - sessionStartedAt.current,
+                    retryCount,
+                  });
+                  return;
+                }
+                if (/reason:USER_PLAY:/i.test(data)) {
+                  bridgeConnectedRef.current = true;
+                  dispatchYt({ type: 'USER_PLAY' });
                   setUiPhase('ready');
                   emitHighlightPlaybackDiagnostic({
                     sessionId: sessionId.current,
@@ -726,9 +835,9 @@ export function HighlightVideoSheet({
                     provider: 'youtube',
                     tier: youtubeTier,
                     sessionNonce,
-                    messageKind: kind,
+                    messageKind: 'USER_PLAY',
                     bridgeConnected: true,
-                    youtubeLoaded: true,
+                    youtubeLoaded: false,
                     sourceHost: sanitizePlaybackUrlForDiagnostics(
                       hostedPlayerUrl || embedUrl || url,
                     ),
@@ -737,15 +846,12 @@ export function HighlightVideoSheet({
                   return;
                 }
                 if (isYouTubePlayingSignal(data)) {
-                  if (handledPlayingRef.current) return;
-                  handledPlayingRef.current = true;
                   bridgeConnectedRef.current = true;
-                  setYoutubeLoaded(true);
-                  youtubeLoadedRef.current = true;
+                  dispatchYt({ type: 'PLAYING' });
                   setUiPhase('playing');
                   emitHighlightPlaybackDiagnostic({
                     sessionId: sessionId.current,
-                    stage: 'PLAYER_READY',
+                    stage: 'PLAYBACK_STARTED',
                     sourceType: 'youtube',
                     provider: 'youtube',
                     tier: youtubeTier,
@@ -756,7 +862,19 @@ export function HighlightVideoSheet({
                     sourceHost: sanitizePlaybackUrlForDiagnostics(
                       hostedPlayerUrl || embedUrl || url,
                     ),
-                    readyMs: Date.now() - sessionStartedAt.current,
+                    playbackStartMs: Date.now() - sessionStartedAt.current,
+                    retryCount,
+                  });
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYBACK_CONFIRMED',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    messageKind: 'PLAYING',
+                    youtubeLoaded: true,
+                    playbackStartMs: Date.now() - sessionStartedAt.current,
                     retryCount,
                   });
                   return;
@@ -765,6 +883,7 @@ export function HighlightVideoSheet({
                 if (parsed.isProgress || !parsed.reason) return;
                 if (!/^reason:/i.test(data.trim()) && videoId && !data.includes(videoId)) return;
                 bridgeConnectedRef.current = true;
+                dispatchYt({ type: 'FAIL' });
                 skipWithReason(parsed.reason, parsed.youtubeErrorCode);
               }}
               onHttpError={(event) => {
@@ -784,6 +903,19 @@ export function HighlightVideoSheet({
                 else skipWithReason('UNKNOWN_ERROR');
               }}
             />
+            {showPlayAffordance ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tapToPlayLabel}
+                onPress={handlePlayAffordancePress}
+                style={styles.playAffordance}
+              >
+                <View style={styles.playDisc}>
+                  <View style={styles.playTriangle} />
+                </View>
+                <Text style={styles.playAffordanceText}>{tapToPlayLabel}</Text>
+              </Pressable>
+            ) : null}
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
@@ -1197,6 +1329,39 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  playAffordance: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  playDisc: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playTriangle: {
+    width: 0,
+    height: 0,
+    marginLeft: 4,
+    borderStyle: 'solid',
+    borderTopWidth: 12,
+    borderBottomWidth: 12,
+    borderLeftWidth: 20,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#1a0b3a',
+  },
+  playAffordanceText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
   },
   error: {
