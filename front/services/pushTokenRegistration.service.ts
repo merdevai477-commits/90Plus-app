@@ -149,15 +149,16 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
     // Channel ids are versioned (…-v2). Android freezes importance after first
     // create — renaming forces a fresh HIGH/MAX channel so heads-up banners work
     // on Android 8–12 and 13+.
+    // Do not set `sound` on Android channels. Any string (including "default")
+    // is treated as a custom raw asset name and logs:
+    // "Custom sound 'default' not found in native app". Omitting the key uses
+    // the system default notification sound. Use `sound: null` only for silent.
     const common = {
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250] as number[],
         enableVibrate: true,
         showBadge: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        // Platform default ringtone. Empty string is treated as a custom asset
-        // name and throws "Custom sound '' not found" from expo-notifications.
-        sound: 'default',
     };
 
     await Notifications.setNotificationChannelAsync('default', {
@@ -216,8 +217,14 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
     const Notifications = loadNotifications();
     if (!Notifications || Platform.OS !== 'android') return;
     if (channelsReady) return;
-    await setupAndroidChannels(Notifications);
-    channelsReady = true;
+    try {
+        await setupAndroidChannels(Notifications);
+    } catch (err) {
+        // Mark ready anyway so a flaky native call cannot retry forever and ANR.
+        logger.warn('[Push] Android notification channel setup failed:', err);
+    } finally {
+        channelsReady = true;
+    }
 }
 
 /**

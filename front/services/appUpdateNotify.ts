@@ -32,12 +32,12 @@ function getNotificationsModule(): NotificationsModule | null {
 
 async function ensureChannel(Notifications: NotificationsModule): Promise<void> {
   if (Platform.OS !== 'android') return;
+  // Omit `sound` so Android uses the system default (strings are custom assets).
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: 'App updates',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250],
     enableVibrate: true,
-    sound: 'default',
   });
 }
 
