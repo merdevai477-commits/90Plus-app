@@ -46,6 +46,7 @@ import UserIdentity from '../identity/UserIdentity';
 import { TSF_CARD_ART, TSF_CARD_ART_BOX, TSF_LEAGUE_LOGO, TSF_PITCH_CARD_ART } from './assets';
 import { TsfNav, tsfNavBottom, type TsfTabKey } from './TsfNav';
 import { TsfIslandBack, TsfPointsHero } from './TsfPointsHero';
+import { resolveTsfCountdownTarget, TsfRoundCountdown } from './TsfRoundCountdown';
 import { TSF_THEME, type TsfColors } from './tsfTheme';
 
 const PITCH = require('../../assets/images/top-scorers-five/pitch.jpg');
@@ -87,11 +88,16 @@ function formatWhen(iso: string | null, language: string): string {
   });
 }
 
-function daysUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return null;
-  return Math.max(1, Math.ceil(ms / 86_400_000));
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT']);
+const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+const POSTPONED_STATUSES = new Set(['PST', 'TBD']);
+
+function fixturePhase(status: string | null | undefined): 'LIVE' | 'FT' | 'NS' | 'POST' {
+  const code = String(status ?? '').toUpperCase();
+  if (POSTPONED_STATUSES.has(code)) return 'POST';
+  if (FINISHED_STATUSES.has(code)) return 'FT';
+  if (LIVE_STATUSES.has(code)) return 'LIVE';
+  return 'NS';
 }
 
 /** 2-2-1 on the far goal: striker, two mids, two at the back. Percents of the pitch. */
@@ -270,23 +276,34 @@ export default function LeagueBoardScreen() {
     ({ item }) => {
       const lineup = lineups[item];
       const slots = lineup?.slots ?? emptyLineup(item);
+      const earliestLock =
+        slots.map((slot) => slot.lockedUntil).filter((value): value is string => !!value).sort()[0] ?? null;
+      const countdownAt = resolveTsfCountdownTarget({
+        lockedUntil: earliestLock,
+        endAt: lineup?.gameweek.endAt ?? null,
+        reopenAt: lineup?.gameweek.reopenAt ?? null,
+        leagueLocked: !!lineup?.gameweek.locked,
+      });
+      const tintCrest = isDark && (item === 'pl' || item === 'ligue1' || item === 'egypt');
       return (
         <ScrollView
           style={{ width }}
           contentContainerStyle={{ paddingBottom: tsfNavBottom(insets.bottom) + 16, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
         >
+          <TsfRoundCountdown
+            leagueName={leagueName(item)}
+            crest={CREST[item]}
+            tintCrest={tintCrest}
+            round={lineup?.gameweek.round ?? null}
+            targetAt={countdownAt}
+          />
           <View style={{ width, height: pitchBox.height || undefined, flex: pitchBox.height ? undefined : 1 }}>
             <PitchFormation
               slots={slots}
-              reopenAt={
-                slots.map((slot) => slot.lockedUntil).filter((value): value is string => !!value).sort()[0]
-                ?? (lineup?.gameweek.locked ? lineup.gameweek.endAt : null)
-              }
               box={pitchBox}
               fontSemi={fontSemi}
               fontMedium={fontMedium}
-              lockLabel={pickCopy.lockBanner}
               onHelp={() => setHelpOpen(true)}
               onOpen={openSlot}
               onRemove={removeSlot}
@@ -295,7 +312,7 @@ export default function LeagueBoardScreen() {
         </ScrollView>
       );
     },
-    [fontMedium, fontSemi, insets.bottom, lineups, openSlot, pickCopy.lockBanner, pitchBox, removeSlot, width],
+    [fontMedium, fontSemi, insets.bottom, isDark, leagueName, lineups, openSlot, pitchBox, removeSlot, width],
   );
 
   const filtered = useMemo(() => {
@@ -496,27 +513,21 @@ export default function LeagueBoardScreen() {
 
 function PitchFormation({
   slots,
-  reopenAt,
   box,
   fontSemi,
   fontMedium,
-  lockLabel,
   onHelp,
   onOpen,
   onRemove,
 }: {
   slots: TsfApiLineup['slots'];
-  reopenAt: string | null;
   box: { width: number; height: number };
   fontSemi: string | undefined;
   fontMedium: string | undefined;
-  lockLabel: string;
   onHelp: () => void;
   onOpen: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
   onRemove: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
 }) {
-  const days = daysUntil(reopenAt);
-
   return (
     <View style={styles.pitchStage}>
       <View style={styles.lockRow}>
@@ -528,14 +539,6 @@ function PitchFormation({
         >
           <Ionicons name="help" size={18} color="#6A2BD9" />
         </TouchableOpacity>
-        {days != null ? (
-          <View style={styles.lockPill}>
-            <Ionicons name="time" size={16} color="#FFFFFF" />
-            <Text style={[styles.lockPillText, { fontFamily: fontSemi }]} numberOfLines={1}>
-              {lockLabel.replace('{days}', String(days))}
-            </Text>
-          </View>
-        ) : null}
       </View>
       {box.width > 0
         ? slots.slice(0, 5).map((slot, index) => {
@@ -656,14 +659,17 @@ function LeagueMatches({
     (async () => {
       try {
         const upcoming = await topScorersFiveService.getUpcoming(competition, language);
-        let rows = upcoming.fixtures;
+        let rows: TsfApiFixture[] = upcoming.fixtures;
         if (isSignedIn) {
           const token = await getTokenRef.current();
           if (token) {
-            const mine = await topScorersFiveService.getMyFixtures(token, language, 'europe', competition);
+            const tournament = competition === 'egypt' ? 'egypt' : 'europe';
+            const mine = await topScorersFiveService.getMyFixtures(token, language, tournament, competition);
             const byId = new Map(rows.map((row) => [row.fixtureId, row]));
             for (const row of mine.fixtures) {
-              if (!byId.has(row.fixtureId)) byId.set(row.fixtureId, row);
+              const existing = byId.get(row.fixtureId);
+              // Prefer the richer status/score when merging my fixtures with the league list.
+              byId.set(row.fixtureId, existing ? mergeFixtureRow(existing, row) : row);
             }
             rows = [...byId.values()].sort((a, b) => a.kickoff.localeCompare(b.kickoff));
           }
@@ -690,21 +696,76 @@ function LeagueMatches({
           <Text style={{ color: colors.muted, fontFamily: fontMedium, textAlign: 'center' }}>{copy.matches.emptyTitle}</Text>
         </TouchableOpacity>
       ) : (
-        shown.map((fixture) => (
-          <View key={fixture.fixtureId} style={[styles.matchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.matchDate, { color: colors.purple, fontFamily: fontMedium }]}>
-              {new Date(fixture.kickoff).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en', {
-                day: 'numeric',
-                month: 'short',
-              })}
-            </Text>
-            <View style={styles.matchTeams}>
-              <TeamSide name={fixture.home.name} logo={fixture.home.logo} colors={colors} font={fontMedium} />
-              <Text style={{ color: colors.muted, fontFamily: fontSemi }}>-</Text>
-              <TeamSide name={fixture.away.name} logo={fixture.away.logo} colors={colors} font={fontMedium} />
+        shown.map((fixture) => {
+          const phase = fixturePhase(fixture.status);
+          const statusLabel =
+            phase === 'FT'
+              ? copy.pick.matchStatusFt
+              : phase === 'LIVE'
+                ? copy.pick.matchStatusLive
+                : phase === 'POST'
+                  ? copy.pick.matchStatusPostponed
+                  : copy.pick.matchStatusNs;
+          const hasScore =
+            (phase === 'FT' || phase === 'LIVE') &&
+            fixture.homeScore != null &&
+            fixture.awayScore != null;
+          const centerText = hasScore
+            ? `${fixture.homeScore} - ${fixture.awayScore}`
+            : phase === 'NS'
+              ? new Date(fixture.kickoff).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '-';
+          return (
+            <View key={fixture.fixtureId} style={[styles.matchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.matchMeta}>
+                <Text style={[styles.matchDate, { color: colors.purple, fontFamily: fontMedium }]}>
+                  {new Date(fixture.kickoff).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    {
+                      backgroundColor:
+                        phase === 'LIVE' ? '#DC2626' : phase === 'FT' ? colors.purple : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      {
+                        fontFamily: fontSemi,
+                        color: phase === 'NS' || phase === 'POST' ? colors.muted : '#FFFFFF',
+                      },
+                    ]}
+                  >
+                    {phase === 'LIVE' && fixture.elapsed != null ? `${statusLabel} ${fixture.elapsed}'` : statusLabel}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.matchTeams}>
+                <TeamSide name={fixture.home.name} logo={fixture.home.logo} colors={colors} font={fontMedium} />
+                <Text
+                  style={{
+                    color: hasScore ? colors.text : colors.muted,
+                    fontFamily: fontSemi,
+                    minWidth: 52,
+                    textAlign: 'center',
+                  }}
+                >
+                  {centerText}
+                </Text>
+                <TeamSide name={fixture.away.name} logo={fixture.away.logo} colors={colors} font={fontMedium} />
+              </View>
             </View>
-          </View>
-        ))
+          );
+        })
       )}
       {fixtures.length > 4 && !expanded ? (
         <TouchableOpacity onPress={() => setExpanded(true)} accessibilityRole="button">
@@ -713,6 +774,27 @@ function LeagueMatches({
       ) : null}
     </ScrollView>
   );
+}
+
+function mergeFixtureRow(a: TsfApiFixture, b: TsfApiFixture): TsfApiFixture {
+  const phaseA = fixturePhase(a.status);
+  const phaseB = fixturePhase(b.status);
+  const preferB =
+    (phaseB === 'FT' || phaseB === 'LIVE') && phaseA === 'NS'
+      ? true
+      : (phaseA === 'FT' || phaseA === 'LIVE') && phaseB === 'NS'
+        ? false
+        : false;
+  const primary = preferB ? b : a;
+  const secondary = preferB ? a : b;
+  return {
+    ...secondary,
+    ...primary,
+    homeScore: primary.homeScore ?? secondary.homeScore ?? null,
+    awayScore: primary.awayScore ?? secondary.awayScore ?? null,
+    elapsed: primary.elapsed ?? secondary.elapsed ?? null,
+    status: primary.status || secondary.status,
+  };
 }
 
 function LeagueRanking({
@@ -1215,17 +1297,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 18,
   },
-  lockPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#6A2BD9',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    maxWidth: '82%',
-  },
-  lockPillText: { color: '#FFFFFF', fontSize: 13 },
   infoOrb: {
     width: 36,
     height: 36,
@@ -1421,7 +1492,19 @@ const styles = StyleSheet.create({
   heading: { alignItems: 'center', gap: 6, marginBottom: 8 },
   headingCrest: { width: 48, height: 48 },
   matchRow: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 8 },
+  matchMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   matchDate: { fontSize: 12, textAlign: 'center' },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statusText: { fontSize: 11 },
   matchTeams: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   teamSide: { flex: 1, alignItems: 'center', gap: 4 },
   teamLogo: { width: 36, height: 36 },

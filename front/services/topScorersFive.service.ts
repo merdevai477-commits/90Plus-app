@@ -74,8 +74,12 @@ export interface TsfApiPlayer {
 export interface TsfApiGameweek {
   id: string;
   weekKey: string;
+  /** ISO week number for the Tuesday window — "الجولة N". */
+  round?: number;
   startAt: string;
   endAt: string;
+  /** One hour after `endAt` — when the formation reopens. */
+  reopenAt?: string;
   lockAt: string;
   status: 'OPEN' | 'LOCKED' | 'LIVE' | 'CALCULATING' | 'COMPLETED';
   locked: boolean;
@@ -133,6 +137,9 @@ export interface TsfApiFixture {
   fixtureId: number;
   kickoff: string;
   status: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  elapsed?: number | null;
   home: { id: number; name: string; logo: string | null };
   away: { id: number; name: string; logo: string | null };
 }

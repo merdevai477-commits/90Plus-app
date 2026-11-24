@@ -898,12 +898,19 @@ describe('gameweek window and lifecycle', () => {
     expect(isTsfGameweekOpen({ status: 'LOCKED', lockAt }, NOW)).toBe(false);
   });
 
-  it('keeps league picking open through LOCKED/LIVE until the window ends', () => {
+  it('keeps league picking open through LOCKED/LIVE until one hour after the window ends', () => {
     const endAt = new Date(NOW.getTime() + 86_400_000);
     expect(isTsfLeaguePickingOpen({ status: 'LOCKED', endAt }, NOW)).toBe(true);
     expect(isTsfLeaguePickingOpen({ status: 'LIVE', endAt }, NOW)).toBe(true);
     expect(isTsfLeaguePickingOpen({ status: 'CALCULATING', endAt }, NOW)).toBe(false);
-    expect(isTsfLeaguePickingOpen({ status: 'LIVE', endAt: NOW }, NOW)).toBe(false);
+    // Still open at exact endAt — the ±1h grace keeps picks available.
+    expect(isTsfLeaguePickingOpen({ status: 'LIVE', endAt: NOW }, NOW)).toBe(true);
+    expect(
+      isTsfLeaguePickingOpen(
+        { status: 'LIVE', endAt: new Date(NOW.getTime() - 3_600_000) },
+        NOW,
+      ),
+    ).toBe(false);
   });
 
   it('treats a fixture as pickable only before kickoff', () => {

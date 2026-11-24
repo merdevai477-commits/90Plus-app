@@ -29,6 +29,8 @@ import {
   tsfPickState,
   tsfPoolKey,
   tsfPortraitUrl,
+  tsfRoundNumber,
+  tsfRoundReopenAt,
   tsfSlotKeys,
   tsfUpcomingWindow,
   type TsfLeagueConfig,
@@ -169,8 +171,12 @@ export async function resolveTsfPickGameweek(
 export type TsfGameweekDto = {
   id: string;
   weekKey: string;
+  /** ISO week number for the Tuesday window — shown as "الجولة N". */
+  round: number;
   startAt: string;
   endAt: string;
+  /** One hour after `endAt` — when the formation reopens for the next window. */
+  reopenAt: string;
   lockAt: string;
   status: TopScorersFiveGameweek['status'];
   locked: boolean;
@@ -180,8 +186,10 @@ function gameweekDto(gameweek: TopScorersFiveGameweek, now: Date = new Date(), p
   return {
     id: gameweek.id,
     weekKey: gameweek.weekKey,
+    round: tsfRoundNumber(gameweek.weekKey),
     startAt: gameweek.startAt.toISOString(),
     endAt: gameweek.endAt.toISOString(),
+    reopenAt: tsfRoundReopenAt(gameweek.endAt).toISOString(),
     lockAt: gameweek.lockAt.toISOString(),
     status: gameweek.status,
     /** True when nobody left in this league can still be picked. */
@@ -1187,6 +1195,9 @@ export type TsfUpcomingFixtureDto = {
   fixtureId: number;
   kickoff: string;
   status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  elapsed: number | null;
   home: TsfTeamRef;
   away: TsfTeamRef;
 };
@@ -1195,6 +1206,9 @@ type RelevantFixture = {
   fixtureId: number;
   kickoffAt: Date;
   status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  elapsed: number | null;
   /** Stats stored (or the fixture voided) — it will not change any more. */
   processed: boolean;
   home: TsfTeamRef;
@@ -1206,7 +1220,30 @@ const FIXTURE_SELECT = {
   fixtureId: true, matchDate: true, status: true, leagueSeason: true,
   homeTeamId: true, homeTeamName: true, homeTeamLogo: true,
   awayTeamId: true, awayTeamName: true, awayTeamLogo: true,
+  homeScore: true, awayScore: true, elapsed: true,
 } as const;
+
+const LIVE_OR_FINISHED = new Set([
+  '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT', 'FT', 'AET', 'PEN',
+]);
+
+/** Prefer a live/finished cache status over a stale stored `NS`. */
+function preferFixtureStatus(
+  cached: string | null | undefined,
+  stored: string | null | undefined,
+  processed: boolean,
+): string {
+  const cache = String(cached ?? '').toUpperCase();
+  const store = String(stored ?? '').toUpperCase();
+  if (processed && store) return stored!;
+  if (LIVE_OR_FINISHED.has(cache) || isTsfFinishedStatus(cache) || isTsfVoidStatus(cache)) {
+    return cached!;
+  }
+  if (LIVE_OR_FINISHED.has(store) || isTsfFinishedStatus(store) || isTsfVoidStatus(store)) {
+    return stored!;
+  }
+  return cached || stored || 'NS';
+}
 
 const TEAM_NAMES_UPSTREAM_BUDGET_MS = 2_500;
 
@@ -1290,6 +1327,9 @@ async function tsfRelevantFixtures(
       fixtureId: row.fixtureId,
       kickoffAt: row.matchDate,
       status: row.status,
+      homeScore: row.homeScore,
+      awayScore: row.awayScore,
+      elapsed: row.elapsed,
       processed: false,
       home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
       away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
@@ -1302,7 +1342,10 @@ async function tsfRelevantFixtures(
     byId.set(row.fixtureId, {
       fixtureId: row.fixtureId,
       kickoffAt: row.kickoffAt,
-      status: processed ? row.status : (base?.status ?? row.status),
+      status: preferFixtureStatus(base?.status, row.status, processed),
+      homeScore: base?.homeScore ?? null,
+      awayScore: base?.awayScore ?? null,
+      elapsed: base?.elapsed ?? null,
       processed,
       home: base?.home ?? { id: row.homeTeamId, name: row.homeTeamName ?? '', logo: COMPETITOR_LOGO(row.homeTeamId) },
       away: base?.away ?? { id: row.awayTeamId, name: row.awayTeamName ?? '', logo: COMPETITOR_LOGO(row.awayTeamId) },
@@ -1318,8 +1361,9 @@ export type TsfLeagueFixtureDto = TsfUpcomingFixtureDto & {
 };
 
 /**
- * The league's fixtures kicking off in the next 7 days (now → now + 7 × 24h,
- * UTC instants), from the shared fixture cache.
+ * The league's fixtures around the current window: recent results (3 days back)
+ * through the next 7 days. Finished and live rows stay so the matches tab can
+ * show score + status instead of looking unplayed.
  */
 export async function listTsfUpcomingFixtures(
   leagueKey: string,
@@ -1327,12 +1371,13 @@ export async function listTsfUpcomingFixtures(
   now: Date = new Date(),
 ): Promise<{ leagueKey: string; from: string; to: string; fixtures: TsfLeagueFixtureDto[] }> {
   const cfg = requireLeague(leagueKey);
-  const { from, to } = tsfUpcomingWindow(now);
+  const { to } = tsfUpcomingWindow(now);
+  const from = new Date(now.getTime() - 3 * 86_400_000);
   const rows = await prisma.cachedFixture.findMany({
     where: {
       leagueId: cfg.competitionLeagueId,
       matchDate: { gte: from, lt: to },
-      status: { notIn: ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'] },
+      status: { notIn: ['CANC', 'ABD', 'AWD', 'WO'] },
     },
     orderBy: { matchDate: 'asc' },
     select: { ...FIXTURE_SELECT, leagueName: true },
@@ -1341,6 +1386,9 @@ export async function listTsfUpcomingFixtures(
     fixtureId: row.fixtureId,
     kickoff: row.matchDate.toISOString(),
     status: row.status,
+    homeScore: row.homeScore,
+    awayScore: row.awayScore,
+    elapsed: row.elapsed,
     home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
     away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
     league: { key: cfg.key, id: cfg.scores365CompetitionId, name: row.leagueName },
@@ -1478,6 +1526,9 @@ export async function getTsfMyFixtures(
         leagueKey: tsfScopeKey(pick.cfg),
         kickoff: fixture.kickoffAt.toISOString(),
         status: fixture.status,
+        homeScore: fixture.homeScore,
+        awayScore: fixture.awayScore,
+        elapsed: fixture.elapsed,
         season: fixture.season,
         home: fixture.home,
         away: fixture.away,
@@ -1533,22 +1584,21 @@ export async function listTsfPlayerFixtures(
   const rows = await prisma.cachedFixture.findMany({
     where: {
       leagueId: cfg.competitionLeagueId,
-      matchDate: { gte: new Date(Date.now() - 3 * 3_600_000) },
-      status: { notIn: ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'] },
+      matchDate: { gte: new Date(Date.now() - 3 * 86_400_000) },
+      status: { notIn: ['CANC', 'ABD', 'AWD', 'WO'] },
       OR: [{ homeTeamId: player.teamId }, { awayTeamId: player.teamId }],
     },
     orderBy: { matchDate: 'asc' },
     take: limit,
-    select: {
-      fixtureId: true, matchDate: true, status: true,
-      homeTeamId: true, homeTeamName: true, homeTeamLogo: true,
-      awayTeamId: true, awayTeamName: true, awayTeamLogo: true,
-    },
+    select: FIXTURE_SELECT,
   });
   const fixtures = rows.map((row) => ({
     fixtureId: row.fixtureId,
     kickoff: row.matchDate.toISOString(),
     status: row.status,
+    homeScore: row.homeScore,
+    awayScore: row.awayScore,
+    elapsed: row.elapsed,
     home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? null },
     away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? null },
   }));

@@ -358,6 +358,8 @@ export function tsfGameAthleteIds(game: TsfScorableGame): Set<number> {
 // ─── Gameweek window + lifecycle ─────────────────────────────────────────────
 
 const DAY_MS = 86_400_000;
+/** ±1h around the Tuesday close so users can still pick before the next window. */
+export const TSF_ROUND_GRACE_MS = 60 * 60 * 1000;
 /** Windows start Tuesday 00:00 UTC so a Fri–Mon matchday never straddles two. */
 const WINDOW_START_UTC_DAY = 2;
 
@@ -369,6 +371,46 @@ export function tsfGameweekWindow(now: Date = new Date()): TsfGameweekWindow {
   const startAt = new Date(midnight - offset * DAY_MS);
   const endAt = new Date(startAt.getTime() + 7 * DAY_MS);
   return { weekKey: startAt.toISOString().slice(0, 10), startAt, endAt };
+}
+
+/** Formation reopens one hour after the competition's Tuesday window ends. */
+export function tsfRoundReopenAt(endAt: Date): Date {
+  return new Date(endAt.getTime() + TSF_ROUND_GRACE_MS);
+}
+
+/** ISO week number for the Tuesday `weekKey` — the "الجولة N" badge. */
+export function tsfRoundNumber(weekKey: string): number {
+  const date = new Date(`${weekKey}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return 0;
+  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil((((target.getTime() - yearStart.getTime()) / DAY_MS) + 1) / 7);
+}
+
+/**
+ * What the per-league countdown ticks toward.
+ * Slot locks win; otherwise the card appears from one hour before the window
+ * ends through one hour after (`endAt + grace`).
+ */
+export function tsfCountdownTarget(input: {
+  now: Date;
+  endAt: Date;
+  lockedUntil?: Date | null;
+  leagueLocked?: boolean;
+}): Date | null {
+  const lock = input.lockedUntil ?? null;
+  if (lock != null && lock.getTime() > input.now.getTime()) return lock;
+
+  const reopen = tsfRoundReopenAt(input.endAt);
+  if (reopen.getTime() <= input.now.getTime()) return null;
+
+  if (input.leagueLocked) return reopen;
+
+  const showFrom = new Date(input.endAt.getTime() - TSF_ROUND_GRACE_MS);
+  if (input.now.getTime() < showFrom.getTime()) return null;
+  return reopen;
 }
 
 const STATUS_ORDER: TopScorersFiveGameweekStatus[] = [
@@ -429,14 +471,14 @@ export function isTsfFixtureKickedOff(
 }
 
 /**
- * League-wide picking stays available through LOCKED/LIVE until the window ends
- * — individual players drop out once their own match has started.
+ * League-wide picking stays available through LOCKED/LIVE until one hour after
+ * the window ends — individual players drop out once their own match has started.
  */
 export function isTsfLeaguePickingOpen(
   gameweek: { endAt: Date; status: TopScorersFiveGameweekStatus },
   now: Date = new Date(),
 ): boolean {
-  if (now >= gameweek.endAt) return false;
+  if (now >= tsfRoundReopenAt(gameweek.endAt)) return false;
   return gameweek.status !== 'CALCULATING' && gameweek.status !== 'COMPLETED';
 }
 
