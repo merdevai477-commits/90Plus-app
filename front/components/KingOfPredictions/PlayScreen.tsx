@@ -49,10 +49,10 @@ import {
   peekKingMatches,
   type KingRouteMode,
 } from './shared';
+import { KingNav, KING_NAV_HEIGHT, kingNavBottom, type KingTabKey } from './KingNav';
 import { KingToast, type KingToastState } from './KingToast';
 
 const SIDE = 20;
-const NAV_HEIGHT = 51;
 const DAILY_LIMIT = 10;
 /** Finished football scores above this are almost never real — drop bad/non-soccer rows. */
 const MAX_FOOTBALL_GOALS = 20;
@@ -127,8 +127,8 @@ export function KingPlayScreen({
   const [sheetPick, setSheetPick] = useState<CardPick | null>(null);
   const [homeText, setHomeText] = useState('');
   const [awayText, setAwayText] = useState('');
-  const navBottom = Math.max(insets.bottom, 12) + 8;
-  const listBottom = navBottom + NAV_HEIGHT + 24;
+  const navBottom = kingNavBottom(insets.bottom);
+  const listBottom = navBottom + KING_NAV_HEIGHT + 24;
 
   const loadGenRef = useRef(0);
   const hasRows = useRef(openingMatches.length > 0);
@@ -374,7 +374,11 @@ export function KingPlayScreen({
   };
 
   const openBoard = () => {
-    router.push({ pathname: '/king-of-predictions/leaderboard', params: { mode } } as never);
+    router.replace({ pathname: '/king-of-predictions/leaderboard', params: { mode } } as never);
+  };
+
+  const onNavChange = (tab: KingTabKey) => {
+    if (tab === 'ranking') openBoard();
   };
 
   const goBack = () => {
@@ -527,25 +531,7 @@ export function KingPlayScreen({
         )}
       </ScrollView>
 
-      <View pointerEvents="box-none" style={[styles.footer, { bottom: navBottom }]}>
-        <View
-          style={[
-            styles.nav,
-            {
-              backgroundColor: theme.navBg,
-              borderColor: theme.navBorder,
-              shadowColor: theme.cardShadow,
-            },
-          ]}
-        >
-          <View style={[styles.navItem, { backgroundColor: theme.navActiveBg }]}>
-            <Text style={[styles.navText, { color: theme.navActiveText, fontFamily: fontSemi }]}>{copy.tabPredict}</Text>
-          </View>
-          <Pressable onPress={openBoard} style={styles.navItem}>
-            <Text style={[styles.navText, { color: theme.navIdleText, fontFamily: fontSemi }]}>{copy.tabRanking}</Text>
-          </Pressable>
-        </View>
-      </View>
+      <KingNav activeTab="play" onChange={onNavChange} />
 
       <Modal visible={sheetMatch != null} transparent animationType="fade" onRequestClose={closeSheet}>
         <KeyboardAvoidingView
@@ -823,26 +809,6 @@ const styles = StyleSheet.create({
   center: { marginTop: 40, alignItems: 'center' },
   centerText: { fontSize: 15, textAlign: 'center' },
   retry: { marginTop: 8, fontSize: 15 },
-  footer: {
-    position: 'absolute',
-    left: SIDE,
-    right: SIDE,
-    alignItems: 'center',
-  },
-  nav: {
-    width: 192,
-    height: NAV_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 6,
-    flexDirection: 'row',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  navItem: { flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  navText: { fontSize: 14 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center' },
   sheet: {
     marginHorizontal: 16,

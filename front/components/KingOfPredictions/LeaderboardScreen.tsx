@@ -30,11 +30,11 @@ import { KingPlayHeader } from './KingPlayHeader';
 import { KingPodium } from './KingPodium';
 import { useKingPicksStore } from './kingPicksStore';
 import { getKingPlayTheme } from './playTheme';
+import { KingNav, KING_NAV_HEIGHT, kingNavBottom, type KingTabKey } from './KingNav';
 import { parseKingMode, toApiMode } from './shared';
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 const SIDE = 20;
-const NAV_HEIGHT = 51;
 
 export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | string[] | undefined }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
@@ -117,8 +117,12 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
     router.replace({ pathname: '/king-of-predictions', params: { mode } } as never);
   };
 
-  const navBottom = Math.max(insets.bottom, 12) + 8;
-  const listBottom = navBottom + NAV_HEIGHT + (meEntry ? 78 : 16);
+  const onNavChange = (tab: KingTabKey) => {
+    if (tab === 'play') openPlay();
+  };
+
+  const navBottom = kingNavBottom(insets.bottom);
+  const listBottom = navBottom + KING_NAV_HEIGHT + (meEntry ? 78 : 16);
 
   const fonts = { bold: fontBold, semi: fontSemi, medium: fontMedium, regular: fontRegular };
 
@@ -200,7 +204,7 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
       )}
 
       {meEntry ? (
-        <View pointerEvents="box-none" style={[styles.meWrap, { bottom: navBottom + NAV_HEIGHT + 10 }]}>
+        <View pointerEvents="box-none" style={[styles.meWrap, { bottom: navBottom + KING_NAV_HEIGHT + 10 }]}>
           <RankingRow
             entry={meEntry}
             theme={theme}
@@ -212,29 +216,7 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
         </View>
       ) : null}
 
-      <View pointerEvents="box-none" style={[styles.footer, { bottom: navBottom }]}>
-        <View
-          style={[
-            styles.nav,
-            {
-              backgroundColor: theme.navBg,
-              borderColor: theme.navBorder,
-              shadowColor: theme.cardShadow,
-            },
-          ]}
-        >
-          <View style={[styles.navItem, { backgroundColor: theme.navActiveBg }]}>
-            <Text style={[styles.navText, { color: theme.navActiveText, fontFamily: fontSemi }]}>
-              {copy.tabRanking}
-            </Text>
-          </View>
-          <Pressable onPress={openPlay} style={styles.navItem}>
-            <Text style={[styles.navText, { color: theme.navIdleText, fontFamily: fontSemi }]}>
-              {copy.tabPredict}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+      <KingNav activeTab="ranking" onChange={onNavChange} />
     </View>
   );
 }
@@ -446,19 +428,4 @@ const styles = StyleSheet.create({
   },
   rankText: { fontSize: 11, textAlign: 'center' },
   meWrap: { position: 'absolute', left: SIDE, right: SIDE },
-  footer: { position: 'absolute', left: SIDE, right: SIDE, alignItems: 'center' },
-  nav: {
-    width: 192,
-    height: NAV_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 6,
-    flexDirection: 'row',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  navItem: { flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  navText: { fontSize: 14 },
 });
