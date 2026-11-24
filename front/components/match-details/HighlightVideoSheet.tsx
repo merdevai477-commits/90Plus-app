@@ -230,6 +230,13 @@ export function HighlightVideoSheet({
   const [retryCount, setRetryCount] = useState(0);
   const [youtubeTier, setYoutubeTier] = useState<YoutubeSurfaceTier>('hosted');
   const [ytSession, setYtSession] = useState(createInitialYoutubePlaybackSession);
+  /**
+   * Playback confirmed (PLAYING only) — NOT PLAYER_READY.
+   * Kept as an explicit binding so Fast Refresh / Hermes never hit
+   * "Property 'youtubeLoaded' doesn't exist" after the state rename,
+   * and diagnostics keep the historical field name.
+   */
+  const youtubeLoaded = ytSession.playing;
 
   const skippedId = useRef('');
   const attempted = useRef<string[]>([]);
@@ -237,6 +244,7 @@ export function HighlightVideoSheet({
   const lastYoutubeErrorCode = useRef<number | null>(null);
   const lastBridgeMessageKind = useRef<string | null>(null);
   const bridgeConnectedRef = useRef(false);
+  const youtubeLoadedRef = useRef(false);
   const youtubeWebViewRef = useRef<WebView>(null);
   const sessionId = useRef(createHighlightPlaybackSessionId());
   const sessionStartedAt = useRef(Date.now());
@@ -247,6 +255,10 @@ export function HighlightVideoSheet({
   const dispatchYt = useCallback((event: YoutubePlaybackSessionEvent) => {
     setYtSession((prev) => reduceYoutubePlaybackSession(prev, event));
   }, []);
+
+  useEffect(() => {
+    youtubeLoadedRef.current = youtubeLoaded;
+  }, [youtubeLoaded]);
 
   if (seenKey !== openKey) {
     resetSessionRefs({ skippedId, attempted, failureReasons });
@@ -756,7 +768,7 @@ export function HighlightVideoSheet({
                   tier: youtubeTier,
                   sessionNonce,
                   playerStatus: 'load_end',
-                  youtubeLoaded: ytSession.playerReady || ytSession.playing,
+                  youtubeLoaded: youtubeLoadedRef.current,
                   sourceHost: sanitizePlaybackUrlForDiagnostics(
                     hostedPlayerUrl || embedUrl || url,
                   ),
@@ -764,6 +776,7 @@ export function HighlightVideoSheet({
                 });
                 // Never treat HTML paint as playback success (hosted or embed).
                 // Hosted posts PLAYER_READY/PLAYING; embed probe posts the same.
+                void youtubeLoaded;
               }}
               onMessage={(event) => {
                 const data = event.nativeEvent.data || '';
@@ -865,6 +878,7 @@ export function HighlightVideoSheet({
                     playbackStartMs: Date.now() - sessionStartedAt.current,
                     retryCount,
                   });
+                  youtubeLoadedRef.current = true;
                   emitHighlightPlaybackDiagnostic({
                     sessionId: sessionId.current,
                     stage: 'PLAYBACK_CONFIRMED',
