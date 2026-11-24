@@ -9,6 +9,7 @@ import {
   parseYouTubeProbeMessage,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
+  shouldEscalateHostedToEmbed,
   shouldOfferOpenInYouTube,
   youtubeBridgeMessageKind,
 } from '../highlightPlaybackErrors';
@@ -56,6 +57,24 @@ describe('highlightPlaybackErrors', () => {
         'EMBED_UNAVAILABLE',
       );
       expect(classifyYouTubeProbeSignal('onError {"info": 150}')).toBe('EMBED_UNAVAILABLE');
+    });
+
+    it('escalates hosted→embed for 153 / timeouts, never for hard embed blocks 101/150', () => {
+      expect(
+        shouldEscalateHostedToEmbed({ reason: 'EMBED_UNAVAILABLE', youtubeErrorCode: 153 }),
+      ).toBe(true);
+      expect(
+        shouldEscalateHostedToEmbed({ reason: 'EMBED_UNAVAILABLE', youtubeErrorCode: 150 }),
+      ).toBe(false);
+      expect(
+        shouldEscalateHostedToEmbed({ reason: 'EMBED_UNAVAILABLE', youtubeErrorCode: 101 }),
+      ).toBe(false);
+      expect(
+        shouldEscalateHostedToEmbed({ reason: 'PLAYBACK_TIMEOUT', youtubeErrorCode: null }),
+      ).toBe(true);
+      expect(
+        shouldEscalateHostedToEmbed({ reason: 'EMBED_UNAVAILABLE', youtubeErrorCode: null }),
+      ).toBe(false);
     });
 
     it('maps YouTube IFrame error codes including 5 and 153', () => {

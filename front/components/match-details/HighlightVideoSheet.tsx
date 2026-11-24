@@ -24,9 +24,11 @@ import { useTranslation } from '../../src/i18n';
 import {
   isYouTubePlayerReadySignal,
   isYouTubePlayingSignal,
+  isYouTubeTimeAdvancingSignal,
   parseYouTubeProbeMessage,
   pickFinalPlaybackReason,
   playbackErrorMessageKey,
+  shouldEscalateHostedToEmbed,
   shouldOfferOpenInYouTube,
   type PlaybackFailureReason,
 } from '../../utils/highlightPlaybackErrors';
@@ -101,13 +103,21 @@ type Props = {
 };
 
 /**
- * Secondary DOM probe for YouTube error banners inside the iframe wrapper.
- * Must include video id so RN does not drop the message (location is 90plus.pro).
+ * Secondary DOM probe for the direct youtube.com/embed WebView.
+ * Must include video id so RN does not drop the message.
+ *
+ * CRITICAL: never treat "#movie_player exists without .ytp-error" as PLAYING.
+ * That heuristic fires as soon as chrome mounts and caused black-screen
+ * "PLAYING" with zero frames. PLAYING requires an HTML5 video that is
+ * actually advancing currentTime.
  */
 const PLAYBACK_PROBE = `
 (function () {
+  var reportedReady = false;
   var reportedPlaying = false;
   var reportedFail = false;
+  var reportedTime = false;
+  var lastTime = -1;
   function send(reason) {
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage('reason:' + reason + ':' + (window.__HL_VID || '') + ':' + location.href);
@@ -116,30 +126,45 @@ const PLAYBACK_PROBE = `
   function pageText(doc) {
     try { return (doc && doc.body && doc.body.innerText) || ''; } catch (e) { return ''; }
   }
-  function hasPlayableVideo() {
+  function mainVideo() {
     try {
-      var video = document.querySelector('video.html5-main-video, #movie_player video, video');
-      if (video && video.readyState >= 2 && !video.error) return true;
-      var mp = document.querySelector('#movie_player');
-      if (mp && mp.classList && (mp.classList.contains('playing-mode') || mp.classList.contains('paused-mode'))) return true;
-      if (mp && !document.querySelector('.ytp-error')) return true;
-    } catch (e) {}
-    return false;
+      return document.querySelector('video.html5-main-video, #movie_player video, video');
+    } catch (e) { return null; }
   }
   function check() {
-    if (!reportedPlaying && hasPlayableVideo()) {
-      reportedPlaying = true;
+    if (reportedFail) return;
+    var video = mainVideo();
+    var mp = null;
+    try { mp = document.querySelector('#movie_player'); } catch (e1) {}
+
+    // Player chrome mounted ≠ playback. Ready only.
+    if (!reportedReady && (mp || (video && video.readyState >= 1))) {
+      reportedReady = true;
       send('PLAYER_READY');
-      send('PLAYING');
-      return;
     }
-    if (reportedFail || reportedPlaying) return;
+
+    // Visible-progress proxy: currentTime must advance while not paused.
+    if (video && !video.error && video.readyState >= 2) {
+      var t = 0;
+      try { t = Number(video.currentTime) || 0; } catch (e2) { t = 0; }
+      if (!reportedTime && t > 0.2 && lastTime >= 0 && t > lastTime + 0.05) {
+        reportedTime = true;
+        send('TIME_ADVANCING');
+      }
+      if (!reportedPlaying && !video.paused && t > 0.25) {
+        reportedPlaying = true;
+        send('PLAYING');
+      }
+      lastTime = t;
+    }
+
+    if (reportedPlaying) return;
     var text = pageText(document);
     var err = '';
     try {
       var node = document.querySelector('.ytp-error, .ytp-error-content, .ytp-error-content-wrap-subreason');
       err = node ? (node.innerText || '') : '';
-    } catch (e) {}
+    } catch (e3) {}
     var blob = text + ' ' + err;
     if (/playback on other websites has been disabled|video player configuration error|error\\s*153/i.test(blob)) {
       reportedFail = true;
@@ -164,10 +189,15 @@ const PLAYBACK_PROBE = `
       var code = info[1];
       reportedFail = true;
       if (code === '100') send('SOURCE_NOT_FOUND');
+      else if (code === '101' || code === '150') send('YT_ERROR:' + code);
       else send('EMBED_UNAVAILABLE');
       return;
     }
-    if (/onError/.test(raw) && /150|153|101/.test(raw)) {
+    if (/onError/.test(raw) && /\\b(150|101)\\b/.test(raw)) {
+      reportedFail = true;
+      var m = raw.match(/\\b(150|101)\\b/);
+      send('YT_ERROR:' + (m ? m[1] : '150'));
+    } else if (/onError/.test(raw) && /153/.test(raw)) {
       reportedFail = true;
       send('EMBED_UNAVAILABLE');
     } else if (/onError/.test(raw) && /100/.test(raw)) {
@@ -179,6 +209,7 @@ const PLAYBACK_PROBE = `
   setTimeout(check, 1600);
   setTimeout(check, 3500);
   setTimeout(check, 6000);
+  setInterval(check, 1000);
 })();
 true;
 `;
@@ -253,6 +284,7 @@ export function HighlightVideoSheet({
   const youtubeWebViewRef = useRef<WebView>(null);
   /** Temporary on-screen / logcat sequence for black-screen investigation. */
   const [bridgeEventLog, setBridgeEventLog] = useState<string[]>([]);
+  const [timeAdvancing, setTimeAdvancing] = useState(false);
   const pushBridgeEvent = useCallback((kind: string) => {
     const stamp = `${Date.now() % 100000}:${kind}`;
     lastBridgeMessageKind.current = kind;
@@ -295,6 +327,7 @@ export function HighlightVideoSheet({
     setYtSession(createInitialYoutubePlaybackSession());
     setYoutubeTier('hosted');
     setBridgeEventLog(visible ? [`${Date.now() % 100000}:SESSION_OPEN`] : []);
+    setTimeAdvancing(false);
     setUiPhase(visible ? 'initializing' : 'idle');
   }
 
@@ -408,14 +441,11 @@ export function HighlightVideoSheet({
         return;
       }
 
-      // Hosted IFrame failed → try direct embed URI + app Referer (may fix Error 153).
+      // Hosted → direct embed only when it might help (esp. Error 153). Never for 101/150.
       if (
         embedUrl &&
         youtubeTier === 'hosted' &&
-        (reason === 'EMBED_UNAVAILABLE' ||
-          reason === 'PLAYBACK_TIMEOUT' ||
-          reason === 'PLAYER_INITIALIZATION_FAILED' ||
-          reason === 'NETWORK_ERROR')
+        shouldEscalateHostedToEmbed({ reason, youtubeErrorCode: code ?? lastYoutubeErrorCode.current })
       ) {
         failureReasons.current.push(reason);
         emitHighlightPlaybackDiagnostic({
@@ -728,6 +758,7 @@ export function HighlightVideoSheet({
     `ready=${ytSession.playerReady ? 1 : 0} playing=${ytSession.playing ? 1 : 0} failed=${failed ? 1 : 0}`,
     `loadChrome=${showLoadingChrome ? 1 : 0} playAff=${showPlayAffordance ? 1 : 0}`,
     `ytLoaded=${youtubeLoaded ? 1 : 0} tier=${youtubeTier}`,
+    `timeAdv=${timeAdvancing ? 1 : 0} (≠ visible frame)`,
     `affStyle=z2 fill opacity1 disc=72`,
     `bridge=${bridgeConnectedRef.current ? 1 : 0} last=${lastBridgeMessageKind.current ?? '-'}`,
     ...bridgeEventLog.slice(-8),
@@ -852,6 +883,26 @@ export function HighlightVideoSheet({
                   return;
                 }
 
+                if (isYouTubeTimeAdvancingSignal(data)) {
+                  bridgeConnectedRef.current = true;
+                  setTimeAdvancing(true);
+                  emitHighlightPlaybackDiagnostic({
+                    sessionId: sessionId.current,
+                    stage: 'PLAYBACK_STARTED_OBSERVED',
+                    sourceType: 'youtube',
+                    provider: 'youtube',
+                    tier: youtubeTier,
+                    sessionNonce,
+                    messageKind: 'TIME_ADVANCING',
+                    bridgeConnected: true,
+                    youtubeLoaded: youtubeLoadedRef.current,
+                    sourceHost: sanitizePlaybackUrlForDiagnostics(
+                      (isHostedTier ? hostedPlayerUrl : null) || embedUrl || url,
+                    ),
+                    retryCount,
+                  });
+                  return;
+                }
                 if (isYouTubePlayerReadySignal(data)) {
                   bridgeConnectedRef.current = true;
                   // Init only — do not claim playback success or disable playback watchdog.
@@ -868,7 +919,7 @@ export function HighlightVideoSheet({
                     bridgeConnected: true,
                     youtubeLoaded: false,
                     sourceHost: sanitizePlaybackUrlForDiagnostics(
-                      hostedPlayerUrl || embedUrl || url,
+                      (isHostedTier ? hostedPlayerUrl : null) || embedUrl || url,
                     ),
                     readyMs: Date.now() - sessionStartedAt.current,
                     retryCount,

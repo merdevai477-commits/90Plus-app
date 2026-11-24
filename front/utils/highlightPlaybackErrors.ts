@@ -71,6 +71,11 @@ export function isYouTubePlayingSignal(raw: string): boolean {
   return /^reason:PLAYING:/i.test(raw.trim());
 }
 
+/** HTML5 video.currentTime advanced — stronger than API PLAYING for "a frame can paint". */
+export function isYouTubeTimeAdvancingSignal(raw: string): boolean {
+  return /^reason:TIME_ADVANCING:/i.test(raw.trim());
+}
+
 /** Bridge/page lifecycle probes — must never clear the play watchdog or map to failure. */
 export function isYouTubeBridgeDiagnosticSignal(raw: string): boolean {
   return /^reason:(BRIDGE_HELLO|PAGE_SCRIPT_START|PAGE_LOADED):/i.test(raw.trim());
@@ -102,6 +107,26 @@ export function classifyYouTubeErrorCode(code: number): PlaybackFailureReason {
   return 'UNKNOWN_ERROR';
 }
 
+/**
+ * Hosted → direct youtube.com/embed escalate.
+ * Error 153 is often a Referer / player-config issue that a direct embed + app
+ * Referer can fix. Errors 101/150 mean the uploader disabled embedding — retrying
+ * embed is wasted work and previously let a DOM probe falsely claim PLAYING.
+ */
+export function shouldEscalateHostedToEmbed(options: {
+  reason: PlaybackFailureReason;
+  youtubeErrorCode?: number | null;
+}): boolean {
+  const code = options.youtubeErrorCode;
+  if (code === 101 || code === 150) return false;
+  if (code === 153) return true;
+  return (
+    options.reason === 'PLAYBACK_TIMEOUT' ||
+    options.reason === 'PLAYER_INITIALIZATION_FAILED' ||
+    options.reason === 'NETWORK_ERROR'
+  );
+}
+
 export type YouTubeProbeParseResult = {
   reason: PlaybackFailureReason | null;
   /** Raw numeric YouTube onError code when known (5, 100, 101, 150, 153, …). */
@@ -120,6 +145,7 @@ export function parseYouTubeProbeMessage(raw: string): YouTubeProbeParseResult {
   if (
     isYouTubePlaybackProgressSignal(text) ||
     isYouTubeBridgeDiagnosticSignal(text) ||
+    isYouTubeTimeAdvancingSignal(text) ||
     /^reason:USER_PLAY:/i.test(text)
   ) {
     return { reason: null, youtubeErrorCode: null, isProgress: true };
