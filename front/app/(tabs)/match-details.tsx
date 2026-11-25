@@ -11,6 +11,7 @@ import {
   StatusBar,
   RefreshControl,
   useWindowDimensions,
+  BackHandler,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -157,6 +158,14 @@ interface MatchDetailsParams {
   fixtureId: string | string[];
 }
 
+type MatchDetailsTab = 'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'chats' | 'info';
+
+/** In-tab history for H2H / last-5 taps (same route can't stack in Tabs). */
+type RelatedMatchHistoryEntry = {
+  fixtureId: number;
+  returnTab: MatchDetailsTab;
+};
+
 /**
  * Rebuild the raw API-Football shapes the live store expects from a locally
  * archived (finished) match. Lets us ingest an archived match into the live
@@ -272,7 +281,17 @@ const MatchDetailsScreen = () => {
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'chats' | 'info'>('events');
+  const [activeTab, setActiveTab] = useState<MatchDetailsTab>('events');
+  /** Popped on back so Form/H2H → past match → back returns to that Form tab. */
+  const relatedMatchStackRef = useRef<RelatedMatchHistoryEntry[]>([]);
+  /** Fixture id we expect next from our own related/back navigation (not an external open). */
+  const pendingRelatedFixtureIdRef = useRef<number | null>(null);
+  /** Tab to restore after fixtureId changes from related-match back. */
+  const pendingReturnTabRef = useRef<MatchDetailsTab | null>(null);
+  /** Last fixtureId this screen applied history/tab rules for (avoids Strict Mode wiping the stack). */
+  const lastHistoryFixtureIdRef = useRef<number | null>(null);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
@@ -360,8 +379,33 @@ const MatchDetailsScreen = () => {
   }, [activeTab, fixtureId]);
 
   // Every match opens on the events tab: labeled "Highlights" pre-kickoff, "Events" when live/finished.
+  // Related-match back restores the Form/H2H tab the user came from.
   useEffect(() => {
     if (!fixtureId) return;
+
+    const isExpectedRelated = pendingRelatedFixtureIdRef.current === fixtureId;
+    const restoreTab = pendingReturnTabRef.current;
+
+    if (isExpectedRelated) {
+      pendingRelatedFixtureIdRef.current = null;
+      pendingReturnTabRef.current = null;
+      lastHistoryFixtureIdRef.current = fixtureId;
+      const nextTab: MatchDetailsTab = restoreTab ?? 'events';
+      setActiveTab(nextTab);
+      detailsTabPrev.current = nextTab;
+      return;
+    }
+
+    // Same fixture re-fire (React Strict Mode) — keep H2H stack + current tab.
+    if (lastHistoryFixtureIdRef.current === fixtureId) {
+      return;
+    }
+
+    // Opened from matches / push / deeplink — drop in-tab H2H history.
+    lastHistoryFixtureIdRef.current = fixtureId;
+    relatedMatchStackRef.current = [];
+    pendingRelatedFixtureIdRef.current = null;
+    pendingReturnTabRef.current = null;
     setActiveTab('events');
     detailsTabPrev.current = 'events';
   }, [fixtureId]);
@@ -588,14 +632,31 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, getToken]);
 
-  /** Pop the details screen; never push Matches (that remounts the list as if opened from outside). */
+  /** Pop related H2H/last-5 match first, then the details screen. Never push Matches. */
   const handleMatchBack = useCallback(() => {
+    const prev = relatedMatchStackRef.current.pop();
+    if (prev && prev.fixtureId > 0) {
+      pendingRelatedFixtureIdRef.current = prev.fixtureId;
+      pendingReturnTabRef.current = prev.returnTab;
+      router.setParams({ fixtureId: String(prev.fixtureId) });
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
       return;
     }
     router.replace('/(tabs)/matches' as never);
   }, [router]);
+
+  // Hardware back must pop related matches one step (tabs layout otherwise jumps to Matches).
+  useEffect(() => {
+    if (!isFocused) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleMatchBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isFocused, handleMatchBack]);
 
   const handleToggleMatchNotifications = useCallback(async () => {
     if (!fixtureId || matchSubLoading) return;
@@ -1607,10 +1668,16 @@ const MatchDetailsScreen = () => {
         return;
       }
       if (String(relatedFixtureId) === String(fixtureId)) return;
-      router.push({
-        pathname: '/(tabs)/match-details',
-        params: { fixtureId: String(relatedFixtureId) },
-      });
+      // Tabs reuse one match-details screen — keep a local stack so back returns here.
+      if (fixtureId > 0) {
+        relatedMatchStackRef.current.push({
+          fixtureId,
+          returnTab: activeTabRef.current,
+        });
+      }
+      pendingRelatedFixtureIdRef.current = relatedFixtureId;
+      pendingReturnTabRef.current = null;
+      router.setParams({ fixtureId: String(relatedFixtureId) });
     },
     [router, fixtureId],
   );
