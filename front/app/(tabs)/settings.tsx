@@ -70,7 +70,7 @@ import {
   fetchNotificationPreferences,
   NOTIFICATION_PREFS_QUERY_KEY,
 } from '../../components/notifications/notificationPreferencesApi';
-import { SeedXpControlPanel } from '../../components/Settings/SeedXpControlPanel';
+import { SeedXpControlPanel } from '@/components/Settings/SeedXpControlPanel';
 
 const CACHE_SIZE_SCAN_LIMIT = 80;
 
