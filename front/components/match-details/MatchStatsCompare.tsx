@@ -474,6 +474,107 @@ function BigNumberPair({
   );
 }
 
+/** XG card — same soft shell as Possession (Figma 1767:13422), split values from old XG. */
+function XgCard({
+  pair,
+  title,
+  homeName,
+  awayName,
+  rtl,
+  s,
+}: {
+  pair: Pair;
+  title: string;
+  homeName: string;
+  awayName: string;
+  rtl: boolean;
+  s: number;
+}) {
+  const C = useStatsC();
+  const { isDark } = useMatchDetailsTheme();
+  const homeColor = isDark ? '#C4B5FD' : '#8856E1';
+  const awayColor = isDark ? '#A78BFA' : '#4B1FA3';
+  const nameColor = isDark ? C.text : '#4B1FA3';
+  const titleColor = isDark ? C.text : '#24104E';
+  const suffixColor = isDark ? C.textSoft : '#6A2BD9';
+  const dividerColors = isDark
+    ? (['rgba(196,181,253,0)', 'rgba(196,181,253,0.45)', 'rgba(196,181,253,0)'] as const)
+    : (['rgba(75,31,163,0)', 'rgba(75,31,163,0.28)', 'rgba(75,31,163,0)'] as const);
+
+  const col = (value: number | null, name: string, color: string) => (
+    <View style={[styles.xgCol, { gap: 10 * s }]}>
+      <Text
+        style={[styles.xgValue, { color, fontSize: 28 * s, lineHeight: 34 * s }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {fmt(value, 2)}
+      </Text>
+      <Text
+        style={[styles.xgName, { color: nameColor, fontSize: 15 * s, lineHeight: 20 * s }]}
+        numberOfLines={2}
+      >
+        {name}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View
+      style={[
+        styles.possessionCard,
+        isDark
+          ? { backgroundColor: C.card, borderColor: C.cardBorder, borderWidth: 1 }
+          : styles.possessionShadow,
+      ]}
+    >
+      {!isDark ? (
+        <LinearGradient
+          colors={['#FFFFFF', '#FDFBFF']}
+          start={{ x: 0.05, y: 0 }}
+          end={{ x: 0.95, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
+      <View style={{ paddingHorizontal: 11 * s, paddingVertical: 17 * s, gap: 14 * s }}>
+        <View
+          style={[
+            styles.sectionTitleRow,
+            {
+              flexDirection: rtl ? 'row' : 'row-reverse',
+              alignSelf: rtl ? 'flex-end' : 'flex-start',
+              gap: 8 * s,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: titleColor }]}>
+            {title}
+            <Text style={[styles.sectionTitleSuffix, { color: suffixColor }]}>{' (XG)'}</Text>
+          </Text>
+          <Image
+            source={ICON.xg}
+            style={{ width: 21 * s, height: 21 * s }}
+            contentFit="contain"
+            tintColor={isDark ? '#C4B5FD' : undefined}
+          />
+        </View>
+        <View style={[styles.xgRow, { paddingHorizontal: 8 * s, minHeight: 72 * s }]}>
+          {col(pair.away, awayName, awayColor)}
+          <LinearGradient
+            colors={[...dividerColors]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={{ width: 1, alignSelf: 'stretch', marginHorizontal: 8 * s }}
+          />
+          {col(pair.home, homeName, homeColor)}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /** Shared track: away fills from the left, home from the right. */
 function DualTrack({ pair, s }: { pair: Pair; s: number }) {
   const C = useStatsC();
@@ -828,11 +929,14 @@ export function MatchStatsCompare({
       ) : null}
 
       {has(p.xg) ? (
-        <Section title={md.statsXgTitle} suffix="(XG)" icon={ICON.xg} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 20 * s }}>
-            <BigNumberPair pair={p.xg} decimals={2} gap={12} {...names} />
-          </Card>
-        </Section>
+        <XgCard
+          pair={p.xg}
+          title={md.statsXgTitle}
+          homeName={homeName}
+          awayName={awayName}
+          rtl={rtl}
+          s={s}
+        />
       ) : null}
 
       {has(p.totalShots) ? (
@@ -1047,6 +1151,27 @@ const styles = StyleSheet.create({
   bigValue: {
     fontWeight: '700',
     textAlign: 'center',
+  },
+  xgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  xgCol: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  xgValue: {
+    fontWeight: '700',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  xgName: {
+    fontWeight: '600',
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   subTitle: {
     fontWeight: '600',
