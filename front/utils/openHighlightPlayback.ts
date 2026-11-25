@@ -1,5 +1,6 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
+  filterSupportedHighlightPlaybackUrls,
   isDirectHighlightFile,
   preferDirectHighlightUrls,
   resolveHighlightPlaybackUrl,
@@ -8,31 +9,45 @@ import {
 } from './highlightPlaybackUrl';
 
 /**
- * Direct/Streamin clips open in-app. YouTube opens in the YouTube app/browser
- * immediately — no in-app WebView attempt.
+ * Direct/Streamin clips open in-app. YouTube opens in the YouTube app/browser.
+ * Unsupported hosts (streama.in, etc.) are never opened in the sheet — that
+ * was causing "مصدر الفيديو ده مش مدعوم" when they ranked ahead of YouTube.
  */
 export function openHighlightPlayback(
   rawUrls: string[],
   openSheet: (urls: string[]) => void,
 ): boolean {
-  const urls = preferDirectHighlightUrls(
-    rawUrls.map((u) => u.trim()).filter(Boolean),
+  const supported = filterSupportedHighlightPlaybackUrls(
+    preferDirectHighlightUrls(rawUrls.map((u) => u.trim()).filter(Boolean)),
+    Platform.OS,
   );
-  if (!urls.length) return false;
+  if (!supported.length) return false;
 
-  const first = urls[0];
-  const resolved = resolveHighlightPlaybackUrl(first);
-  const isYoutube = Boolean(youtubeVideoId(first) || youtubeVideoId(resolved));
-  const isDirect = isDirectHighlightFile(resolved);
-
-  if (isYoutube && !isDirect) {
-    const watch = youtubeMobileWatchUrl(first) || youtubeMobileWatchUrl(resolved);
-    if (watch) {
-      void Linking.openURL(watch);
-      return true;
+  const directs: string[] = [];
+  const youtubes: string[] = [];
+  for (const url of supported) {
+    const resolved = resolveHighlightPlaybackUrl(url, Platform.OS);
+    if (isDirectHighlightFile(resolved)) {
+      directs.push(url);
+    } else if (youtubeVideoId(url) || youtubeVideoId(resolved)) {
+      youtubes.push(url);
     }
   }
 
-  openSheet(urls);
-  return true;
+  // In-app sheet is MP4/Streamin only. On iOS, YouTube WebView is unreliable
+  // (150/153); keep YouTube as external fallback after directs are exhausted.
+  if (directs.length) {
+    openSheet(Platform.OS === 'ios' ? directs : [...directs, ...youtubes]);
+    return true;
+  }
+
+  const watch =
+    youtubeMobileWatchUrl(youtubes[0] || '') ||
+    youtubeMobileWatchUrl(supported[0] || '');
+  if (watch) {
+    void Linking.openURL(watch);
+    return true;
+  }
+
+  return false;
 }

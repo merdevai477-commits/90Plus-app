@@ -66,14 +66,57 @@ export function isDirectHighlightFile(url: string): boolean {
   return /\.(mp4|m3u8)(?:$|\?)/i.test(url);
 }
 
-/** Prefer owned CDN / direct MP4 before YouTube embeds (fewer false geo blocks). */
+/**
+ * True when the app can play this URL in-sheet (Streamin/MP4/HLS) or as YouTube.
+ * Hosts like streama.in / x.com are unsupported in-app.
+ */
+export function isSupportedHighlightPlaybackUrl(
+  url: string,
+  platform?: string | null,
+): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (youtubeVideoId(trimmed)) return true;
+  const resolved = resolveHighlightPlaybackUrl(trimmed, platform);
+  return isDirectHighlightFile(resolved) || Boolean(youtubeVideoId(resolved));
+}
+
+/** Prefer owned CDN / direct MP4, then YouTube — never promote unsupported hosts. */
 export function preferDirectHighlightUrls(urls: string[]): string[] {
   const score = (url: string): number => {
     if (/\.mp4(?:$|\?)|streamin\.|media\.90plus|r2\.cloudflarestorage/i.test(url)) return 0;
-    if (youtubeVideoId(url)) return 2;
-    return 1;
+    if (youtubeVideoId(url)) return 1;
+    // streama.in / unknown hosts — keep last so they never block playable sources
+    return 50;
   };
   return [...urls].sort((a, b) => score(a) - score(b));
+}
+
+/**
+ * Collect every playback candidate from a Highlightly clip.
+ * Always includes `embedUrl` even when `url` is an unsupported host.
+ */
+export function collectHighlightClipPlaybackUrls(clip: {
+  url?: string | null;
+  embedUrl?: string | null;
+  playbackUrls?: string[] | null;
+}): string[] {
+  const listed = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
+  const primary = (clip.url || '').trim();
+  const embed = (clip.embedUrl || '').trim();
+  return [...listed, primary, embed].filter(
+    (url, index, all) => url && all.indexOf(url) === index,
+  );
+}
+
+/** Drop unsupported hosts; keep Streamin/MP4 and YouTube only. */
+export function filterSupportedHighlightPlaybackUrls(
+  urls: string[],
+  platform?: string | null,
+): string[] {
+  return preferDirectHighlightUrls(
+    urls.filter((url) => isSupportedHighlightPlaybackUrl(url, platform)),
+  );
 }
 
 /** YouTube watch, share, shorts, and embed links. */

@@ -6,10 +6,10 @@ import {
   type GoalClipMedia,
 } from './assignGoalClips';
 import {
-  isDirectHighlightFile,
+  collectHighlightClipPlaybackUrls,
+  filterSupportedHighlightPlaybackUrls,
+  isSupportedHighlightPlaybackUrl,
   preferDirectHighlightUrls,
-  resolveHighlightPlaybackUrl,
-  youtubeVideoId,
 } from './highlightPlaybackUrl';
 
 type GoalEvent = {
@@ -19,38 +19,17 @@ type GoalEvent = {
 };
 
 function clipPlayUrl(clip: GoalClipMedia | null | undefined): string {
-  const preferred = clip?.playbackUrls?.find((url) => url.trim()) || clip?.url || clip?.embedUrl || '';
-  return preferred.trim();
-}
-
-function clipCandidateUrls(clip: GoalClipMedia): string[] {
-  const listed = (clip.playbackUrls || []).map((url) => url.trim()).filter(Boolean);
-  const primary = clipPlayUrl(clip);
-  const original = (clip.url || clip.embedUrl || '').trim();
-  return [...listed, primary, original].filter((url, index, all) => url && all.indexOf(url) === index);
-}
-
-function isSupportedPlaybackUrl(url: string): boolean {
-  if (!url) return false;
-  if (youtubeVideoId(url)) return true;
-  const resolved = resolveHighlightPlaybackUrl(url);
-  return isDirectHighlightFile(resolved) || Boolean(youtubeVideoId(resolved));
-}
-
-function clipMatchesSameEvent(clip: GoalClipMedia, event: GoalEvent): boolean {
-  const elapsed = event.time?.elapsed;
-  const playerName = event.player?.name ?? '';
-  const playerOk = playerName ? clipMatchesPlayer(clip, playerName) : false;
-  const minute = clipMinute(clip);
-
-  if (playerOk && minuteAgrees(clip, elapsed)) return true;
-  if (minute != null && elapsed != null && minute === elapsed) return true;
-  return false;
+  return collectHighlightClipPlaybackUrls(clip || {}).find((url) =>
+    isSupportedHighlightPlaybackUrl(url),
+  )
+    || collectHighlightClipPlaybackUrls(clip || {})[0]
+    || '';
 }
 
 /**
  * Ordered playback URLs for one goal event within a single fixture's clip list.
- * Primary assigned clip first, then same-event alternatives. Never pulls other fixtures.
+ * Primary assigned clip first (url + embedUrl + playbackUrls), then same-event
+ * alternatives. Unsupported hosts never rank ahead of Streamin/YouTube.
  */
 export function buildGoalClipPlaybackCandidates(
   events: GoalEvent[],
@@ -68,15 +47,13 @@ export function buildGoalClipPlaybackCandidates(
   const pushUrl = (raw: string, requireSupported = false) => {
     const url = raw.trim();
     if (!url || seen.has(url)) return;
-    if (requireSupported && !isSupportedPlaybackUrl(url)) return;
+    if (requireSupported && !isSupportedHighlightPlaybackUrl(url)) return;
     seen.add(url);
     urls.push(url);
   };
 
-  // Supported primary URLs first. Unsupported assigned URLs stay as last resort
-  // so a dead streama.in row cannot block a same-clip YouTube/Streamin alternate.
   if (primary) {
-    const primaryUrls = clipCandidateUrls(primary);
+    const primaryUrls = collectHighlightClipPlaybackUrls(primary);
     for (const candidate of primaryUrls) pushUrl(candidate, true);
     for (const candidate of primaryUrls) pushUrl(candidate, false);
   }
@@ -96,12 +73,32 @@ export function buildGoalClipPlaybackCandidates(
     return clipMatchesSameEvent(clip, event);
   });
 
-  // Prefer supported direct/YouTube alternates after primary.
-  const supported = alternates.filter((clip) => isSupportedPlaybackUrl(clipPlayUrl(clip)));
-  const unsupported = alternates.filter((clip) => !isSupportedPlaybackUrl(clipPlayUrl(clip)));
+  const supported = alternates.filter((clip) =>
+    isSupportedHighlightPlaybackUrl(clipPlayUrl(clip)),
+  );
+  const unsupported = alternates.filter(
+    (clip) => !isSupportedHighlightPlaybackUrl(clipPlayUrl(clip)),
+  );
 
-  for (const clip of supported) pushUrl(clipPlayUrl(clip), false);
-  for (const clip of unsupported) pushUrl(clipPlayUrl(clip), false);
+  for (const clip of supported) {
+    for (const candidate of collectHighlightClipPlaybackUrls(clip)) pushUrl(candidate, true);
+  }
+  for (const clip of unsupported) {
+    for (const candidate of collectHighlightClipPlaybackUrls(clip)) pushUrl(candidate, false);
+  }
 
-  return preferDirectHighlightUrls(urls);
+  // Prefer playable sources; keep a tiny unsupported tail only if nothing else exists.
+  const playable = filterSupportedHighlightPlaybackUrls(urls);
+  return playable.length ? playable : preferDirectHighlightUrls(urls);
+}
+
+function clipMatchesSameEvent(clip: GoalClipMedia, event: GoalEvent): boolean {
+  const elapsed = event.time?.elapsed;
+  const playerName = event.player?.name ?? '';
+  const playerOk = playerName ? clipMatchesPlayer(clip, playerName) : false;
+  const minute = clipMinute(clip);
+
+  if (playerOk && minuteAgrees(clip, elapsed)) return true;
+  if (minute != null && elapsed != null && minute === elapsed) return true;
+  return false;
 }

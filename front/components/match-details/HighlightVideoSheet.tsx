@@ -515,6 +515,27 @@ export function HighlightVideoSheet({
     skipWithReason('UNSUPPORTED_PROVIDER');
   }, [visible, failed, unsupported, index, skipWithReason]);
 
+  // YouTube mid-queue (e.g. after Streamin preflight fail): open externally —
+  // never mount WebView for goal/highlight fallbacks (iOS 150/153).
+  useEffect(() => {
+    if (!visible || failed || !url || direct || unsupported) return;
+    if (!youtubeVideoId(url)) return;
+    if (openYouTubeExternally(url)) {
+      onClose();
+      return;
+    }
+    skipWithReason('EMBED_UNAVAILABLE');
+  }, [
+    visible,
+    failed,
+    url,
+    direct,
+    unsupported,
+    openYouTubeExternally,
+    onClose,
+    skipWithReason,
+  ]);
+
   // MP4/HLS Range preflight before mounting native player.
   // Race CDN mirrors in parallel (short timeout) so goal clips appear quickly.
   useEffect(() => {

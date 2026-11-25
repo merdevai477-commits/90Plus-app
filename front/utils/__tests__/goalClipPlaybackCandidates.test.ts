@@ -87,4 +87,19 @@ describe('buildGoalClipPlaybackCandidates', () => {
       expect.arrayContaining(otherFixtureClips.map((clip) => clip.url)),
     );
   });
+
+  it('uses YouTube embedUrl when primary url is an unsupported host', () => {
+    const events = [goal('Saka', 22)];
+    const clips = [
+      {
+        title: 'Saka 22',
+        description: 'Saka 22',
+        url: 'https://streama.in/clip/dead',
+        embedUrl: 'https://www.youtube.com/embed/qjEXEEBQgqo',
+      },
+    ];
+    expect(buildGoalClipPlaybackCandidates(events, 0, clips)).toEqual([
+      'https://www.youtube.com/embed/qjEXEEBQgqo',
+    ]);
+  });
 });

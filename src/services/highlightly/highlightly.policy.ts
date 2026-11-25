@@ -229,15 +229,29 @@ export function pickSummary(clips: StoredHighlightClip[]): PublicHighlight | nul
   return pickSummaries(clips)[0] ?? null;
 }
 
+function goalPlayRank(clip: StoredHighlightClip): number {
+  const playable = `${clip.url} ${clip.embedUrl ?? ''}`;
+  if (/\.mp4(?:$|\?)|streamin\./i.test(playable)) return 0;
+  if (/youtube\.com|youtu\.be/i.test(playable)) return 1;
+  return 20;
+}
+
 export function pickGoals(clips: StoredHighlightClip[]): PublicHighlight[] {
   const seen = new Set<string>();
   const goals = clips
-    .filter((clip) => clip.category === GOAL_CATEGORY && clip.url)
-    .sort((a, b) => a.highlightlyId - b.highlightlyId);
+    .filter((clip) => clip.category === GOAL_CATEGORY && (clip.url || clip.embedUrl))
+    .sort((a, b) => {
+      const rank = goalPlayRank(a) - goalPlayRank(b);
+      if (rank !== 0) return rank;
+      return a.highlightlyId - b.highlightlyId;
+    });
   const picked: PublicHighlight[] = [];
   for (const goal of goals) {
-    if (seen.has(goal.url)) continue;
-    seen.add(goal.url);
+    // Prefer url for identity so two rows sharing the same stream still collapse;
+    // embed-only clips still get a key from embedUrl.
+    const key = (goal.url || goal.embedUrl || '').replace(/[?&#].*$/, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
     picked.push(toPublic(goal));
   }
   return picked;

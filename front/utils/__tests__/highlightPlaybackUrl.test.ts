@@ -1,5 +1,8 @@
 import {
+  collectHighlightClipPlaybackUrls,
+  filterSupportedHighlightPlaybackUrls,
   isDirectHighlightFile,
+  isSupportedHighlightPlaybackUrl,
   preferDirectHighlightUrls,
   resolveHighlightPlaybackUrl,
   streaminPlaybackCandidates,
@@ -83,6 +86,44 @@ describe('resolveHighlightPlaybackUrl', () => {
     ).toEqual([
       'https://w-cdn.streamin.top/uploads/aa.mp4',
       'https://www.youtube.com/watch?v=abc1234',
+    ]);
+  });
+
+  it('never ranks unsupported hosts ahead of YouTube', () => {
+    expect(
+      preferDirectHighlightUrls([
+        'https://streama.in/clip/dead',
+        'https://www.youtube.com/watch?v=abc1234',
+      ]),
+    ).toEqual([
+      'https://www.youtube.com/watch?v=abc1234',
+      'https://streama.in/clip/dead',
+    ]);
+  });
+
+  it('collects embedUrl even when url is an unsupported host', () => {
+    expect(
+      collectHighlightClipPlaybackUrls({
+        url: 'https://streama.in/clip/dead',
+        embedUrl: 'https://www.youtube.com/embed/abc1234xyz',
+        playbackUrls: ['https://streamin.link/v/aa11bb22'],
+      }),
+    ).toEqual([
+      'https://streamin.link/v/aa11bb22',
+      'https://streama.in/clip/dead',
+      'https://www.youtube.com/embed/abc1234xyz',
+    ]);
+    expect(isSupportedHighlightPlaybackUrl('https://streama.in/clip/dead')).toBe(false);
+    expect(isSupportedHighlightPlaybackUrl('https://www.youtube.com/embed/abc1234xyz')).toBe(true);
+    expect(
+      filterSupportedHighlightPlaybackUrls([
+        'https://streama.in/clip/dead',
+        'https://www.youtube.com/embed/abc1234xyz',
+        'https://streamin.link/v/aa11bb22',
+      ]),
+    ).toEqual([
+      'https://streamin.link/v/aa11bb22',
+      'https://www.youtube.com/embed/abc1234xyz',
     ]);
   });
 });
