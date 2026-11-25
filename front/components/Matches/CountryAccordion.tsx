@@ -142,26 +142,30 @@ const LeagueSection = memo(function LeagueSection({
 
   return (
     <View style={styles.leagueSection}>
-      {/* League Header */}
+      {/* Competition header — Figma: count+chevron | name+logo */}
       <TouchableOpacity style={styles.leagueHeader} onPress={toggle} activeOpacity={0.7}>
-        {leagueLogoUri ? (
-          <Image
-            source={{ uri: leagueLogoUri }}
-            style={styles.leagueLogo}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            transition={0}
-          />
-        ) : (
-          <View style={[styles.leagueLogo, styles.placeholderLogo]} />
-        )}
-        <Text style={styles.leagueName} numberOfLines={1}>{localizedLeagueName}</Text>
-        <Text style={styles.matchCount}>{matchCount}</Text>
-        {expanded ? (
-          <ChevronUp size={14} color={colors.iconMuted} />
-        ) : (
-          <ChevronDown size={14} color={colors.iconMuted} />
-        )}
+        <View style={styles.leagueCountSide}>
+          {expanded ? (
+            <ChevronUp size={17} color={colors.primary} />
+          ) : (
+            <ChevronDown size={17} color={colors.primary} />
+          )}
+          <Text style={styles.matchCount}>{matchCount}</Text>
+        </View>
+        <View style={styles.leagueNameSide}>
+          <Text style={styles.leagueName} numberOfLines={1}>{localizedLeagueName}</Text>
+          {leagueLogoUri ? (
+            <Image
+              source={{ uri: leagueLogoUri }}
+              style={styles.leagueLogo}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              transition={0}
+            />
+          ) : (
+            <View style={[styles.leagueLogo, styles.placeholderLogo]} />
+          )}
+        </View>
       </TouchableOpacity>
 
       {/* Match Cards — only rendered when this league is expanded.
@@ -223,16 +227,20 @@ export const CountryAccordion = memo(function CountryAccordion({
   return (
     <View style={styles.countryShell}>
       <View style={styles.countryContainer}>
-        {/* Country Header */}
+        {/* Region header — Figma: count+chevron | name+flag */}
         <TouchableOpacity style={styles.countryHeader} onPress={toggle} activeOpacity={0.7}>
-          <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
-          <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
-          <Text style={styles.totalBadge}>{totalMatches}</Text>
-          {expanded ? (
-            <ChevronUp size={16} color={colors.iconMuted} />
-          ) : (
-            <ChevronDown size={16} color={colors.iconMuted} />
-          )}
+          <View style={styles.countryCountSide}>
+            {expanded ? (
+              <ChevronUp size={20} color={colors.primary} />
+            ) : (
+              <ChevronDown size={20} color={colors.primary} />
+            )}
+            <Text style={styles.totalBadge}>{totalMatches}</Text>
+          </View>
+          <View style={styles.countryNameSide}>
+            <Text style={styles.countryName} numberOfLines={1}>{localizedCountryName}</Text>
+            <CountryFlagThumb country={countryGroup.country} apiFlag={countryGroup.countryFlag} />
+          </View>
         </TouchableOpacity>
 
         {/* Leagues are only mounted when the country is expanded. This is the
@@ -259,15 +267,15 @@ function createAccordionStyles(c: MatchesThemeColors) {
   return StyleSheet.create({
     countryShell: {
       marginBottom: 10,
-      borderRadius: 14,
-      shadowColor: '#24104E',
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
+      borderRadius: 18,
+      shadowColor: '#D5C3F4',
+      shadowOpacity: 0.75,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 3,
     },
     countryContainer: {
-      borderRadius: 14,
+      borderRadius: 18,
       overflow: 'hidden',
       backgroundColor: c.cardBg,
       borderWidth: 1.5,
@@ -276,9 +284,23 @@ function createAccordionStyles(c: MatchesThemeColors) {
     countryHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      gap: 10,
+      justifyContent: 'space-between',
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      gap: 12,
+    },
+    countryCountSide: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    countryNameSide: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 12,
+      minWidth: 0,
     },
     countryFlag: {
       ...StyleSheet.absoluteFillObject,
@@ -292,14 +314,14 @@ function createAccordionStyles(c: MatchesThemeColors) {
       backgroundColor: c.logoStubBg,
     },
     brandFlagWrap: {
-      width: 28,
-      height: 28,
-      borderRadius: 8,
-      backgroundColor: '#F3EDFF',
-      borderWidth: 1,
-      borderColor: 'rgba(106,43,217,0.22)',
+      width: 37,
+      height: 35,
+      borderRadius: 10,
+      backgroundColor: c.upcomingBadgeBg,
       alignItems: 'center',
       justifyContent: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 7,
     },
     flagEmoji: {
       fontSize: 16,
@@ -314,66 +336,80 @@ function createAccordionStyles(c: MatchesThemeColors) {
       opacity: 0.85,
     },
     countryName: {
-      flex: 1,
-      fontSize: 15,
+      flexShrink: 1,
+      fontSize: 18,
       fontWeight: '700',
       color: c.textPrimary,
+      textAlign: 'right',
     },
     totalBadge: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: c.textPrimary,
-      backgroundColor: c.chipBg,
-      borderWidth: 1,
-      borderColor: c.chipBorder,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 10,
+      minWidth: 42,
+      height: 29,
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.primary,
+      backgroundColor: c.upcomingBadgeBg,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 15,
       overflow: 'hidden',
+      textAlign: 'center',
     },
     leaguesWrapper: {
-      paddingHorizontal: 8,
-      paddingBottom: 8,
+      paddingHorizontal: 10,
+      paddingBottom: 10,
+      gap: 10,
     },
     leagueSection: {
-      marginTop: 4,
-      borderRadius: 10,
-      backgroundColor: c.chipBg,
-      borderWidth: 1,
-      borderColor: c.chipBorder,
+      borderRadius: 12,
+      backgroundColor: c.competitionGroupBg,
       overflow: 'hidden',
+      paddingHorizontal: 14,
+      paddingTop: 12,
+      paddingBottom: 12,
     },
     leagueHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      justifyContent: 'space-between',
+      marginBottom: 10,
       gap: 8,
     },
+    leagueCountSide: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    leagueNameSide: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 12,
+      minWidth: 0,
+    },
     leagueLogo: {
-      width: 20,
-      height: 20,
+      width: 18,
+      height: 18,
       borderRadius: 4,
     },
     placeholderLogo: {
       backgroundColor: c.logoStubBg,
     },
     leagueName: {
-      flex: 1,
-      fontSize: 13,
+      flexShrink: 1,
+      fontSize: 14,
       fontWeight: '600',
-      color: c.textPrimary,
+      color: c.primary,
+      textAlign: 'right',
     },
     matchCount: {
-      fontSize: 11,
+      fontSize: 14,
       fontWeight: '600',
-      color: c.textMuted,
-      marginEnd: 4,
+      color: c.primary,
     },
     matchesContainer: {
-      paddingHorizontal: 4,
-      paddingBottom: 6,
-      gap: 4,
+      gap: 8,
     },
     viewAllBtn: {
       alignItems: 'center',

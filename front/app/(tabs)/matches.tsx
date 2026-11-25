@@ -526,7 +526,8 @@ const MatchRow = memo(function MatchRow({
           activeOpacity={0.75}
           onPress={() => onOpenDetails(fixture)}
         >
-          {/* Away left | Home right — same scoreboard orientation as MatchHeader. */}
+          {/* Away left | Home right — same scoreboard orientation as MatchHeader.
+              Figma Match: vertical team columns (crest above name) + status/time center. */}
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.awayLogo ? (
@@ -545,7 +546,9 @@ const MatchRow = memo(function MatchRow({
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
+            <Text style={styles.teamTxt} numberOfLines={2}>
+              {awayName}
+            </Text>
           </View>
           <View style={styles.scoreCol}>
             {specialStatusLabel ? (
@@ -619,9 +622,9 @@ const MatchRow = memo(function MatchRow({
                   </Text>
                 ) : null}
               </View>
-            ) : (
-              <Text style={styles.minuteTxt}>{fixture.minute ?? ''}</Text>
-            )}
+            ) : fixture.minute ? (
+              <Text style={styles.minuteTxt}>{fixture.minute}</Text>
+            ) : null}
           </View>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
@@ -641,7 +644,9 @@ const MatchRow = memo(function MatchRow({
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
+            <Text style={styles.teamTxt} numberOfLines={2}>
+              {homeName}
+            </Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity

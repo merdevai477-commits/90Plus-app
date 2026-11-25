@@ -50,6 +50,14 @@ export type MatchesThemeColors = {
   logoStubBorder: string;
   initialsBg: string;
   initialsTxt: string;
+  /** Inset match card surface inside a competition group (Figma `#ebe7fd`). */
+  matchCardBg: string;
+  /** Upcoming status pill fill (Figma `#e7dbff`). */
+  upcomingBadgeBg: string;
+  /** Upcoming status pill label (Figma `#6a2bd9`). */
+  upcomingBadgeTxt: string;
+  /** Competition / league group fill (Figma `#f3f1fe`). */
+  competitionGroupBg: string;
   wcCardBg: string;
   wcCardBorder: string;
   wcSub: string;
@@ -107,6 +115,10 @@ export const MATCHES_THEME: { light: MatchesThemeColors; dark: MatchesThemeColor
     logoStubBorder: 'rgba(106,43,217,0.2)',
     initialsBg: 'rgba(106,43,217,0.18)',
     initialsTxt: AUTH_LIGHT.primary,
+    matchCardBg: '#EBE7FD',
+    upcomingBadgeBg: '#E7DBFF',
+    upcomingBadgeTxt: '#6A2BD9',
+    competitionGroupBg: '#F3F1FE',
     wcCardBg: '#FFFFFF',
     wcCardBorder: 'rgba(106,43,217,0.22)',
     wcSub: AUTH_LIGHT.primary,
@@ -160,6 +172,10 @@ export const MATCHES_THEME: { light: MatchesThemeColors; dark: MatchesThemeColor
     logoStubBorder: 'rgba(255,255,255,0.16)',
     initialsBg: 'rgba(124,58,237,0.3)',
     initialsTxt: '#A78BFA',
+    matchCardBg: 'rgba(124,58,237,0.18)',
+    upcomingBadgeBg: 'rgba(167,139,250,0.22)',
+    upcomingBadgeTxt: '#C4B5FD',
+    competitionGroupBg: 'rgba(124,58,237,0.1)',
     wcCardBg: '#0A0812',
     wcCardBorder: 'rgba(168,85,247,0.26)',
     wcSub: 'rgba(216,180,254,0.82)',
