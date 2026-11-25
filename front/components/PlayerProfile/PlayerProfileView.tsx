@@ -349,12 +349,14 @@ export default function PlayerProfileView({
                 <Text
                   style={[
                     styles.heroName,
+                    styles.heroLiftShadow,
                     {
                       fontFamily: fontExtraBold,
-                      color: isDark ? C.ink : '#0a0a0a',
-                      fontSize: Math.round(28 * scale),
-                      lineHeight: Math.round(32 * scale),
+                      color: isDark ? C.ink : '#000000',
+                      fontSize: Math.round(30 * scale),
+                      lineHeight: Math.round(34 * scale),
                       letterSpacing: -0.2,
+                      textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
                     },
                   ]}
                   numberOfLines={2}
@@ -369,24 +371,28 @@ export default function PlayerProfileView({
                   <Text
                     style={[
                       styles.heroClub,
+                      styles.heroLiftShadow,
                       {
                         fontFamily: fontExtraBold,
-                        color: isDark ? C.ink : '#0a0a0a',
-                        fontSize: Math.round(18 * scale),
-                        lineHeight: Math.round(23 * scale),
+                        color: isDark ? C.ink : '#000000',
+                        fontSize: Math.round(19 * scale),
+                        lineHeight: Math.round(24 * scale),
+                        textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
                       },
                     ]}
                     numberOfLines={1}
                   >
                     {vm.clubName}
                   </Text>
-                  <TeamBadge
-                    name={vm.clubName}
-                    logo={vm.clubLogo || undefined}
-                    size={Math.round(38 * scale)}
-                    color="transparent"
-                    highQuality
-                  />
+                  <View style={styles.heroCrestLift}>
+                    <TeamBadge
+                      name={vm.clubName}
+                      logo={vm.clubLogo || undefined}
+                      size={Math.round(42 * scale)}
+                      color="transparent"
+                      highQuality
+                    />
+                  </View>
                 </View>
               ) : null}
             </View>
@@ -906,7 +912,7 @@ function LastMatchesCard({
   const fontBold = useAppFont(700);
   const fontExtraBold = useAppFont(800);
   const ordered = rtl ? matches : [...matches].reverse();
-  const heavyInk = isDark ? C.ink : '#0a0a0a';
+  const heavyInk = isDark ? C.ink : '#000000';
 
   return (
     <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start', alignSelf: 'stretch' }}>
@@ -953,20 +959,30 @@ function LastMatchesCard({
                       {rating.toFixed(1)}
                     </Text>
                   </View>
-                  <TeamBadge
-                    name={match.opponentName || '—'}
-                    logo={match.opponentLogo || undefined}
-                    size={40}
-                    color="transparent"
-                    highQuality
-                  />
+                  <View style={styles.heroCrestLift}>
+                    <TeamBadge
+                      name={match.opponentName || '—'}
+                      logo={match.opponentLogo || undefined}
+                      size={42}
+                      color="transparent"
+                      highQuality
+                    />
+                  </View>
                 </View>
                 <View style={styles.matchMeta}>
                   <Text style={[styles.matchDate, { fontFamily: fontSemi, color: C.muted }]}>
                     {fmtMatchDate(match.startTime)}
                   </Text>
                   <Text
-                    style={[styles.matchOpponent, { fontFamily: fontExtraBold, color: heavyInk }]}
+                    style={[
+                      styles.matchOpponent,
+                      styles.heroLiftShadow,
+                      {
+                        fontFamily: fontExtraBold,
+                        color: heavyInk,
+                        textShadowColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.18)',
+                      },
+                    ]}
                     numberOfLines={1}
                   >
                     {shortOpponent(match.opponentName)}
@@ -1178,6 +1194,22 @@ const styles = StyleSheet.create({
   },
   heroName: { flexShrink: 1, flexGrow: 1, textAlign: 'right' },
   verifiedBadge: { width: 22, height: 22, marginTop: 4 },
+  heroLiftShadow: {
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  heroCrestLift: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.28,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 1 },
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
+  },
   heroClubRow: {
     flexDirection: 'row',
     direction: 'ltr',
@@ -1296,7 +1328,7 @@ const styles = StyleSheet.create({
   },
   matchMeta: { alignItems: 'center', gap: 4, width: '100%' },
   matchDate: { fontSize: 11, textAlign: 'center', width: '100%' },
-  matchOpponent: { fontSize: 18, textAlign: 'center', width: '100%' },
+  matchOpponent: { fontSize: 19, textAlign: 'center', width: '100%' },
   matchDivider: { width: 1, height: 81, alignSelf: 'center' },
 
   compCard: {

@@ -47,7 +47,7 @@ export const PP_LIGHT: PPColors = {
   pale: '#f3edff',
   hero: '#230e48',
   heroSide: '#271051',
-  jersey: '#0a0a0a',
+  jersey: '#000000',
   softLilac: '#e9d5ff',
   border: '#e8e0f5',
   divider: '#e8e0f5',

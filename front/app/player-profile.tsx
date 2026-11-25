@@ -1110,11 +1110,13 @@ export default function PlayerProfileScreen() {
                         <Text
                             style={[
                                 styles.heroJersey,
+                                styles.heroLiftShadow,
                                 {
                                     fontFamily: fontExtraBold,
                                     top: headerHeight - 6,
-                                    color: isDark ? B.jersey : '#0a0a0a',
-                                    opacity: isDark ? 0.85 : 0.95,
+                                    color: isDark ? B.jersey : '#000000',
+                                    opacity: isDark ? 0.9 : 1,
+                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.28)',
                                 },
                                 rtl ? { left: 14 } : { right: 14 },
                             ]}
@@ -1174,10 +1176,12 @@ export default function PlayerProfileScreen() {
                                     <Text
                                         style={[
                                             styles.playerName,
+                                            styles.heroLiftShadow,
                                             {
                                                 fontFamily: fontExtraBold,
                                                 textAlign,
-                                                color: isDark ? B.ink : '#0a0a0a',
+                                                color: isDark ? B.ink : '#000000',
+                                                textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
                                             },
                                         ]}
                                         numberOfLines={2}
@@ -1194,19 +1198,23 @@ export default function PlayerProfileScreen() {
                                 )}
                                 {primaryTeam && (
                                     <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
-                                        <TeamBadge
-                                            name={primaryTeam.name}
-                                            color="transparent"
-                                            size={36}
-                                            logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
-                                            highQuality
-                                        />
+                                        <View style={styles.heroCrestLift}>
+                                            <TeamBadge
+                                                name={primaryTeam.name}
+                                                color="transparent"
+                                                size={40}
+                                                logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                                highQuality
+                                            />
+                                        </View>
                                         <Text
                                             style={[
                                                 styles.heroTeamName,
+                                                styles.heroLiftShadow,
                                                 {
                                                     fontFamily: fontExtraBold,
-                                                    color: isDark ? B.ink : '#0a0a0a',
+                                                    color: isDark ? B.ink : '#000000',
+                                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
                                                 },
                                             ]}
                                             numberOfLines={1}
@@ -1549,8 +1557,23 @@ const styles = StyleSheet.create({
     heroJersey: {
         position: 'absolute',
         top: -6,
-        fontSize: 110,
-        opacity: 0.95,
+        fontSize: 118,
+    },
+    heroLiftShadow: {
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    heroCrestLift: {
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOpacity: 0.28,
+                shadowRadius: 3,
+                shadowOffset: { width: 0, height: 1 },
+            },
+            android: { elevation: 3 },
+            default: {},
+        }),
     },
     heroRow: { alignItems: 'center', gap: 16 },
     photoWrap: { alignItems: 'center' },
@@ -1579,7 +1602,7 @@ const styles = StyleSheet.create({
     inlineRow: { alignItems: 'center', gap: 6 },
     flag: { width: 18, height: 12, borderRadius: 2 },
     heroMeta: { fontSize: 13, flexShrink: 1 },
-    playerName: { fontSize: 24, flexShrink: 1, lineHeight: 30 },
+    playerName: { fontSize: 26, flexShrink: 1, lineHeight: 32 },
     verified: { width: 20, height: 20 },
     injuredBadge: {
         alignItems: 'center',
@@ -1593,7 +1616,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(239,68,68,0.45)',
     },
     injuredText: { fontSize: 11, color: '#fca5a5' },
-    heroTeamName: { fontSize: 15, flexShrink: 1 },
+    heroTeamName: { fontSize: 16, flexShrink: 1 },
 
     chipsRow: { flexWrap: 'wrap', gap: 8, marginTop: 18 },
     chip: {
