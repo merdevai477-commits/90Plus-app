@@ -1110,7 +1110,12 @@ export default function PlayerProfileScreen() {
                         <Text
                             style={[
                                 styles.heroJersey,
-                                { fontFamily: fontBold, top: headerHeight - 6, color: B.jersey },
+                                {
+                                    fontFamily: fontExtraBold,
+                                    top: headerHeight - 6,
+                                    color: isDark ? B.jersey : '#0a0a0a',
+                                    opacity: isDark ? 0.85 : 0.95,
+                                },
                                 rtl ? { left: 14 } : { right: 14 },
                             ]}
                             allowFontScaling={false}
@@ -1169,7 +1174,11 @@ export default function PlayerProfileScreen() {
                                     <Text
                                         style={[
                                             styles.playerName,
-                                            { fontFamily: fontExtraBold, textAlign, color: B.ink },
+                                            {
+                                                fontFamily: fontExtraBold,
+                                                textAlign,
+                                                color: isDark ? B.ink : '#0a0a0a',
+                                            },
                                         ]}
                                         numberOfLines={2}
                                     >
@@ -1188,12 +1197,18 @@ export default function PlayerProfileScreen() {
                                         <TeamBadge
                                             name={primaryTeam.name}
                                             color="transparent"
-                                            size={30}
+                                            size={36}
                                             logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
                                             highQuality
                                         />
                                         <Text
-                                            style={[styles.heroTeamName, { fontFamily: fontBold, color: B.soft }]}
+                                            style={[
+                                                styles.heroTeamName,
+                                                {
+                                                    fontFamily: fontExtraBold,
+                                                    color: isDark ? B.ink : '#0a0a0a',
+                                                },
+                                            ]}
                                             numberOfLines={1}
                                         >
                                             {getTeamDisplayName(primaryTeam.name, language)}
@@ -1535,7 +1550,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: -6,
         fontSize: 110,
-        opacity: 0.85,
+        opacity: 0.95,
     },
     heroRow: { alignItems: 'center', gap: 16 },
     photoWrap: { alignItems: 'center' },
@@ -1578,7 +1593,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(239,68,68,0.45)',
     },
     injuredText: { fontSize: 11, color: '#fca5a5' },
-    heroTeamName: { fontSize: 14, flexShrink: 1 },
+    heroTeamName: { fontSize: 15, flexShrink: 1 },
 
     chipsRow: { flexWrap: 'wrap', gap: 8, marginTop: 18 },
     chip: {

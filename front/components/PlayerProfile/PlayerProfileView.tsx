@@ -351,7 +351,7 @@ export default function PlayerProfileView({
                     styles.heroName,
                     {
                       fontFamily: fontExtraBold,
-                      color: C.ink,
+                      color: isDark ? C.ink : '#0a0a0a',
                       fontSize: Math.round(28 * scale),
                       lineHeight: Math.round(32 * scale),
                       letterSpacing: -0.2,
@@ -370,8 +370,8 @@ export default function PlayerProfileView({
                     style={[
                       styles.heroClub,
                       {
-                        fontFamily: fontBold,
-                        color: isDark ? C.soft : '#373737',
+                        fontFamily: fontExtraBold,
+                        color: isDark ? C.ink : '#0a0a0a',
                         fontSize: Math.round(18 * scale),
                         lineHeight: Math.round(23 * scale),
                       },
@@ -383,7 +383,7 @@ export default function PlayerProfileView({
                   <TeamBadge
                     name={vm.clubName}
                     logo={vm.clubLogo || undefined}
-                    size={Math.round(32 * scale)}
+                    size={Math.round(38 * scale)}
                     color="transparent"
                     highQuality
                   />
@@ -901,9 +901,12 @@ function LastMatchesCard({
 }) {
   const { t } = useTranslation();
   const pc = t.playerCareer;
+  const { isDark } = useResolvedAppScheme();
   const fontSemi = useAppFont(600);
   const fontBold = useAppFont(700);
+  const fontExtraBold = useAppFont(800);
   const ordered = rtl ? matches : [...matches].reverse();
+  const heavyInk = isDark ? C.ink : '#0a0a0a';
 
   return (
     <View style={{ gap: 16, alignItems: rtl ? 'flex-end' : 'flex-start', alignSelf: 'stretch' }}>
@@ -953,7 +956,7 @@ function LastMatchesCard({
                   <TeamBadge
                     name={match.opponentName || '—'}
                     logo={match.opponentLogo || undefined}
-                    size={34}
+                    size={40}
                     color="transparent"
                     highQuality
                   />
@@ -963,7 +966,7 @@ function LastMatchesCard({
                     {fmtMatchDate(match.startTime)}
                   </Text>
                   <Text
-                    style={[styles.matchOpponent, { fontFamily: fontBold, color: C.ink }]}
+                    style={[styles.matchOpponent, { fontFamily: fontExtraBold, color: heavyInk }]}
                     numberOfLines={1}
                   >
                     {shortOpponent(match.opponentName)}
@@ -1293,7 +1296,7 @@ const styles = StyleSheet.create({
   },
   matchMeta: { alignItems: 'center', gap: 4, width: '100%' },
   matchDate: { fontSize: 11, textAlign: 'center', width: '100%' },
-  matchOpponent: { fontSize: 17, textAlign: 'center', width: '100%' },
+  matchOpponent: { fontSize: 18, textAlign: 'center', width: '100%' },
   matchDivider: { width: 1, height: 81, alignSelf: 'center' },
 
   compCard: {
