@@ -88,9 +88,6 @@ function hostedYoutubePlayerUrl(
  */
 type YoutubeSurfaceTier = 'hosted' | 'embed';
 
-/** Temporary marker so a screenshot proves this JS (0e18+) is what the device ran. */
-const HL_DIAG_BUILD_MARKER = 'hl-diag-0e18-v1';
-
 type Props = {
   visible: boolean;
   urls: string[];
@@ -333,6 +330,14 @@ export function HighlightVideoSheet({
 
   const firstCandidateUrl = urls[0] ?? '';
 
+  const openYouTubeExternally = useCallback((candidateUrl: string) => {
+    const id = youtubeVideoId(candidateUrl);
+    if (!id) return false;
+    const watch = youtubeMobileWatchUrl(id) || `https://www.youtube.com/watch?v=${id}`;
+    void Linking.openURL(watch);
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!visible) {
       setSurfaceReady(false);
@@ -344,8 +349,15 @@ export function HighlightVideoSheet({
       });
       return;
     }
-    // Mount the surface on the same turn as the tap. Waiting on async work
-    // (even a no-op) drops iOS user-activation and blocks YouTube autoplay.
+    // YouTube → open the YouTube app/browser immediately (no in-app WebView).
+    const ytId = youtubeVideoId(firstCandidateUrl);
+    const resolvedFirst = resolveHighlightPlaybackUrl(firstCandidateUrl);
+    if (ytId && !isDirectHighlightFile(resolvedFirst)) {
+      openYouTubeExternally(firstCandidateUrl);
+      onClose();
+      return;
+    }
+    // Mount the surface on the same turn as the tap for direct MP4/HLS.
     setUiPhase('loading');
     setSurfaceReady(true);
     emitHighlightPlaybackDiagnostic({
@@ -361,7 +373,7 @@ export function HighlightVideoSheet({
       setSurfaceReady(false);
       releaseHighlightReplay();
     };
-  }, [visible, sessionNonce, listKey, firstCandidateUrl, retryCount]);
+  }, [visible, sessionNonce, listKey, firstCandidateUrl, retryCount, onClose, openYouTubeExternally]);
 
   const url = urls[index] ?? '';
   const fileUrl = resolveHighlightPlaybackUrl(url);
@@ -397,14 +409,6 @@ export function HighlightVideoSheet({
     },
     [matchDetailsText],
   );
-
-  const openYouTubeExternally = useCallback((candidateUrl: string) => {
-    const id = youtubeVideoId(candidateUrl);
-    if (!id) return false;
-    const watch = youtubeMobileWatchUrl(id) || `https://www.youtube.com/watch?v=${id}`;
-    void Linking.openURL(watch);
-    return true;
-  }, []);
 
   const finishWithReasons = useCallback(() => {
     const finalReason = pickFinalPlaybackReason(failureReasons.current);
@@ -512,6 +516,7 @@ export function HighlightVideoSheet({
   }, [visible, failed, unsupported, index, skipWithReason]);
 
   // MP4/HLS Range preflight before mounting native player.
+  // Race CDN mirrors in parallel (short timeout) so goal clips appear quickly.
   useEffect(() => {
     if (!visible || failed || !direct || !fileUrl) {
       setDirectReady(false);
@@ -532,24 +537,29 @@ export function HighlightVideoSheet({
       retryCount,
     });
     void (async () => {
+      let winner: string | null = null;
       let lastReason: PlaybackFailureReason = 'SOURCE_NOT_FOUND';
-      for (const target of urlsToTry) {
-        const result = await preflightDirectMp4(target);
-        if (cancelled) return;
-        if (result.ok === true) {
-          setPlayableDirectUrl(target);
-          setDirectReady(true);
-          return;
-        }
-        lastReason = result.reason;
-        if (lastReason !== 'SOURCE_NOT_FOUND' && lastReason !== 'SOURCE_EXPIRED') break;
-      }
-      if (!cancelled) skipWithReason(lastReason);
+      await Promise.all(
+        urlsToTry.map(async (target) => {
+          const result = await preflightDirectMp4(target, { timeoutMs: 2_500 });
+          if (cancelled) return;
+          if (result.ok === true) {
+            if (winner == null) {
+              winner = target;
+              setPlayableDirectUrl(target);
+              setDirectReady(true);
+            }
+            return;
+          }
+          lastReason = result.reason;
+        }),
+      );
+      if (!cancelled && winner == null) skipWithReason(lastReason);
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible, failed, direct, fileUrl, index, skipWithReason, sourceType, retryCount]);
+  }, [visible, failed, direct, fileUrl, url, index, skipWithReason, sourceType, retryCount]);
 
   // Reset YouTube session when surface / tier / clip changes.
   // Keep bridgeConnected across hosted→embed escalate within same session token;
@@ -745,24 +755,27 @@ export function HighlightVideoSheet({
     !failed &&
     (showYoutubeLoadingSpinner || (direct && !directReady) || uiPhase === 'initializing');
 
-  const nativeAppVersion =
-    Platform.OS === 'android'
+  const showDiagHud = typeof __DEV__ !== 'undefined' && __DEV__;
+  const nativeAppVersion = showDiagHud
+    ? Platform.OS === 'android'
       ? String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? '?')
-      : String(Constants.nativeBuildVersion ?? Constants.expoConfig?.ios?.buildNumber ?? '?');
-  const diagLines = [
-    HL_DIAG_BUILD_MARKER,
-    `native=${Constants.nativeAppVersion ?? '?'}/${nativeAppVersion}`,
-    `runtime=${Updates.runtimeVersion ?? Constants.expoConfig?.runtimeVersion ?? '?'}`,
-    `update=${Updates.updateId ?? 'null'} ch=${Updates.channel ?? 'null'}`,
-    `uiPhase=${uiPhase} yt=${ytSession.phase}`,
-    `ready=${ytSession.playerReady ? 1 : 0} playing=${ytSession.playing ? 1 : 0} failed=${failed ? 1 : 0}`,
-    `loadChrome=${showLoadingChrome ? 1 : 0} playAff=${showPlayAffordance ? 1 : 0}`,
-    `ytLoaded=${youtubeLoaded ? 1 : 0} tier=${youtubeTier}`,
-    `timeAdv=${timeAdvancing ? 1 : 0} (≠ visible frame)`,
-    `affStyle=z2 fill opacity1 disc=72`,
-    `bridge=${bridgeConnectedRef.current ? 1 : 0} last=${lastBridgeMessageKind.current ?? '-'}`,
-    ...bridgeEventLog.slice(-8),
-  ];
+      : String(Constants.nativeBuildVersion ?? Constants.expoConfig?.ios?.buildNumber ?? '?')
+    : '';
+  const diagLines = showDiagHud
+    ? [
+        'hl-diag-dev',
+        `native=${Constants.nativeAppVersion ?? '?'}/${nativeAppVersion}`,
+        `runtime=${Updates.runtimeVersion ?? Constants.expoConfig?.runtimeVersion ?? '?'}`,
+        `update=${Updates.updateId ?? 'null'} ch=${Updates.channel ?? 'null'}`,
+        `uiPhase=${uiPhase} yt=${ytSession.phase}`,
+        `ready=${ytSession.playerReady ? 1 : 0} playing=${ytSession.playing ? 1 : 0} failed=${failed ? 1 : 0}`,
+        `loadChrome=${showLoadingChrome ? 1 : 0} playAff=${showPlayAffordance ? 1 : 0}`,
+        `ytLoaded=${youtubeLoaded ? 1 : 0} tier=${youtubeTier}`,
+        `timeAdv=${timeAdvancing ? 1 : 0} (≠ visible frame)`,
+        `bridge=${bridgeConnectedRef.current ? 1 : 0} last=${lastBridgeMessageKind.current ?? '-'}`,
+        ...bridgeEventLog.slice(-8),
+      ]
+    : [];
 
   return (
     <Modal
@@ -1087,8 +1100,8 @@ export function HighlightVideoSheet({
             <CloseButton onClose={onClose} label={closeLabel} />
           </View>
         ) : null}
-        {/* Temporary black-screen investigation HUD — remove after session captured. */}
-        {visible ? (
+        {/* Dev-only playback HUD — never shown in production/EAS Update builds. */}
+        {visible && showDiagHud ? (
           <View pointerEvents="none" style={styles.diagHud}>
             {diagLines.map((line, idx) => (
               <Text key={`${idx}:${line}`} style={styles.diagHudText}>
@@ -1132,17 +1145,12 @@ function DirectClipPlayer({
     try {
       Object.assign(instance, {
         // iOS: start sooner like reels. Android: keep a slightly deeper buffer.
-        bufferOptions:
-          Platform.OS === 'ios'
-            ? {
-                preferredForwardBufferDuration: 2,
-                waitsToMinimizeStalling: false,
-              }
-            : {
-                preferredForwardBufferDuration: 6,
-                waitsToMinimizeStalling: true,
-                minBufferForPlayback: 0.5,
-              },
+        bufferOptions: {
+          // Start goal clips ASAP on both platforms (short forward buffer).
+          preferredForwardBufferDuration: 2,
+          waitsToMinimizeStalling: false,
+          minBufferForPlayback: 0.25,
+        },
       });
     } catch {
       /* buffer options optional */

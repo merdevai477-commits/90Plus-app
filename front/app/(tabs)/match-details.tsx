@@ -78,6 +78,7 @@ import { MatchMomentumGraph } from '../../components/match-details/MatchMomentum
 import { MatchSummaryVideo } from '../../components/match-details/MatchSummaryVideo';
 import { HighlightVideoSheet } from '../../components/match-details/HighlightVideoSheet';
 import { preferDirectHighlightUrls } from '../../utils/highlightPlaybackUrl';
+import { openHighlightPlayback } from '../../utils/openHighlightPlayback';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
@@ -2165,12 +2166,10 @@ const MatchDetailsScreen = () => {
                 title: matchSummary.title,
                 thumbnailUrl: matchSummary.thumbnail,
               });
-              if (summaryUrls.length) {
-                setHighlightVideoUrls(summaryUrls);
-                return;
-              }
               const fallback = (matchSummary.url || matchSummary.embedUrl || '').trim();
-              setHighlightVideoUrls(fallback ? [fallback] : []);
+              const urls = summaryUrls.length ? summaryUrls : fallback ? [fallback] : [];
+              // YouTube → open YouTube app immediately; direct MP4/Streamin → in-app sheet.
+              openHighlightPlayback(urls, setHighlightVideoUrls);
             }}
           />
         ) : (
@@ -2231,7 +2230,7 @@ const MatchDetailsScreen = () => {
                     title: meta?.title ?? null,
                     thumbnailUrl: meta?.thumbnailUrl ?? null,
                   });
-                  setHighlightVideoUrls(urls);
+                  openHighlightPlayback(urls, setHighlightVideoUrls);
                 }}
               />
               <MatchEventsLegend
