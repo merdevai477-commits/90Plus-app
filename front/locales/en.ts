@@ -732,7 +732,7 @@ export const en = {
       redCards: 'Red Cards',
       goalkeeperSaves: 'Goalkeeper Saves',
       totalPasses: 'Total Passes',
-      passesAccurate: 'Accurate Passes',
+      passesAccurate: 'Correct Passes',
       passesPercentage: 'Pass Accuracy',
       expectedGoals: 'Expected Goals (xG)',
       tackles: 'Tackles',

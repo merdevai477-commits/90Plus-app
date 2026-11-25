@@ -71,7 +71,7 @@ const STAT_KEYS = {
   shotsOn: ['shotsongoal', 'shotsontarget'],
   shotsOff: ['shotsoffgoal', 'shotsofftarget'],
   blocked: ['blockedshots', 'shotsblocked'],
-  totalPasses: ['totalpasses'],
+  totalPasses: ['totalpasses', 'passes'],
   passesAccurate: ['passesaccurate', 'accuratepasses'],
   passAccuracy: ['passes%', 'passespercentage', 'passaccuracy'],
   attacks: ['attacks'],
@@ -291,12 +291,15 @@ function StatsListCard({
   rows,
   s,
 }: {
-  rows: Array<{ key: string; label: string; pair: Pair; decimals?: number }>;
+  rows: Array<{ key: string; label: string; pair: Pair; decimals?: number; suffix?: string }>;
   s: number;
 }) {
   const C = useStatsC();
   const { isDark } = useMatchDetailsTheme();
   if (rows.length === 0) return null;
+
+  const show = (pair: Pair, side: 'home' | 'away', decimals?: number, suffix?: string) =>
+    `${fmt(pair[side], decimals ?? 0)}${suffix ?? ''}`;
 
   return (
     <View
@@ -319,6 +322,7 @@ function StatsListCard({
       <View style={{ paddingVertical: 4 * s }}>
         {rows.map((row, idx) => {
           const last = idx === rows.length - 1;
+          const valueWidth = (row.suffix ? 44 : 36) * s;
           return (
             <View
               key={row.key}
@@ -333,11 +337,11 @@ function StatsListCard({
               ]}
             >
               <Text
-                style={[styles.listValue, { color: C.leftValue, fontSize: 18 * s, width: 32 * s }]}
+                style={[styles.listValue, { color: C.leftValue, fontSize: 18 * s, width: valueWidth }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
-                {fmt(row.pair.away, row.decimals ?? 0)}
+                {show(row.pair, 'away', row.decimals, row.suffix)}
               </Text>
               <Text
                 style={[styles.listLabel, { color: C.label, fontSize: 15 * s }]}
@@ -346,11 +350,11 @@ function StatsListCard({
                 {row.label}
               </Text>
               <Text
-                style={[styles.listValue, { color: C.rightValue, fontSize: 18 * s, width: 32 * s }]}
+                style={[styles.listValue, { color: C.rightValue, fontSize: 18 * s, width: valueWidth }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
-                {fmt(row.pair.home, row.decimals ?? 0)}
+                {show(row.pair, 'home', row.decimals, row.suffix)}
               </Text>
             </View>
           );
@@ -459,14 +463,14 @@ export function MatchStatsCompare({
       };
     }
     const totalPasses = get(STAT_KEYS.totalPasses);
+    const passesAccurate = get(STAT_KEYS.passesAccurate);
     let passAccuracy = get(STAT_KEYS.passAccuracy);
-    if (!has(passAccuracy)) {
-      const accurate = get(STAT_KEYS.passesAccurate);
+    if (!has(passAccuracy) && has(passesAccurate) && has(totalPasses)) {
       const ratio = (a: number | null, tot: number | null) =>
         a != null && tot ? Math.round((a / tot) * 100) : null;
       passAccuracy = {
-        home: ratio(accurate.home, totalPasses.home),
-        away: ratio(accurate.away, totalPasses.away),
+        home: ratio(passesAccurate.home, totalPasses.home),
+        away: ratio(passesAccurate.away, totalPasses.away),
       };
     }
     return {
@@ -477,6 +481,7 @@ export function MatchStatsCompare({
       shotsOff,
       blocked,
       totalPasses,
+      passesAccurate,
       passAccuracy,
       attacks: get(STAT_KEYS.attacks),
       dangerous: get(STAT_KEYS.dangerous),
@@ -490,7 +495,7 @@ export function MatchStatsCompare({
 
   const listRows = useMemo(() => {
     const L = (type: string) => getLocalizedStatType(type, language);
-    const candidates: Array<{ key: string; label: string; pair: Pair; decimals?: number }> = [
+    const candidates: Array<{ key: string; label: string; pair: Pair; decimals?: number; suffix?: string }> = [
       { key: 'shotsOn', label: L('Shots on Goal'), pair: p.shotsOn },
       { key: 'shotsOff', label: L('Shots off Goal'), pair: p.shotsOff },
       { key: 'blocked', label: L('Blocked Shots'), pair: p.blocked },
@@ -499,15 +504,12 @@ export function MatchStatsCompare({
       { key: 'fouls', label: L('Fouls'), pair: p.fouls },
       { key: 'yellow', label: L('Yellow Cards'), pair: p.yellow },
       { key: 'red', label: L('Red Cards'), pair: p.red },
+      { key: 'passes', label: L('Total Passes'), pair: p.totalPasses },
+      { key: 'passesAccurate', label: L('Passes accurate'), pair: p.passesAccurate },
+      { key: 'passAcc', label: L('Pass Accuracy'), pair: p.passAccuracy, suffix: '%' },
       { key: 'offsides', label: L('Offsides'), pair: p.offsides },
       { key: 'attacks', label: L('Attacks'), pair: p.attacks },
       { key: 'dangerous', label: L('Dangerous Attacks'), pair: p.dangerous },
-      { key: 'passes', label: L('Total Passes'), pair: p.totalPasses },
-      {
-        key: 'passAcc',
-        label: L('Pass Accuracy'),
-        pair: p.passAccuracy,
-      },
     ];
     return candidates.filter((r) => has(r.pair));
   }, [p, language]);
