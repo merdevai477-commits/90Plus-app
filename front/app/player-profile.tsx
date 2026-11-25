@@ -994,27 +994,71 @@ export default function PlayerProfileScreen() {
     const fontReg = useAppFont(400);
 
     const matchStats = useMemo(() => {
-        type Row = { key: string; label: string; value: string; isTop: boolean; isRating: boolean };
+        type Row = {
+            key: string;
+            label: string;
+            value: string;
+            isTop: boolean;
+            isRating: boolean;
+            kind: 'minutes' | 'goals' | 'assists' | 'pass' | 'other';
+        };
+        const classify = (names: string): Row['kind'] => {
+            if (/rating|تقييم/.test(names)) return 'other';
+            if (/\bmin(ute)?s?\b|دقيقة|دقائق|minutes?\s*played/.test(names)) return 'minutes';
+            if (/\bassists?\b|صناع|تمريرة حاسمة|تمريرات حاسمة/.test(names)) return 'assists';
+            if (
+                /\bgoals?\b|أهداف/.test(names) &&
+                !/expected|متوقع|conced|عليه|against|xG|xGOT|xA/i.test(names)
+            ) {
+                return 'goals';
+            }
+            if (/pass|تمرير|عرضي|cross|final third|الثلث/.test(names)) return 'pass';
+            return 'other';
+        };
         const rows: Row[] = [];
         (matchReport365?.stats ?? []).forEach((raw, idx) => {
             const formatted = format365StatEntry(raw, language);
             if (!formatted) return;
             const o = raw as Record<string, unknown>;
             const names = `${o.name ?? ''} ${o.shortName ?? ''} ${formatted.label}`.toLowerCase();
+            const kind = classify(names);
             rows.push({
                 ...formatted,
                 key: `${idx}-${formatted.label}`,
                 isTop: o.isTop === true,
                 isRating: /rating|تقييم/.test(names),
+                kind: kind === 'other' && /rating|تقييم/.test(names) ? 'other' : kind,
             });
         });
         const rating = rows.find((r) => r.isRating) ?? null;
         const rest = rows.filter((r) => r !== rating);
+        const pick = (kind: Row['kind']) => rest.find((r) => r.kind === kind) ?? null;
+        const highlights = {
+            minutes: pick('minutes'),
+            goals: pick('goals'),
+            assists: pick('assists'),
+        };
+        const highlightKeys = new Set(
+            [highlights.minutes, highlights.goals, highlights.assists]
+                .filter(Boolean)
+                .map((r) => r!.key),
+        );
+        const list = rest.filter((r) => !highlightKeys.has(r.key));
+        const passList = list.filter((r) => r.kind === 'pass');
+        const attackList = list.filter((r) => r.kind !== 'pass');
+        // Fallback featured grid when the trio isn't available.
         const tops = rest.filter((r) => r.isTop);
         const featured = (tops.length >= 2 ? tops : rest).slice(0, 4);
-        const list = rest.filter((r) => !featured.includes(r));
         const ratingNum = rating ? Number.parseFloat(rating.value) : NaN;
-        return { rating: Number.isFinite(ratingNum) ? ratingNum : null, featured, list, total: rows.length };
+        return {
+            rating: Number.isFinite(ratingNum) ? ratingNum : null,
+            highlights,
+            featured,
+            attackList,
+            passList,
+            list,
+            total: rows.length,
+        };
     }, [matchReport365, language]);
 
     const matchEvents = useMemo(
@@ -1070,15 +1114,106 @@ export default function PlayerProfileScreen() {
             },
         } as any);
 
+    const isMatchContext = Boolean(contextFixtureId);
     const chips: { key: string; icon?: number; text: string }[] = [];
     if (primaryPosition) chips.push({ key: 'pos', icon: PP_ICON.position, text: primaryPosition });
-    if (is365Source && matchReport365?.formation) chips.push({ key: 'formation', icon: PP_ICON.court, text: matchReport365.formation });
-    if (heroPlayer.age != null && heroPlayer.age > 0) chips.push({ key: 'age', icon: PP_ICON.cake, text: `${heroPlayer.age} ${pp.years}` });
-    if (!is365Source) chips.push({ key: 'season', icon: PP_ICON.seasonStats, text: `${seasonYear}/${seasonYear + 1}` });
+    if (is365Source && matchReport365?.formation) {
+        chips.push({ key: 'formation', icon: PP_ICON.court, text: matchReport365.formation });
+    }
+    if (!isMatchContext && heroPlayer.age != null && heroPlayer.age > 0) {
+        chips.push({ key: 'age', icon: PP_ICON.cake, text: `${heroPlayer.age} ${pp.years}` });
+    }
+    if (!isMatchContext && !is365Source) {
+        chips.push({ key: 'season', icon: PP_ICON.seasonStats, text: `${seasonYear}/${seasonYear + 1}` });
+    }
 
     const heroWash = isDark
         ? (['rgba(12,5,26,0.55)', 'rgba(12,5,26,0.88)', B.bg] as const)
         : (['rgba(249,246,254,0.42)', 'rgba(249,246,254,0.88)', B.bg] as const);
+
+    const highlightCells: {
+        key: string;
+        icon: number;
+        value: string;
+        label: string;
+        valueColor?: string;
+    }[] = [
+        {
+            key: 'minutes',
+            icon: PP_ICON.statTimer,
+            value: matchStats.highlights.minutes?.value
+                ? /['′]/.test(matchStats.highlights.minutes.value)
+                    ? matchStats.highlights.minutes.value
+                    : `${matchStats.highlights.minutes.value}′`
+                : '—',
+            label: pp.minute,
+            valueColor: '#AC1519',
+        },
+        {
+            key: 'goals',
+            icon: PP_ICON.statFootball,
+            value: matchStats.highlights.goals?.value ?? '0',
+            label: pp.goals,
+        },
+        {
+            key: 'assists',
+            icon: PP_ICON.statCleats,
+            value: matchStats.highlights.assists?.value ?? '0',
+            label: pp.assistsShort,
+        },
+    ];
+
+    const hasHighlightTrio =
+        matchStats.highlights.minutes != null ||
+        matchStats.highlights.goals != null ||
+        matchStats.highlights.assists != null;
+
+    const renderStatListCard = (rows: typeof matchStats.list) => {
+        if (rows.length === 0) return null;
+        return (
+            <View
+                style={[
+                    styles.matchListCard,
+                    {
+                        backgroundColor: isDark ? B.card : '#FFFDFF',
+                        shadowColor: B.shadow,
+                    },
+                ]}
+            >
+                {rows.map((s, idx) => (
+                    <View
+                        key={s.key}
+                        style={[
+                            styles.matchStatRow,
+                            { flexDirection: row },
+                            idx < rows.length - 1 && [
+                                styles.matchStatRowDivider,
+                                { borderBottomColor: isDark ? B.divider : 'rgba(255,255,255,0.9)' },
+                            ],
+                        ]}
+                    >
+                        <Text
+                            style={[
+                                styles.matchStatValue,
+                                { fontFamily: fontBold, color: B.primary },
+                            ]}
+                        >
+                            {s.value}
+                        </Text>
+                        <Text
+                            style={[
+                                styles.matchStatLabel,
+                                { fontFamily: fontSemi, textAlign, color: B.ink },
+                            ]}
+                            numberOfLines={2}
+                        >
+                            {s.label}
+                        </Text>
+                    </View>
+                ))}
+            </View>
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: B.bg }]}>
@@ -1098,210 +1233,488 @@ export default function PlayerProfileScreen() {
                 scrollEventThrottle={16}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
             >
-                {/* Hero */}
-                <View style={[styles.hero, { paddingTop: headerHeight + 12 }]}>
-                    <ExpoImage source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
-                    <LinearGradient
-                        colors={[...heroWash]}
-                        locations={[0, 0.65, 1]}
-                        style={StyleSheet.absoluteFill}
-                    />
-                    {jerseyNumber != null ? (
-                        <Text
-                            style={[
-                                styles.heroJersey,
-                                styles.heroLiftShadow,
-                                {
-                                    fontFamily: fontExtraBold,
-                                    top: headerHeight - 6,
-                                    color: isDark ? B.jersey : '#000000',
-                                    opacity: isDark ? 0.9 : 1,
-                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.28)',
-                                },
-                                rtl ? { left: 14 } : { right: 14 },
-                            ]}
-                            allowFontScaling={false}
-                        >
-                            {`#${jerseyNumber}`}
-                        </Text>
-                    ) : null}
-
-                    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-                        <View style={[styles.heroRow, { flexDirection: row }]}>
-                            <View style={styles.photoWrap}>
-                                <PlayerHeroPhoto
-                                    key={playerId}
-                                    playerId={playerId}
-                                    photo={heroPlayer.photo ?? params.photo}
-                                    name={heroPlayer.name}
-                                    position={primaryPosition}
-                                    colors={teamColors}
-                                    photoSource={is365Source ? '365' : 'api'}
+                {/* Hero — Figma match-player sheet (2554:9449) when opened from a fixture */}
+                <View
+                    style={[
+                        styles.hero,
+                        { paddingTop: headerHeight + (isMatchContext ? 8 : 12) },
+                        isMatchContext && styles.heroMatchPad,
+                    ]}
+                >
+                    {isMatchContext ? (
+                        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                            <View style={[styles.matchHeroCard, { shadowColor: '#511DAC' }]}>
+                                <LinearGradient
+                                    colors={['#2A1058', '#4B1FA3', '#6A2BD9']}
+                                    start={{ x: 0, y: 0.15 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={StyleSheet.absoluteFill}
                                 />
-                                {matchStats.rating != null ? (
-                                    <View
+                                <LinearGradient
+                                    colors={['rgba(167,139,250,0.35)', 'transparent', 'rgba(36,16,78,0.45)']}
+                                    start={{ x: 0.2, y: 0 }}
+                                    end={{ x: 0.9, y: 1 }}
+                                    style={StyleSheet.absoluteFill}
+                                />
+                                {jerseyNumber != null ? (
+                                    <Text
                                         style={[
-                                            styles.ratingMedal,
-                                            { backgroundColor: ratingTone(matchStats.rating), borderColor: B.bg },
+                                            styles.matchHeroJersey,
+                                            {
+                                                fontFamily: fontExtraBold,
+                                                ...(rtl ? { left: 8 } : { right: 8 }),
+                                            },
                                         ]}
+                                        allowFontScaling={false}
                                     >
-                                        <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
-                                            {matchStats.rating.toFixed(1)}
-                                        </Text>
-                                    </View>
+                                        {jerseyNumber}
+                                    </Text>
                                 ) : null}
-                            </View>
-
-                            <View style={[styles.heroInfo, { alignItems: alignStart }]}>
-                                {heroPlayer.nationality ? (
-                                    <View style={[styles.inlineRow, { flexDirection: row }]}>
-                                        {nationalityFlagUri ? (
+                                <View style={[styles.matchHeroRow, { flexDirection: row }]}>
+                                    <View style={styles.matchHeroPhoto}>
+                                        <PlayerHeroPhoto
+                                            key={playerId}
+                                            playerId={playerId}
+                                            photo={heroPlayer.photo ?? params.photo}
+                                            name={heroPlayer.name}
+                                            position={primaryPosition}
+                                            colors={teamColors}
+                                            photoSource={is365Source ? '365' : 'api'}
+                                        />
+                                        {matchStats.rating != null ? (
                                             <View
                                                 style={[
-                                                    styles.flagFrame,
+                                                    styles.ratingMedal,
                                                     {
-                                                        borderColor: isDark
-                                                            ? 'rgba(255,255,255,0.22)'
-                                                            : 'rgba(12,5,25,0.14)',
+                                                        backgroundColor: ratingTone(matchStats.rating),
+                                                        borderColor: '#2A1058',
                                                     },
                                                 ]}
                                             >
-                                                <ExpoImage
-                                                    source={{ uri: nationalityFlagUri }}
-                                                    style={StyleSheet.absoluteFillObject}
-                                                    contentFit="cover"
-                                                    cachePolicy="memory-disk"
-                                                    transition={0}
-                                                />
+                                                <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
+                                                    {matchStats.rating.toFixed(1)}
+                                                </Text>
                                             </View>
                                         ) : null}
+                                    </View>
+                                    <View style={[styles.matchHeroInfo, { alignItems: alignStart }]}>
                                         <Text
                                             style={[
-                                                styles.heroMeta,
-                                                {
-                                                    fontFamily: fontSemi,
-                                                    color: isDark ? B.soft : '#313131',
-                                                },
+                                                styles.matchHeroName,
+                                                { fontFamily: fontBold, textAlign },
                                             ]}
-                                            numberOfLines={1}
+                                            numberOfLines={2}
                                         >
-                                            {heroPlayer.nationality}
+                                            {heroPlayer.name}
+                                        </Text>
+                                        <View
+                                            style={[
+                                                styles.matchHeroMetaRow,
+                                                { flexDirection: row },
+                                            ]}
+                                        >
+                                            {primaryTeam ? (
+                                                <View style={[styles.inlineRow, { flexDirection: row, gap: 6 }]}>
+                                                    <Text
+                                                        style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
+                                                        numberOfLines={1}
+                                                    >
+                                                        {getTeamDisplayName(primaryTeam.name, language)}
+                                                    </Text>
+                                                    <TeamBadge
+                                                        name={primaryTeam.name}
+                                                        color="transparent"
+                                                        size={22}
+                                                        logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                                        highQuality
+                                                    />
+                                                </View>
+                                            ) : null}
+                                            {heroPlayer.nationality ? (
+                                                <View style={[styles.inlineRow, { flexDirection: row, gap: 9 }]}>
+                                                    <Text
+                                                        style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
+                                                        numberOfLines={1}
+                                                    >
+                                                        {heroPlayer.nationality}
+                                                    </Text>
+                                                    {nationalityFlagUri ? (
+                                                        <View
+                                                            style={[
+                                                                styles.flagFrame,
+                                                                { borderColor: 'rgba(255,255,255,0.28)' },
+                                                            ]}
+                                                        >
+                                                            <ExpoImage
+                                                                source={{ uri: nationalityFlagUri }}
+                                                                style={StyleSheet.absoluteFillObject}
+                                                                contentFit="cover"
+                                                                cachePolicy="memory-disk"
+                                                                transition={0}
+                                                            />
+                                                        </View>
+                                                    ) : null}
+                                                </View>
+                                            ) : null}
+                                        </View>
+                                        {chips.length > 0 ? (
+                                            <View style={[styles.matchChipsRow, { flexDirection: row }]}>
+                                                {chips.map((c) => (
+                                                    <View
+                                                        key={c.key}
+                                                        style={[styles.matchChip, { flexDirection: row }]}
+                                                    >
+                                                        {c.icon != null ? (
+                                                            <ExpoImage
+                                                                source={c.icon}
+                                                                style={styles.chipIcon}
+                                                                contentFit="contain"
+                                                            />
+                                                        ) : null}
+                                                        <Text
+                                                            style={[
+                                                                styles.matchChipText,
+                                                                { fontFamily: fontBold },
+                                                            ]}
+                                                            numberOfLines={1}
+                                                        >
+                                                            {c.text}
+                                                        </Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        ) : null}
+                                    </View>
+                                </View>
+                            </View>
+
+                            {is365Source && athleteId365 > 0 ? (
+                                <TouchableOpacity
+                                    activeOpacity={0.85}
+                                    style={[styles.matchCareerBtnWrap, { shadowColor: B.primaryDark }]}
+                                    onPress={openCareer}
+                                >
+                                    <View style={[styles.matchCareerBtn, { flexDirection: row }]}>
+                                        <Ionicons
+                                            name={rtl ? 'chevron-back' : 'chevron-forward'}
+                                            size={22}
+                                            color="#fff"
+                                        />
+                                        <Text style={[styles.matchCareerBtnText, { fontFamily: fontBold }]}>
+                                            {pp.viewFullCareer}
                                         </Text>
                                     </View>
-                                ) : null}
-                                <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4, gap: 7 }]}>
-                                    <Text
-                                        style={[
-                                            styles.playerName,
-                                            {
-                                                // Match career profile / Figma 2431:17446
-                                                fontFamily: fontBold,
-                                                textAlign,
-                                                color: isDark ? B.ink : '#0c0519',
-                                            },
-                                        ]}
-                                        numberOfLines={2}
-                                    >
-                                        {heroPlayer.name}
-                                    </Text>
-                                    <ExpoImage source={PP_ICON.verified} style={styles.verified} contentFit="contain" />
-                                </View>
-                                {heroPlayer.injured && (
-                                    <View style={[styles.injuredBadge, { flexDirection: row }]}>
-                                        <Ionicons name="medkit-outline" size={12} color="#fca5a5" />
-                                        <Text style={[styles.injuredText, { fontFamily: fontBold }]}>{pp.injured}</Text>
+                                </TouchableOpacity>
+                            ) : null}
+                        </Animated.View>
+                    ) : (
+                        <>
+                            <ExpoImage source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
+                            <LinearGradient
+                                colors={[...heroWash]}
+                                locations={[0, 0.65, 1]}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            {jerseyNumber != null ? (
+                                <Text
+                                    style={[
+                                        styles.heroJersey,
+                                        styles.heroLiftShadow,
+                                        {
+                                            fontFamily: fontExtraBold,
+                                            top: headerHeight - 6,
+                                            color: isDark ? B.jersey : '#000000',
+                                            opacity: isDark ? 0.9 : 1,
+                                            textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.28)',
+                                        },
+                                        rtl ? { left: 14 } : { right: 14 },
+                                    ]}
+                                    allowFontScaling={false}
+                                >
+                                    {`#${jerseyNumber}`}
+                                </Text>
+                            ) : null}
+
+                            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                                <View style={[styles.heroRow, { flexDirection: row }]}>
+                                    <View style={styles.photoWrap}>
+                                        <PlayerHeroPhoto
+                                            key={playerId}
+                                            playerId={playerId}
+                                            photo={heroPlayer.photo ?? params.photo}
+                                            name={heroPlayer.name}
+                                            position={primaryPosition}
+                                            colors={teamColors}
+                                            photoSource={is365Source ? '365' : 'api'}
+                                        />
+                                        {matchStats.rating != null ? (
+                                            <View
+                                                style={[
+                                                    styles.ratingMedal,
+                                                    {
+                                                        backgroundColor: ratingTone(matchStats.rating),
+                                                        borderColor: B.bg,
+                                                    },
+                                                ]}
+                                            >
+                                                <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
+                                                    {matchStats.rating.toFixed(1)}
+                                                </Text>
+                                            </View>
+                                        ) : null}
                                     </View>
-                                )}
-                                {primaryTeam && (
-                                    <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
-                                        <View style={styles.heroCrestLift}>
-                                            <TeamBadge
-                                                name={primaryTeam.name}
-                                                color="transparent"
-                                                size={40}
-                                                logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
-                                                highQuality
+
+                                    <View style={[styles.heroInfo, { alignItems: alignStart }]}>
+                                        {heroPlayer.nationality ? (
+                                            <View style={[styles.inlineRow, { flexDirection: row }]}>
+                                                {nationalityFlagUri ? (
+                                                    <View
+                                                        style={[
+                                                            styles.flagFrame,
+                                                            {
+                                                                borderColor: isDark
+                                                                    ? 'rgba(255,255,255,0.22)'
+                                                                    : 'rgba(12,5,25,0.14)',
+                                                            },
+                                                        ]}
+                                                    >
+                                                        <ExpoImage
+                                                            source={{ uri: nationalityFlagUri }}
+                                                            style={StyleSheet.absoluteFillObject}
+                                                            contentFit="cover"
+                                                            cachePolicy="memory-disk"
+                                                            transition={0}
+                                                        />
+                                                    </View>
+                                                ) : null}
+                                                <Text
+                                                    style={[
+                                                        styles.heroMeta,
+                                                        {
+                                                            fontFamily: fontSemi,
+                                                            color: isDark ? B.soft : '#313131',
+                                                        },
+                                                    ]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {heroPlayer.nationality}
+                                                </Text>
+                                            </View>
+                                        ) : null}
+                                        <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4, gap: 7 }]}>
+                                            <Text
+                                                style={[
+                                                    styles.playerName,
+                                                    {
+                                                        fontFamily: fontBold,
+                                                        textAlign,
+                                                        color: isDark ? B.ink : '#0c0519',
+                                                    },
+                                                ]}
+                                                numberOfLines={2}
+                                            >
+                                                {heroPlayer.name}
+                                            </Text>
+                                            <ExpoImage
+                                                source={PP_ICON.verified}
+                                                style={styles.verified}
+                                                contentFit="contain"
                                             />
                                         </View>
-                                        <Text
-                                            style={[
-                                                styles.heroTeamName,
-                                                styles.heroLiftShadow,
-                                                {
-                                                    fontFamily: fontExtraBold,
-                                                    color: isDark ? B.ink : '#000000',
-                                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
-                                                },
-                                            ]}
-                                            numberOfLines={1}
-                                        >
-                                            {getTeamDisplayName(primaryTeam.name, language)}
-                                        </Text>
+                                        {heroPlayer.injured && (
+                                            <View style={[styles.injuredBadge, { flexDirection: row }]}>
+                                                <Ionicons name="medkit-outline" size={12} color="#fca5a5" />
+                                                <Text style={[styles.injuredText, { fontFamily: fontBold }]}>
+                                                    {pp.injured}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        {primaryTeam && (
+                                            <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
+                                                <View style={styles.heroCrestLift}>
+                                                    <TeamBadge
+                                                        name={primaryTeam.name}
+                                                        color="transparent"
+                                                        size={40}
+                                                        logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                                        highQuality
+                                                    />
+                                                </View>
+                                                <Text
+                                                    style={[
+                                                        styles.heroTeamName,
+                                                        styles.heroLiftShadow,
+                                                        {
+                                                            fontFamily: fontExtraBold,
+                                                            color: isDark ? B.ink : '#000000',
+                                                            textShadowColor: isDark
+                                                                ? 'rgba(0,0,0,0.55)'
+                                                                : 'rgba(0,0,0,0.22)',
+                                                        },
+                                                    ]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {getTeamDisplayName(primaryTeam.name, language)}
+                                                </Text>
+                                            </View>
+                                        )}
                                     </View>
-                                )}
-                            </View>
-                        </View>
+                                </View>
 
-                        {chips.length > 0 ? (
-                            <View style={[styles.chipsRow, { flexDirection: row }]}>
-                                {chips.map((c) => (
-                                    <View
-                                        key={c.key}
-                                        style={[
-                                            styles.chip,
-                                            {
-                                                flexDirection: row,
-                                                backgroundColor: isDark ? 'rgba(11,5,24,0.85)' : 'rgba(255,255,255,0.92)',
-                                                borderColor: B.border,
-                                            },
-                                        ]}
+                                {chips.length > 0 ? (
+                                    <View style={[styles.chipsRow, { flexDirection: row }]}>
+                                        {chips.map((c) => (
+                                            <View
+                                                key={c.key}
+                                                style={[
+                                                    styles.chip,
+                                                    {
+                                                        flexDirection: row,
+                                                        backgroundColor: isDark
+                                                            ? 'rgba(11,5,24,0.85)'
+                                                            : 'rgba(255,255,255,0.92)',
+                                                        borderColor: B.border,
+                                                    },
+                                                ]}
+                                            >
+                                                {c.icon != null ? (
+                                                    <ExpoImage
+                                                        source={c.icon}
+                                                        style={styles.chipIcon}
+                                                        contentFit="contain"
+                                                    />
+                                                ) : null}
+                                                <Text
+                                                    style={[styles.chipText, { fontFamily: fontSemi, color: B.ink }]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {c.text}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                ) : null}
+
+                                {is365Source && athleteId365 > 0 && (
+                                    <TouchableOpacity
+                                        activeOpacity={0.85}
+                                        style={[styles.careerButtonWrap, { shadowColor: B.primary }]}
+                                        onPress={openCareer}
                                     >
-                                        {c.icon != null ? (
-                                            <ExpoImage source={c.icon} style={styles.chipIcon} contentFit="contain" />
-                                        ) : null}
-                                        <Text
-                                            style={[styles.chipText, { fontFamily: fontSemi, color: B.ink }]}
-                                            numberOfLines={1}
+                                        <LinearGradient
+                                            colors={[B.primary, B.primaryDeep]}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={[styles.careerButton, { flexDirection: row }]}
                                         >
-                                            {c.text}
-                                        </Text>
-                                    </View>
-                                ))}
-                            </View>
-                        ) : null}
-
-                        {is365Source && athleteId365 > 0 && (
-                            <TouchableOpacity
-                                activeOpacity={0.85}
-                                style={[styles.careerButtonWrap, { shadowColor: B.primary }]}
-                                onPress={openCareer}
-                            >
-                                <LinearGradient
-                                    colors={[B.primary, B.primaryDeep]}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={[styles.careerButton, { flexDirection: row }]}
-                                >
-                                    <ExpoImage source={PP_ICON.seasonStats} style={styles.chipIcon} contentFit="contain" />
-                                    <Text style={[styles.careerButtonText, { fontFamily: fontBold }]}>{pp.viewFullCareer}</Text>
-                                    <Ionicons name={rtl ? 'chevron-back' : 'chevron-forward'} size={16} color="#fff" />
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        )}
-                    </Animated.View>
+                                            <ExpoImage
+                                                source={PP_ICON.seasonStats}
+                                                style={styles.chipIcon}
+                                                contentFit="contain"
+                                            />
+                                            <Text style={[styles.careerButtonText, { fontFamily: fontBold }]}>
+                                                {pp.viewFullCareer}
+                                            </Text>
+                                            <Ionicons
+                                                name={rtl ? 'chevron-back' : 'chevron-forward'}
+                                                size={16}
+                                                color="#fff"
+                                            />
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                )}
+                            </Animated.View>
+                        </>
+                    )}
                 </View>
 
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
                     {is365Source && (
                         <>
-                            <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} colors={B} />
+                            {isMatchContext ? (
+                                <View style={[styles.matchPerfHeader, { flexDirection: row }]}>
+                                    <View style={styles.livePill}>
+                                        <Text style={[styles.livePillText, { fontFamily: fontSemi }]}>
+                                            {t.matches.status.live}
+                                        </Text>
+                                        <View style={styles.livePillDot} />
+                                    </View>
+                                    <Text
+                                        style={[
+                                            styles.matchPerfTitle,
+                                            { fontFamily: fontBold, textAlign, color: B.ink },
+                                        ]}
+                                    >
+                                        {pp.currentPerformance}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} colors={B} />
+                            )}
                             {loading && !matchReport365 ? (
                                 <View style={[styles.card, styles.loadingCard, { backgroundColor: B.card, borderColor: B.border }]}>
                                     <ActivityIndicator size="small" color={B.primary} />
                                 </View>
                             ) : matchStats.total > 0 ? (
                                 <>
-                                    {matchStats.featured.length > 0 && (
+                                    {isMatchContext && hasHighlightTrio ? (
+                                        <View
+                                            style={[
+                                                styles.highlightCard,
+                                                {
+                                                    backgroundColor: isDark ? B.card : '#FFFDFF',
+                                                    shadowColor: B.shadow,
+                                                },
+                                            ]}
+                                        >
+                                            <View style={[styles.highlightRow, { flexDirection: row }]}>
+                                                {highlightCells.map((cell, idx) => (
+                                                    <View key={cell.key} style={styles.highlightCellWrap}>
+                                                        {idx > 0 ? (
+                                                            <View
+                                                                style={[
+                                                                    styles.highlightDivider,
+                                                                    {
+                                                                        backgroundColor: isDark
+                                                                            ? B.divider
+                                                                            : 'rgba(36,16,78,0.12)',
+                                                                    },
+                                                                ]}
+                                                            />
+                                                        ) : null}
+                                                        <View style={styles.highlightCell}>
+                                                            <ExpoImage
+                                                                source={cell.icon}
+                                                                style={styles.highlightIcon}
+                                                                contentFit="contain"
+                                                            />
+                                                            <Text
+                                                                style={[
+                                                                    styles.highlightValue,
+                                                                    {
+                                                                        fontFamily: fontBold,
+                                                                        color: cell.valueColor ?? B.ink,
+                                                                    },
+                                                                ]}
+                                                                numberOfLines={1}
+                                                            >
+                                                                {cell.value}
+                                                            </Text>
+                                                            <Text
+                                                                style={[
+                                                                    styles.highlightLabel,
+                                                                    { fontFamily: fontSemi, color: B.ink },
+                                                                ]}
+                                                                numberOfLines={1}
+                                                            >
+                                                                {cell.label}
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        </View>
+                                    ) : matchStats.featured.length > 0 ? (
                                         <View style={[styles.featuredGrid, { flexDirection: row }]}>
                                             {matchStats.featured.map((s) => (
                                                 <View
@@ -1322,7 +1735,10 @@ export default function PlayerProfileScreen() {
                                                         style={styles.featuredAccent}
                                                     />
                                                     <Text
-                                                        style={[styles.featuredValue, { fontFamily: fontBold, color: B.ink }]}
+                                                        style={[
+                                                            styles.featuredValue,
+                                                            { fontFamily: fontBold, color: B.ink },
+                                                        ]}
                                                         numberOfLines={1}
                                                     >
                                                         {s.value}
@@ -1339,8 +1755,20 @@ export default function PlayerProfileScreen() {
                                                 </View>
                                             ))}
                                         </View>
-                                    )}
-                                    {matchStats.list.length > 0 && (
+                                    ) : null}
+
+                                    {isMatchContext ? (
+                                        <View style={styles.matchListsStack}>
+                                            {renderStatListCard(
+                                                matchStats.attackList.length > 0
+                                                    ? matchStats.attackList
+                                                    : matchStats.list,
+                                            )}
+                                            {matchStats.attackList.length > 0
+                                                ? renderStatListCard(matchStats.passList)
+                                                : null}
+                                        </View>
+                                    ) : matchStats.list.length > 0 ? (
                                         <View
                                             style={[
                                                 styles.card,
@@ -1370,14 +1798,17 @@ export default function PlayerProfileScreen() {
                                                         {s.label}
                                                     </Text>
                                                     <Text
-                                                        style={[styles.statValue, { fontFamily: fontBold, color: B.ink }]}
+                                                        style={[
+                                                            styles.statValue,
+                                                            { fontFamily: fontBold, color: B.ink },
+                                                        ]}
                                                     >
                                                         {s.value}
                                                     </Text>
                                                 </View>
                                             ))}
                                         </View>
-                                    )}
+                                    ) : null}
                                 </>
                             ) : (
                                 <View
@@ -1683,6 +2114,144 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(167,139,250,0.35)',
     },
     careerButtonText: { color: '#fff', fontSize: 14 },
+
+    heroMatchPad: { paddingHorizontal: 18, paddingBottom: 8 },
+    matchHeroCard: {
+        height: 214,
+        borderRadius: 18,
+        overflow: 'hidden',
+        justifyContent: 'flex-end',
+        paddingHorizontal: 16,
+        paddingBottom: 18,
+        paddingTop: 20,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    matchHeroJersey: {
+        position: 'absolute',
+        top: -8,
+        fontSize: 140,
+        lineHeight: 150,
+        color: 'rgba(196,165,255,0.28)',
+        textShadowColor: 'rgba(167,139,250,0.65)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 18,
+    },
+    matchHeroRow: { alignItems: 'flex-end', gap: 10, zIndex: 1 },
+    matchHeroPhoto: { alignItems: 'center', marginBottom: -6 },
+    matchHeroInfo: { flex: 1, gap: 12, paddingBottom: 4 },
+    matchHeroName: { color: '#fff', fontSize: 32, lineHeight: 38 },
+    matchHeroMetaRow: { flexWrap: 'wrap', gap: 16, alignItems: 'center' },
+    matchHeroMeta: { color: '#fff', fontSize: 16, flexShrink: 1 },
+    matchChipsRow: { flexWrap: 'wrap', gap: 10 },
+    matchChip: {
+        height: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingHorizontal: 14,
+        borderRadius: 34,
+        backgroundColor: '#4B1FA3',
+    },
+    matchChipText: { color: '#fff', fontSize: 12 },
+    matchCareerBtnWrap: {
+        marginTop: 16,
+        borderRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+        elevation: 6,
+    },
+    matchCareerBtn: {
+        height: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        backgroundColor: '#6A2BD9',
+    },
+    matchCareerBtnText: { color: '#fff', fontSize: 14, lineHeight: 20 },
+    matchPerfHeader: {
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+        marginTop: 8,
+    },
+    matchPerfTitle: { fontSize: 18, flexShrink: 1 },
+    livePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        height: 25,
+        paddingHorizontal: 10,
+        borderRadius: 34,
+        backgroundColor: '#ECFDF3',
+    },
+    livePillText: { color: '#19B052', fontSize: 12 },
+    livePillDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#19B052',
+    },
+    highlightCard: {
+        borderRadius: 16,
+        minHeight: 116,
+        marginBottom: 16,
+        paddingHorizontal: 6,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    highlightRow: {
+        flex: 1,
+        minHeight: 116,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    highlightCellWrap: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 115,
+    },
+    highlightCell: {
+        flex: 1,
+        height: 115,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        paddingHorizontal: 8,
+    },
+    highlightDivider: {
+        width: StyleSheet.hairlineWidth,
+        height: 65,
+    },
+    highlightIcon: { width: 27, height: 27, marginBottom: 2 },
+    highlightValue: { fontSize: 32, lineHeight: 38, textAlign: 'center' },
+    highlightLabel: { fontSize: 14, textAlign: 'center' },
+    matchListsStack: { gap: 16, marginBottom: 8 },
+    matchListCard: {
+        borderRadius: 18,
+        paddingHorizontal: 6,
+        paddingVertical: 8,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    matchStatRow: {
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+    },
+    matchStatRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth },
+    matchStatValue: { width: 76, fontSize: 18, textAlign: 'center' },
+    matchStatLabel: { flex: 1, fontSize: 15 },
 
     body: { paddingHorizontal: 18 },
 
