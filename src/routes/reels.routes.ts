@@ -107,12 +107,15 @@ async function getBlockedUserIdsForUser(userId: string): Promise<string[]> {
  */
 router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { cursor, limit = REELS_PER_PAGE.toString() } = req.query;
+        const { cursor, limit = REELS_PER_PAGE.toString(), scope: scopeRaw } = req.query;
         const currentUserId = req.auth?.userId;
         const take = Math.min(parseInt(limit as string) || REELS_PER_PAGE, 10);
+        const scope = String(scopeRaw || 'for_you').toLowerCase() === 'following'
+            ? 'following'
+            : 'for_you';
 
         // Check feed cache (only for first page without cursor)
-        const cacheKey = `feed_${currentUserId}_${cursor || 'first'}_${take}`;
+        const cacheKey = `feed_${currentUserId}_${scope}_${cursor || 'first'}_${take}`;
         const cached = await getFeedFromCache(cacheKey);
         if (cached) {
             res.json(cached);
@@ -138,13 +141,58 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
 
         const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
 
+        // Following scope: only reels from users the viewer follows
+        let followingIds: string[] | null = null;
+        if (scope === 'following') {
+            if (!currentUser?.id) {
+                const emptyResponse = {
+                    status: 'SUCCESS',
+                    data: { reels: [], nextCursor: null, hasMore: false },
+                };
+                await setFeedCache(cacheKey, emptyResponse);
+                res.json(emptyResponse);
+                return;
+            }
+            const follows = await prisma.follow.findMany({
+                where: { followerId: currentUser.id },
+                select: { followingId: true },
+            });
+            followingIds = follows.map((f) => f.followingId);
+            if (followingIds.length === 0) {
+                const emptyResponse = {
+                    status: 'SUCCESS',
+                    data: { reels: [], nextCursor: null, hasMore: false },
+                };
+                await setFeedCache(cacheKey, emptyResponse);
+                res.json(emptyResponse);
+                return;
+            }
+        }
+
+        const followingAllowList = followingIds
+            ? followingIds.filter((id) => !blockedUserIds.includes(id))
+            : null;
+        if (followingIds && followingAllowList && followingAllowList.length === 0) {
+            const emptyResponse = {
+                status: 'SUCCESS',
+                data: { reels: [], nextCursor: null, hasMore: false },
+            };
+            await setFeedCache(cacheKey, emptyResponse);
+            res.json(emptyResponse);
+            return;
+        }
+
         const reels = await prisma.reel.findMany({
             where: {
                 isDeleted: false,
                 status: 'READY', // Fix 7: exclude PROCESSING/FAILED reels from feed
                 videoUrl: { not: '' }, // Fix 8: skip rows where Mux webhook hasn't fired yet
-                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
-            }, // Exclude deleted reels + blocked users
+                ...(followingAllowList
+                    ? { userId: { in: followingAllowList } }
+                    : blockedUserIds.length > 0
+                        ? { userId: { notIn: blockedUserIds } }
+                        : {}),
+            }, // Exclude deleted reels + blocked users (+ following filter when scoped)
             take: take + 1, // Get one extra to check if there's more
             ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
             // Order by publishedAt (set when the reel transitions to READY)
@@ -279,7 +327,11 @@ router.get('/feed', requireAuth, lenientLimiter, async (req: Request, res: Respo
                 .map((m: any) => mentionUsernameMap.get(m.mentionedUserId))
                 .filter(Boolean),
             previewComments: reel.comments,
-            user: reel.user,
+            user: {
+                ...reel.user,
+                // Following-scope authors are followed by definition
+                ...(scope === 'following' ? { isFollowing: true } : {}),
+            },
             createdAt: reel.createdAt,
             };
         }));

@@ -22,7 +22,11 @@ import {
   Eye,
   X,
   ChevronUp,
+  Search,
+  Plus,
 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 
 // للـ Gradient
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,7 +42,7 @@ import { ReelData } from '../../components/reels/types';
 import { useVideos } from '../../contexts/VideosContext';
 import CommentsModal from '../../components/common/CommentsModal';
 import { useAuth } from '@clerk/clerk-expo';
-import { ReelsService, ReelFeedItem, FollowService } from '../../src/services/authService';
+import { ReelsService, ReelFeedItem, FollowService, type ReelsFeedScope } from '../../src/services/authService';
 import { useFollowStore } from '../../src/store/useFollowStore';
 import { useReelUploadEventsStore } from '../../src/store/useReelUploadEventsStore';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -336,6 +340,11 @@ const ReelsFeed: React.FC = () => {
   // Hashtag filtering
   const [selectedHashtag, setSelectedHashtag] = useState<string | null>(null);
 
+  // For You / Following feed scope (Figma header toggle)
+  const [feedScope, setFeedScope] = useState<ReelsFeedScope>('for_you');
+  const feedScopeRef = useRef<ReelsFeedScope>('for_you');
+  const insets = useSafeAreaInsets();
+
   // Backend integration state - now managed by useReelsCache
   const [backendReels, setBackendReels] = useState<ReelData[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -464,7 +473,9 @@ const ReelsFeed: React.FC = () => {
         developer: reel.user?.isDeveloper || reel.user?.identity?.isDeveloper || false,
         identity: reel.user?.identity || null,
         followers: 0,
-        isFollowing: reel.user?.id ? followState.isFollowing(reel.user.id) : false
+        isFollowing:
+          reel.user?.isFollowing === true ||
+          (reel.user?.id ? followState.isFollowing(reel.user.id) : false),
       },
       videoUrl: reel.videoUrl, // Now guaranteed to be valid
       thumbnail: reel.thumbnail || '',
@@ -494,11 +505,17 @@ const ReelsFeed: React.FC = () => {
     const RETRY_DELAYS = [500, 1000, 2000]; // Reduced delays for faster retry
 
     try {
+      const scope = feedScopeRef.current;
+      const feedCacheKey =
+        scope === 'following'
+          ? `${CACHE_KEYS.REELS_FEED}_following`
+          : CACHE_KEYS.REELS_FEED;
+
       // Use Promise.all for parallel loading of network state and cache
       const [networkState, cachedData] = await Promise.all([
         Network.getNetworkStateAsync(),
         !cursor && !skipCache && !selectedHashtag
-          ? cacheService.get<ReelsCacheData>(CACHE_KEYS.REELS_FEED)
+          ? cacheService.get<ReelsCacheData>(feedCacheKey)
           : Promise.resolve(null)
       ]);
 
@@ -555,10 +572,10 @@ const ReelsFeed: React.FC = () => {
 
       // Fetch fresh data
       let result;
-      if (selectedHashtag) {
+      if (selectedHashtag && scope === 'for_you') {
         result = await ReelsService.getByHashtag(token, selectedHashtag, cursor);
       } else {
-        result = await ReelsService.getFeed(token, cursor);
+        result = await ReelsService.getFeed(token, cursor, scope);
       }
 
       if (result) {
@@ -602,7 +619,7 @@ const ReelsFeed: React.FC = () => {
             hasMore: result.hasMore,
             cachedAt: Date.now(),
           };
-          cacheService.set(CACHE_KEYS.REELS_FEED, cacheData, CACHE_TTL.REELS)
+          cacheService.set(feedCacheKey, cacheData, CACHE_TTL.REELS)
             .catch(err => logger.warn('[ReelsFeed] Cache save failed:', err));
         }
 
@@ -643,7 +660,7 @@ const ReelsFeed: React.FC = () => {
         setRetryCount(attemptNumber);
       }
     }
-  }, [getToken, selectedHashtag, transformBackendReel, likedReelIdsSet]);
+  }, [getToken, selectedHashtag, transformBackendReel, likedReelIdsSet, feedScope]);
 
   useEffect(() => {
     backendReelsLengthRef.current = backendReels.length;
@@ -767,7 +784,10 @@ const ReelsFeed: React.FC = () => {
     if (readyTick === 0) return; // initial value, not a real event
     (async () => {
       try {
-        await cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
+        await Promise.all([
+          cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {}),
+          cacheService.invalidate(`${CACHE_KEYS.REELS_FEED}_following`).catch(() => {}),
+        ]);
         await loadReelsFromBackend(undefined, true);
       } catch (err) {
         logger.warn('[ReelsFeed] Failed to refresh after reel ready event:', err);
@@ -777,16 +797,30 @@ const ReelsFeed: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readyTick]);
 
-  // Reload when hashtag changes
+  // Reload when hashtag or feed scope changes
   useEffect(() => {
+    feedScopeRef.current = feedScope;
     if (hasLoadedRef.current) {
       setIsInitialLoading(true);
       setBackendReels([]);
+      setReels([]);
       setNextCursor(null);
       setHasMore(true);
-      loadReelsFromBackend().finally(() => setIsInitialLoading(false));
+      setNoReelsMessage(false);
+      setCurrentIndex(0);
+      loadReelsFromBackend(undefined, true).finally(() => setIsInitialLoading(false));
     }
-  }, [selectedHashtag]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedHashtag, feedScope]);
+
+  const handleFeedScopeChange = useCallback((scope: ReelsFeedScope) => {
+    if (scope === feedScope) return;
+    haptic.trigger('light');
+    if (scope === 'following' && selectedHashtag) {
+      setSelectedHashtag(null);
+    }
+    setFeedScope(scope);
+  }, [feedScope, selectedHashtag, haptic]);
 
   // Reels state - ONLY backend reels (no local videos in global feed)
   const [reels, setReels] = useState<ReelData[]>([]);
@@ -1566,11 +1600,98 @@ const ReelsFeed: React.FC = () => {
     <View style={styles.container} onLayout={onFeedLayout}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Header */}
+      {/* Header — search / create + For You | Following */}
+      <View
+        style={[styles.reelsHeader, { paddingTop: Math.max(insets.top, 12) + 8 }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.reelsHeaderRow}>
+          <View style={styles.reelsHeaderActions}>
+            <TouchableOpacity
+              style={styles.headerGlassBtn}
+              onPress={() => {
+                haptic.trigger('light');
+                router.push('/search' as any);
+              }}
+              accessibilityLabel={t.reels?.forYouTab ? 'Search' : 'Search'}
+              activeOpacity={0.85}
+            >
+              {Platform.OS === 'ios' ? (
+                <View style={styles.headerGlassFill} />
+              ) : (
+                <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+              )}
+              <Search size={22} color={COLORS.white} strokeWidth={2.2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerGlassBtn}
+              onPress={() => {
+                haptic.trigger('light');
+                router.push('/(tabs)/profile' as any);
+              }}
+              accessibilityLabel="Create reel"
+              activeOpacity={0.85}
+            >
+              {Platform.OS === 'ios' ? (
+                <View style={styles.headerGlassFill} />
+              ) : (
+                <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+              )}
+              <Plus size={22} color={COLORS.white} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.scopeToggle}>
+            {Platform.OS === 'ios' ? (
+              <View style={styles.scopeToggleFill} />
+            ) : (
+              <BlurView intensity={16} tint="dark" style={StyleSheet.absoluteFill} />
+            )}
+            <TouchableOpacity
+              style={[
+                styles.scopeSegment,
+                styles.scopeSegmentWide,
+                feedScope === 'following' && styles.scopeSegmentActive,
+              ]}
+              onPress={() => handleFeedScopeChange('following')}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.scopeSegmentText,
+                  feedScope === 'following' && styles.scopeSegmentTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {t.reels.followingTab}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.scopeSegment,
+                styles.scopeSegmentNarrow,
+                feedScope === 'for_you' && styles.scopeSegmentActive,
+              ]}
+              onPress={() => handleFeedScopeChange('for_you')}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.scopeSegmentText,
+                  feedScope === 'for_you' && styles.scopeSegmentTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {t.reels.forYouTab}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
 
       {/* Hashtag Filter Bar */}
-      {selectedHashtag && (
-        <View style={styles.hashtagFilterBar}>
+      {selectedHashtag && feedScope === 'for_you' && (
+        <View style={[styles.hashtagFilterBar, { top: Math.max(insets.top, 12) + 56 }]}>
           <Text style={styles.hashtagFilterText}>
             #{selectedHashtag}
           </Text>
@@ -1606,7 +1727,7 @@ const ReelsFeed: React.FC = () => {
       {!isInitialLoading && noReelsMessage && reels.length === 0 && (
         <View style={styles.noReelsContainer}>
           <LinearGradient
-            colors={['rgba(124,58,237,0.22)', 'rgba(59,130,246,0.08)', 'transparent']}
+            colors={['rgba(106,43,217,0.22)', 'rgba(59,130,246,0.08)', 'transparent']}
             style={styles.noReelsGlow}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
@@ -1614,23 +1735,39 @@ const ReelsFeed: React.FC = () => {
           <View style={styles.noReelsIconContainer}>
             <Eye size={56} color={COLORS.secondary} />
           </View>
-          <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle}</Text>
-          <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle}</Text>
+          <Text style={styles.noReelsTitle}>
+            {feedScope === 'following'
+              ? t.reels.noFollowingVideosTitle
+              : t.reels.noVideosTitle}
+          </Text>
+          <Text style={styles.noReelsSubtitle}>
+            {feedScope === 'following'
+              ? t.reels.noFollowingVideosSubtitle
+              : t.reels.noVideosSubtitle}
+          </Text>
           <TouchableOpacity
             style={styles.noReelsButton}
             onPress={() => {
               haptic.trigger('light');
-              router.push('/(tabs)/rank');
+              if (feedScope === 'following') {
+                handleFeedScopeChange('for_you');
+              } else {
+                router.push('/(tabs)/rank');
+              }
             }}
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={[COLORS.primary, COLORS.brandPurpleDark]}
+              colors={[COLORS.figmaPrimary || '#6a2bd9', COLORS.brandPurpleDark]}
               style={styles.noReelsButtonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction}</Text>
+              <Text style={styles.noReelsButtonText}>
+                {feedScope === 'following'
+                  ? t.reels.switchToForYou
+                  : t.reels.noVideosCallToAction}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -1846,6 +1983,82 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 100,
     alignItems: 'center',
+  },
+  reelsHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingHorizontal: 14,
+  },
+  reelsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  reelsHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerGlassBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(34,32,39,0.67)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  headerGlassFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(34,32,39,0.67)',
+  },
+  scopeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+    backgroundColor: 'rgba(32,32,39,0.66)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    gap: 4,
+  },
+  scopeToggleFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(32,32,39,0.66)',
+  },
+  scopeSegment: {
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  scopeSegmentWide: {
+    minWidth: 80,
+  },
+  scopeSegmentNarrow: {
+    minWidth: 59,
+  },
+  scopeSegmentActive: {
+    backgroundColor: '#6a2bd9',
+  },
+  scopeSegmentText: {
+    color: '#cfcdda',
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  scopeSegmentTextActive: {
+    color: '#f2f2f7',
+    fontSize: 16,
+    fontWeight: '600',
   },
   headerTitle: {
     fontSize: 24,

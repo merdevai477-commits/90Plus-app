@@ -99,8 +99,8 @@ const COLORS = {
   primary: PURPLE_PRIMARY,
   background: BG_BASE,
   error: '#FF5252',
-  progressBg: 'rgba(255, 255, 255, 0.28)',
-  progressFill: PURPLE_PRIMARY,
+  progressBg: '#17161b',
+  progressFill: '#6a2bd9',
 } as const;
 
 /**
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
+    height: 4,
     zIndex: 10,
   },
   progressBackground: {
@@ -719,6 +719,8 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     backgroundColor: COLORS.progressFill,
+    borderTopLeftRadius: 40,
+    borderBottomLeftRadius: 16,
   },
   errorContainer: {
     flex: 1,

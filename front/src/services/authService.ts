@@ -1081,9 +1081,18 @@ export interface ReelFeedItem {
         displayName: string | null;
         avatar: string | null;
         isVerified: boolean;
+        isDeveloper?: boolean;
+        isFollowing?: boolean;
+        identity?: {
+            isVerified: boolean;
+            isDeveloper: boolean;
+            badge: { key: string; title: string; accent: string } | null;
+        } | null;
     };
     createdAt: string;
 }
+
+export type ReelsFeedScope = 'for_you' | 'following';
 
 export interface ReelsFeedResponse {
     reels: ReelFeedItem[];
@@ -1154,14 +1163,21 @@ function parseReelsCommentApiError(
 
 export class ReelsService {
     /**
-     * Get reels feed with pagination (5 reels per request)
+     * Get reels feed with pagination (5 reels per request).
+     * scope=following returns only reels from accounts the viewer follows.
      */
-    static async getFeed(token: string, cursor?: string): Promise<ReelsFeedResponse | null> {
+    static async getFeed(
+        token: string,
+        cursor?: string,
+        scope: ReelsFeedScope = 'for_you',
+    ): Promise<ReelsFeedResponse | null> {
         try {
-            const url = cursor 
-                ? `${API_URL}/reels/feed?cursor=${cursor}`
-                : `${API_URL}/reels/feed`;
-            
+            const params = new URLSearchParams();
+            if (cursor) params.set('cursor', cursor);
+            if (scope && scope !== 'for_you') params.set('scope', scope);
+            const qs = params.toString();
+            const url = qs ? `${API_URL}/reels/feed?${qs}` : `${API_URL}/reels/feed`;
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {

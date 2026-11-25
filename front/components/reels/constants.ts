@@ -34,6 +34,8 @@ export const COLORS = {
     mediumGray: BG_SURFACE,
 
     // Semantic
+    /** Figma --90plus-primary used on reels chrome */
+    figmaPrimary: '#6a2bd9',
     primary: PURPLE_PRIMARY,
     secondary: PURPLE_SOFT,
     accent: BLUE_ELECTRIC,
@@ -135,5 +137,7 @@ export const EFFECTS = {
 export const REELS_TAB_CLEARANCE = 82;
 
 /** Action rail sizing — keep full stack above tab bar */
-export const ACTION_BTN = 44;
-export const ACTION_GAP = 10;
+export const ACTION_BTN = 37;
+export const ACTION_GAP = 4;
+export const ACTION_SLOT_H = 62;
+export const FIGMA_PRIMARY = '#6a2bd9';

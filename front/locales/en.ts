@@ -3215,6 +3215,12 @@ export const en = {
     save: 'Save',
     follow: 'Follow',
     following: 'Following',
+    forYouTab: 'For You',
+    followingTab: 'Following',
+    more: 'More',
+    noFollowingVideosTitle: 'No reels from people you follow',
+    noFollowingVideosSubtitle: 'When people you follow post reels, they will show up here',
+    switchToForYou: 'Browse For You',
 
     // States
     views: 'Views',
