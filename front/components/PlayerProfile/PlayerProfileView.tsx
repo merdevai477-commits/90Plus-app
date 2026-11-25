@@ -208,7 +208,12 @@ export default function PlayerProfileView({
   const pad = 20;
   const photoUri = vm.photoCandidates[photoIndex];
   const photoFailed = photoIndex >= vm.photoCandidates.length;
-  const flagUri = vm.nationality ? getCountryFlagUri(vm.nationality, null, 80) : null;
+  // High-res PNG so the small hero/attr flags stay sharp (Figma Twemoji look).
+  const flagUri = vm.nationality ? getCountryFlagUri(vm.nationality, null, 160) : null;
+  const flagSize = {
+    width: Math.round(24 * scale),
+    height: Math.round(17 * scale),
+  };
   const hasSocials = Boolean(socials?.instagramUrl || socials?.facebookUrl);
   const recentMatches = useMemo(
     () => (vm.lastMatches ?? []).filter((m) => m.played && m.rating != null).slice(0, 3),
@@ -332,7 +337,7 @@ export default function PlayerProfileView({
                       {
                         fontFamily: fontSemi,
                         color: isDark ? C.ink : '#313131',
-                        fontSize: Math.round(15 * scale),
+                        fontSize: Math.round(16 * scale),
                       },
                     ]}
                     numberOfLines={1}
@@ -340,7 +345,19 @@ export default function PlayerProfileView({
                     {vm.nationality}
                   </Text>
                   {flagUri ? (
-                    <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" />
+                    <View
+                      style={[
+                        styles.flagFrame,
+                        flagSize,
+                        { borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(12,5,25,0.14)' },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: flagUri }}
+                        style={StyleSheet.absoluteFillObject}
+                        contentFit="cover"
+                      />
+                    </View>
                   ) : null}
                 </View>
               ) : null}
@@ -349,21 +366,31 @@ export default function PlayerProfileView({
                 <Text
                   style={[
                     styles.heroName,
-                    styles.heroLiftShadow,
                     {
-                      fontFamily: fontExtraBold,
-                      color: isDark ? C.ink : '#000000',
-                      fontSize: Math.round(30 * scale),
+                      // Figma 2431:17446 — Sora Bold 28 / #0c0519
+                      fontFamily: fontBold,
+                      color: isDark ? C.ink : '#0c0519',
+                      fontSize: Math.round(28 * scale),
                       lineHeight: Math.round(34 * scale),
                       letterSpacing: -0.2,
-                      textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
                     },
                   ]}
                   numberOfLines={2}
                 >
                   {vm.name}
                 </Text>
-                <Image source={PP_ICON.verified} style={styles.verifiedBadge} contentFit="contain" />
+                <Image
+                  source={PP_ICON.verified}
+                  style={[
+                    styles.verifiedBadge,
+                    {
+                      width: Math.round(24 * scale),
+                      height: Math.round(24 * scale),
+                      marginTop: Math.round(2 * scale),
+                    },
+                  ]}
+                  contentFit="contain"
+                />
               </View>
 
               {vm.clubName ? (
@@ -472,7 +499,21 @@ export default function PlayerProfileView({
             label={pc.nationality}
             value={vm.nationality || '—'}
             leading={
-              flagUri ? <Image source={{ uri: flagUri }} style={styles.flag} contentFit="cover" /> : null
+              flagUri ? (
+                <View
+                  style={[
+                    styles.flagFrame,
+                    styles.flagStrip,
+                    { borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(12,5,25,0.14)' },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: flagUri }}
+                    style={StyleSheet.absoluteFillObject}
+                    contentFit="cover"
+                  />
+                </View>
+              ) : null
             }
             C={C}
           />
@@ -1180,7 +1221,7 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 8,
+    gap: 9,
     maxWidth: '100%',
   },
   heroNation: { textAlign: 'right' },
@@ -1189,11 +1230,11 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'flex-start',
     justifyContent: 'flex-end',
-    gap: 6,
+    gap: 7,
     width: '100%',
   },
   heroName: { flexShrink: 1, flexGrow: 1, textAlign: 'right' },
-  verifiedBadge: { width: 22, height: 22, marginTop: 4 },
+  verifiedBadge: { width: 24, height: 24, marginTop: 2 },
   heroLiftShadow: {
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
@@ -1262,7 +1303,26 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   attrValue: { fontSize: 15 },
-  flag: { width: 16, height: 16, borderRadius: 2 },
+  /** Thick rectangular flag with emboss — clearer than a flat 16² PNG */
+  flagFrame: {
+    borderRadius: 3,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth + 0.5,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    flexShrink: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.18,
+        shadowRadius: 1.5,
+        shadowOffset: { width: 0, height: 0.5 },
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  flagStrip: { width: 22, height: 15 },
+  flag: { width: 22, height: 15, borderRadius: 3 },
 
   sectionRow: { alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   sectionTitle: { fontSize: 16 },

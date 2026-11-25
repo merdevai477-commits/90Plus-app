@@ -1048,7 +1048,7 @@ export default function PlayerProfileScreen() {
 
     const heroPlayer = displayPlayer.player;
     const nationalityFlagUri = heroPlayer.nationality
-        ? getCountryFlagUri(heroPlayer.nationality, null, 80)
+        ? getCountryFlagUri(heroPlayer.nationality, null, 160)
         : null;
     const row = rtl ? 'row-reverse' : 'row';
     const textAlign = rtl ? 'right' : 'left';
@@ -1156,32 +1156,48 @@ export default function PlayerProfileScreen() {
                                 {heroPlayer.nationality ? (
                                     <View style={[styles.inlineRow, { flexDirection: row }]}>
                                         {nationalityFlagUri ? (
-                                            <ExpoImage
-                                                source={{ uri: nationalityFlagUri }}
-                                                style={styles.flag}
-                                                contentFit="cover"
-                                                cachePolicy="memory-disk"
-                                                transition={0}
-                                            />
+                                            <View
+                                                style={[
+                                                    styles.flagFrame,
+                                                    {
+                                                        borderColor: isDark
+                                                            ? 'rgba(255,255,255,0.22)'
+                                                            : 'rgba(12,5,25,0.14)',
+                                                    },
+                                                ]}
+                                            >
+                                                <ExpoImage
+                                                    source={{ uri: nationalityFlagUri }}
+                                                    style={StyleSheet.absoluteFillObject}
+                                                    contentFit="cover"
+                                                    cachePolicy="memory-disk"
+                                                    transition={0}
+                                                />
+                                            </View>
                                         ) : null}
                                         <Text
-                                            style={[styles.heroMeta, { fontFamily: fontSemi, color: B.soft }]}
+                                            style={[
+                                                styles.heroMeta,
+                                                {
+                                                    fontFamily: fontSemi,
+                                                    color: isDark ? B.soft : '#313131',
+                                                },
+                                            ]}
                                             numberOfLines={1}
                                         >
                                             {heroPlayer.nationality}
                                         </Text>
                                     </View>
                                 ) : null}
-                                <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4 }]}>
+                                <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4, gap: 7 }]}>
                                     <Text
                                         style={[
                                             styles.playerName,
-                                            styles.heroLiftShadow,
                                             {
-                                                fontFamily: fontExtraBold,
+                                                // Match career profile / Figma 2431:17446
+                                                fontFamily: fontBold,
                                                 textAlign,
-                                                color: isDark ? B.ink : '#000000',
-                                                textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)',
+                                                color: isDark ? B.ink : '#0c0519',
                                             },
                                         ]}
                                         numberOfLines={2}
@@ -1599,11 +1615,30 @@ const styles = StyleSheet.create({
         ...Platform.select({ ios: { transform: [{ translateY: 1 }] }, default: {} }),
     },
     heroInfo: { flex: 1 },
-    inlineRow: { alignItems: 'center', gap: 6 },
-    flag: { width: 18, height: 12, borderRadius: 2 },
-    heroMeta: { fontSize: 13, flexShrink: 1 },
-    playerName: { fontSize: 26, flexShrink: 1, lineHeight: 32 },
-    verified: { width: 20, height: 20 },
+    inlineRow: { alignItems: 'center', gap: 9 },
+    flagFrame: {
+        width: 24,
+        height: 17,
+        borderRadius: 3,
+        overflow: 'hidden',
+        borderWidth: StyleSheet.hairlineWidth + 0.5,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        flexShrink: 0,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 1.5,
+                shadowOffset: { width: 0, height: 0.5 },
+            },
+            android: { elevation: 1 },
+            default: {},
+        }),
+    },
+    flag: { width: 24, height: 17, borderRadius: 3 },
+    heroMeta: { fontSize: 16, flexShrink: 1 },
+    playerName: { fontSize: 28, flexShrink: 1, lineHeight: 34 },
+    verified: { width: 24, height: 24 },
     injuredBadge: {
         alignItems: 'center',
         gap: 4,
