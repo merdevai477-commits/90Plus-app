@@ -1,7 +1,7 @@
 /**
- * Match statistics tab — Figma node 1408:21303 (90plus).
- * Section icons are the vectors exported from that frame into
- * assets/images/match-stats/ and rendered with expo-image.
+ * Match statistics tab — Figma node 1767:13422 (90plus).
+ * Layout: possession → simple comparison list → xG card.
+ * Section icons live in assets/images/match-stats/.
  */
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
@@ -9,7 +9,6 @@ import Svg, { Circle } from 'react-native-svg';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
-import TeamBadge from '../common/TeamBadge';
 import type { TeamStatistics } from '../../services/apiFootball';
 import { getLocalizedStatType } from '../../utils/i18nHelpers';
 import { useTranslation } from '../../src/i18n';
@@ -19,13 +18,6 @@ const ICON = {
   possessionChart: require('../../assets/images/match-stats/icon-possession-chart.svg'),
   soccerBall: require('../../assets/images/match-stats/icon-soccer-ball.svg'),
   xg: require('../../assets/images/match-stats/icon-xg.svg'),
-  shots: require('../../assets/images/match-stats/icon-shots.svg'),
-  passes: require('../../assets/images/match-stats/icon-passes.svg'),
-  attacks: require('../../assets/images/match-stats/icon-attacks.svg'),
-  corners: require('../../assets/images/match-stats/icon-corners.svg'),
-  fouls: require('../../assets/images/match-stats/icon-fouls.svg'),
-  offsides: require('../../assets/images/match-stats/icon-offsides.svg'),
-  summary: require('../../assets/images/match-stats/icon-summary.svg'),
   idea: require('../../assets/images/match-stats/icon-idea.svg'),
 } as const;
 
@@ -34,61 +26,41 @@ const DESIGN_WIDTH = 405;
 const C_DARK = {
   card: '#0B0518',
   cardBorder: '#281359',
-  primary: '#8B5CF6',
-  secondary: '#A855F7',
-  homeRing: '#AB5CF6',
-  homeRingTrack: '#1C0E29',
-  awayRingTrack: '#170E29',
-  barTrack: '#170F29',
-  yellow: '#FDAC0B',
-  red: '#B60505',
   muted: '#B0B0B0',
   insight: '#78679F',
   text: '#FFFFFF',
   textSoft: '#DFD1FD',
+  leftValue: '#C4B5FD',
+  rightValue: '#A78BFA',
+  label: '#FFFFFF',
+  ringHome: '#C4B5FD',
+  ringAway: '#A78BFA',
+  ringTrack: '#2A1B4A',
 } as const;
 
 const C_LIGHT = {
   card: '#FFFFFF',
   cardBorder: 'rgba(106,43,217,0.2)',
-  primary: '#6A2BD9',
-  secondary: '#8B5CF6',
-  homeRing: '#6A2BD9',
-  homeRingTrack: '#EDE6FA',
-  awayRingTrack: '#F3EDFF',
-  barTrack: '#EDE6FA',
-  yellow: '#D97706',
-  red: '#B60505',
   muted: '#6B7280',
   insight: '#6B5B95',
   text: '#1A102B',
   textSoft: '#6A2BD9',
+  /** Figma left value */
+  leftValue: '#8856E1',
+  /** Figma right value */
+  rightValue: '#4B1FA3',
+  label: '#24104E',
+  ringHome: '#4B1FA3',
+  ringAway: '#8856E1',
+  ringTrack: '#F3EDFF',
 } as const;
 
-type StatsC = {
-  card: string;
-  cardBorder: string;
-  primary: string;
-  secondary: string;
-  homeRing: string;
-  homeRingTrack: string;
-  awayRingTrack: string;
-  barTrack: string;
-  yellow: string;
-  red: string;
-  muted: string;
-  insight: string;
-  text: string;
-  textSoft: string;
-};
+type StatsC = typeof C_LIGHT;
 
 function useStatsC(): StatsC {
   const { isDark } = useMatchDetailsTheme();
   return isDark ? C_DARK : C_LIGHT;
 }
-
-
-const DIVIDER_V = ['rgba(139,92,246,0)', 'rgba(139,92,246,0.55)', 'rgba(81,54,144,0)'] as const;
 
 type Pair = { home: number | null; away: number | null };
 
@@ -143,134 +115,84 @@ function fill(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
 }
 
-// ─── Primitives ──────────────────────────────────────────────────────────────
-
-function VDivider({ height }: { height?: number }) {
+function SoftCard({
+  children,
+  s,
+  radius = 16,
+}: {
+  children: React.ReactNode;
+  s: number;
+  radius?: number;
+}) {
+  const C = useStatsC();
+  const { isDark } = useMatchDetailsTheme();
   return (
-    <LinearGradient
-      colors={DIVIDER_V}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-      style={height != null ? { width: 1, height } : styles.vDividerStretch}
-    />
+    <View
+      style={[
+        styles.softCard,
+        { borderRadius: radius },
+        isDark
+          ? { backgroundColor: C.card, borderColor: C.cardBorder, borderWidth: 1 }
+          : styles.softShadow,
+      ]}
+    >
+      {!isDark ? (
+        <LinearGradient
+          colors={['#FFFFFF', '#FDFBFF']}
+          start={{ x: 0.05, y: 0 }}
+          end={{ x: 0.95, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
+      <View style={{ paddingHorizontal: 11 * s, paddingVertical: 17 * s, gap: 13 * s }}>{children}</View>
+    </View>
   );
 }
 
-function HDivider() {
-  return (
-    <LinearGradient
-      colors={DIVIDER_V}
-      start={{ x: 0, y: 0.5 }}
-      end={{ x: 1, y: 0.5 }}
-      style={styles.hDivider}
-    />
-  );
-}
-
-function Section({
+function SectionTitle({
   title,
   suffix,
   icon,
-  iconNode,
   rtl,
   s,
-  children,
 }: {
   title: string;
   suffix?: string;
-  icon?: number;
-  iconNode?: React.ReactNode;
+  icon: number;
   rtl: boolean;
   s: number;
-  children: React.ReactNode;
 }) {
   const C = useStatsC();
+  const { isDark } = useMatchDetailsTheme();
+  const titleColor = isDark ? C.text : '#24104E';
+  const suffixColor = isDark ? C.textSoft : '#6A2BD9';
   return (
-    <View style={{ gap: 14 * s }}>
-      <View
-        style={[
-          styles.sectionTitleRow,
-          {
-            flexDirection: rtl ? 'row' : 'row-reverse',
-            alignSelf: rtl ? 'flex-end' : 'flex-start',
-          },
-        ]}
-      >
-        <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: C.text }]}>
-          {title}
-          {suffix ? <Text style={[styles.sectionTitleSuffix, { color: C.textSoft }]}>{` ${suffix}`}</Text> : null}
-        </Text>
-        {iconNode ?? (icon != null ? <Image source={icon} style={styles.sectionIcon} contentFit="contain" /> : null)}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function Card({ style, children }: { style?: object; children: React.ReactNode }) {
-  const C = useStatsC();
-  return <View style={[styles.card, { backgroundColor: C.card, borderColor: C.cardBorder }, style]}>{children}</View>;
-}
-
-function TeamName({ name, s, size = 14 }: { name: string; s: number; size?: number }) {
-  const C = useStatsC();
-  return (
-    <Text
-      style={[styles.teamName, { fontSize: size * s, color: C.text }]}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.8}
+    <View
+      style={[
+        styles.sectionTitleRow,
+        {
+          flexDirection: rtl ? 'row' : 'row-reverse',
+          alignSelf: rtl ? 'flex-end' : 'flex-start',
+          gap: 8 * s,
+        },
+      ]}
     >
-      {name}
-    </Text>
-  );
-}
-
-function PercentRing({
-  pct,
-  size,
-  color,
-  track,
-}: {
-  pct: number;
-  size: number;
-  color: string;
-  track: string;
-}) {
-  const C = useStatsC();
-  const stroke = size * 0.1;
-  const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(100, pct));
-  // Round caps add stroke/2 at each end — shorten the dash so the visible arc matches pct.
-  const dash = Math.max(0.01, (circ * clamped) / 100 - stroke);
-  const center = size / 2;
-
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Circle cx={center} cy={center} r={r} stroke={track} strokeWidth={stroke} fill="transparent" />
-        {clamped > 0 ? (
-          <Circle
-            cx={center}
-            cy={center}
-            r={r}
-            stroke={color}
-            strokeWidth={stroke}
-            fill="transparent"
-            strokeDasharray={`${dash} ${circ}`}
-            strokeDashoffset={-stroke / 2}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${center} ${center})`}
-          />
-        ) : null}
-      </Svg>
-      <Text style={[styles.ringValue, { fontSize: size / 6, color: C.text }]}>{`${Math.round(clamped)}%`}</Text>
+      <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: titleColor }]}>
+        {title}
+        {suffix ? <Text style={[styles.sectionTitleSuffix, { color: suffixColor }]}>{suffix}</Text> : null}
+      </Text>
+      <Image
+        source={icon}
+        style={{ width: 21 * s, height: 21 * s }}
+        contentFit="contain"
+        tintColor={isDark ? '#C4B5FD' : undefined}
+      />
     </View>
   );
 }
 
-/** One shared ring, Figma 1767:13395. Home is always on the right. */
+/** One shared ring — Figma 1767:13395. Home is always on the right. */
 function PossessionCard({
   pair,
   title,
@@ -288,11 +210,6 @@ function PossessionCard({
 }) {
   const C = useStatsC();
   const { isDark } = useMatchDetailsTheme();
-  const homeColor = isDark ? '#C4B5FD' : '#8856E1';
-  const awayColor = isDark ? '#A78BFA' : '#4B1FA3';
-  const nameColor = isDark ? C.text : '#4B1FA3';
-  const titleColor = isDark ? C.text : '#24104E';
-  const track = isDark ? '#2A1B4A' : '#F3EDFF';
   const size = 88 * s;
   const stroke = 10.83 * s;
   const r = (size - stroke) / 2;
@@ -313,7 +230,7 @@ function PossessionCard({
         {`${Math.round(value)}%`}
       </Text>
       <Text
-        style={[styles.possessionName, { color: nameColor, fontSize: 16 * s, lineHeight: 20 * s }]}
+        style={[styles.possessionName, { color: C.rightValue, fontSize: 16 * s, lineHeight: 20 * s }]}
         numberOfLines={2}
       >
         {name}
@@ -322,159 +239,128 @@ function PossessionCard({
   );
 
   return (
+    <SoftCard s={s}>
+      <SectionTitle title={title} icon={ICON.possessionChart} rtl={rtl} s={s} />
+      <View style={[styles.possessionRow, { paddingHorizontal: 12 * s }]}>
+        {side(awayPct, awayName, C.leftValue)}
+        <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+          <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+            <Circle cx={center} cy={center} r={r} stroke={C.ringTrack} strokeWidth={stroke} fill="transparent" />
+            {homeLen > 0 ? (
+              <Circle
+                cx={center}
+                cy={center}
+                r={r}
+                stroke={C.ringHome}
+                strokeWidth={stroke}
+                fill="transparent"
+                strokeDasharray={`${homeLen} ${circ}`}
+                strokeDashoffset={gap / 2}
+                transform={`rotate(-90 ${center} ${center})`}
+              />
+            ) : null}
+            {awayLen > 0 ? (
+              <Circle
+                cx={center}
+                cy={center}
+                r={r}
+                stroke={C.ringAway}
+                strokeWidth={stroke}
+                fill="transparent"
+                strokeDasharray={`${awayLen} ${circ}`}
+                strokeDashoffset={awayLen + gap / 2}
+                transform={`rotate(-90 ${center} ${center})`}
+              />
+            ) : null}
+          </Svg>
+          <Image
+            source={ICON.soccerBall}
+            style={{ width: 24 * s, height: 24 * s }}
+            contentFit="contain"
+            tintColor={isDark ? '#F4EEFF' : undefined}
+          />
+        </View>
+        {side(homePct, homeName, C.rightValue)}
+      </View>
+    </SoftCard>
+  );
+}
+
+/** Figma 1770:13493 — simple away | label | home rows. */
+function StatsListCard({
+  rows,
+  s,
+}: {
+  rows: Array<{ key: string; label: string; pair: Pair; decimals?: number }>;
+  s: number;
+}) {
+  const C = useStatsC();
+  const { isDark } = useMatchDetailsTheme();
+  if (rows.length === 0) return null;
+
+  return (
     <View
       style={[
-        styles.possessionCard,
+        styles.listCard,
         isDark
           ? { backgroundColor: C.card, borderColor: C.cardBorder, borderWidth: 1 }
-          : styles.possessionShadow,
+          : styles.softShadow,
       ]}
     >
       {!isDark ? (
         <LinearGradient
           colors={['#FFFFFF', '#FDFBFF']}
-          start={{ x: 0.05, y: 0 }}
-          end={{ x: 0.95, y: 1 }}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
       ) : null}
-      <View style={{ paddingHorizontal: 11 * s, paddingVertical: 17 * s, gap: 13 * s }}>
-        <View
-          style={[
-            styles.sectionTitleRow,
-            {
-              flexDirection: rtl ? 'row' : 'row-reverse',
-              alignSelf: rtl ? 'flex-end' : 'flex-start',
-              gap: 8 * s,
-            },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: titleColor }]}>{title}</Text>
-          <Image
-            source={ICON.possessionChart}
-            style={{ width: 21 * s, height: 21 * s }}
-            contentFit="contain"
-            tintColor={isDark ? '#C4B5FD' : undefined}
-          />
-        </View>
-        <View style={[styles.possessionRow, { paddingHorizontal: 12 * s }]}>
-          {side(awayPct, awayName, awayColor)}
-          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-              <Circle cx={center} cy={center} r={r} stroke={track} strokeWidth={stroke} fill="transparent" />
-              {homeLen > 0 ? (
-                <Circle
-                  cx={center}
-                  cy={center}
-                  r={r}
-                  stroke={homeColor}
-                  strokeWidth={stroke}
-                  fill="transparent"
-                  strokeDasharray={`${homeLen} ${circ}`}
-                  strokeDashoffset={gap / 2}
-                  transform={`rotate(-90 ${center} ${center})`}
-                />
-              ) : null}
-              {awayLen > 0 ? (
-                <Circle
-                  cx={center}
-                  cy={center}
-                  r={r}
-                  stroke={awayColor}
-                  strokeWidth={stroke}
-                  fill="transparent"
-                  strokeDasharray={`${awayLen} ${circ}`}
-                  strokeDashoffset={awayLen + gap / 2}
-                  transform={`rotate(-90 ${center} ${center})`}
-                />
-              ) : null}
-            </Svg>
-            <Image
-              source={ICON.soccerBall}
-              style={{ width: 24 * s, height: 24 * s }}
-              contentFit="contain"
-              tintColor={isDark ? '#F4EEFF' : undefined}
-            />
-          </View>
-          {side(homePct, homeName, homeColor)}
-        </View>
+      <View style={{ paddingVertical: 4 * s }}>
+        {rows.map((row, idx) => {
+          const last = idx === rows.length - 1;
+          return (
+            <View
+              key={row.key}
+              style={[
+                styles.listRow,
+                {
+                  height: 48 * s,
+                  paddingHorizontal: 8 * s,
+                  borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
+                  borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)',
+                },
+              ]}
+            >
+              <Text
+                style={[styles.listValue, { color: C.leftValue, fontSize: 18 * s, width: 32 * s }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {fmt(row.pair.away, row.decimals ?? 0)}
+              </Text>
+              <Text
+                style={[styles.listLabel, { color: C.label, fontSize: 15 * s }]}
+                numberOfLines={1}
+              >
+                {row.label}
+              </Text>
+              <Text
+                style={[styles.listValue, { color: C.rightValue, fontSize: 18 * s, width: 32 * s }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {fmt(row.pair.home, row.decimals ?? 0)}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-function RingPair({
-  pair,
-  homeName,
-  awayName,
-  s,
-  divider,
-}: {
-  pair: Pair;
-  homeName: string;
-  awayName: string;
-  s: number;
-  divider?: boolean;
-}) {
-  const C = useStatsC();
-  const size = 112 * s;
-  return (
-    <View style={[styles.pairRow, { gap: (divider ? 28 : 40) * s }]}>
-      <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
-        <PercentRing pct={n(pair.away)} size={size} color={C.primary} track={C.awayRingTrack} />
-        <TeamName name={awayName} s={s} />
-      </View>
-      {divider ? <VDivider /> : null}
-      <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
-        <PercentRing pct={n(pair.home)} size={size} color={C.homeRing} track={C.homeRingTrack} />
-        <TeamName name={homeName} s={s} />
-      </View>
-    </View>
-  );
-}
-
-function BigNumberPair({
-  pair,
-  homeName,
-  awayName,
-  s,
-  fontSize = 34,
-  gap = 8,
-  decimals = 0,
-}: {
-  pair: Pair;
-  homeName: string;
-  awayName: string;
-  s: number;
-  fontSize?: number;
-  gap?: number;
-  decimals?: number;
-}) {
-  const C = useStatsC();
-  const col = (value: number | null, name: string, color: string) => (
-    <View style={[styles.bigCol, { gap: gap * s }]}>
-      <Text
-        style={[styles.bigValue, { color, fontSize: fontSize * s }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
-        {fmt(value, decimals)}
-      </Text>
-      <TeamName name={name} s={s} />
-    </View>
-  );
-
-  return (
-    <View style={[styles.pairRow, { gap: 28 * s }]}>
-      {col(pair.away, awayName, C.primary)}
-      <VDivider />
-      {col(pair.home, homeName, C.secondary)}
-    </View>
-  );
-}
-
-/** XG card — same soft shell as Possession (Figma 1767:13422), split values from old XG. */
+/** xG card under the list — same soft shell as possession. */
 function XgCard({
   pair,
   title,
@@ -492,11 +378,6 @@ function XgCard({
 }) {
   const C = useStatsC();
   const { isDark } = useMatchDetailsTheme();
-  const homeColor = isDark ? '#C4B5FD' : '#8856E1';
-  const awayColor = isDark ? '#A78BFA' : '#4B1FA3';
-  const nameColor = isDark ? C.text : '#4B1FA3';
-  const titleColor = isDark ? C.text : '#24104E';
-  const suffixColor = isDark ? C.textSoft : '#6A2BD9';
   const dividerColors = isDark
     ? (['rgba(196,181,253,0)', 'rgba(196,181,253,0.45)', 'rgba(196,181,253,0)'] as const)
     : (['rgba(75,31,163,0)', 'rgba(75,31,163,0.28)', 'rgba(75,31,163,0)'] as const);
@@ -511,290 +392,28 @@ function XgCard({
       >
         {fmt(value, 2)}
       </Text>
-      <Text
-        style={[styles.xgName, { color: nameColor, fontSize: 15 * s, lineHeight: 20 * s }]}
-        numberOfLines={2}
-      >
+      <Text style={[styles.xgName, { color: C.rightValue, fontSize: 15 * s, lineHeight: 20 * s }]} numberOfLines={2}>
         {name}
       </Text>
     </View>
   );
 
   return (
-    <View
-      style={[
-        styles.possessionCard,
-        isDark
-          ? { backgroundColor: C.card, borderColor: C.cardBorder, borderWidth: 1 }
-          : styles.possessionShadow,
-      ]}
-    >
-      {!isDark ? (
+    <SoftCard s={s}>
+      <SectionTitle title={title} suffix=" (xG)" icon={ICON.xg} rtl={rtl} s={s} />
+      <View style={[styles.xgRow, { paddingHorizontal: 8 * s, minHeight: 72 * s }]}>
+        {col(pair.away, awayName, C.leftValue)}
         <LinearGradient
-          colors={['#FFFFFF', '#FDFBFF']}
-          start={{ x: 0.05, y: 0 }}
-          end={{ x: 0.95, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+          colors={[...dividerColors]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={{ width: 1, alignSelf: 'stretch', marginHorizontal: 8 * s }}
         />
-      ) : null}
-      <View style={{ paddingHorizontal: 11 * s, paddingVertical: 17 * s, gap: 14 * s }}>
-        <View
-          style={[
-            styles.sectionTitleRow,
-            {
-              flexDirection: rtl ? 'row' : 'row-reverse',
-              alignSelf: rtl ? 'flex-end' : 'flex-start',
-              gap: 8 * s,
-            },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { fontSize: 16 * s, color: titleColor }]}>
-            {title}
-            <Text style={[styles.sectionTitleSuffix, { color: suffixColor }]}>{' (XG)'}</Text>
-          </Text>
-          <Image
-            source={ICON.xg}
-            style={{ width: 21 * s, height: 21 * s }}
-            contentFit="contain"
-            tintColor={isDark ? '#C4B5FD' : undefined}
-          />
-        </View>
-        <View style={[styles.xgRow, { paddingHorizontal: 8 * s, minHeight: 72 * s }]}>
-          {col(pair.away, awayName, awayColor)}
-          <LinearGradient
-            colors={[...dividerColors]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={{ width: 1, alignSelf: 'stretch', marginHorizontal: 8 * s }}
-          />
-          {col(pair.home, homeName, homeColor)}
-        </View>
+        {col(pair.home, homeName, C.rightValue)}
       </View>
-    </View>
+    </SoftCard>
   );
 }
-
-/** Shared track: away fills from the left, home from the right. */
-function DualTrack({ pair, s }: { pair: Pair; s: number }) {
-  const C = useStatsC();
-  const total = n(pair.home) + n(pair.away);
-  const homePct = total > 0 ? (n(pair.home) / total) * 88 : 0;
-  const awayPct = total > 0 ? (n(pair.away) / total) * 88 : 0;
-  const h = 8 * s;
-  return (
-    <View style={[styles.track, { height: h, borderRadius: h / 2, backgroundColor: C.barTrack }]}>
-      <View style={{ width: `${awayPct}%`, height: h, borderRadius: h / 2, backgroundColor: C.primary }} />
-      <View style={{ width: `${homePct}%`, height: h, borderRadius: h / 2, backgroundColor: C.secondary }} />
-    </View>
-  );
-}
-
-function ShotsCard({
-  total,
-  rows,
-  homeName,
-  awayName,
-  s,
-}: {
-  total: Pair;
-  rows: Array<{ key: string; label: string; pair: Pair }>;
-  homeName: string;
-  awayName: string;
-  s: number;
-}) {
-  const C = useStatsC();
-  return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 22 * s }}>
-      <View style={{ gap: 12 * s }}>
-        <View style={styles.spaceBetween}>
-          <View style={[styles.flex1, styles.alignStart]}>
-            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.away)}</Text>
-            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
-              {awayName}
-            </Text>
-          </View>
-          <View style={[styles.flex1, styles.alignEnd]}>
-            <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(total.home)}</Text>
-            <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
-              {homeName}
-            </Text>
-          </View>
-        </View>
-        <DualTrack pair={total} s={s} />
-      </View>
-
-      {rows.map((row) => (
-        <View key={row.key} style={{ gap: 10 * s }}>
-          <View style={styles.spaceBetween}>
-            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.away)}</Text>
-            <Text style={[styles.rowLabel, { fontSize: 13 * s, color: C.text }]} numberOfLines={1}>
-              {row.label}
-            </Text>
-            <Text style={[styles.rowValue, { fontSize: 17 * s, color: C.text }]}>{fmt(row.pair.home)}</Text>
-          </View>
-          <DualTrack pair={row.pair} s={s} />
-        </View>
-      ))}
-    </Card>
-  );
-}
-
-/** Corners / fouls / offsides: each side owns its own track, scaled to the larger value. */
-function SideBarsCard({
-  pair,
-  homeName,
-  awayName,
-  s,
-}: {
-  pair: Pair;
-  homeName: string;
-  awayName: string;
-  s: number;
-}) {
-  const C = useStatsC();
-  const max = Math.max(n(pair.home), n(pair.away));
-  const pct = (v: number | null) => (max > 0 ? (n(v) / max) * 100 : 0);
-  const h = 8 * s;
-
-  const side = (value: number | null, name: string, color: string, align: 'start' | 'end') => (
-    <View style={[styles.flex1, { gap: 12 * s }]}>
-      <View style={align === 'start' ? styles.alignStart : styles.alignEnd}>
-        <Text style={[styles.smallValue, { fontSize: 20 * s, color: C.primary }]}>{fmt(value)}</Text>
-        <Text style={[styles.smallName, { fontSize: 12 * s, color: C.text }]} numberOfLines={1}>
-          {name}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.track,
-          {
-            height: h,
-            borderRadius: h / 2,
-            justifyContent: align === 'start' ? 'flex-start' : 'flex-end',
-            backgroundColor: C.barTrack,
-          },
-        ]}
-      >
-        <View style={{ width: `${pct(value)}%`, height: h, borderRadius: h / 2, backgroundColor: color }} />
-      </View>
-    </View>
-  );
-
-  return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s }}>
-      <View style={[styles.pairRow, { gap: 16 * s }]}>
-        {side(pair.away, awayName, C.primary, 'start')}
-        <VDivider />
-        {side(pair.home, homeName, C.secondary, 'end')}
-      </View>
-    </Card>
-  );
-}
-
-function CardsCard({
-  yellow,
-  red,
-  homeName,
-  awayName,
-  s,
-}: {
-  yellow: Pair;
-  red: Pair;
-  homeName: string;
-  awayName: string;
-  s: number;
-}) {
-  const C = useStatsC();
-  const group = (value: number | null, name: string, color: string) => (
-    <View style={[styles.cardGroup, { gap: 6 * s }]}>
-      <View style={[styles.cardCountCol, { gap: 4 * s }]}>
-        <Text style={[styles.cardCount, { fontSize: 28 * s, color: C.text }]}>{fmt(value)}</Text>
-        <TeamName name={name} s={s} size={13} />
-      </View>
-      <View style={{ width: 14 * s, height: 19 * s, borderRadius: 2, backgroundColor: color, marginTop: 6 * s }} />
-    </View>
-  );
-
-  const row = (pair: Pair, color: string) => (
-    <View style={[styles.pairRow, { gap: 24 * s }]}>
-      {group(pair.away, awayName, color)}
-      <VDivider />
-      {group(pair.home, homeName, color)}
-    </View>
-  );
-
-  return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
-      {row(yellow, C.yellow)}
-      <HDivider />
-      {row(red, C.red)}
-    </Card>
-  );
-}
-
-function SummarySide({
-  name,
-  logo,
-  metrics,
-  align,
-  s,
-}: {
-  name: string;
-  logo?: string;
-  metrics: Array<{ key: string; value: string; label: string; small?: boolean }>;
-  align: 'start' | 'end';
-  s: number;
-}) {
-  const C = useStatsC();
-  const crest = (
-    <TeamBadge name={name} logo={logo} size={30 * s} color="transparent" />
-  );
-  return (
-    <View style={[styles.summarySide, { gap: 6 * s, flexDirection: align === 'start' ? 'row' : 'row-reverse' }]}>
-      {crest}
-      <View style={[styles.flex1, { gap: 14 * s, alignItems: align === 'start' ? 'flex-start' : 'flex-end' }]}>
-        <Text
-          style={[
-            styles.summaryName,
-            {
-              fontSize: 14 * s,
-              lineHeight: 18 * s,
-              minHeight: 36 * s,
-              textAlign: align === 'start' ? 'left' : 'right',
-              color: C.text,
-            },
-          ]}
-          numberOfLines={2}
-        >
-          {name}
-        </Text>
-        <View style={[styles.summaryMetrics, { gap: 8 * s }]}>
-          {metrics.map((m) => (
-            <View key={m.key} style={[styles.flex1, styles.summaryMetric]}>
-              <Text
-                style={[styles.summaryValue, { fontSize: 17 * s, color: C.text }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {m.value}
-              </Text>
-              <Text
-                style={[styles.summaryLabel, { fontSize: (m.small ? 9 : 10) * s, color: C.muted }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {m.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ─── Main ────────────────────────────────────────────────────────────────────
 
 export interface MatchStatsCompareProps {
   statistics: TeamStatistics[];
@@ -808,8 +427,6 @@ export function MatchStatsCompare({
   statistics,
   homeName,
   awayName,
-  homeLogo,
-  awayLogo,
 }: MatchStatsCompareProps) {
   const C = useStatsC();
   const { t, language } = useTranslation();
@@ -871,6 +488,30 @@ export function MatchStatsCompare({
     };
   }, [home, away]);
 
+  const listRows = useMemo(() => {
+    const L = (type: string) => getLocalizedStatType(type, language);
+    const candidates: Array<{ key: string; label: string; pair: Pair; decimals?: number }> = [
+      { key: 'shotsOn', label: L('Shots on Goal'), pair: p.shotsOn },
+      { key: 'shotsOff', label: L('Shots off Goal'), pair: p.shotsOff },
+      { key: 'blocked', label: L('Blocked Shots'), pair: p.blocked },
+      { key: 'totalShots', label: L('Total Shots'), pair: p.totalShots },
+      { key: 'corners', label: L('Corner Kicks'), pair: p.corners },
+      { key: 'fouls', label: L('Fouls'), pair: p.fouls },
+      { key: 'yellow', label: L('Yellow Cards'), pair: p.yellow },
+      { key: 'red', label: L('Red Cards'), pair: p.red },
+      { key: 'offsides', label: L('Offsides'), pair: p.offsides },
+      { key: 'attacks', label: L('Attacks'), pair: p.attacks },
+      { key: 'dangerous', label: L('Dangerous Attacks'), pair: p.dangerous },
+      { key: 'passes', label: L('Total Passes'), pair: p.totalPasses },
+      {
+        key: 'passAcc',
+        label: L('Pass Accuracy'),
+        pair: p.passAccuracy,
+      },
+    ];
+    return candidates.filter((r) => has(r.pair));
+  }, [p, language]);
+
   const insight = useMemo(() => {
     const teamName = (side: 'home' | 'away') => (side === 'home' ? homeName : awayName);
     const poss = leader(p.possession);
@@ -899,24 +540,8 @@ export function MatchStatsCompare({
     return base + fill(md.statsInsightXgOther, { team: teamName(xg) });
   }, [p, md, homeName, awayName]);
 
-  const shotRows = [
-    { key: 'on', label: md.statsOnTarget, pair: p.shotsOn },
-    { key: 'off', label: md.statsOffTarget, pair: p.shotsOff },
-    { key: 'blocked', label: md.statsBlocked, pair: p.blocked },
-  ].filter((r) => has(r.pair));
-
-  const summaryMetrics = (side: 'home' | 'away') =>
-    [
-      has(p.xg) ? { key: 'xg', value: fmt(p.xg[side], 2), label: 'xG' } : null,
-      has(p.totalShots) ? { key: 'shots', value: fmt(p.totalShots[side]), label: md.statsSummaryShots } : null,
-      has(p.shotsOn) ? { key: 'on', value: fmt(p.shotsOn[side]), label: md.statsOnTarget, small: true } : null,
-    ].filter((m): m is NonNullable<typeof m> => m != null);
-
-  const sectionProps = { rtl, s };
-  const names = { homeName, awayName, s };
-
   return (
-    <View style={[styles.root, { gap: 22 * s }]} onLayout={onLayout}>
+    <View style={[styles.root, { gap: 24 * s }]} onLayout={onLayout}>
       {has(p.possession) ? (
         <PossessionCard
           pair={p.possession}
@@ -928,10 +553,12 @@ export function MatchStatsCompare({
         />
       ) : null}
 
+      <StatsListCard rows={listRows} s={s} />
+
       {has(p.xg) ? (
         <XgCard
           pair={p.xg}
-          title={md.statsXgTitle}
+          title={getLocalizedStatType('Expected Goals', language).replace(/\s*\(xG\)\s*$/i, '') || md.statsXgTitle}
           homeName={homeName}
           awayName={awayName}
           rtl={rtl}
@@ -939,117 +566,33 @@ export function MatchStatsCompare({
         />
       ) : null}
 
-      {has(p.totalShots) ? (
-        <Section title={md.shots} icon={ICON.shots} {...sectionProps}>
-          <ShotsCard total={p.totalShots} rows={shotRows} {...names} />
-        </Section>
-      ) : null}
-
-      {has(p.totalPasses) || has(p.passAccuracy) ? (
-        <Section title={md.passes} icon={ICON.passes} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
-            {has(p.totalPasses) ? <BigNumberPair pair={p.totalPasses} {...names} /> : null}
-            {has(p.totalPasses) && has(p.passAccuracy) ? <HDivider /> : null}
-            {has(p.passAccuracy) ? (
-              <View style={{ gap: 8 * s, alignItems: 'center' }}>
-                <Text style={[styles.subTitle, { fontSize: 15 * s }]}>
-                  {getLocalizedStatType('Pass Accuracy', language)}
-                </Text>
-                <RingPair pair={p.passAccuracy} divider {...names} />
-              </View>
-            ) : null}
-          </Card>
-        </Section>
-      ) : null}
-
-      {has(p.attacks) || has(p.dangerous) ? (
-        <Section title={getLocalizedStatType('Attacks', language)} icon={ICON.attacks} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
-            {has(p.attacks) ? <BigNumberPair pair={p.attacks} {...names} /> : null}
-            {has(p.attacks) && has(p.dangerous) ? <HDivider /> : null}
-            {has(p.dangerous) ? (
-              <View style={{ gap: 10 * s, alignItems: 'center' }}>
-                <Text style={[styles.subTitle, { fontSize: 15 * s }]}>
-                  {getLocalizedStatType('Dangerous Attacks', language)}
-                </Text>
-                <BigNumberPair pair={p.dangerous} fontSize={30} {...names} />
-              </View>
-            ) : null}
-          </Card>
-        </Section>
-      ) : null}
-
-      {has(p.corners) ? (
-        <Section title={md.corners} icon={ICON.corners} {...sectionProps}>
-          <SideBarsCard pair={p.corners} {...names} />
-        </Section>
-      ) : null}
-
-      {has(p.fouls) ? (
-        <Section title={md.fouls} icon={ICON.fouls} {...sectionProps}>
-          <SideBarsCard pair={p.fouls} {...names} />
-        </Section>
-      ) : null}
-
-      {has(p.yellow) || has(p.red) ? (
-        <Section
-          title={md.statsCards}
-          iconNode={
-            <LinearGradient
-              colors={[C.primary, '#513590']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.cardsIcon}
-            />
-          }
-          {...sectionProps}
+      {insight ? (
+        <LinearGradient
+          colors={['rgba(139,92,246,0.14)', 'rgba(62,12,176,0.14)']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={[
+            styles.insight,
+            {
+              paddingHorizontal: 18 * s,
+              paddingVertical: 9 * s,
+              gap: 12 * s,
+              flexDirection: rtl ? 'row' : 'row-reverse',
+            },
+          ]}
         >
-          <CardsCard yellow={p.yellow} red={p.red} {...names} />
-        </Section>
-      ) : null}
-
-      {n(p.offsides.home) + n(p.offsides.away) > 0 ? (
-        <Section title={md.offsides} icon={ICON.offsides} {...sectionProps}>
-          <SideBarsCard pair={p.offsides} {...names} />
-        </Section>
-      ) : null}
-
-      {summaryMetrics('home').length > 0 ? (
-        <View style={{ gap: 12 * s }}>
-          <Section title={md.statsSummary} icon={ICON.summary} {...sectionProps}>
-            <Card style={{ padding: 14 * s }}>
-              <View style={[styles.pairRow, { gap: 9 * s, alignItems: 'center' }]}>
-                <SummarySide name={awayName} logo={awayLogo} metrics={summaryMetrics('away')} align="start" s={s} />
-                <VDivider height={64 * s} />
-                <SummarySide name={homeName} logo={homeLogo} metrics={summaryMetrics('home')} align="end" s={s} />
-              </View>
-            </Card>
-          </Section>
-
-          {insight ? (
-            <LinearGradient
-              colors={['rgba(139,92,246,0.14)', 'rgba(62,12,176,0.14)']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[
-                styles.insight,
-                {
-                  paddingHorizontal: 18 * s,
-                  paddingVertical: 9 * s,
-                  gap: 12 * s,
-                  flexDirection: rtl ? 'row' : 'row-reverse',
-                },
-              ]}
-            >
-              <Text style={[styles.insightText, { fontSize: 13 * s, textAlign: rtl ? 'right' : 'left' }]}>
-                {insight}
-              </Text>
-              <View style={styles.insightIconBox}>
-                <Image source={ICON.idea} style={styles.insightIcon} contentFit="contain" />
-              </View>
-            </LinearGradient>
-          ) : null}
-        </View>
+          <Text
+            style={[
+              styles.insightText,
+              { fontSize: 13 * s, textAlign: rtl ? 'right' : 'left', color: C.insight },
+            ]}
+          >
+            {insight}
+          </Text>
+          <View style={styles.insightIconBox}>
+            <Image source={ICON.idea} style={styles.insightIcon} contentFit="contain" />
+          </View>
+        </LinearGradient>
       ) : null}
     </View>
   );
@@ -1059,58 +602,25 @@ const styles = StyleSheet.create({
   root: {
     width: '100%',
   },
-  flex1: {
-    flex: 1,
-  },
-  card: {
+  softCard: {
     width: '100%',
-    borderWidth: 1,
-    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  softShadow: {
+    shadowColor: '#4B1FA3',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   sectionTitleRow: {
     alignItems: 'center',
-    gap: 8,
   },
   sectionTitle: {
     fontWeight: '600',
   },
   sectionTitleSuffix: {
     fontWeight: '500',
-  },
-  sectionIcon: {
-    width: 22,
-    height: 22,
-  },
-  cardsIcon: {
-    width: 16,
-    height: 22,
-    borderRadius: 3,
-  },
-  vDividerStretch: {
-    width: 1,
-    alignSelf: 'stretch',
-  },
-  hDivider: {
-    width: '100%',
-    height: 1,
-  },
-  pairRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  possessionCard: {
-    width: '100%',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  possessionShadow: {
-    shadowColor: '#4B1FA3',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
   },
   possessionRow: {
     flexDirection: 'row',
@@ -1132,25 +642,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     alignSelf: 'stretch',
   },
-  ringCol: {
-    flex: 1,
+  listCard: {
+    width: '100%',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  listRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
   },
-  ringValue: {
-    fontWeight: '600',
-  },
-  teamName: {
-    fontWeight: '600',
-    textAlign: 'center',
-    alignSelf: 'stretch',
-  },
-  bigCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  bigValue: {
+  listValue: {
     fontWeight: '700',
     textAlign: 'center',
+  },
+  listLabel: {
+    flex: 1,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   xgRow: {
     flexDirection: 'row',
@@ -1172,85 +683,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     alignSelf: 'stretch',
-  },
-  subTitle: {
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  spaceBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  alignStart: {
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  alignEnd: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  smallValue: {
-    fontWeight: '700',
-  },
-  smallName: {
-    fontWeight: '600',
-  },
-  rowValue: {
-    fontWeight: '700',
-    minWidth: 24,
-    textAlign: 'center',
-  },
-  rowLabel: {
-    flex: 1,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  track: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  cardGroup: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  cardCountCol: {
-    flexShrink: 1,
-    alignItems: 'center',
-  },
-  cardCount: {
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  summarySide: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  summaryName: {
-    fontWeight: '700',
-    alignSelf: 'stretch',
-  },
-  summaryMetrics: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'stretch',
-  },
-  summaryMetric: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  summaryValue: {
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  summaryLabel: {
-    fontWeight: '600',
-    textAlign: 'center',
   },
   insight: {
     width: '100%',

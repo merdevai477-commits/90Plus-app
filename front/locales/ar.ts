@@ -957,8 +957,8 @@ export const ar = {
     matchUnavailable: 'هذه المباراة غير متاحة حالياً',
     matchUnavailableSubtext: 'لم يتم نشر تفاصيل هذه المباراة بعد. برجاء المحاولة لاحقاً.',
     statTypes: {
-      shotsOnGoal: 'تسديدات على المرمى',
-      shotsOffGoal: 'تسديدات خارج المرمى',
+      shotsOnGoal: 'التسديدات على المرمى',
+      shotsOffGoal: 'التسديدات خارج المرمى',
       totalShots: 'إجمالي التسديدات',
       blockedShots: 'تسديدات محجوبة',
       shotsInsidebox: 'تسديدات داخل المنطقة',
