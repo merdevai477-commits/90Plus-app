@@ -40,11 +40,12 @@ const PAGE_TITLES = {
   'reel-comments': 'تعليقات الريلز',
   activity: 'نشاط المسابقات',
   badges: 'الشارات',
-  'seed-xp': 'نقاط البذرة',
+  'seed-xp': 'حساب البذرة',
   'app-update': 'تحديث التطبيق',
 };
 
 const SEED_XP_QUICK = [-50, -10, -5, -1, 1, 5, 10, 50];
+const SEED_FRIENDS_QUICK = [-10, -5, -1, 1, 5, 10];
 
 const AD_STATUS = {
   DRAFT: 'بانتظار المراجعة',
@@ -792,49 +793,88 @@ async function renderSeedXp() {
     overviewEl.innerHTML = `<p class="muted">حساب البذرة مش موجود.</p>`;
     return;
   }
+  const sw = user.shareWin || { friends: 0, shares: 0, score: 0, weekKey: '—' };
   const avatar = user.avatar
     ? `<img src="${esc(user.avatar)}" alt="" style="width:56px;height:56px;border-radius:16px;object-fit:cover" />`
     : `<div style="width:56px;height:56px;border-radius:16px;background:rgba(110,168,255,.15);display:grid;place-items:center;font-weight:800">${esc((user.displayName || user.username || '?').charAt(0).toUpperCase())}</div>`;
 
   overviewEl.innerHTML = `
-    <div style="max-width:560px;display:grid;gap:16px">
+    <div style="max-width:640px;display:grid;gap:18px">
       <div style="display:flex;gap:14px;align-items:center">
         ${avatar}
         <div style="min-width:0;flex:1">
           <h2 style="margin:0;font-size:20px">${esc(user.displayName || user.username)}</h2>
           <p class="muted" style="margin:4px 0 0">@${esc(user.username)}</p>
-          <p class="muted" style="margin:6px 0 0;font-size:13px">تعديل النقاط للحساب ده بس</p>
+          <p class="muted" style="margin:6px 0 0;font-size:13px">تعديل XP والأصدقاء للحساب ده بس · الدورة ${esc(sw.weekKey)}</p>
         </div>
         <button type="button" class="btn btn-ghost" id="seed-xp-refresh">تحديث</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div style="padding:16px;text-align:center;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
-          <div style="font-size:28px;font-weight:800" id="seed-xp-value">${num(user.xp)}</div>
-          <div class="muted" style="font-size:12px;margin-top:4px">نقاط</div>
+
+      <section style="display:grid;gap:12px;padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
+        <h3 style="margin:0;font-size:15px">نقاط البروفايل (XP)</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="padding:14px;text-align:center;border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <div style="font-size:26px;font-weight:800" id="seed-xp-value">${num(user.xp)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">XP</div>
+          </div>
+          <div style="padding:14px;text-align:center;border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <div style="font-size:26px;font-weight:800" id="seed-xp-level">${num(user.level)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">المستوى</div>
+          </div>
         </div>
-        <div style="padding:16px;text-align:center;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
-          <div style="font-size:28px;font-weight:800" id="seed-xp-level">${num(user.level)}</div>
-          <div class="muted" style="font-size:12px;margin-top:4px">المستوى</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px" id="seed-xp-chips">
+          ${SEED_XP_QUICK.map((d) => {
+            const neg = d < 0;
+            return `<button type="button" class="btn ${neg ? 'btn-danger' : 'btn-live'}" data-delta="${d}">${neg ? d : `+${d}`}</button>`;
+          }).join('')}
         </div>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px" id="seed-xp-chips">
-        ${SEED_XP_QUICK.map((d) => {
-          const neg = d < 0;
-          return `<button type="button" class="btn ${neg ? 'btn-danger' : 'btn-live'}" data-delta="${d}">${neg ? d : `+${d}`}</button>`;
-        }).join('')}
-      </div>
-      <form id="seed-xp-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input id="seed-xp-custom" type="number" step="1" placeholder="مبلغ مخصص ±" style="flex:1;min-width:160px" />
-        <button type="submit" class="btn btn-review" id="seed-xp-apply">تطبيق</button>
-      </form>
-      <p class="muted" id="seed-xp-status" style="margin:0;font-size:13px"></p>
+        <form id="seed-xp-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="seed-xp-custom" type="number" step="1" placeholder="مبلغ XP مخصص ±" style="flex:1;min-width:160px" />
+          <button type="submit" class="btn btn-review">تطبيق XP</button>
+        </form>
+        <p class="muted" id="seed-xp-status" style="margin:0;font-size:13px"></p>
+      </section>
+
+      <section style="display:grid;gap:12px;padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
+        <h3 style="margin:0;font-size:15px">أصدقاء شارك واربح</h3>
+        <p class="muted" style="margin:0;font-size:13px">كل صديق = +3 في الترتيب و +1 XP على البروفايل</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div style="padding:14px;text-align:center;border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <div style="font-size:26px;font-weight:800" id="seed-friends-value">${num(sw.friends)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">أصدقاء</div>
+          </div>
+          <div style="padding:14px;text-align:center;border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <div style="font-size:26px;font-weight:800" id="seed-score-value">${num(sw.score)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">سكور الدورة</div>
+          </div>
+          <div style="padding:14px;text-align:center;border:1px solid rgba(255,255,255,.06);border-radius:14px">
+            <div style="font-size:26px;font-weight:800" id="seed-shares-value">${num(sw.shares)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">شير</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px" id="seed-friends-chips">
+          ${SEED_FRIENDS_QUICK.map((d) => {
+            const neg = d < 0;
+            return `<button type="button" class="btn ${neg ? 'btn-danger' : 'btn-live'}" data-friends-delta="${d}">${neg ? d : `+${d}`}</button>`;
+          }).join('')}
+        </div>
+        <form id="seed-friends-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="seed-friends-custom" type="number" step="1" placeholder="أصدقاء ±" style="flex:1;min-width:160px" />
+          <button type="submit" class="btn btn-review">تطبيق أصدقاء</button>
+        </form>
+        <p class="muted" id="seed-friends-status" style="margin:0;font-size:13px"></p>
+      </section>
     </div>`;
 
   const statusEl = document.getElementById('seed-xp-status');
+  const friendsStatusEl = document.getElementById('seed-friends-status');
   const xpEl = document.getElementById('seed-xp-value');
   const levelEl = document.getElementById('seed-xp-level');
+  const friendsEl = document.getElementById('seed-friends-value');
+  const scoreEl = document.getElementById('seed-score-value');
+  const sharesEl = document.getElementById('seed-shares-value');
 
-  async function applyDelta(delta) {
+  async function applyXpDelta(delta) {
     if (!delta || !Number.isInteger(delta)) return;
     deskError.hidden = true;
     statusEl.textContent = 'جاري التعديل…';
@@ -847,11 +887,36 @@ async function renderSeedXp() {
       xpEl.textContent = num(data.xp);
       levelEl.textContent = num(data.level);
       const sign = data.awarded >= 0 ? '+' : '';
-      statusEl.textContent = `تم: ${sign}${data.awarded} → ${data.xp} نقطة · مستوى ${data.level}`;
+      statusEl.textContent = `تم: ${sign}${data.awarded} → ${data.xp} XP · مستوى ${data.level}`;
     } catch (err) {
       deskError.hidden = false;
       deskError.textContent = err.message || 'تعذر تعديل النقاط';
       statusEl.textContent = '';
+    }
+  }
+
+  async function applyFriendsDelta(delta) {
+    if (!delta || !Number.isInteger(delta)) return;
+    deskError.hidden = true;
+    friendsStatusEl.textContent = 'جاري تعديل الأصدقاء…';
+    try {
+      const result = await api('/xp/friends/adjust', {
+        method: 'POST',
+        body: JSON.stringify({ delta }),
+      });
+      const data = result.data;
+      friendsEl.textContent = num(data.friends);
+      scoreEl.textContent = num(data.score);
+      sharesEl.textContent = num(data.shares);
+      xpEl.textContent = num(data.xp);
+      levelEl.textContent = num(data.level);
+      const fSign = data.friendsDelta >= 0 ? '+' : '';
+      const xSign = data.xpDelta >= 0 ? '+' : '';
+      friendsStatusEl.textContent = `أصدقاء ${fSign}${data.friendsDelta} → ${data.friends} · سكور ${data.score} · XP ${xSign}${data.xpDelta} → ${data.xp}`;
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر تعديل الأصدقاء';
+      friendsStatusEl.textContent = '';
     }
   }
 
@@ -861,7 +926,7 @@ async function renderSeedXp() {
   document.getElementById('seed-xp-chips').addEventListener('click', (event) => {
     const btn = event.target.closest('[data-delta]');
     if (!btn) return;
-    void applyDelta(Number(btn.dataset.delta));
+    void applyXpDelta(Number(btn.dataset.delta));
   });
   document.getElementById('seed-xp-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -871,7 +936,22 @@ async function renderSeedXp() {
       return;
     }
     document.getElementById('seed-xp-custom').value = '';
-    void applyDelta(parsed);
+    void applyXpDelta(parsed);
+  });
+  document.getElementById('seed-friends-chips').addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-friends-delta]');
+    if (!btn) return;
+    void applyFriendsDelta(Number(btn.dataset.friendsDelta));
+  });
+  document.getElementById('seed-friends-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const parsed = Number.parseInt(document.getElementById('seed-friends-custom').value.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed === 0) {
+      friendsStatusEl.textContent = 'اكتب رقم صحيح غير صفر';
+      return;
+    }
+    document.getElementById('seed-friends-custom').value = '';
+    void applyFriendsDelta(parsed);
   });
 }
 

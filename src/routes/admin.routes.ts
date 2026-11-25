@@ -1748,31 +1748,20 @@ router.put('/king/daily-matches', requireAdmin, async (req: Request, res: Respon
 
 /**
  * GET /api/admin/xp/seed-target
- * Profile + XP for the locked seed account (developer-only).
+ * Profile + XP + Share & Win friends for the locked seed account (developer-only).
  */
 router.get('/xp/seed-target', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
-        const user = await prisma.user.findUnique({
-            where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
-            select: {
-                id: true,
-                clerkUserId: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                xp: true,
-                level: true,
-            },
-        });
-
-        if (!user) {
+        const { getSeedAccountBundle } = await import('../services/seed-account-adjust.service');
+        const data = await getSeedAccountBundle();
+        if (!data) {
             sendError(req, res, ErrorCode.NOT_FOUND, 'Seed target account not found');
             return;
         }
 
         res.json({
             status: 'SUCCESS',
-            data: user,
+            data,
         });
     } catch (error: unknown) {
         logger.error('Admin XP seed-target get error:', error);

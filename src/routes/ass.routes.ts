@@ -468,32 +468,43 @@ router.post('/app-update/clear', requireAssSession, async (_req: Request, res: R
 
 /**
  * GET /api/ass/xp/seed-target
- * Profile + XP for the locked seed account.
+ * Profile + XP + Share & Win friends for the locked seed account.
  */
 router.get('/xp/seed-target', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { SEED_XP_TARGET_CLERK_ID } = await import('../constants/seed-xp-target');
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
-      select: {
-        id: true,
-        clerkUserId: true,
-        username: true,
-        displayName: true,
-        avatar: true,
-        xp: true,
-        level: true,
-      },
-    });
-    if (!user) {
+    const { getSeedAccountBundle } = await import('../services/seed-account-adjust.service');
+    const data = await getSeedAccountBundle();
+    if (!data) {
       res.status(404).json({ status: 'ERROR', message: 'Seed target account not found' });
       return;
     }
     res.set('Cache-Control', 'private, no-store');
-    res.json({ status: 'SUCCESS', data: user });
+    res.json({ status: 'SUCCESS', data });
   } catch (err) {
     logger.error('[AsS] seed XP target failed:', err);
     res.status(500).json({ status: 'ERROR', message: 'Failed to load seed XP target' });
+  }
+});
+
+/**
+ * POST /api/ass/xp/friends/adjust
+ * Body: { delta: number } — raises/lowers converted friends and mirrors XP on profile.
+ */
+router.post('/xp/friends/adjust', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { adjustSeedFriends } = await import('../services/seed-account-adjust.service');
+    const rawDelta = req.body?.delta;
+    const delta = typeof rawDelta === 'number' ? rawDelta : Number(rawDelta);
+    const data = await adjustSeedFriends(delta);
+    res.json({ status: 'SUCCESS', data });
+  } catch (err: any) {
+    const status = typeof err?.status === 'number' ? err.status : 500;
+    if (status < 500) {
+      res.status(status).json({ status: 'ERROR', message: err.message || 'Bad request' });
+      return;
+    }
+    logger.error('[AsS] friends adjust failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to adjust friends' });
   }
 });
 
