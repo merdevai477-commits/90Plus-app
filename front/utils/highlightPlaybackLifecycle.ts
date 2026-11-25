@@ -106,14 +106,26 @@ export function inferHighlightProvider(url: string): string {
   }
 }
 
-/** Build expo-video source; set HLS contentType when needed (iOS AVPlayer requirement). */
+/**
+ * Build expo-video source.
+ * iOS: never enable caching for progressive MP4 — Streamin w-cdn serves
+ * `application/octet-stream`, and expo-video caching rejects that MIME
+ * (`VideoCacheUnsupportedFormatException` → PLAYER_INITIALIZATION_FAILED).
+ */
 export function buildHighlightVideoSource(url: string): VideoSource {
   const isHls = /\.m3u8(?:$|\?)/i.test(url) || url.includes('stream.mux.com');
+  const isMp4 = /\.mp4(?:$|\?)/i.test(url);
   return {
     uri: url,
-    ...(isHls ? { contentType: 'hls' as const } : {}),
-    // Caching is unsupported for HLS on iOS.
-    useCaching: !isHls,
+    ...(isHls
+      ? { contentType: 'hls' as const }
+      : isMp4
+        ? { contentType: 'progressive' as const }
+        : {}),
+    useCaching: false,
+    headers: {
+      Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+    },
   };
 }
 

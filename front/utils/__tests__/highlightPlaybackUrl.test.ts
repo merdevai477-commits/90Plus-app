@@ -2,6 +2,7 @@ import {
   isDirectHighlightFile,
   preferDirectHighlightUrls,
   resolveHighlightPlaybackUrl,
+  streaminPlaybackCandidates,
   YOUTUBE_APP_REFERER,
   youtubeEmbedDocument,
   youtubeEmbedUrl,
@@ -18,7 +19,21 @@ describe('resolveHighlightPlaybackUrl', () => {
     expect(resolveHighlightPlaybackUrl('https://streamin.me/v/76ce927b')).toBe(
       'https://w-cdn.streamin.top/uploads/76ce927b.mp4',
     );
+    expect(resolveHighlightPlaybackUrl('https://streamin.link/v/76ce927b', 'ios')).toBe(
+      'https://c-cdn.streamin.top/uploads/76ce927b.mp4',
+    );
     expect(isDirectHighlightFile('https://w-cdn.streamin.top/uploads/76ce927b.mp4')).toBe(true);
+  });
+
+  it('prefers c-cdn first on iOS for video/mp4 MIME', () => {
+    expect(streaminPlaybackCandidates('https://streamin.link/v/abc123', 'ios')).toEqual([
+      'https://c-cdn.streamin.top/uploads/abc123.mp4',
+      'https://w-cdn.streamin.top/uploads/abc123.mp4',
+    ]);
+    expect(streaminPlaybackCandidates('https://streamin.link/v/abc123', 'android')).toEqual([
+      'https://w-cdn.streamin.top/uploads/abc123.mp4',
+      'https://c-cdn.streamin.top/uploads/abc123.mp4',
+    ]);
   });
 
   it('leaves an existing video file untouched', () => {

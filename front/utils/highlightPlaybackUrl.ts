@@ -1,6 +1,12 @@
 const STREAMIN_HOSTS = new Set(['streamin.link', 'streamin.me']);
-/** Streamin moved live files off c-cdn. Try the current host first, then the old one. */
-const STREAMIN_CDN_HOSTS = ['w-cdn.streamin.top', 'c-cdn.streamin.top'];
+/**
+ * Streamin CDN mirrors.
+ * Prefer c-cdn on iOS: it returns `Content-Type: video/mp4`.
+ * w-cdn often returns `application/octet-stream`, which breaks AVPlayer when
+ * caching is involved and is less reliable for native progressive playback.
+ */
+const STREAMIN_CDN_HOSTS_IOS = ['c-cdn.streamin.top', 'w-cdn.streamin.top'] as const;
+const STREAMIN_CDN_HOSTS_DEFAULT = ['w-cdn.streamin.top', 'c-cdn.streamin.top'] as const;
 
 export const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
 
@@ -10,11 +16,16 @@ export const YOUTUBE_EMBED_ORIGIN = 'https://90plus.pro';
  */
 export const YOUTUBE_APP_REFERER = 'https://com.mhmdsh1892.ninetyplusapp';
 
+const ALL_STREAMIN_CDN_HOSTS = [
+  ...STREAMIN_CDN_HOSTS_DEFAULT,
+  ...STREAMIN_CDN_HOSTS_IOS,
+] as const;
+
 export function streaminClipId(pageUrl: string): string | null {
   try {
     const parsed = new URL(pageUrl.trim());
     const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
-    const cdnHost = STREAMIN_CDN_HOSTS.some((cdn) => host === cdn);
+    const cdnHost = ALL_STREAMIN_CDN_HOSTS.some((cdn) => host === cdn);
     const watchHost = STREAMIN_HOSTS.has(host) || host.endsWith('.streamin.link') || host.endsWith('.streamin.me');
     if (!cdnHost && !watchHost) return null;
     const id = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/\.mp4$/i, '') ?? '';
@@ -24,20 +35,26 @@ export function streaminClipId(pageUrl: string): string | null {
   }
 }
 
-export function streaminPlaybackCandidates(pageUrl: string): string[] {
+export function streaminPlaybackCandidates(
+  pageUrl: string,
+  platform?: string | null,
+): string[] {
   const id = streaminClipId(pageUrl);
   if (!id) return [];
-  return STREAMIN_CDN_HOSTS.map((host) => `https://${host}/uploads/${id}.mp4`);
+  const hosts =
+    platform === 'ios' ? STREAMIN_CDN_HOSTS_IOS : STREAMIN_CDN_HOSTS_DEFAULT;
+  return hosts.map((host) => `https://${host}/uploads/${id}.mp4`);
 }
 
 /** Turn a Streamin watch page into the MP4, so the app plays the file itself. */
-export function resolveHighlightPlaybackUrl(pageUrl: string): string {
+export function resolveHighlightPlaybackUrl(
+  pageUrl: string,
+  platform?: string | null,
+): string {
   const trimmed = pageUrl.trim();
   if (!trimmed) return trimmed;
   try {
-    const parsed = new URL(trimmed);
-    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
-    const candidates = streaminPlaybackCandidates(trimmed);
+    const candidates = streaminPlaybackCandidates(trimmed, platform);
     if (candidates.length) return candidates[0];
   } catch {
     return trimmed;

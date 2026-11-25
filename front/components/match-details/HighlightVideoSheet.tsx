@@ -351,7 +351,7 @@ export function HighlightVideoSheet({
     }
     // YouTube → open the YouTube app/browser immediately (no in-app WebView).
     const ytId = youtubeVideoId(firstCandidateUrl);
-    const resolvedFirst = resolveHighlightPlaybackUrl(firstCandidateUrl);
+    const resolvedFirst = resolveHighlightPlaybackUrl(firstCandidateUrl, Platform.OS);
     if (ytId && !isDirectHighlightFile(resolvedFirst)) {
       openYouTubeExternally(firstCandidateUrl);
       onClose();
@@ -376,7 +376,7 @@ export function HighlightVideoSheet({
   }, [visible, sessionNonce, listKey, firstCandidateUrl, retryCount, onClose, openYouTubeExternally]);
 
   const url = urls[index] ?? '';
-  const fileUrl = resolveHighlightPlaybackUrl(url);
+  const fileUrl = resolveHighlightPlaybackUrl(url, Platform.OS);
   const embedUrl = url ? youtubeEmbedUrl(url) ?? youtubeEmbedUrl(fileUrl) : null;
   const direct = Boolean(url) && !embedUrl && isDirectHighlightFile(fileUrl);
   const videoId = url ? youtubeVideoId(url) : null;
@@ -526,7 +526,7 @@ export function HighlightVideoSheet({
     setDirectReady(false);
     setPlayableDirectUrl('');
     setUiPhase('loading');
-    const targets = streaminPlaybackCandidates(url);
+    const targets = streaminPlaybackCandidates(url, Platform.OS);
     const urlsToTry = targets.length ? targets : [fileUrl];
     emitHighlightPlaybackDiagnostic({
       sessionId: sessionId.current,
@@ -537,24 +537,25 @@ export function HighlightVideoSheet({
       retryCount,
     });
     void (async () => {
-      let winner: string | null = null;
-      let lastReason: PlaybackFailureReason = 'SOURCE_NOT_FOUND';
-      await Promise.all(
-        urlsToTry.map(async (target) => {
-          const result = await preflightDirectMp4(target, { timeoutMs: 2_500 });
-          if (cancelled) return;
-          if (result.ok === true) {
-            if (winner == null) {
-              winner = target;
-              setPlayableDirectUrl(target);
-              setDirectReady(true);
-            }
-            return;
-          }
-          lastReason = result.reason;
-        }),
+      // Race probes in parallel, then pick the first preferred host that succeeded
+      // (iOS prefers c-cdn for video/mp4 MIME over w-cdn octet-stream).
+      const probed = await Promise.all(
+        urlsToTry.map(async (target) => ({
+          target,
+          result: await preflightDirectMp4(target, { timeoutMs: 2_500 }),
+        })),
       );
-      if (!cancelled && winner == null) skipWithReason(lastReason);
+      if (cancelled) return;
+      const winner = probed.find((row) => row.result.ok === true);
+      if (winner) {
+        setPlayableDirectUrl(winner.target);
+        setDirectReady(true);
+        return;
+      }
+      const lastReason =
+        probed.map((row) => (row.result.ok ? null : row.result.reason)).filter(Boolean).pop() ??
+        'SOURCE_NOT_FOUND';
+      skipWithReason(lastReason as PlaybackFailureReason);
     })();
     return () => {
       cancelled = true;
@@ -1145,12 +1146,18 @@ function DirectClipPlayer({
     try {
       Object.assign(instance, {
         // iOS: start sooner like reels. Android: keep a slightly deeper buffer.
-        bufferOptions: {
-          // Start goal clips ASAP on both platforms (short forward buffer).
-          preferredForwardBufferDuration: 2,
-          waitsToMinimizeStalling: false,
-          minBufferForPlayback: 0.25,
-        },
+        bufferOptions:
+          Platform.OS === 'ios'
+            ? {
+                // Let AVPlayer choose buffer; avoid Android-only knobs on iOS.
+                preferredForwardBufferDuration: 0,
+                waitsToMinimizeStalling: false,
+              }
+            : {
+                preferredForwardBufferDuration: 2,
+                waitsToMinimizeStalling: false,
+                minBufferForPlayback: 0.25,
+              },
       });
     } catch {
       /* buffer options optional */

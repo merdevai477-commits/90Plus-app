@@ -53,17 +53,24 @@ describe('highlightPlaybackLifecycle', () => {
     expect(classifyHighlightSourceType('https://streama.in/x')).toBe('unsupported');
   });
 
-  it('builds HLS VideoSource with contentType hls and without caching', () => {
+  it('builds progressive MP4 without caching (iOS rejects octet-stream + cache)', () => {
     const hls = buildHighlightVideoSource('https://cdn.example.com/live.m3u8');
     expect(hls).toEqual({
       uri: 'https://cdn.example.com/live.m3u8',
       contentType: 'hls',
       useCaching: false,
+      headers: {
+        Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+      },
     });
     const mp4 = buildHighlightVideoSource('https://cdn.example.com/goal.mp4');
     expect(mp4).toEqual({
       uri: 'https://cdn.example.com/goal.mp4',
-      useCaching: true,
+      contentType: 'progressive',
+      useCaching: false,
+      headers: {
+        Accept: 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+      },
     });
   });
 
