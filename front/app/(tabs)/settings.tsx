@@ -70,6 +70,7 @@ import {
   fetchNotificationPreferences,
   NOTIFICATION_PREFS_QUERY_KEY,
 } from '../../components/notifications/notificationPreferencesApi';
+import { SeedXpControlPanel } from '../../components/Settings/SeedXpControlPanel';
 
 const CACHE_SIZE_SCAN_LIMIT = 80;
 
@@ -289,6 +290,21 @@ export default function SettingsScreen() {
         subtitle={isDark ? tSettings.appearanceDark : tSettings.appearanceLight}
         hint={tSettings.appearanceSub}
         onChange={(dark) => setTheme(dark ? 'dark' : 'light')}
+      />
+
+      <SeedXpControlPanel
+        labels={{
+          section: tSettings.seedXpSection,
+          subtitle: tSettings.seedXpSubtitle,
+          xpLabel: tSettings.seedXpPoints,
+          levelLabel: tSettings.seedXpLevel,
+          customPlaceholder: tSettings.seedXpCustomPlaceholder,
+          apply: tSettings.seedXpApply,
+          refresh: tSettings.seedXpRefresh,
+          adjusted: tSettings.seedXpAdjusted,
+          adjustFailed: tSettings.seedXpAdjustFailed,
+          loadFailed: tSettings.seedXpLoadFailed,
+        }}
       />
 
       {osPushGranted === false ? (

@@ -3674,6 +3674,18 @@ export const en = {
     heroEyebrow: 'CONTROL CENTER',
     heroTitle: 'Alerts & app behavior',
 
+    // Seed account XP (developer-only)
+    seedXpSection: 'Seed profile XP',
+    seedXpSubtitle: 'Adjust XP for the seeded account only',
+    seedXpPoints: 'XP',
+    seedXpLevel: 'Level',
+    seedXpCustomPlaceholder: 'Custom ± amount',
+    seedXpApply: 'Apply',
+    seedXpRefresh: 'Refresh',
+    seedXpAdjusted: 'XP updated',
+    seedXpAdjustFailed: 'Could not adjust XP',
+    seedXpLoadFailed: 'Could not load seed profile',
+
     // Section labels
     sectionNotifications: 'Notifications',
     sectionPreferences: 'Preferences',

@@ -1742,5 +1742,156 @@ router.put('/king/daily-matches', requireAdmin, async (req: Request, res: Respon
     }
 });
 
+/**
+ * Seed / demo account whose XP can be freely adjusted from CONTROL CENTER.
+ * Locked to this Clerk id only — other accounts cannot be targeted.
+ */
+const SEED_XP_TARGET_CLERK_ID = 'user_3LQahd4ClpSN26xyBqC80CSEa0H';
+const SEED_XP_ADJUST_MAX_ABS = 10_000;
+
+/**
+ * GET /api/admin/xp/seed-target
+ * Profile + XP for the locked seed account (developer-only).
+ */
+router.get('/xp/seed-target', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
+            select: {
+                id: true,
+                clerkUserId: true,
+                username: true,
+                displayName: true,
+                avatar: true,
+                xp: true,
+                level: true,
+            },
+        });
+
+        if (!user) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Seed target account not found');
+            return;
+        }
+
+        res.json({
+            status: 'SUCCESS',
+            data: user,
+        });
+    } catch (error: unknown) {
+        logger.error('Admin XP seed-target get error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load seed XP target');
+    }
+});
+
+/**
+ * POST /api/admin/xp/adjust
+ * Body: { delta: number } — positive awards, negative penalizes.
+ * Only the locked seed Clerk account can be adjusted.
+ */
+router.post('/xp/adjust', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const rawDelta = req.body?.delta;
+        const delta = typeof rawDelta === 'number' ? rawDelta : Number(rawDelta);
+
+        if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: 'delta must be a non-zero integer',
+            });
+            return;
+        }
+
+        if (Math.abs(delta) > SEED_XP_ADJUST_MAX_ABS) {
+            res.status(400).json({
+                status: 'ERROR',
+                message: `delta abs must be ≤ ${SEED_XP_ADJUST_MAX_ABS}`,
+            });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({
+            where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
+            select: { id: true, username: true, xp: true, level: true },
+        });
+
+        if (!target) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Seed target account not found');
+            return;
+        }
+
+        const { awardXp, penalizeXp } = await import('../services/xp.service');
+        const adminUser = (req as any).adminUser as { id: string };
+        const idempotencyKey = `admin.xp.adjust.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+        const metadata = {
+            byAdminId: adminUser?.id,
+            seedClerkUserId: SEED_XP_TARGET_CLERK_ID,
+            requestedDelta: delta,
+        };
+
+        const result =
+            delta > 0
+                ? await awardXp({
+                      userId: target.id,
+                      action: 'ADMIN_ADJUSTMENT',
+                      amount: delta,
+                      timezone: 'Africa/Cairo',
+                      idempotencyKey,
+                      metadata,
+                  })
+                : await penalizeXp({
+                      userId: target.id,
+                      action: 'ADMIN_ADJUSTMENT',
+                      amount: Math.abs(delta),
+                      idempotencyKey,
+                      metadata,
+                  });
+
+        try {
+            await AuditService.log({
+                action: AuditAction.USER_SUSPENDED,
+                actorId: adminUser.id,
+                targetId: target.id,
+                targetType: AuditTargetType.USER,
+                resource: 'MODERATION',
+                metadata: {
+                    action: 'ADMIN_XP_ADJUSTMENT',
+                    delta,
+                    awarded: result.awarded,
+                    newXp: result.newXp,
+                    newLevel: result.newLevel,
+                    username: target.username,
+                },
+            });
+        } catch (auditError) {
+            logger.warn('Failed to audit admin XP adjust:', auditError);
+        }
+
+        logger.info('Admin XP adjust', {
+            adminId: adminUser?.id,
+            targetId: target.id,
+            delta,
+            awarded: result.awarded,
+            newXp: result.newXp,
+        });
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                username: target.username,
+                delta,
+                awarded: result.awarded,
+                xp: result.newXp,
+                level: result.newLevel,
+                previousXp: target.xp,
+                previousLevel: target.level,
+                reason: result.reason ?? 'ok',
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Admin XP adjust error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to adjust XP');
+    }
+});
+
 export default router;
 

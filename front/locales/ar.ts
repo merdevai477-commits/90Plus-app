@@ -3592,6 +3592,18 @@ export const ar = {
     heroEyebrow: 'مركز التحكم',
     heroTitle: 'التنبيهات وسلوك التطبيق',
 
+    // نقاط حساب البذرة (للمطور فقط)
+    seedXpSection: 'نقاط بروفايل البذرة',
+    seedXpSubtitle: 'زود أو قلّل النقاط للحساب اللي بنزوده بس',
+    seedXpPoints: 'نقاط',
+    seedXpLevel: 'المستوى',
+    seedXpCustomPlaceholder: 'مبلغ مخصص ±',
+    seedXpApply: 'تطبيق',
+    seedXpRefresh: 'تحديث',
+    seedXpAdjusted: 'تم تحديث النقاط',
+    seedXpAdjustFailed: 'تعذّر تعديل النقاط',
+    seedXpLoadFailed: 'تعذّر تحميل بروفايل البذرة',
+
     sectionNotifications: 'الإشعارات',
     sectionPreferences: 'التفضيلات',
     appearance: 'المظهر',
