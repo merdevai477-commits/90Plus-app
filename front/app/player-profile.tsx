@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Text as SvgText } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiFootballService, { type Player365Career } from '../services/apiFootball';
 import { logger } from '../utils/logger';
@@ -393,6 +394,79 @@ const heroPhotoStyles = StyleSheet.create({
         height: '100%',
     },
 });
+
+/**
+ * Figma neon jersey number (2554:9449).
+ * Render `back` under the cutout and `front` (stroke rim) above it so the
+ * digit stays neon-readable when the player overlaps it.
+ */
+function NeonJerseyNumber({
+    value,
+    fontFamily,
+    layer,
+}: {
+    value: number | string;
+    fontFamily: string;
+    layer: 'back' | 'front';
+}) {
+    const label = String(value);
+    if (layer === 'back') {
+        return (
+            <View style={styles.neonJerseyBack} pointerEvents="none">
+                <Text
+                    style={[styles.neonJerseyBloom, { fontFamily }]}
+                    allowFontScaling={false}
+                >
+                    {label}
+                </Text>
+                <Text
+                    style={[styles.neonJerseyGlow, { fontFamily }]}
+                    allowFontScaling={false}
+                >
+                    {label}
+                </Text>
+                <Text
+                    style={[styles.neonJerseyCore, { fontFamily }]}
+                    allowFontScaling={false}
+                >
+                    {label}
+                </Text>
+            </View>
+        );
+    }
+    return (
+        <View style={styles.neonJerseyFront} pointerEvents="none">
+            <Svg width={210} height={200}>
+                <SvgText
+                    x="8"
+                    y="152"
+                    fontSize="148"
+                    fontFamily={fontFamily}
+                    fontWeight="800"
+                    stroke="#C084FC"
+                    strokeWidth={6}
+                    fill="none"
+                    opacity={0.4}
+                >
+                    {label}
+                </SvgText>
+                <SvgText
+                    x="8"
+                    y="152"
+                    fontSize="148"
+                    fontFamily={fontFamily}
+                    fontWeight="800"
+                    stroke="#F3E8FF"
+                    strokeWidth={2.4}
+                    fill="none"
+                    opacity={0.7}
+                >
+                    {label}
+                </SvgText>
+            </Svg>
+        </View>
+    );
+}
 
 /** Figma match-stats hero: cutout-first photo, same source as player-career. */
 function MatchHeroCutout({
@@ -1322,18 +1396,14 @@ export default function PlayerProfileScreen() {
                                     style={StyleSheet.absoluteFill}
                                 />
                                 {jerseyNumber != null ? (
-                                    <Text
-                                        style={[
-                                            styles.matchHeroJersey,
-                                            { fontFamily: fontExtraBold },
-                                        ]}
-                                        allowFontScaling={false}
-                                    >
-                                        {jerseyNumber}
-                                    </Text>
+                                    <NeonJerseyNumber
+                                        value={jerseyNumber}
+                                        fontFamily={fontExtraBold}
+                                        layer="back"
+                                    />
                                 ) : null}
 
-                                {/* Figma 2554:9449 — edge-cut cutout on the left, identity on the right */}
+                                {/* Figma 2554:9449 — cutout between neon fill and neon stroke rim */}
                                 <View style={styles.matchHeroCutoutWrap} pointerEvents="none">
                                     <MatchHeroCutout
                                         athleteId={athleteId365 > 0 ? athleteId365 : playerId}
@@ -1350,6 +1420,13 @@ export default function PlayerProfileScreen() {
                                         pointerEvents="none"
                                     />
                                 </View>
+                                {jerseyNumber != null ? (
+                                    <NeonJerseyNumber
+                                        value={jerseyNumber}
+                                        fontFamily={fontExtraBold}
+                                        layer="front"
+                                    />
+                                ) : null}
 
                                 {matchStats.rating != null ? (
                                     <View
@@ -2192,24 +2269,63 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 4,
     },
-    matchHeroJersey: {
+    neonJerseyBack: {
         position: 'absolute',
-        left: 18,
-        top: -18,
+        left: 4,
+        top: -36,
+        width: 210,
+        height: 200,
         zIndex: 1,
+        alignItems: 'flex-start',
+        justifyContent: 'flex-end',
+    },
+    neonJerseyFront: {
+        position: 'absolute',
+        left: 4,
+        top: -36,
+        width: 210,
+        height: 200,
+        zIndex: 3,
+    },
+    neonJerseyBloom: {
+        position: 'absolute',
+        left: 8,
+        bottom: 8,
         fontSize: 148,
         lineHeight: 158,
-        color: 'rgba(196,165,255,0.32)',
-        textShadowColor: 'rgba(167,139,250,0.75)',
+        color: 'rgba(192,132,252,0.55)',
+        textShadowColor: '#C084FC',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 22,
+        textShadowRadius: 36,
+    },
+    neonJerseyGlow: {
+        position: 'absolute',
+        left: 8,
+        bottom: 8,
+        fontSize: 148,
+        lineHeight: 158,
+        color: 'rgba(233,213,255,0.5)',
+        textShadowColor: '#E9D5FF',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 18,
+    },
+    neonJerseyCore: {
+        position: 'absolute',
+        left: 8,
+        bottom: 8,
+        fontSize: 148,
+        lineHeight: 158,
+        color: 'rgba(243,232,255,0.42)',
+        textShadowColor: 'rgba(216,180,254,0.95)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 8,
     },
     matchHeroCutoutWrap: {
         position: 'absolute',
-        left: -6,
-        bottom: -22,
-        width: 172,
-        height: 236,
+        left: 10,
+        bottom: -28,
+        width: 158,
+        height: 210,
         zIndex: 2,
     },
     matchHeroCutoutImage: {
@@ -2230,8 +2346,8 @@ const styles = StyleSheet.create({
     },
     matchHeroRating: {
         position: 'absolute',
-        left: 118,
-        bottom: 14,
+        left: 126,
+        bottom: 12,
         zIndex: 4,
     },
     matchHeroIdentity: {
