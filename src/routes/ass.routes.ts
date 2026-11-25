@@ -466,4 +466,121 @@ router.post('/app-update/clear', requireAssSession, async (_req: Request, res: R
   res.json({ status: 'SUCCESS' });
 });
 
+/**
+ * GET /api/ass/xp/seed-target
+ * Profile + XP for the locked seed account.
+ */
+router.get('/xp/seed-target', requireAssSession, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { SEED_XP_TARGET_CLERK_ID } = await import('../constants/seed-xp-target');
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
+      select: {
+        id: true,
+        clerkUserId: true,
+        username: true,
+        displayName: true,
+        avatar: true,
+        xp: true,
+        level: true,
+      },
+    });
+    if (!user) {
+      res.status(404).json({ status: 'ERROR', message: 'Seed target account not found' });
+      return;
+    }
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ status: 'SUCCESS', data: user });
+  } catch (err) {
+    logger.error('[AsS] seed XP target failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to load seed XP target' });
+  }
+});
+
+/**
+ * POST /api/ass/xp/adjust
+ * Body: { delta: number } — positive awards, negative penalizes.
+ * Locked to the seed Clerk account only.
+ */
+router.post('/xp/adjust', requireAssSession, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { SEED_XP_ADJUST_MAX_ABS, SEED_XP_TARGET_CLERK_ID } = await import(
+      '../constants/seed-xp-target'
+    );
+    const rawDelta = req.body?.delta;
+    const delta = typeof rawDelta === 'number' ? rawDelta : Number(rawDelta);
+
+    if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+      res.status(400).json({ status: 'ERROR', message: 'delta must be a non-zero integer' });
+      return;
+    }
+    if (Math.abs(delta) > SEED_XP_ADJUST_MAX_ABS) {
+      res.status(400).json({
+        status: 'ERROR',
+        message: `delta abs must be ≤ ${SEED_XP_ADJUST_MAX_ABS}`,
+      });
+      return;
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { clerkUserId: SEED_XP_TARGET_CLERK_ID },
+      select: { id: true, username: true, xp: true, level: true },
+    });
+    if (!target) {
+      res.status(404).json({ status: 'ERROR', message: 'Seed target account not found' });
+      return;
+    }
+
+    const { awardXp, penalizeXp } = await import('../services/xp.service');
+    const idempotencyKey = `ass.xp.adjust.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+    const metadata = {
+      actor: 'ass',
+      seedClerkUserId: SEED_XP_TARGET_CLERK_ID,
+      requestedDelta: delta,
+    };
+
+    const result =
+      delta > 0
+        ? await awardXp({
+            userId: target.id,
+            action: 'ADMIN_ADJUSTMENT',
+            amount: delta,
+            timezone: 'Africa/Cairo',
+            idempotencyKey,
+            metadata,
+          })
+        : await penalizeXp({
+            userId: target.id,
+            action: 'ADMIN_ADJUSTMENT',
+            amount: Math.abs(delta),
+            idempotencyKey,
+            metadata,
+          });
+
+    logger.info('[AsS] XP adjust', {
+      targetId: target.id,
+      delta,
+      awarded: result.awarded,
+      newXp: result.newXp,
+    });
+
+    res.json({
+      status: 'SUCCESS',
+      data: {
+        username: target.username,
+        delta,
+        awarded: result.awarded,
+        xp: result.newXp,
+        level: result.newLevel,
+        previousXp: target.xp,
+        previousLevel: target.level,
+        reason: result.reason ?? 'ok',
+      },
+    });
+  } catch (err) {
+    logger.error('[AsS] XP adjust failed:', err);
+    res.status(500).json({ status: 'ERROR', message: 'Failed to adjust XP' });
+  }
+});
+
 export default router;

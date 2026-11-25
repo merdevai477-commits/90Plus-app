@@ -40,8 +40,11 @@ const PAGE_TITLES = {
   'reel-comments': 'تعليقات الريلز',
   activity: 'نشاط المسابقات',
   badges: 'الشارات',
+  'seed-xp': 'نقاط البذرة',
   'app-update': 'تحديث التطبيق',
 };
+
+const SEED_XP_QUICK = [-50, -10, -5, -1, 1, 5, 10, 50];
 
 const AD_STATUS = {
   DRAFT: 'بانتظار المراجعة',
@@ -782,6 +785,96 @@ function openDelete(id, kind) {
   deleteModal.hidden = false;
 }
 
+async function renderSeedXp() {
+  const json = await api('/xp/seed-target');
+  const user = json.data;
+  if (!user) {
+    overviewEl.innerHTML = `<p class="muted">حساب البذرة مش موجود.</p>`;
+    return;
+  }
+  const avatar = user.avatar
+    ? `<img src="${esc(user.avatar)}" alt="" style="width:56px;height:56px;border-radius:16px;object-fit:cover" />`
+    : `<div style="width:56px;height:56px;border-radius:16px;background:rgba(110,168,255,.15);display:grid;place-items:center;font-weight:800">${esc((user.displayName || user.username || '?').charAt(0).toUpperCase())}</div>`;
+
+  overviewEl.innerHTML = `
+    <div style="max-width:560px;display:grid;gap:16px">
+      <div style="display:flex;gap:14px;align-items:center">
+        ${avatar}
+        <div style="min-width:0;flex:1">
+          <h2 style="margin:0;font-size:20px">${esc(user.displayName || user.username)}</h2>
+          <p class="muted" style="margin:4px 0 0">@${esc(user.username)}</p>
+          <p class="muted" style="margin:6px 0 0;font-size:13px">تعديل النقاط للحساب ده بس</p>
+        </div>
+        <button type="button" class="btn btn-ghost" id="seed-xp-refresh">تحديث</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="padding:16px;text-align:center;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
+          <div style="font-size:28px;font-weight:800" id="seed-xp-value">${num(user.xp)}</div>
+          <div class="muted" style="font-size:12px;margin-top:4px">نقاط</div>
+        </div>
+        <div style="padding:16px;text-align:center;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#0a0a0a">
+          <div style="font-size:28px;font-weight:800" id="seed-xp-level">${num(user.level)}</div>
+          <div class="muted" style="font-size:12px;margin-top:4px">المستوى</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="seed-xp-chips">
+        ${SEED_XP_QUICK.map((d) => {
+          const neg = d < 0;
+          return `<button type="button" class="btn ${neg ? 'btn-danger' : 'btn-live'}" data-delta="${d}">${neg ? d : `+${d}`}</button>`;
+        }).join('')}
+      </div>
+      <form id="seed-xp-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="seed-xp-custom" type="number" step="1" placeholder="مبلغ مخصص ±" style="flex:1;min-width:160px" />
+        <button type="submit" class="btn btn-review" id="seed-xp-apply">تطبيق</button>
+      </form>
+      <p class="muted" id="seed-xp-status" style="margin:0;font-size:13px"></p>
+    </div>`;
+
+  const statusEl = document.getElementById('seed-xp-status');
+  const xpEl = document.getElementById('seed-xp-value');
+  const levelEl = document.getElementById('seed-xp-level');
+
+  async function applyDelta(delta) {
+    if (!delta || !Number.isInteger(delta)) return;
+    deskError.hidden = true;
+    statusEl.textContent = 'جاري التعديل…';
+    try {
+      const result = await api('/xp/adjust', {
+        method: 'POST',
+        body: JSON.stringify({ delta }),
+      });
+      const data = result.data;
+      xpEl.textContent = num(data.xp);
+      levelEl.textContent = num(data.level);
+      const sign = data.awarded >= 0 ? '+' : '';
+      statusEl.textContent = `تم: ${sign}${data.awarded} → ${data.xp} نقطة · مستوى ${data.level}`;
+    } catch (err) {
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر تعديل النقاط';
+      statusEl.textContent = '';
+    }
+  }
+
+  document.getElementById('seed-xp-refresh').addEventListener('click', () => {
+    void renderSeedXp();
+  });
+  document.getElementById('seed-xp-chips').addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-delta]');
+    if (!btn) return;
+    void applyDelta(Number(btn.dataset.delta));
+  });
+  document.getElementById('seed-xp-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const parsed = Number.parseInt(document.getElementById('seed-xp-custom').value.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed === 0) {
+      statusEl.textContent = 'اكتب رقم صحيح غير صفر';
+      return;
+    }
+    document.getElementById('seed-xp-custom').value = '';
+    void applyDelta(parsed);
+  });
+}
+
 async function renderAppUpdate() {
   let notice = null;
   try {
@@ -849,6 +942,13 @@ async function load() {
         activityEl.hidden = true;
         overviewEl.hidden = false;
         await renderBadges();
+        return;
+      }
+      if (STATE.tab === 'seed-xp') {
+        cardsEl.hidden = true;
+        activityEl.hidden = true;
+        overviewEl.hidden = false;
+        await renderSeedXp();
         return;
       }
       if (STATE.tab === 'app-update') {

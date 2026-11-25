@@ -9,6 +9,10 @@ import { suspendUser, autoDeleteContent } from '../services/moderation.service';
 import { NotificationService, NotificationType } from '../services/notification.service';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import { ErrorCode, sendError } from '../constants/errors';
+import {
+    SEED_XP_ADJUST_MAX_ABS,
+    SEED_XP_TARGET_CLERK_ID,
+} from '../constants/seed-xp-target';
 import { notifyUser } from '../services/notify.service';
 
 const router = Router();
@@ -1741,13 +1745,6 @@ router.put('/king/daily-matches', requireAdmin, async (req: Request, res: Respon
         sendError(req, res, ErrorCode.INTERNAL, 'Failed to save King daily matches');
     }
 });
-
-/**
- * Seed / demo account whose XP can be freely adjusted from CONTROL CENTER.
- * Locked to this Clerk id only — other accounts cannot be targeted.
- */
-const SEED_XP_TARGET_CLERK_ID = 'user_3LQahd4ClpSN26xyBqC80CSEa0H';
-const SEED_XP_ADJUST_MAX_ABS = 10_000;
 
 /**
  * GET /api/admin/xp/seed-target
