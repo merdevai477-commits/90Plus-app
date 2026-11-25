@@ -35,7 +35,15 @@ import {
   teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
-import { preferScores365AthletesPhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
+import {
+    preferScores365AthletesPhotoUrl,
+    toFullscreenPhotoUrl,
+    with365ImageSize,
+    buildScores365AthleteCutoutUrl,
+    scores365AthletePhotoCandidates,
+    scores365AthleteImageVersionFromUrl,
+    isScores365ImageUrl,
+} from '../utils/scores365AthletePhoto';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { useAppFont } from '../utils/fontSetup';
 import {
@@ -385,6 +393,63 @@ const heroPhotoStyles = StyleSheet.create({
         height: '100%',
     },
 });
+
+/** Figma match-stats hero: cutout-first photo, same source as player-career. */
+function MatchHeroCutout({
+    athleteId,
+    photo,
+}: {
+    athleteId: number;
+    photo?: string | null;
+}) {
+    const candidates = useMemo(() => {
+        const preferred =
+            preferScores365AthletesPhotoUrl(photo?.trim() || null) ?? photo?.trim() ?? null;
+        const version = scores365AthleteImageVersionFromUrl(preferred);
+        const circular = scores365AthletePhotoCandidates(athleteId, preferred, 250).map(
+            (uri) => with365ImageSize(uri, 250) ?? uri,
+        );
+        if (athleteId <= 0) {
+            return preferred ? [preferred, ...circular] : circular;
+        }
+        // Prefer background-removal cutout when we have a 365 athlete id / CDN photo.
+        if (isScores365ImageUrl(preferred) || !preferred) {
+            return [buildScores365AthleteCutoutUrl(athleteId, 700, version), ...circular];
+        }
+        return preferred ? [preferred, ...circular] : circular;
+    }, [athleteId, photo]);
+
+    const [index, setIndex] = useState(0);
+    useEffect(() => {
+        setIndex(0);
+    }, [candidates.join('|')]);
+
+    const uri = candidates[index];
+    if (!uri || index >= candidates.length) {
+        return (
+            <View style={styles.matchHeroCutoutFallback}>
+                <Ionicons name="person" size={72} color="rgba(255,255,255,0.35)" />
+            </View>
+        );
+    }
+
+    return (
+        <ExpoImage
+            source={{ uri }}
+            style={styles.matchHeroCutoutImage}
+            contentFit="contain"
+            contentPosition="bottom"
+            cachePolicy="memory-disk"
+            priority="high"
+            transition={200}
+            recyclingKey={`match-hero-cutout-${athleteId}-${index}`}
+            onError={() => {
+                if (index + 1 < candidates.length) setIndex((i) => i + 1);
+                else setIndex(candidates.length);
+            }}
+        />
+    );
+}
 
 function MiniStat({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
     const fontBold = useAppFont(700);
@@ -1251,140 +1316,137 @@ export default function PlayerProfileScreen() {
                                     style={StyleSheet.absoluteFill}
                                 />
                                 <LinearGradient
-                                    colors={['rgba(167,139,250,0.35)', 'transparent', 'rgba(36,16,78,0.45)']}
-                                    start={{ x: 0.2, y: 0 }}
-                                    end={{ x: 0.9, y: 1 }}
+                                    colors={['rgba(167,139,250,0.45)', 'transparent', 'rgba(36,16,78,0.5)']}
+                                    start={{ x: 0.15, y: 0 }}
+                                    end={{ x: 0.95, y: 1 }}
                                     style={StyleSheet.absoluteFill}
                                 />
                                 {jerseyNumber != null ? (
                                     <Text
                                         style={[
                                             styles.matchHeroJersey,
-                                            {
-                                                fontFamily: fontExtraBold,
-                                                ...(rtl ? { left: 8 } : { right: 8 }),
-                                            },
+                                            { fontFamily: fontExtraBold },
                                         ]}
                                         allowFontScaling={false}
                                     >
                                         {jerseyNumber}
                                     </Text>
                                 ) : null}
-                                <View style={[styles.matchHeroRow, { flexDirection: row }]}>
-                                    <View style={styles.matchHeroPhoto}>
-                                        <PlayerHeroPhoto
-                                            key={playerId}
-                                            playerId={playerId}
-                                            photo={heroPlayer.photo ?? params.photo}
-                                            name={heroPlayer.name}
-                                            position={primaryPosition}
-                                            colors={teamColors}
-                                            photoSource={is365Source ? '365' : 'api'}
-                                        />
-                                        {matchStats.rating != null ? (
-                                            <View
-                                                style={[
-                                                    styles.ratingMedal,
-                                                    {
-                                                        backgroundColor: ratingTone(matchStats.rating),
-                                                        borderColor: '#2A1058',
-                                                    },
-                                                ]}
-                                            >
-                                                <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
-                                                    {matchStats.rating.toFixed(1)}
+
+                                {/* Figma 2554:9449 — edge-cut cutout on the left, identity on the right */}
+                                <View style={styles.matchHeroCutoutWrap} pointerEvents="none">
+                                    <MatchHeroCutout
+                                        athleteId={athleteId365 > 0 ? athleteId365 : playerId}
+                                        photo={
+                                            matchReport365?.imageUrl ||
+                                            heroPlayer.photo ||
+                                            params.photo
+                                        }
+                                    />
+                                    <LinearGradient
+                                        colors={['transparent', 'rgba(42,16,88,0.45)', 'rgba(42,16,88,0.92)']}
+                                        locations={[0.52, 0.8, 1]}
+                                        style={styles.matchHeroCutoutFade}
+                                        pointerEvents="none"
+                                    />
+                                </View>
+
+                                {matchStats.rating != null ? (
+                                    <View
+                                        style={[
+                                            styles.ratingMedal,
+                                            styles.matchHeroRating,
+                                            {
+                                                backgroundColor: ratingTone(matchStats.rating),
+                                                borderColor: '#2A1058',
+                                            },
+                                        ]}
+                                    >
+                                        <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
+                                            {matchStats.rating.toFixed(1)}
+                                        </Text>
+                                    </View>
+                                ) : null}
+
+                                <View style={styles.matchHeroIdentity}>
+                                    <Text
+                                        style={[
+                                            styles.matchHeroName,
+                                            { fontFamily: fontBold, textAlign: 'right' },
+                                        ]}
+                                        numberOfLines={2}
+                                    >
+                                        {heroPlayer.name}
+                                    </Text>
+                                    <View style={styles.matchHeroMetaRow}>
+                                        {heroPlayer.nationality ? (
+                                            <View style={styles.matchHeroMetaItem}>
+                                                <Text
+                                                    style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {heroPlayer.nationality}
                                                 </Text>
+                                                {nationalityFlagUri ? (
+                                                    <View
+                                                        style={[
+                                                            styles.flagFrame,
+                                                            { borderColor: 'rgba(255,255,255,0.28)' },
+                                                        ]}
+                                                    >
+                                                        <ExpoImage
+                                                            source={{ uri: nationalityFlagUri }}
+                                                            style={StyleSheet.absoluteFillObject}
+                                                            contentFit="cover"
+                                                            cachePolicy="memory-disk"
+                                                            transition={0}
+                                                        />
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        ) : null}
+                                        {primaryTeam ? (
+                                            <View style={styles.matchHeroMetaItem}>
+                                                <Text
+                                                    style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
+                                                    numberOfLines={1}
+                                                >
+                                                    {getTeamDisplayName(primaryTeam.name, language)}
+                                                </Text>
+                                                <TeamBadge
+                                                    name={primaryTeam.name}
+                                                    color="transparent"
+                                                    size={22}
+                                                    logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
+                                                    highQuality
+                                                />
                                             </View>
                                         ) : null}
                                     </View>
-                                    <View style={[styles.matchHeroInfo, { alignItems: alignStart }]}>
-                                        <Text
-                                            style={[
-                                                styles.matchHeroName,
-                                                { fontFamily: fontBold, textAlign },
-                                            ]}
-                                            numberOfLines={2}
-                                        >
-                                            {heroPlayer.name}
-                                        </Text>
-                                        <View
-                                            style={[
-                                                styles.matchHeroMetaRow,
-                                                { flexDirection: row },
-                                            ]}
-                                        >
-                                            {primaryTeam ? (
-                                                <View style={[styles.inlineRow, { flexDirection: row, gap: 6 }]}>
+                                    {chips.length > 0 ? (
+                                        <View style={styles.matchChipsRow}>
+                                            {chips.map((c) => (
+                                                <View key={c.key} style={styles.matchChip}>
                                                     <Text
-                                                        style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
+                                                        style={[
+                                                            styles.matchChipText,
+                                                            { fontFamily: fontBold },
+                                                        ]}
                                                         numberOfLines={1}
                                                     >
-                                                        {getTeamDisplayName(primaryTeam.name, language)}
+                                                        {c.text}
                                                     </Text>
-                                                    <TeamBadge
-                                                        name={primaryTeam.name}
-                                                        color="transparent"
-                                                        size={22}
-                                                        logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
-                                                        highQuality
-                                                    />
-                                                </View>
-                                            ) : null}
-                                            {heroPlayer.nationality ? (
-                                                <View style={[styles.inlineRow, { flexDirection: row, gap: 9 }]}>
-                                                    <Text
-                                                        style={[styles.matchHeroMeta, { fontFamily: fontSemi }]}
-                                                        numberOfLines={1}
-                                                    >
-                                                        {heroPlayer.nationality}
-                                                    </Text>
-                                                    {nationalityFlagUri ? (
-                                                        <View
-                                                            style={[
-                                                                styles.flagFrame,
-                                                                { borderColor: 'rgba(255,255,255,0.28)' },
-                                                            ]}
-                                                        >
-                                                            <ExpoImage
-                                                                source={{ uri: nationalityFlagUri }}
-                                                                style={StyleSheet.absoluteFillObject}
-                                                                contentFit="cover"
-                                                                cachePolicy="memory-disk"
-                                                                transition={0}
-                                                            />
-                                                        </View>
+                                                    {c.icon != null ? (
+                                                        <ExpoImage
+                                                            source={c.icon}
+                                                            style={styles.chipIcon}
+                                                            contentFit="contain"
+                                                        />
                                                     ) : null}
                                                 </View>
-                                            ) : null}
+                                            ))}
                                         </View>
-                                        {chips.length > 0 ? (
-                                            <View style={[styles.matchChipsRow, { flexDirection: row }]}>
-                                                {chips.map((c) => (
-                                                    <View
-                                                        key={c.key}
-                                                        style={[styles.matchChip, { flexDirection: row }]}
-                                                    >
-                                                        {c.icon != null ? (
-                                                            <ExpoImage
-                                                                source={c.icon}
-                                                                style={styles.chipIcon}
-                                                                contentFit="contain"
-                                                            />
-                                                        ) : null}
-                                                        <Text
-                                                            style={[
-                                                                styles.matchChipText,
-                                                                { fontFamily: fontBold },
-                                                            ]}
-                                                            numberOfLines={1}
-                                                        >
-                                                            {c.text}
-                                                        </Text>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        ) : null}
-                                    </View>
+                                    ) : null}
                                 </View>
                             </View>
 
@@ -2121,9 +2183,10 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         overflow: 'hidden',
         justifyContent: 'flex-end',
-        paddingHorizontal: 16,
+        paddingLeft: 157,
+        paddingRight: 16,
         paddingBottom: 18,
-        paddingTop: 20,
+        paddingTop: 28,
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
@@ -2131,23 +2194,79 @@ const styles = StyleSheet.create({
     },
     matchHeroJersey: {
         position: 'absolute',
-        top: -8,
-        fontSize: 140,
-        lineHeight: 150,
-        color: 'rgba(196,165,255,0.28)',
-        textShadowColor: 'rgba(167,139,250,0.65)',
+        left: 18,
+        top: -18,
+        zIndex: 1,
+        fontSize: 148,
+        lineHeight: 158,
+        color: 'rgba(196,165,255,0.32)',
+        textShadowColor: 'rgba(167,139,250,0.75)',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 18,
+        textShadowRadius: 22,
     },
-    matchHeroRow: { alignItems: 'flex-end', gap: 10, zIndex: 1 },
-    matchHeroPhoto: { alignItems: 'center', marginBottom: -6 },
-    matchHeroInfo: { flex: 1, gap: 12, paddingBottom: 4 },
-    matchHeroName: { color: '#fff', fontSize: 32, lineHeight: 38 },
-    matchHeroMetaRow: { flexWrap: 'wrap', gap: 16, alignItems: 'center' },
-    matchHeroMeta: { color: '#fff', fontSize: 16, flexShrink: 1 },
-    matchChipsRow: { flexWrap: 'wrap', gap: 10 },
+    matchHeroCutoutWrap: {
+        position: 'absolute',
+        left: -6,
+        bottom: -22,
+        width: 172,
+        height: 236,
+        zIndex: 2,
+    },
+    matchHeroCutoutImage: {
+        width: '100%',
+        height: '100%',
+    },
+    matchHeroCutoutFallback: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    matchHeroCutoutFade: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 78,
+    },
+    matchHeroRating: {
+        position: 'absolute',
+        left: 118,
+        bottom: 14,
+        zIndex: 4,
+    },
+    matchHeroIdentity: {
+        zIndex: 3,
+        alignItems: 'flex-end',
+        gap: 12,
+        minHeight: 140,
+        justifyContent: 'center',
+    },
+    matchHeroName: { color: '#fff', fontSize: 32, lineHeight: 38, width: '100%' },
+    matchHeroMetaRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 16,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        width: '100%',
+    },
+    matchHeroMetaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        maxWidth: '100%',
+    },
+    matchHeroMeta: { color: '#fff', fontSize: 16, flexShrink: 1, textAlign: 'right' },
+    matchChipsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        justifyContent: 'flex-end',
+        width: '100%',
+    },
     matchChip: {
         height: 25,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 4,
