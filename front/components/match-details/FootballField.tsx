@@ -26,22 +26,34 @@ import { LINEUP_ART, LINEUP_ICON } from './lineupAssets';
 /** Figma artboard width — every number below is in artboard units, scaled to the screen. */
 const DESIGN_W = 448;
 const MAX_CANVAS_W = 520;
-/** Artboard y where the lineup section starts; Figma `top` values are offset by this. */
-const ORIGIN_Y = 383;
+/**
+ * Artboard y where the lineup section starts.
+ * Figma Pitch Header `1814:22724` sits at y=373 — keep a little headroom above it.
+ */
+const ORIGIN_Y = 365;
 /** Fades out just below the GK row (Figma Football Pitch 1814:22856 ends ~970). */
 const SECTION_BOTTOM_Y = 940;
 const SECTION_BG = '#030303';
 
-const CARD_W = 97;
+/** Figma player card `1814:22885` — 102×71 with 55px avatar rising 31 above. */
+const CARD_W = 102;
 const CARD_H = 71;
 const AVATAR = 55;
 const AVATAR_RISE = 31;
-const CARD_GAP = 8;
+/** Midfield row in Figma steps centers by 107 → gap 5 between 102-wide cards. */
+const CARD_GAP = 5;
 /** Card plus the avatar that sticks out above it. */
 const CARD_STACK = 104;
-const PLAYERS_SPAN = 412;
+const PLAYERS_SPAN = 423;
 const PITCH_CENTER_X = 215;
 const KEEPER_TOP = 833;
+/** Figma Pitch Header `1814:22724`. */
+const HEADER_TOP = 373;
+const FORMATION_PILL_W = 70;
+const FORMATION_PILL_H = 32;
+const TOGGLE_W = 207;
+const TOGGLE_H = 32;
+const HEADER_INSET_X = 32;
 /** Absolute depth (0–100) gap that starts a new row. */
 const DEPTH_ROW_GAP = 8;
 
@@ -404,15 +416,14 @@ export const FootballField: React.FC<FootballFieldProps> = ({
             style={[
               styles.pill,
               {
-                left: 24 * s,
-                top: y(406),
-                minWidth: 122 * s,
-                height: 36 * s,
-                paddingHorizontal: 14 * s,
+                left: HEADER_INSET_X * s,
+                top: y(HEADER_TOP + (41 - FORMATION_PILL_H) / 2),
+                width: FORMATION_PILL_W * s,
+                height: FORMATION_PILL_H * s,
               },
             ]}
           >
-            <Text style={[styles.pillText, { fontSize: Math.max(9, 12 * s) }]} maxFontSizeMultiplier={1.1}>
+            <Text style={[styles.pillText, { fontSize: Math.max(8, 9 * s) }]} maxFontSizeMultiplier={1.1}>
               {formationLabel}
             </Text>
           </View>
@@ -420,7 +431,15 @@ export const FootballField: React.FC<FootballFieldProps> = ({
 
         {renderTeamToggle ? (
           <View
-            style={[styles.abs, { right: 18 * s, top: y(406), width: 247 * s, height: 37 * s }]}
+            style={[
+              styles.abs,
+              {
+                right: HEADER_INSET_X * s,
+                top: y(HEADER_TOP + (41 - TOGGLE_H) / 2),
+                width: TOGGLE_W * s,
+                height: TOGGLE_H * s,
+              },
+            ]}
           >
             {renderTeamToggle(s)}
           </View>
@@ -504,7 +523,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1C1240',
+    // Figma Ellipse 58 plate behind circular kit portraits.
+    backgroundColor: '#120D31',
   },
   numberBadge: {
     position: 'absolute',

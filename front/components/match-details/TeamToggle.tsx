@@ -43,14 +43,15 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
   const pillActive = (isDark ? (['#8B5CF6', '#4B1FA3'] as const) : (['#6A2BD9', '#4B1FA3'] as const));
 
   if (variant === 'pill') {
+    // Figma Pitch Header toggle `1814:22727` — 12px Sora labels, ~21px crests.
     const renderSegment = (side: 'home' | 'away', team: TeamToggleTeam) => {
       const isActive = value === side;
       const content = (
-        <View style={[pill.content, { gap: 6 * scale, paddingHorizontal: 8 * scale }]}>
+        <View style={[pill.content, { gap: 6 * scale, paddingHorizontal: 6 * scale }]}>
           <Text
             style={[
               pill.label,
-              { fontSize: 15 * scale, color: isActive ? activeLabel : idleLabel },
+              { fontSize: Math.max(10, 12 * scale), color: isActive ? activeLabel : idleLabel },
               isActive && pill.labelActive,
             ]}
             numberOfLines={1}
@@ -58,7 +59,7 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
           >
             {team.name}
           </Text>
-          <TeamBadge name={team.name} logo={team.logo} size={23 * scale} color="transparent" />
+          <TeamBadge name={team.name} logo={team.logo} size={21 * scale} color="transparent" />
         </View>
       );
       return (
@@ -89,7 +90,8 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
           {
             backgroundColor: pillIdleBg,
             borderColor: pillIdleBorder,
-            shadowOpacity: isDark ? 0.2 : 0.12,
+            // Figma `1814:22727`: soft purple drop shadow on the track.
+            shadowOpacity: isDark ? 0.22 : 0.09,
             elevation: 2,
           },
         ]}
