@@ -1382,41 +1382,59 @@ export default function PlayerProfileScreen() {
                                 <>
                                     {matchStats.featured.length > 0 && (
                                         <View style={[styles.featuredGrid, { flexDirection: row }]}>
-                                            {matchStats.featured.map((s) => (
-                                                <View
-                                                    key={s.key}
-                                                    style={[
-                                                        styles.featuredTile,
-                                                        {
-                                                            alignItems: alignStart,
-                                                            backgroundColor: B.card,
-                                                            borderColor: B.border,
-                                                        },
-                                                    ]}
-                                                >
-                                                    <LinearGradient
-                                                        colors={[B.primary, 'rgba(139,92,246,0)']}
-                                                        start={{ x: rtl ? 1 : 0, y: 0 }}
-                                                        end={{ x: rtl ? 0 : 1, y: 0 }}
-                                                        style={styles.featuredAccent}
-                                                    />
-                                                    <Text
-                                                        style={[styles.featuredValue, { fontFamily: fontBold, color: B.ink }]}
-                                                        numberOfLines={1}
-                                                    >
-                                                        {s.value}
-                                                    </Text>
-                                                    <Text
+                                            {matchStats.featured.map((s) => {
+                                                const numeric = Number.parseFloat(String(s.value).replace(/[^\d.-]/g, ''));
+                                                const isZero =
+                                                    Number.isFinite(numeric) && numeric === 0 && !/'/.test(String(s.value));
+                                                return (
+                                                    <View
+                                                        key={s.key}
                                                         style={[
-                                                            styles.featuredLabel,
-                                                            { fontFamily: fontReg, textAlign, color: B.muted },
+                                                            styles.featuredTile,
+                                                            matchStats.featured.length === 3 && styles.featuredTileThird,
+                                                            matchStats.featured.length !== 3 && styles.featuredTileHalf,
+                                                            {
+                                                                backgroundColor: isDark ? B.card : B.pale,
+                                                                borderColor: isDark ? B.border : 'rgba(106,43,217,0.12)',
+                                                                shadowColor: B.primaryDark,
+                                                            },
                                                         ]}
-                                                        numberOfLines={2}
                                                     >
-                                                        {s.label}
-                                                    </Text>
-                                                </View>
-                                            ))}
+                                                        <LinearGradient
+                                                            colors={[
+                                                                B.primarySoft,
+                                                                isDark ? 'rgba(167,139,250,0)' : 'rgba(139,92,246,0)',
+                                                            ]}
+                                                            start={{ x: 0.5, y: 0 }}
+                                                            end={{ x: 0.5, y: 1 }}
+                                                            style={styles.featuredAccent}
+                                                        />
+                                                        <Text
+                                                            style={[
+                                                                styles.featuredValue,
+                                                                {
+                                                                    fontFamily: fontBold,
+                                                                    color: isZero ? B.muted : B.primaryDeep,
+                                                                },
+                                                            ]}
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            minimumFontScale={0.7}
+                                                        >
+                                                            {s.value}
+                                                        </Text>
+                                                        <Text
+                                                            style={[
+                                                                styles.featuredLabel,
+                                                                { fontFamily: fontSemi, color: B.muted },
+                                                            ]}
+                                                            numberOfLines={2}
+                                                        >
+                                                            {s.label}
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            })}
                                         </View>
                                     )}
                                     {matchStats.list.length > 0 && (
@@ -1424,7 +1442,11 @@ export default function PlayerProfileScreen() {
                                             style={[
                                                 styles.card,
                                                 styles.listCard,
-                                                { backgroundColor: B.card, borderColor: B.border },
+                                                {
+                                                    backgroundColor: B.card,
+                                                    borderColor: B.border,
+                                                    shadowColor: B.primaryDark,
+                                                },
                                             ]}
                                         >
                                             {matchStats.list.map((s, idx) => (
@@ -1433,10 +1455,13 @@ export default function PlayerProfileScreen() {
                                                     style={[
                                                         styles.statRow,
                                                         { flexDirection: row },
-                                                        idx < matchStats.list.length - 1 && [
-                                                            styles.statRowDivider,
-                                                            { borderBottomColor: B.divider },
-                                                        ],
+                                                        idx % 2 === 1 && {
+                                                            backgroundColor: isDark
+                                                                ? 'rgba(167,139,250,0.06)'
+                                                                : B.pale,
+                                                        },
+                                                        idx === 0 && styles.statRowFirst,
+                                                        idx === matchStats.list.length - 1 && styles.statRowLast,
                                                     ]}
                                                 >
                                                     <Text
@@ -1448,11 +1473,25 @@ export default function PlayerProfileScreen() {
                                                     >
                                                         {s.label}
                                                     </Text>
-                                                    <Text
-                                                        style={[styles.statValue, { fontFamily: fontBold, color: B.ink }]}
+                                                    <View
+                                                        style={[
+                                                            styles.statValuePill,
+                                                            {
+                                                                backgroundColor: isDark
+                                                                    ? 'rgba(167,139,250,0.16)'
+                                                                    : 'rgba(106,43,217,0.1)',
+                                                            },
+                                                        ]}
                                                     >
-                                                        {s.value}
-                                                    </Text>
+                                                        <Text
+                                                            style={[
+                                                                styles.statValue,
+                                                                { fontFamily: fontBold, color: B.primaryDeep },
+                                                            ]}
+                                                        >
+                                                            {s.value}
+                                                        </Text>
+                                                    </View>
                                                 </View>
                                             ))}
                                         </View>
@@ -1797,25 +1836,59 @@ const styles = StyleSheet.create({
     emptyCard: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 16, gap: 10 },
     emptyText: { fontSize: 14, textAlign: 'center' },
 
-    featuredGrid: { flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 10 },
+    featuredGrid: {
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: 10,
+        marginBottom: 12,
+    },
     featuredTile: {
-        width: '48.5%',
-        borderRadius: 16,
+        borderRadius: 18,
         borderWidth: 1,
-        paddingHorizontal: 14,
-        paddingTop: 16,
+        paddingHorizontal: 12,
+        paddingTop: 18,
         paddingBottom: 14,
         overflow: 'hidden',
+        alignItems: 'center',
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 3,
     },
-    featuredAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
-    featuredValue: { fontSize: 26 },
-    featuredLabel: { fontSize: 12, marginTop: 4 },
+    featuredTileHalf: { width: '47.8%' },
+    featuredTileThird: { flexGrow: 1, flexBasis: 0, minWidth: 0 },
+    featuredAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, opacity: 0.85 },
+    featuredValue: { fontSize: 30, letterSpacing: -0.5, textAlign: 'center' },
+    featuredLabel: { fontSize: 12, marginTop: 6, textAlign: 'center', lineHeight: 16 },
 
-    listCard: { paddingHorizontal: 14 },
-    statRow: { alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 13 },
-    statRowDivider: { borderBottomWidth: 1 },
-    statLabel: { flex: 1, fontSize: 14 },
-    statValue: { fontSize: 15 },
+    listCard: {
+        paddingHorizontal: 0,
+        paddingVertical: 4,
+        overflow: 'hidden',
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 2,
+    },
+    statRow: {
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+    },
+    statRowFirst: { borderTopLeftRadius: 15, borderTopRightRadius: 15 },
+    statRowLast: { borderBottomLeftRadius: 15, borderBottomRightRadius: 15 },
+    statLabel: { flex: 1, fontSize: 14, lineHeight: 20 },
+    statValuePill: {
+        minWidth: 48,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statValue: { fontSize: 16, letterSpacing: -0.2 },
 
     eventsWrap: { flexWrap: 'wrap', gap: 8 },
     eventChip: {
