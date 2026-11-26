@@ -35,7 +35,13 @@ import {
   teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
-import { preferScores365AthletesPhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
+import {
+    preferScores365AthletesPhotoUrl,
+    scores365AthleteCutoutCandidates,
+    scores365AthleteImageVersionFromUrl,
+    toFullscreenPhotoUrl,
+    with365ImageSize,
+} from '../utils/scores365AthletePhoto';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { useAppFont } from '../utils/fontSetup';
 import {
@@ -284,6 +290,8 @@ function PlayerHeroPhoto({
     position,
     colors,
     photoSource,
+    /** Match-context: edge-free cutout like the career profile hero. */
+    variant = 'circle',
 }: {
     playerId: number;
     photo?: string | null;
@@ -291,24 +299,78 @@ function PlayerHeroPhoto({
     position: string | null;
     colors: readonly [string, string, ...string[]];
     photoSource?: '365' | 'api';
+    variant?: 'circle' | 'cutout';
 }) {
-    const candidates = useMemo(
-        () => playerPhotoCandidates(playerId, photo, photoSource ? { source: photoSource } : undefined),
-        [playerId, photo, photoSource],
-    );
+    const useCutout = variant === 'cutout' && photoSource === '365';
+    const candidates = useMemo(() => {
+        if (useCutout) {
+            const version = scores365AthleteImageVersionFromUrl(photo);
+            return scores365AthleteCutoutCandidates(playerId, photo, 320, version);
+        }
+        return playerPhotoCandidates(playerId, photo, photoSource ? { source: photoSource } : undefined);
+    }, [playerId, photo, photoSource, useCutout]);
     const [uriIndex, setUriIndex] = useState(0);
 
     useEffect(() => {
         setUriIndex(0);
-    }, [playerId, photo]);
+    }, [playerId, photo, useCutout]);
 
     const uri = candidates[uriIndex] ?? '';
-    const displayUri = with365ImageSize(uri, 160) ?? uri;
+    const displayUri = useCutout ? uri : with365ImageSize(uri, 160) ?? uri;
     const [viewerOpen, setViewerOpen] = useState(false);
     const viewerUrl = toFullscreenPhotoUrl(uri) ?? uri;
     const hasPhoto = !!uri && uriIndex < candidates.length;
     const { isDark } = useResolvedAppScheme();
     const B = useMemo(() => getPPColors(isDark), [isDark]);
+
+    const advancePhoto = () => {
+        if (uriIndex + 1 < candidates.length) setUriIndex((i) => i + 1);
+        else setUriIndex(candidates.length);
+    };
+
+    if (useCutout) {
+        return (
+            <>
+                {hasPhoto ? (
+                    <TouchableOpacity
+                        style={[
+                            heroPhotoStyles.cutoutWrap,
+                            {
+                                shadowColor: isDark ? '#000' : B.primaryDark,
+                            },
+                        ]}
+                        onPress={() => setViewerOpen(true)}
+                        activeOpacity={0.9}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel={name}
+                    >
+                        <ExpoImage
+                            source={{ uri: displayUri }}
+                            style={heroPhotoStyles.cutoutImage}
+                            contentFit="contain"
+                            contentPosition="bottom"
+                            cachePolicy="memory-disk"
+                            recyclingKey={`player-cutout-${playerId}-${uriIndex}`}
+                            priority="high"
+                            transition={180}
+                            onError={advancePhoto}
+                        />
+                    </TouchableOpacity>
+                ) : (
+                    <View style={[heroPhotoStyles.cutoutFallback, { backgroundColor: B.pale }]}>
+                        <PlayerAvatar name={name} position={position} size={88} colors={colors} />
+                    </View>
+                )}
+                {hasPhoto ? (
+                    <ImageViewerModal
+                        visible={viewerOpen}
+                        imageUrl={viewerUrl}
+                        onClose={() => setViewerOpen(false)}
+                    />
+                ) : null}
+            </>
+        );
+    }
 
     return (
         <>
@@ -336,13 +398,7 @@ function PlayerHeroPhoto({
                             recyclingKey={`player-${playerId}-${uriIndex}`}
                             priority="high"
                             transition={0}
-                            onError={() => {
-                                if (uriIndex + 1 < candidates.length) {
-                                    setUriIndex((i) => i + 1);
-                                } else {
-                                    setUriIndex(candidates.length);
-                                }
-                            }}
+                            onError={advancePhoto}
                         />
                     </TouchableOpacity>
                 ) : (
@@ -383,6 +439,27 @@ const heroPhotoStyles = StyleSheet.create({
     image: {
         width: '100%',
         height: '100%',
+    },
+    cutoutWrap: {
+        width: 118,
+        height: 148,
+        justifyContent: 'flex-end',
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+    },
+    cutoutImage: {
+        width: '100%',
+        height: '100%',
+    },
+    cutoutFallback: {
+        width: 106,
+        height: 106,
+        borderRadius: 53,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
     },
 });
 
@@ -1117,6 +1194,7 @@ export default function PlayerProfileScreen() {
                                     position={primaryPosition}
                                     colors={teamColors}
                                     photoSource={is365Source ? '365' : 'api'}
+                                    variant={is365Source ? 'cutout' : 'circle'}
                                 />
                                 {jerseyNumber != null ? (
                                     <View
@@ -1125,6 +1203,7 @@ export default function PlayerProfileScreen() {
                                             {
                                                 backgroundColor: isDark ? B.primaryDark : B.primary,
                                                 borderColor: isDark ? B.bg : '#fff',
+                                                top: is365Source ? 6 : -2,
                                             },
                                             rtl ? { left: -2 } : { right: -2 },
                                         ]}
@@ -1577,7 +1656,6 @@ const styles = StyleSheet.create({
     /** Compact jersey number on the avatar — FotMob-style, no giant watermark. */
     jerseyBadge: {
         position: 'absolute',
-        top: -2,
         minWidth: 28,
         height: 28,
         paddingHorizontal: 7,
