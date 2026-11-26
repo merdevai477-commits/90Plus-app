@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 
 import { ReelsService, type ReelFeedItem } from '../src/services/authService';
 import { useTranslation } from '../src/i18n';
@@ -36,6 +36,9 @@ export default function SavedReelsScreen() {
   const { t, language } = useTranslation();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const fonts = useMemo(
     () => ({
       regular: getAppFont(400, language),
@@ -51,35 +54,44 @@ export default function SavedReelsScreen() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
 
-  const load = useCallback(
-    async (cursor?: string, replace = false) => {
-      try {
-        const token = await getToken();
-        if (!token) {
-          setError(t.reels.authFailed || t.profile.savedLoadFailed);
-          return;
-        }
-        const result = await ReelsService.getSavedReels(token, cursor);
-        if (!result) {
-          setError(t.profile.savedLoadFailed);
-          return;
-        }
-        setError(null);
-        setItems((prev) => (replace || !cursor ? result.savedReels : [...prev, ...result.savedReels]));
-        setNextCursor(result.nextCursor);
-        setHasMore(result.hasMore);
-      } catch (err) {
-        logger.error('[SavedReels] load failed', err);
-        setError(t.profile.savedLoadFailed);
+  const load = useCallback(async (cursor?: string, replace = false) => {
+    try {
+      const token = await getTokenRef.current();
+      if (!token) {
+        setError('auth');
+        setItems([]);
+        setHasMore(false);
+        setNextCursor(null);
+        return;
       }
-    },
-    [getToken, t.profile.savedLoadFailed, t.reels.authFailed],
-  );
+      const result = await ReelsService.getSavedReels(token, cursor);
+      if (!result) {
+        setError('failed');
+        if (replace || !cursor) setItems([]);
+        return;
+      }
+      setError(null);
+      setItems((prev) => (replace || !cursor ? result.savedReels : [...prev, ...result.savedReels]));
+      setNextCursor(result.nextCursor);
+      setHasMore(Boolean(result.hasMore));
+    } catch (err) {
+      logger.error('[SavedReels] load failed', err);
+      setError('failed');
+      if (replace || !cursor) setItems([]);
+    }
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    load(undefined, true).finally(() => setLoading(false));
+    load(undefined, true).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const onRefresh = useCallback(async () => {
@@ -89,24 +101,37 @@ export default function SavedReelsScreen() {
   }, [load]);
 
   const onEndReached = useCallback(async () => {
-    if (!hasMore || loadingMore || !nextCursor) return;
+    if (!hasMore || loadingMoreRef.current || !nextCursor) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
-    await load(nextCursor);
-    setLoadingMore(false);
-  }, [hasMore, load, loadingMore, nextCursor]);
+    try {
+      await load(nextCursor);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [hasMore, load, nextCursor]);
+
+  const errorMessage =
+    error === 'auth'
+      ? t.reels.authFailed || t.profile.savedLoadFailed
+      : error
+        ? t.profile.savedLoadFailed
+        : null;
 
   return (
     <View style={[styles.root, { paddingTop: Math.max(insets.top, 12) }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { fontFamily: fonts.bold }]}>{t.reels.savedScreenTitle}</Text>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
+          accessibilityLabel="Back"
         >
-          <ChevronRight size={20} color={FIGMA_PRIMARY} strokeWidth={2.6} />
+          <ChevronLeft size={22} color={FIGMA_PRIMARY} strokeWidth={2.6} />
         </TouchableOpacity>
+        <Text style={[styles.title, { fontFamily: fonts.bold }]}>{t.reels.savedScreenTitle}</Text>
       </View>
       <View style={styles.divider} />
 
@@ -114,9 +139,9 @@ export default function SavedReelsScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={FIGMA_PRIMARY} />
         </View>
-      ) : error ? (
+      ) : errorMessage ? (
         <View style={styles.center}>
-          <Text style={[styles.emptyText, { fontFamily: fonts.regular }]}>{error}</Text>
+          <Text style={[styles.emptyText, { fontFamily: fonts.regular }]}>{errorMessage}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => void onRefresh()}>
             <Text style={[styles.retryText, { fontFamily: fonts.bold }]}>{t.reels.feedErrorRetry}</Text>
           </TouchableOpacity>
@@ -184,10 +209,12 @@ const styles = StyleSheet.create({
     color: TEXT,
     fontSize: 22,
     fontWeight: '700',
+    textAlign: 'center',
   },
   backBtn: {
     position: 'absolute',
-    right: H_PAD,
+    left: H_PAD,
+    zIndex: 2,
     width: 40,
     height: 40,
     borderRadius: 20,

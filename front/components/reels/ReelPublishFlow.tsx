@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
-import { ChevronRight, Check } from 'lucide-react-native';
+import { ChevronLeft, Check } from 'lucide-react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import { extractDurationFromUrl } from '../../utils/videoDuration';
@@ -386,15 +386,16 @@ export default function ReelPublishFlow({
 
   const header = (title: string) => (
     <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) + 4 }]}>
-      <Text style={[styles.headerTitle, { fontFamily: fonts.bold }]}>{title}</Text>
       <TouchableOpacity
         style={styles.backBtn}
         onPress={handleClose}
         hitSlop={10}
         accessibilityRole="button"
+        accessibilityLabel="Back"
       >
-        <ChevronRight size={20} color={FIGMA_PRIMARY} strokeWidth={2.6} />
+        <ChevronLeft size={22} color={FIGMA_PRIMARY} strokeWidth={2.6} />
       </TouchableOpacity>
+      <Text style={[styles.headerTitle, { fontFamily: fonts.bold }]}>{title}</Text>
     </View>
   );
 
@@ -584,7 +585,6 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 18,
@@ -598,7 +598,8 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     position: 'absolute',
-    right: 0,
+    left: 0,
+    zIndex: 2,
     width: 40,
     height: 40,
     borderRadius: 20,
