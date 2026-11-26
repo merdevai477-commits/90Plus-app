@@ -1106,26 +1106,6 @@ export default function PlayerProfileScreen() {
                         locations={[0, 0.65, 1]}
                         style={StyleSheet.absoluteFill}
                     />
-                    {jerseyNumber != null ? (
-                        <Text
-                            style={[
-                                styles.heroJersey,
-                                styles.heroLiftShadow,
-                                {
-                                    fontFamily: fontExtraBold,
-                                    top: headerHeight - 6,
-                                    color: isDark ? B.jersey : '#000000',
-                                    opacity: isDark ? 0.9 : 1,
-                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.28)',
-                                },
-                                rtl ? { left: 14 } : { right: 14 },
-                            ]}
-                            allowFontScaling={false}
-                        >
-                            {`#${jerseyNumber}`}
-                        </Text>
-                    ) : null}
-
                     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
                         <View style={[styles.heroRow, { flexDirection: row }]}>
                             <View style={styles.photoWrap}>
@@ -1138,6 +1118,26 @@ export default function PlayerProfileScreen() {
                                     colors={teamColors}
                                     photoSource={is365Source ? '365' : 'api'}
                                 />
+                                {jerseyNumber != null ? (
+                                    <View
+                                        style={[
+                                            styles.jerseyBadge,
+                                            {
+                                                backgroundColor: isDark ? B.primaryDark : B.primary,
+                                                borderColor: isDark ? B.bg : '#fff',
+                                            },
+                                            rtl ? { left: -2 } : { right: -2 },
+                                        ]}
+                                        accessibilityLabel={`#${jerseyNumber}`}
+                                    >
+                                        <Text
+                                            style={[styles.jerseyBadgeText, { fontFamily: fontBold }]}
+                                            allowFontScaling={false}
+                                        >
+                                            {jerseyNumber}
+                                        </Text>
+                                    </View>
+                                ) : null}
                                 {matchStats.rating != null ? (
                                     <View
                                         style={[
@@ -1570,14 +1570,39 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
 
     hero: { paddingHorizontal: 18, paddingTop: 22, paddingBottom: 20, overflow: 'hidden' },
-    heroJersey: {
-        position: 'absolute',
-        top: -6,
-        fontSize: 118,
-    },
     heroLiftShadow: {
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
+    },
+    /** Compact jersey number on the avatar — FotMob-style, no giant watermark. */
+    jerseyBadge: {
+        position: 'absolute',
+        top: -2,
+        minWidth: 28,
+        height: 28,
+        paddingHorizontal: 7,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        zIndex: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOpacity: 0.2,
+                shadowRadius: 2,
+                shadowOffset: { width: 0, height: 1 },
+            },
+            android: { elevation: 3 },
+            default: {},
+        }),
+    },
+    jerseyBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        lineHeight: 14,
+        includeFontPadding: false,
+        textAlign: 'center',
     },
     heroCrestLift: {
         ...Platform.select({
