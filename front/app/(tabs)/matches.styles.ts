@@ -279,7 +279,8 @@ export function createMatchesStyles(c: MatchesThemeColors) {
     leagueRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     leagueLive: { color: c.primary, fontSize: 14, fontWeight: '700' },
     rowWrap: {
-      minHeight: 116,
+      // Room for crest + up to two lines of club name without clipping.
+      minHeight: 122,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 14,
@@ -295,7 +296,15 @@ export function createMatchesStyles(c: MatchesThemeColors) {
       justifyContent: 'space-between',
       paddingHorizontal: 8,
     },
-    teamCol: { width: '34%', alignItems: 'center', gap: 8 },
+    // flex + minWidth:0 so long club names wrap inside the column instead of
+    // colliding with the center kickoff/score block.
+    teamCol: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 2,
+    },
     logoStub: {
       width: 48,
       height: 48,
@@ -316,8 +325,23 @@ export function createMatchesStyles(c: MatchesThemeColors) {
     },
     logoInitialsTxt: { color: c.initialsTxt, fontSize: 11, fontWeight: '800' },
     teamLogo: { width: 34, height: 34 },
-    teamTxt: { color: c.textPrimary, fontSize: 14, fontWeight: '600', maxWidth: '100%' },
-    scoreCol: { width: '32%', minWidth: 88, alignItems: 'center', flexShrink: 0 },
+    teamTxt: {
+      color: c.textPrimary,
+      fontSize: 13.5,
+      lineHeight: 17,
+      fontWeight: '600',
+      width: '100%',
+      textAlign: 'center',
+      alignSelf: 'stretch',
+    },
+    scoreCol: {
+      width: 100,
+      maxWidth: '30%',
+      minWidth: 88,
+      alignItems: 'center',
+      flexShrink: 0,
+      paddingHorizontal: 4,
+    },
     liveBadge: {
       color: '#ef4444',
       fontSize: 11,

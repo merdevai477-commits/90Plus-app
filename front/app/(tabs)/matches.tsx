@@ -417,6 +417,14 @@ const PredictionButton = memo(function PredictionButton({
   );
 });
 
+/** Scale club labels so long Arabic/English names stay readable under the crest. */
+function matchCardTeamNameStyle(name: string): { fontSize: number; lineHeight: number } | undefined {
+  const len = name.trim().length;
+  if (len > 22) return { fontSize: 11.5, lineHeight: 15 };
+  if (len > 14) return { fontSize: 12.5, lineHeight: 16 };
+  return undefined;
+}
+
 const MatchRow = memo(function MatchRow({
   fixture,
   showPreds,
@@ -545,7 +553,14 @@ const MatchRow = memo(function MatchRow({
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
+            <Text
+              style={[styles.teamTxt, matchCardTeamNameStyle(awayName)]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+              accessibilityLabel={awayName}
+            >
+              {awayName}
+            </Text>
           </View>
           <View style={styles.scoreCol}>
             {specialStatusLabel ? (
@@ -641,7 +656,14 @@ const MatchRow = memo(function MatchRow({
                 </View>
               )}
             </View>
-            <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
+            <Text
+              style={[styles.teamTxt, matchCardTeamNameStyle(homeName)]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+              accessibilityLabel={homeName}
+            >
+              {homeName}
+            </Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
