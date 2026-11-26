@@ -2303,15 +2303,15 @@ const MatchDetailsScreen = () => {
                 language={language}
                 labels={{
                   goal: t.matchDetails.goal || 'هدف',
-                  ownGoal: t.matchDetails.ownGoal || 'هدف في مرماه',
+                  ownGoal: t.matchDetails.ownGoal || 'هدف عكسي',
                   substitution: t.matchDetails.substitution || 'تبديل',
                   injurySubstitution: t.matchDetails.injurySubstitution || 'تبديل بسبب إصابة',
-                  penalty: t.matchDetails.penalty || 'ضربة جزاء',
-                  corner: t.matchDetails.cornerKick || 'ضربة ركنيه',
-                  var: t.matchDetails.varReview || 'VAR',
-                  missedPenalty: t.matchDetails.missedPenalty || 'ضربة جزاء ضائعة',
+                  penalty: t.matchDetails.penalty || 'ركلة جزاء',
+                  corner: t.matchDetails.cornerKick || 'ركلة ركنية',
+                  var: t.matchDetails.varReview || 'تقنية الفيديو',
+                  missedPenalty: t.matchDetails.missedPenalty || 'ركلة جزاء مهدرة',
                   secondYellow: t.matchDetails.secondYellow || 'إنذار ثانٍ',
-                  assist: t.matchDetails.assist || 'تمريره حاسمه',
+                  assist: t.matchDetails.assist || 'تمريرة حاسمة',
                 }}
               />
             </>

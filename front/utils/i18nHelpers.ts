@@ -396,10 +396,62 @@ export function getLocalizedStatType(
 
 // ─── Match event type localization ───────────────────────────────────────────
 
+/** API-Football / 365Scores VAR `detail` → matchDetails locale key. */
+const VAR_DETAIL_LOCALE_KEYS: Array<{ match: RegExp; key: string; en: string }> = [
+  { match: /goal disallowed[^a-z]*offside/i, key: 'varGoalDisallowedOffside', en: 'Goal disallowed — offside' },
+  { match: /goal disallowed[^a-z]*handball/i, key: 'varGoalDisallowedHandball', en: 'Goal disallowed — handball' },
+  { match: /goal disallowed[^a-z]*foul/i, key: 'varGoalDisallowedFoul', en: 'Goal disallowed — foul' },
+  { match: /goal disallowed/i, key: 'varGoalDisallowed', en: 'Goal disallowed' },
+  { match: /goal cancelled|goal canceled/i, key: 'varGoalCancelled', en: 'Goal cancelled' },
+  { match: /goal confirmed/i, key: 'varGoalConfirmed', en: 'Goal confirmed' },
+  { match: /penalty confirmed/i, key: 'varPenaltyConfirmed', en: 'Penalty confirmed' },
+  { match: /penalty cancelled|penalty canceled/i, key: 'varPenaltyCancelled', en: 'Penalty cancelled' },
+  { match: /card upgrade/i, key: 'varCardUpgrade', en: 'Card upgrade' },
+];
+
+/**
+ * Localize provider VAR detail text (never leave English football jargon
+ * as a literal string in Arabic UI).
+ */
+export function localizeMatchVarDetail(
+  detail: string | null | undefined,
+  language: Language,
+): string {
+  const raw = (detail ?? '').toString().trim();
+  if (!raw) return '';
+
+  const md = (translations[language]?.matchDetails
+    ?? translations.en.matchDetails) as Record<string, unknown>;
+  const label = (key: string, fallback: string): string =>
+    typeof md[key] === 'string' ? (md[key] as string) : fallback;
+
+  for (const row of VAR_DETAIL_LOCALE_KEYS) {
+    if (row.match.test(raw)) return label(row.key, row.en);
+  }
+
+  if (language !== 'ar') return raw;
+
+  // Soft cleanup for unknown English VAR phrases so Arabic UI stays readable.
+  return raw
+    .replace(/Goal cancelled/gi, label('varGoalCancelled', 'إلغاء هدف'))
+    .replace(/Goal canceled/gi, label('varGoalCancelled', 'إلغاء هدف'))
+    .replace(/Goal Disallowed/gi, label('varGoalDisallowed', 'هدف غير محتسب'))
+    .replace(/Goal confirmed/gi, label('varGoalConfirmed', 'تأكيد الهدف'))
+    .replace(/Penalty cancelled/gi, label('varPenaltyCancelled', 'إلغاء ركلة الجزاء'))
+    .replace(/Penalty canceled/gi, label('varPenaltyCancelled', 'إلغاء ركلة الجزاء'))
+    .replace(/Penalty confirmed/gi, label('varPenaltyConfirmed', 'تأكيد ركلة الجزاء'))
+    .replace(/Card upgrade/gi, label('varCardUpgrade', 'ترقية البطاقة'))
+    .replace(/offside/gi, 'تسلل')
+    .replace(/handball/gi, 'لمسة يد')
+    .replace(/foul/gi, 'خطأ')
+    .replace(/\bVAR\b/gi, label('varReview', 'تقنية الفيديو'));
+}
+
 /**
  * Localize a match event's descriptive label. Known types (goals, cards,
- * substitutions) map to locale keys; unknown types fall back to the provider
- * `detail` string so we never show a blank label.
+ * substitutions, VAR) map to football terminology — never raw English detail
+ * for Arabic. Unknown types fall back to the provider `detail` string so we
+ * never show a blank label.
  */
 export function getLocalizedEventLabel(
   type: string | null | undefined,
@@ -415,16 +467,38 @@ export function getLocalizedEventLabel(
   const rawDetail = (detail ?? '').toString();
 
   if (rawType === 'goal') {
+    if (/missed/i.test(rawDetail)) return label('missedPenalty', 'Missed penalty');
     if (/own/i.test(rawDetail)) return label('ownGoal', 'Own Goal');
     if (/penalty/i.test(rawDetail)) return label('penaltyGoal', 'Penalty Goal');
     return label('goal', 'Goal');
   }
   if (rawType === 'card') {
+    if (/second/i.test(rawDetail)) return label('secondYellow', 'Second yellow');
     if (/yellow/i.test(rawDetail)) return label('yellowCard', 'Yellow Card');
     if (/red/i.test(rawDetail)) return label('redCard', 'Red Card');
   }
-  if (rawType === 'subst') return label('substitution', 'Substitution');
-  if (rawType === 'var') return rawDetail || 'VAR';
+  if (rawType === 'subst') {
+    if (/injur/i.test(rawDetail)) return label('injurySubstitution', 'Injury substitution');
+    return label('substitution', 'Substitution');
+  }
+  if (rawType === 'var') {
+    const varBase = label('varReview', language === 'ar' ? 'تقنية الفيديو' : 'VAR');
+    const detailLabel = localizeMatchVarDetail(rawDetail, language);
+    if (detailLabel && detailLabel.toLowerCase() !== varBase.toLowerCase()) {
+      return `${varBase} — ${detailLabel}`;
+    }
+    return varBase;
+  }
+
+  // Corner / other known details that sometimes arrive without a typed event.
+  if (/corner/i.test(rawType) || /corner/i.test(rawDetail)) {
+    return label('cornerKick', 'Corner');
+  }
+
+  if (language === 'ar' && rawDetail) {
+    const maybeVar = localizeMatchVarDetail(rawDetail, language);
+    if (maybeVar && maybeVar !== rawDetail) return maybeVar;
+  }
 
   return rawDetail || label('events', 'Event');
 }

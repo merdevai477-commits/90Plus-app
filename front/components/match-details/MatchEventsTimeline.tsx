@@ -220,13 +220,27 @@ function EventBody({
     );
   }
 
+  const eventTypeLabel = getLocalizedEventLabel(event.type, event.detail, language);
+  const isVarEvent = (event.type || '').toLowerCase() === 'var';
+
   let label: string;
+  let typeHint: string | null = null;
   if (isSynthetic) {
     label = goalForLabel.replace('{team}', isolate(teamName));
+  } else if (isVarEvent) {
+    // Always show football terminology for VAR (e.g. تقنية الفيديو — إلغاء هدف),
+    // never leave the provider's English detail as the primary label.
+    label = isolate(eventTypeLabel);
+    if (playerName) typeHint = isolate(playerName);
   } else if (playerName) {
     label = isolate(playerName);
+    // Show proper type under the name for goals/cards (هدف، بطاقة صفراء، …).
+    const typeLower = (event.type || '').toLowerCase();
+    if ((typeLower === 'goal' || typeLower === 'card') && eventTypeLabel) {
+      typeHint = isolate(eventTypeLabel);
+    }
   } else {
-    label = isolate(getLocalizedEventLabel(event.type, event.detail, language));
+    label = isolate(eventTypeLabel);
   }
 
   const playUrl = clip?.url || clip?.embedUrl || '';
@@ -240,6 +254,17 @@ function EventBody({
         name={`${LRM}${label}`}
         icon={<EventGlyph event={event} />}
       />
+      {typeHint ? (
+        <Text
+          style={[
+            styles.syntheticHint,
+            { color: mutedColor, textAlign: towardCenter === 'right' ? 'left' : 'right' },
+          ]}
+          numberOfLines={2}
+        >
+          {typeHint}
+        </Text>
+      ) : null}
       {isSynthetic ? (
         <Text style={[styles.syntheticHint, { color: mutedColor, textAlign: towardCenter === 'right' ? 'left' : 'right' }]}>
           {detailsUnavailableLabel}

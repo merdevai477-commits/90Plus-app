@@ -646,6 +646,15 @@ export const en = {
     cornerKick: 'Corner',
     secondYellow: 'Second yellow',
     varReview: 'VAR',
+    varGoalCancelled: 'Goal cancelled',
+    varGoalDisallowed: 'Goal disallowed',
+    varGoalDisallowedOffside: 'Goal disallowed — offside',
+    varGoalDisallowedFoul: 'Goal disallowed — foul',
+    varGoalDisallowedHandball: 'Goal disallowed — handball',
+    varGoalConfirmed: 'Goal confirmed',
+    varPenaltyConfirmed: 'Penalty confirmed',
+    varPenaltyCancelled: 'Penalty cancelled',
+    varCardUpgrade: 'Card upgrade',
 
     // Stats
     shots: 'Shots',
