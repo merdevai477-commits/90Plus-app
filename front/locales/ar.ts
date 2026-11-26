@@ -1042,15 +1042,6 @@ export const ar = {
     matchStats: 'إحصائيات المباراة',
     eventsSection: 'الأحداث',
     notAvailableShort: 'غير متاح',
-    performanceOverview: 'نظرة عامة على الأداء',
-    keyStatistics: 'إحصائيات أساسية',
-    sectionAttack: 'الهجوم',
-    sectionPassing: 'التمرير',
-    sectionDribbling: 'المراوغة والاستحواذ',
-    sectionDefense: 'الدفاع',
-    sectionPhysical: 'البدني',
-    sectionGoalkeeper: 'حراسة المرمى',
-    sectionOther: 'أخرى',
   },
 
   playerCareer: {

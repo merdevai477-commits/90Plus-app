@@ -803,15 +803,6 @@ export const en = {
     matchStats: 'Match stats',
     eventsSection: 'Events',
     notAvailableShort: 'N/A',
-    performanceOverview: 'Performance overview',
-    keyStatistics: 'Key statistics',
-    sectionAttack: 'Attacking',
-    sectionPassing: 'Passing',
-    sectionDribbling: 'Dribbling & possession',
-    sectionDefense: 'Defensive',
-    sectionPhysical: 'Physical',
-    sectionGoalkeeper: 'Goalkeeper',
-    sectionOther: 'Other',
   },
 
   playerCareer: {
