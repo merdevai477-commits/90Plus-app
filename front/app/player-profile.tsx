@@ -436,30 +436,43 @@ function NeonJerseyNumber({
     }
     return (
         <View style={styles.neonJerseyFront} pointerEvents="none">
-            <Svg width={210} height={200}>
+            <Svg width={220} height={220}>
                 <SvgText
-                    x="8"
-                    y="152"
-                    fontSize="148"
+                    x="4"
+                    y="168"
+                    fontSize="160"
                     fontFamily={fontFamily}
                     fontWeight="800"
-                    stroke="#C084FC"
-                    strokeWidth={6}
+                    stroke="#A855F7"
+                    strokeWidth={10}
                     fill="none"
-                    opacity={0.4}
+                    opacity={0.45}
                 >
                     {label}
                 </SvgText>
                 <SvgText
-                    x="8"
-                    y="152"
-                    fontSize="148"
+                    x="4"
+                    y="168"
+                    fontSize="160"
                     fontFamily={fontFamily}
                     fontWeight="800"
-                    stroke="#F3E8FF"
-                    strokeWidth={2.4}
+                    stroke="#E9D5FF"
+                    strokeWidth={4}
                     fill="none"
-                    opacity={0.7}
+                    opacity={0.85}
+                >
+                    {label}
+                </SvgText>
+                <SvgText
+                    x="4"
+                    y="168"
+                    fontSize="160"
+                    fontFamily={fontFamily}
+                    fontWeight="800"
+                    stroke="#FFFFFF"
+                    strokeWidth={1.4}
+                    fill="none"
+                    opacity={0.9}
                 >
                     {label}
                 </SvgText>
@@ -2260,7 +2273,7 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         overflow: 'hidden',
         justifyContent: 'flex-end',
-        paddingLeft: 157,
+        paddingLeft: 168,
         paddingRight: 16,
         paddingBottom: 18,
         paddingTop: 28,
@@ -2271,61 +2284,63 @@ const styles = StyleSheet.create({
     },
     neonJerseyBack: {
         position: 'absolute',
-        left: 4,
-        top: -36,
-        width: 210,
-        height: 200,
+        left: -2,
+        top: -52,
+        width: 220,
+        height: 220,
         zIndex: 1,
         alignItems: 'flex-start',
         justifyContent: 'flex-end',
     },
     neonJerseyFront: {
         position: 'absolute',
-        left: 4,
-        top: -36,
-        width: 210,
-        height: 200,
+        left: -2,
+        top: -52,
+        width: 220,
+        height: 220,
         zIndex: 3,
     },
     neonJerseyBloom: {
         position: 'absolute',
-        left: 8,
-        bottom: 8,
-        fontSize: 148,
-        lineHeight: 158,
-        color: 'rgba(192,132,252,0.55)',
-        textShadowColor: '#C084FC',
+        left: 4,
+        bottom: 12,
+        fontSize: 160,
+        lineHeight: 170,
+        color: 'rgba(168,85,247,0.55)',
+        textShadowColor: '#A855F7',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 36,
+        textShadowRadius: 42,
     },
     neonJerseyGlow: {
         position: 'absolute',
-        left: 8,
-        bottom: 8,
-        fontSize: 148,
-        lineHeight: 158,
-        color: 'rgba(233,213,255,0.5)',
+        left: 4,
+        bottom: 12,
+        fontSize: 160,
+        lineHeight: 170,
+        color: 'rgba(233,213,255,0.62)',
         textShadowColor: '#E9D5FF',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 18,
+        textShadowRadius: 22,
     },
     neonJerseyCore: {
         position: 'absolute',
-        left: 8,
-        bottom: 8,
-        fontSize: 148,
-        lineHeight: 158,
-        color: 'rgba(243,232,255,0.42)',
-        textShadowColor: 'rgba(216,180,254,0.95)',
+        left: 4,
+        bottom: 12,
+        fontSize: 160,
+        lineHeight: 170,
+        // Hollow neon fill — bright rim comes from shadows + front stroke.
+        color: 'rgba(250,245,255,0.22)',
+        textShadowColor: 'rgba(243,232,255,1)',
         textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 8,
+        textShadowRadius: 10,
     },
     matchHeroCutoutWrap: {
+        // Sit lower/right so the neon digit crown stays readable (Figma 2554:9449).
         position: 'absolute',
-        left: 10,
-        bottom: -28,
-        width: 158,
-        height: 210,
+        left: 34,
+        bottom: -36,
+        width: 148,
+        height: 198,
         zIndex: 2,
     },
     matchHeroCutoutImage: {
@@ -2342,16 +2357,16 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        height: 78,
+        height: 88,
     },
     matchHeroRating: {
         position: 'absolute',
-        left: 126,
-        bottom: 12,
+        left: 138,
+        bottom: 10,
         zIndex: 4,
     },
     matchHeroIdentity: {
-        zIndex: 3,
+        zIndex: 5,
         alignItems: 'flex-end',
         gap: 12,
         minHeight: 140,
