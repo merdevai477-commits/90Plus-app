@@ -24,8 +24,6 @@ import {
     MessageCircle,
     Send,
     Bookmark,
-    Volume2,
-    VolumeX,
     MoreHorizontal,
     Play,
     BadgeCheck,
@@ -491,27 +489,6 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 style={[styles.bottomGradient, { pointerEvents: 'none' }]}
             />
 
-            {/* Transient mute chip — not on the social rail */}
-            <TouchableOpacity
-                style={[
-                    styles.muteChip,
-                    { top: topClearance },
-                    isRtl ? { right: 14 } : { left: 14 },
-                ]}
-                onPress={() => {
-                    haptics.lightImpact();
-                    onToggleMute();
-                }}
-                activeOpacity={0.85}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-                {feedMuted ? (
-                    <VolumeX size={18} color={COLORS.white} strokeWidth={2.2} />
-                ) : (
-                    <Volume2 size={18} color={COLORS.white} strokeWidth={2.2} />
-                )}
-            </TouchableOpacity>
-
             {/* Bottom meta: user + caption (end side) */}
             <View
                 style={[
@@ -823,16 +800,6 @@ const styles = StyleSheet.create({
         right: 0,
         height: 320,
         zIndex: 5,
-    },
-    muteChip: {
-        position: 'absolute',
-        zIndex: 40,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: FIGMA_PRIMARY,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     metaBlock: {
         position: 'absolute',

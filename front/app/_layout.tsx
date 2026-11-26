@@ -336,6 +336,7 @@ function RootLayoutNav() {
       <Stack.Screen name="competition-profile" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
+      <Stack.Screen name="saved-reels" options={{ headerShown: false }} />
       {/*
        * SHARE & WIN — front/app/share-win/
        *   index.tsx       → the Figma screen (node 109:470)

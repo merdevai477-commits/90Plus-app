@@ -24,9 +24,11 @@ import {
   ChevronUp,
   Search,
   Plus,
+  Bookmark,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import ReelPublishFlow from '../../components/reels/ReelPublishFlow';
 
 // للـ Gradient
 import { LinearGradient } from 'expo-linear-gradient';
@@ -343,6 +345,7 @@ const ReelsFeed: React.FC = () => {
   // For You / Following feed scope (Figma header toggle)
   const [feedScope, setFeedScope] = useState<ReelsFeedScope>('for_you');
   const feedScopeRef = useRef<ReelsFeedScope>('for_you');
+  const [showPublishFlow, setShowPublishFlow] = useState(false);
   const insets = useSafeAreaInsets();
 
   // Backend integration state - now managed by useReelsCache
@@ -1627,7 +1630,7 @@ const ReelsFeed: React.FC = () => {
               style={styles.headerGlassBtn}
               onPress={() => {
                 haptic.trigger('light');
-                router.push('/(tabs)/profile' as any);
+                setShowPublishFlow(true);
               }}
               accessibilityLabel="Create reel"
               activeOpacity={0.85}
@@ -1686,6 +1689,23 @@ const ReelsFeed: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[styles.headerGlassBtn, styles.headerSavedBtn]}
+            onPress={() => {
+              haptic.trigger('light');
+              router.push('/saved-reels' as any);
+            }}
+            accessibilityLabel={t.reels.savedScreenTitle}
+            activeOpacity={0.85}
+          >
+            {Platform.OS === 'ios' ? (
+              <View style={styles.headerGlassFill} />
+            ) : (
+              <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+            )}
+            <Bookmark size={20} color={COLORS.white} strokeWidth={2.2} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1861,6 +1881,15 @@ const ReelsFeed: React.FC = () => {
           onSuccess={handleSuccess}
         />
       )}
+
+      <ReelPublishFlow
+        visible={showPublishFlow}
+        onClose={() => setShowPublishFlow(false)}
+        onWatchReel={(reelId) => {
+          router.setParams({ reelId } as any);
+          void loadReelsFromBackend(undefined, true);
+        }}
+      />
     </View>
   );
 };
@@ -1995,12 +2024,15 @@ const styles = StyleSheet.create({
   reelsHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 12,
   },
   reelsHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  headerSavedBtn: {
+    marginLeft: 'auto',
   },
   headerGlassBtn: {
     width: 44,
