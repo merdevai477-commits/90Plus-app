@@ -130,32 +130,28 @@ const LeagueMatchBlock = memo(function LeagueMatchBlock({
     return (
         <View style={styles.leagueSection}>
             <View style={styles.leagueHeader}>
-                <View style={styles.leagueCountSide}>
-                    {showChevron ? (
-                        expanded ? (
-                            <ChevronUp size={17} color={colors.primary} />
-                        ) : (
-                            <ChevronDown size={17} color={colors.primary} />
-                        )
-                    ) : null}
-                    <Text style={styles.matchCount}>{fixtures.length}</Text>
-                </View>
-                <View style={styles.leagueNameSide}>
-                    <Text style={styles.leagueName} numberOfLines={1}>
-                        {title}
-                    </Text>
-                    {leagueLogo ? (
-                        <Image
-                            source={{ uri: leagueLogo }}
-                            style={styles.leagueLogo}
-                            contentFit="contain"
-                            cachePolicy="memory-disk"
-                            transition={0}
-                        />
+                {leagueLogo ? (
+                    <Image
+                        source={{ uri: leagueLogo }}
+                        style={styles.leagueLogo}
+                        contentFit="contain"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                    />
+                ) : (
+                    <View style={[styles.leagueLogo, styles.placeholderLogo]} />
+                )}
+                <Text style={styles.leagueName} numberOfLines={1}>
+                    {title}
+                </Text>
+                <Text style={styles.matchCount}>{fixtures.length}</Text>
+                {showChevron ? (
+                    expanded ? (
+                        <ChevronUp size={14} color={colors.iconMuted} />
                     ) : (
-                        <View style={[styles.leagueLogo, styles.placeholderLogo]} />
-                    )}
-                </View>
+                        <ChevronDown size={14} color={colors.iconMuted} />
+                    )
+                ) : null}
             </View>
             {expanded ? (
                 <View style={styles.matchesContainer}>
@@ -600,43 +596,21 @@ function createFavoritesStyles(c: MatchesThemeColors) {
     leaguesWrapper: { paddingHorizontal: 8, paddingBottom: 8 },
     leagueSection: {
       marginTop: 4,
-      borderRadius: 12,
-      backgroundColor: c.competitionGroupBg,
+      borderRadius: 10,
+      backgroundColor: c.chipBg,
       overflow: 'hidden',
-      paddingHorizontal: 14,
-      paddingTop: 12,
-      paddingBottom: 12,
     },
     leagueHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
       gap: 8,
     },
-    leagueCountSide: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    leagueNameSide: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-end',
-      gap: 12,
-      minWidth: 0,
-    },
-    leagueLogo: { width: 18, height: 18, borderRadius: 4 },
-    leagueName: {
-      flexShrink: 1,
-      fontSize: 14,
-      fontWeight: '600',
-      color: c.primary,
-      textAlign: 'right',
-    },
-    matchCount: { fontSize: 14, fontWeight: '600', color: c.primary },
-    matchesContainer: { gap: 8 },
+    leagueLogo: { width: 20, height: 20, borderRadius: 4 },
+    leagueName: { flex: 1, fontSize: 13, fontWeight: '600', color: c.textPrimary },
+    matchCount: { fontSize: 11, fontWeight: '600', color: c.textMuted, marginEnd: 4 },
+    matchesContainer: { paddingHorizontal: 4, paddingBottom: 6, gap: 4 },
     emptyMatches: { color: c.textMuted, textAlign: 'center', paddingVertical: 12, fontSize: 13 },
     emptyWrap: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 10 },
     emptyIconRing: {

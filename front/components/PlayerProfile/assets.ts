@@ -16,10 +16,6 @@ export const PP_ICON = {
   dribble: require('../../assets/images/player-profile/dribble.svg'),
   sparkle: require('../../assets/images/player-profile/sparkle.svg'),
   time: require('../../assets/images/player-profile/time.svg'),
-  /** Figma match-player-stats featured trio (2554:9511 / 9517 / 9523) */
-  statCleats: require('../../assets/images/player-profile/stat-cleats.svg'),
-  statFootball: require('../../assets/images/player-profile/stat-football.svg'),
-  statTimer: require('../../assets/images/player-profile/stat-timer.svg'),
   history: require('../../assets/images/player-profile/history.svg'),
   transfers: require('../../assets/images/player-profile/transfers.svg'),
   euro: require('../../assets/images/player-profile/euro-new.svg'),
