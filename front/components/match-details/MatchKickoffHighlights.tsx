@@ -26,7 +26,18 @@ const ICON = {
   whistle: require('../../assets/images/match-info/icon-whistle.svg'),
   weather: require('../../assets/images/match-info/icon-weather.svg'),
   capacity: require('../../assets/images/match-vote/capacity.svg'),
+  statusBullet: require('../../assets/images/match-info/status-bullet.svg'),
 };
+
+/** Figma 2536:12982 — Selection Status */
+const STATUS_STRIP = {
+  bg: '#FCF8EB',
+  bgDark: 'rgba(182,154,53,0.16)',
+  title: '#806518',
+  titleDark: '#E8D48A',
+  hint: '#625B49',
+  hintDark: 'rgba(232,212,138,0.72)',
+} as const;
 
 const CARD_SHADOW = {
   shadowColor: '#4B1FA3',
@@ -280,24 +291,38 @@ export function MatchKickoffHighlights({
           style={[
             styles.strip,
             {
-              borderColor: isDark ? 'rgba(167,139,250,0.35)' : colors.primaryBorder,
-              backgroundColor: isDark ? 'transparent' : colors.primaryMuted,
+              backgroundColor: isDark ? STATUS_STRIP.bgDark : STATUS_STRIP.bg,
+              flexDirection: rtl ? 'row' : 'row-reverse',
             },
           ]}
         >
-          {isDark ? (
-            <LinearGradient
-              colors={['rgba(124,58,237,0.42)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.18)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : null}
-          <View style={[styles.stripDot, { backgroundColor: accent }]} />
-          <View style={styles.stripCopy}>
-            <Text style={[styles.stripTitle, { color: ink }]}>{autoUpdateTitle}</Text>
-            <Text style={[styles.stripHint, { color: muted }]}>{autoUpdateHint}</Text>
+          <View style={[styles.stripCopy, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
+            <Text
+              style={[
+                styles.stripTitle,
+                {
+                  color: isDark ? STATUS_STRIP.titleDark : STATUS_STRIP.title,
+                  textAlign: rtl ? 'right' : 'left',
+                  writingDirection: rtl ? 'rtl' : 'ltr',
+                },
+              ]}
+            >
+              {autoUpdateTitle}
+            </Text>
+            <Text
+              style={[
+                styles.stripHint,
+                {
+                  color: isDark ? STATUS_STRIP.hintDark : STATUS_STRIP.hint,
+                  textAlign: rtl ? 'right' : 'left',
+                  writingDirection: rtl ? 'rtl' : 'ltr',
+                },
+              ]}
+            >
+              {autoUpdateHint}
+            </Text>
           </View>
+          <ExpoImage source={ICON.statusBullet} style={styles.stripDot} contentFit="contain" />
         </View>
       ) : null}
 
@@ -389,32 +414,35 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   strip: {
-    minHeight: 58,
-    borderRadius: 16,
+    minHeight: 69,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 17,
+    paddingVertical: 14,
+    gap: 12,
+    direction: 'ltr',
   },
   stripDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
   },
   stripCopy: {
     flex: 1,
-    gap: 2,
+    gap: 5,
   },
   stripTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 18,
+    width: '100%',
   },
   stripHint: {
     fontSize: 12,
-    lineHeight: 16,
+    fontWeight: '400',
+    lineHeight: 18,
+    width: '100%',
   },
   section: {
     width: '100%',

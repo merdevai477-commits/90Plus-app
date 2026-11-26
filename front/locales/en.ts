@@ -482,8 +482,9 @@ export const en = {
     highlightsShort: 'Highlights',
     infoShort: 'Information',
     highlightsTitle: 'Match information',
-    highlightsAutoUpdate: 'Details move to Information',
-    highlightsAutoUpdateHint: 'When the first event appears, these details open in a new Information tab.',
+    highlightsAutoUpdate: 'Details will move to the Information tab',
+    highlightsAutoUpdateHint:
+      'With the first event, these details will appear in the Information tab before the Match tab.',
     stadiumAndCoverage: 'Stadium & coverage',
     kickoffTimeLabel: 'Kick-off time',
     matchRefereeLabel: 'Match referee',
