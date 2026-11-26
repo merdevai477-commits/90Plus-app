@@ -23,7 +23,7 @@ import TeamBadge from '../components/common/TeamBadge';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
 import { localeWithLatinNumerals } from '../src/i18n/latinDigits';
-import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedStatType } from '../utils/i18nHelpers';
 import { Image as ExpoImage } from 'expo-image';
 import LeagueIcon from '../components/common/LeagueIcon';
 import {
@@ -46,7 +46,6 @@ import {
 } from '../components/PlayerProfile/PlayerProfileView';
 import { PP_ICON, PP_STADIUM } from '../components/PlayerProfile/assets';
 import { getPPColors, ratingTone } from '../components/PlayerProfile/theme';
-import { MatchStatsDashboard } from '../components/PlayerProfile/MatchStatsDashboard';
 import { useResolvedAppScheme } from '../hooks/useResolvedAppScheme';
 
 // Cache key prefix for player data
@@ -130,6 +129,24 @@ interface MatchReport365 {
     imageUrl: string | null;
     stats: unknown[];
     chartEvents: unknown[];
+}
+
+function format365StatEntry(
+  raw: unknown,
+  language: Language,
+): { label: string; value: string } | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const rawLabel =
+        (typeof o.name === 'string' && o.name) ||
+        (typeof o.shortName === 'string' && o.shortName) ||
+        (typeof o.typeName === 'string' && o.typeName) ||
+        (o.type != null ? `#${String(o.type)}` : null);
+    const label = rawLabel ? getLocalizedStatType(rawLabel, language) || rawLabel : null;
+    const rawValue = o.value ?? o.val ?? o.statValue;
+    const value = rawValue != null ? String(rawValue) : null;
+    if (!label && !value) return null;
+    return { label: label ?? 'Stat', value: value ?? '—' };
 }
 
 function format365ChartEvent(raw: unknown): string | null {
@@ -976,6 +993,30 @@ export default function PlayerProfileScreen() {
     const fontSemi = useAppFont(600);
     const fontReg = useAppFont(400);
 
+    const matchStats = useMemo(() => {
+        type Row = { key: string; label: string; value: string; isTop: boolean; isRating: boolean };
+        const rows: Row[] = [];
+        (matchReport365?.stats ?? []).forEach((raw, idx) => {
+            const formatted = format365StatEntry(raw, language);
+            if (!formatted) return;
+            const o = raw as Record<string, unknown>;
+            const names = `${o.name ?? ''} ${o.shortName ?? ''} ${formatted.label}`.toLowerCase();
+            rows.push({
+                ...formatted,
+                key: `${idx}-${formatted.label}`,
+                isTop: o.isTop === true,
+                isRating: /rating|تقييم/.test(names),
+            });
+        });
+        const rating = rows.find((r) => r.isRating) ?? null;
+        const rest = rows.filter((r) => r !== rating);
+        const tops = rest.filter((r) => r.isTop);
+        const featured = (tops.length >= 2 ? tops : rest).slice(0, 4);
+        const list = rest.filter((r) => !featured.includes(r));
+        const ratingNum = rating ? Number.parseFloat(rating.value) : NaN;
+        return { rating: Number.isFinite(ratingNum) ? ratingNum : null, featured, list, total: rows.length };
+    }, [matchReport365, language]);
+
     const matchEvents = useMemo(
         () =>
             (matchReport365?.chartEvents ?? [])
@@ -1067,16 +1108,17 @@ export default function PlayerProfileScreen() {
                     />
                     {jerseyNumber != null ? (
                         <Text
-                            pointerEvents="none"
                             style={[
                                 styles.heroJersey,
+                                styles.heroLiftShadow,
                                 {
                                     fontFamily: fontExtraBold,
-                                    top: headerHeight + 8,
-                                    // Soft watermark behind identity — never compete with name/photo.
-                                    color: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(12,5,25,0.08)',
+                                    top: headerHeight - 6,
+                                    color: isDark ? B.jersey : '#000000',
+                                    opacity: isDark ? 0.9 : 1,
+                                    textShadowColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.28)',
                                 },
-                                rtl ? { left: -4 } : { right: -4 },
+                                rtl ? { left: 14 } : { right: 14 },
                             ]}
                             allowFontScaling={false}
                         >
@@ -1084,11 +1126,9 @@ export default function PlayerProfileScreen() {
                         </Text>
                     ) : null}
 
-                    <Animated.View
-                        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], zIndex: 1 }}
-                    >
+                    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
                         <View style={[styles.heroRow, { flexDirection: row }]}>
-                            <View style={[styles.photoWrap, { zIndex: 2 }]}>
+                            <View style={styles.photoWrap}>
                                 <PlayerHeroPhoto
                                     key={playerId}
                                     playerId={playerId}
@@ -1098,10 +1138,21 @@ export default function PlayerProfileScreen() {
                                     colors={teamColors}
                                     photoSource={is365Source ? '365' : 'api'}
                                 />
-                                {/* Rating lives in the performance overview; keep hero photo clean. */}
+                                {matchStats.rating != null ? (
+                                    <View
+                                        style={[
+                                            styles.ratingMedal,
+                                            { backgroundColor: ratingTone(matchStats.rating), borderColor: B.bg },
+                                        ]}
+                                    >
+                                        <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
+                                            {matchStats.rating.toFixed(1)}
+                                        </Text>
+                                    </View>
+                                ) : null}
                             </View>
 
-                            <View style={[styles.heroInfo, { alignItems: alignStart, zIndex: 2 }]}>
+                            <View style={[styles.heroInfo, { alignItems: alignStart }]}>
                                 {heroPlayer.nationality ? (
                                     <View style={[styles.inlineRow, { flexDirection: row }]}>
                                         {nationalityFlagUri ? (
@@ -1242,36 +1293,133 @@ export default function PlayerProfileScreen() {
 
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
                     {is365Source && (
-                        <MatchStatsDashboard
-                            stats={matchReport365?.stats}
-                            position={matchReport365?.position ?? primaryPosition}
-                            language={language}
-                            rtl={rtl}
-                            colors={B}
-                            loading={loading && !matchReport365}
-                            events={matchEvents}
-                            fontBold={fontBold}
-                            fontSemi={fontSemi}
-                            fontReg={fontReg}
-                            labels={{
-                                matchStats: pp.matchStats,
-                                performanceOverview: pp.performanceOverview || 'Performance overview',
-                                keyStatistics: pp.keyStatistics || 'Key statistics',
-                                rating: pp.rating,
-                                goals: pp.goals,
-                                assists: pp.assists,
-                                minutes: pp.minutesPlayed,
-                                sectionAttack: pp.sectionAttack || 'Attacking',
-                                sectionPassing: pp.sectionPassing || 'Passing',
-                                sectionDribbling: pp.sectionDribbling || 'Dribbling',
-                                sectionDefense: pp.sectionDefense || 'Defensive',
-                                sectionPhysical: pp.sectionPhysical || 'Physical',
-                                sectionGoalkeeper: pp.sectionGoalkeeper || 'Goalkeeper',
-                                sectionOther: pp.sectionOther || 'Other',
-                                eventsSection: pp.eventsSection,
-                                empty: pp.noCompetitionStats,
-                            }}
-                        />
+                        <>
+                            <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} colors={B} />
+                            {loading && !matchReport365 ? (
+                                <View style={[styles.card, styles.loadingCard, { backgroundColor: B.card, borderColor: B.border }]}>
+                                    <ActivityIndicator size="small" color={B.primary} />
+                                </View>
+                            ) : matchStats.total > 0 ? (
+                                <>
+                                    {matchStats.featured.length > 0 && (
+                                        <View style={[styles.featuredGrid, { flexDirection: row }]}>
+                                            {matchStats.featured.map((s) => (
+                                                <View
+                                                    key={s.key}
+                                                    style={[
+                                                        styles.featuredTile,
+                                                        {
+                                                            alignItems: alignStart,
+                                                            backgroundColor: B.card,
+                                                            borderColor: B.border,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <LinearGradient
+                                                        colors={[B.primary, 'rgba(139,92,246,0)']}
+                                                        start={{ x: rtl ? 1 : 0, y: 0 }}
+                                                        end={{ x: rtl ? 0 : 1, y: 0 }}
+                                                        style={styles.featuredAccent}
+                                                    />
+                                                    <Text
+                                                        style={[styles.featuredValue, { fontFamily: fontBold, color: B.ink }]}
+                                                        numberOfLines={1}
+                                                    >
+                                                        {s.value}
+                                                    </Text>
+                                                    <Text
+                                                        style={[
+                                                            styles.featuredLabel,
+                                                            { fontFamily: fontReg, textAlign, color: B.muted },
+                                                        ]}
+                                                        numberOfLines={2}
+                                                    >
+                                                        {s.label}
+                                                    </Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                    {matchStats.list.length > 0 && (
+                                        <View
+                                            style={[
+                                                styles.card,
+                                                styles.listCard,
+                                                { backgroundColor: B.card, borderColor: B.border },
+                                            ]}
+                                        >
+                                            {matchStats.list.map((s, idx) => (
+                                                <View
+                                                    key={s.key}
+                                                    style={[
+                                                        styles.statRow,
+                                                        { flexDirection: row },
+                                                        idx < matchStats.list.length - 1 && [
+                                                            styles.statRowDivider,
+                                                            { borderBottomColor: B.divider },
+                                                        ],
+                                                    ]}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.statLabel,
+                                                            { fontFamily: fontReg, textAlign, color: B.soft },
+                                                        ]}
+                                                        numberOfLines={2}
+                                                    >
+                                                        {s.label}
+                                                    </Text>
+                                                    <Text
+                                                        style={[styles.statValue, { fontFamily: fontBold, color: B.ink }]}
+                                                    >
+                                                        {s.value}
+                                                    </Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
+                            ) : (
+                                <View
+                                    style={[
+                                        styles.card,
+                                        styles.emptyCard,
+                                        { backgroundColor: B.card, borderColor: B.border },
+                                    ]}
+                                >
+                                    <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
+                                    <Text style={[styles.emptyText, { fontFamily: fontReg, color: B.soft }]}>
+                                        {pp.noCompetitionStats}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {matchEvents.length > 0 && (
+                                <>
+                                    <SectionHeader icon={PP_ICON.time} title={pp.eventsSection} rtl={rtl} colors={B} />
+                                    <View style={[styles.eventsWrap, { flexDirection: row }]}>
+                                        {matchEvents.map((line, idx) => (
+                                            <View
+                                                key={`${line}-${idx}`}
+                                                style={[
+                                                    styles.eventChip,
+                                                    {
+                                                        backgroundColor: isDark ? 'rgba(139,92,246,0.1)' : B.pale,
+                                                        borderColor: B.border,
+                                                    },
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={[styles.eventText, { fontFamily: fontSemi, color: B.ink }]}
+                                                >
+                                                    {line}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </>
+                            )}
+                        </>
                     )}
 
                     {/* Season total summary — API-Football career profile only */}
@@ -1424,10 +1572,8 @@ const styles = StyleSheet.create({
     hero: { paddingHorizontal: 18, paddingTop: 22, paddingBottom: 20, overflow: 'hidden' },
     heroJersey: {
         position: 'absolute',
-        zIndex: 0,
-        fontSize: 132,
-        lineHeight: 132,
-        includeFontPadding: false,
+        top: -6,
+        fontSize: 118,
     },
     heroLiftShadow: {
         textShadowOffset: { width: 0, height: 1 },
