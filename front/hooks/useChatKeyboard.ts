@@ -5,15 +5,16 @@ import type { FlashListRef } from '@shopify/flash-list';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
-const KEYBOARD_OPEN_GAP = Platform.OS === 'android' ? 0 : 5;
+const KEYBOARD_OPEN_GAP = 8;
 /**
- * Manual composer lift is iOS-only. Android uses adjustResize in app.json and,
- * in dev/production builds, KeyboardStickyView on AI chat and match live chat.
+ * When KeyboardStickyView isn't linked (Expo Go / unlinked native module), lift
+ * the absolute composer with the keyboard height from native events.
+ * Production builds with KeyboardController use sticky views instead.
  */
-const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios';
+const USE_MANUAL_COMPOSER_LIFT = !isKeyboardControllerActive;
 
 /** Retries after show/focus — window resize + FlashList layout settle at different times. */
-const SCROLL_RETRY_MS = Platform.OS === 'android' ? [0, 48, 120, 220, 360] : [0, 64, 160];
+const SCROLL_RETRY_MS = Platform.OS === 'android' ? [0, 48, 120, 220, 360, 520] : [0, 64, 160, 280];
 
 type UseChatKeyboardParams<TItem> = {
   listRef: RefObject<FlashListRef<TItem> | null>;
@@ -49,6 +50,7 @@ export function useChatKeyboard<TItem>({
   const scrollRafRef = useRef<number[]>([]);
   const mountedRef = useRef(true);
   const keyboardVisibleRef = useRef(false);
+  const keyboardHeightRef = useRef(0);
   const messageCountRef = useRef(messageCount);
   messageCountRef.current = messageCount;
   const hasMessagesRef = useRef(hasMessages);
@@ -117,6 +119,7 @@ export function useChatKeyboard<TItem>({
 
   const setHeightIfValid = useCallback((h: number) => {
     if (h <= 0) return;
+    keyboardHeightRef.current = h;
     setKeyboardHeight((prev) => (Math.abs(prev - h) < 2 ? prev : h));
   }, []);
 
@@ -128,9 +131,11 @@ export function useChatKeyboard<TItem>({
       const fromEvent = heightFromEvent(e);
       if (fromEvent > 0) {
         setHeightIfValid(fromEvent);
+      } else if (USE_MANUAL_COMPOSER_LIFT && keyboardHeightRef.current > 0) {
+        // Re-use last good height if the event omitted coordinates.
+        setHeightIfValid(keyboardHeightRef.current);
       }
-      // Always re-pin the last message above the keyboard — including Android with
-      // KeyboardController. Native lift alone still leaves long replies clipped.
+      // Always re-pin the last message above the keyboard.
       scheduleScrollToEnd(false);
     },
     [scheduleScrollToEnd, setHeightIfValid],
@@ -151,11 +156,15 @@ export function useChatKeyboard<TItem>({
   applyKeyboardOpenRef.current = applyKeyboardOpen;
   applyKeyboardCloseRef.current = applyKeyboardClose;
 
-  /** iOS only: poll metrics until keyboard animation finishes. Android metrics() on focus is stale/too large. */
+  /**
+   * Poll metrics while the keyboard animates (Expo Go / no sticky view).
+   * Prefer event height; metrics are a fallback after show has started.
+   */
   const scheduleHeightSync = useCallback(() => {
     if (!USE_MANUAL_COMPOSER_LIFT) return;
     clearSyncTimers();
     const trySync = () => {
+      if (!keyboardVisibleRef.current) return;
       const h = heightFromMetrics();
       if (h > 0) setHeightIfValid(h);
     };
@@ -195,17 +204,19 @@ export function useChatKeyboard<TItem>({
   }, [clearScrollTimers, clearSyncTimers]);
 
   const onInputFocus = useCallback(() => {
-    // Apply composer padding immediately on focus so Android pan + padding stay
-    // in sync (avoids a jump on the first keystroke). Do not read metrics() or
-    // set keyboardHeight on Android — lift is iOS-only.
     keyboardVisibleRef.current = true;
     setKeyboardVisible(true);
     setLayoutEpoch((n) => n + 1);
-    if (Platform.OS === 'ios') {
+    // Re-apply last known height immediately so Android Expo Go lifts the dock
+    // before keyboardDidShow (avoids one frame under the keyboard).
+    if (USE_MANUAL_COMPOSER_LIFT && keyboardHeightRef.current > 0) {
+      setHeightIfValid(keyboardHeightRef.current);
+    }
+    if (USE_MANUAL_COMPOSER_LIFT) {
       scheduleHeightSync();
     }
     scheduleScrollToEnd(true);
-  }, [scheduleHeightSync, scheduleScrollToEnd]);
+  }, [scheduleHeightSync, scheduleScrollToEnd, setHeightIfValid]);
 
   const syncKeyboardHeight = useCallback(() => {
     if (!USE_MANUAL_COMPOSER_LIFT) return;

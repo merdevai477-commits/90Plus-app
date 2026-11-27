@@ -24,7 +24,9 @@ export type ChatComposerDockProps = ChatComposerProps & {
 
 /**
  * Floats the composer over the bottom of the chat body. KeyboardStickyView
- * moves it with the keyboard when linked; iOS Expo Go lifts it manually.
+ * moves it with the keyboard when linked; otherwise keyboardLift (from
+ * keyboard events) raises the absolute dock above the soft keyboard — needed
+ * on Android Expo Go where adjustResize often leaves the field under Gboard.
  */
 export function ChatComposerDock({
   dockPaddingBottom,
