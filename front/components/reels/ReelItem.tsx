@@ -489,29 +489,25 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 style={[styles.bottomGradient, { pointerEvents: 'none' }]}
             />
 
-            {/* Bottom meta: user + caption (end side) */}
+            {/* Bottom meta: user + caption — left side; action rail stays on the right */}
             <View
                 style={[
                     styles.metaBlock,
                     {
                         bottom: bottomClearance + 10,
-                        ...(isRtl ? { right: 12, left: 78 } : { left: 12, right: 78 }),
+                        left: 12,
+                        right: 78,
                     },
                 ]}
             >
                 <TouchableOpacity
-                    style={[
-                        styles.userRow,
-                        isRtl ? styles.userRowEnd : styles.userRowStart,
-                    ]}
+                    style={[styles.userRow, styles.userRowStart]}
                     onPress={onUserPress}
                     activeOpacity={0.85}
                 >
-                    {!isRtl ? (
-                        <Image source={{ uri: reel.user.avatar }} style={styles.userAvatar} />
-                    ) : null}
-                    <View style={[styles.userTextCol, isRtl ? styles.userTextColRtl : styles.userTextColLtr]}>
-                        <View style={[styles.userNameRow, isRtl && styles.userNameRowRtl]}>
+                    <Image source={{ uri: reel.user.avatar }} style={styles.userAvatar} />
+                    <View style={[styles.userTextCol, styles.userTextColLtr]}>
+                        <View style={styles.userNameRow}>
                             <Text
                                 style={[styles.userName, { fontFamily: fontBold }]}
                                 numberOfLines={1}
@@ -536,9 +532,6 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             @{reel.user.username}
                         </Text>
                     </View>
-                    {isRtl ? (
-                        <Image source={{ uri: reel.user.avatar }} style={styles.userAvatar} />
-                    ) : null}
                 </TouchableOpacity>
 
                 {captionTitle ? (
@@ -573,14 +566,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 ) : null}
             </View>
 
-            {/* Action rail — start edge (left in RTL Figma) */}
+            {/* Action rail — right edge (likes / comments / share) */}
             <View
                 style={[
                     styles.actionsColumn,
                     {
                         bottom: bottomClearance + 4,
                         gap: ACTION_GAP,
-                        ...(isRtl ? { left: 8 } : { right: 8 }),
+                        right: 8,
                     },
                 ]}
             >
@@ -812,9 +805,6 @@ const styles = StyleSheet.create({
         gap: 10,
         alignSelf: 'stretch',
     },
-    userRowEnd: {
-        justifyContent: 'flex-end',
-    },
     userRowStart: {
         justifyContent: 'flex-start',
     },
@@ -823,9 +813,6 @@ const styles = StyleSheet.create({
         gap: 4,
         maxWidth: 200,
     },
-    userTextColRtl: {
-        alignItems: 'flex-start',
-    },
     userTextColLtr: {
         alignItems: 'flex-start',
     },
@@ -833,11 +820,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-    },
-    userNameRowRtl: {
-        flexDirection: 'row-reverse',
-        alignSelf: 'stretch',
-        justifyContent: 'flex-start',
     },
     userName: {
         color: COLORS.white,
