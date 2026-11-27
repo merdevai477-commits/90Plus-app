@@ -469,7 +469,7 @@ export const ar = {
     allCompetitions: 'كل البطولات',
 
     // كروت المباريات — الأحد أولاً زي Date#getDay
-    weekdayShort: ['حد', 'اتنين', 'تلات', 'اربع', 'خميس', 'جمعه', 'سبت'],
+    weekdayShort: ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'],
 
     // Squad groups
     goalkeepers: 'حراس المرمى',
@@ -615,7 +615,8 @@ export const ar = {
       today: 'اليوم',
       prevMonth: 'الشهر السابق',
       nextMonth: 'الشهر التالي',
-      weekDays: ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'],
+      // Mon-first storage; calendar reorders to Sat→Fri when weekStartsOn=saturday.
+      weekDays: ['اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت', 'أحد'],
       weekStartsOn: 'saturday',
       staleData: 'بيانات محفوظة — اضغط للتحديث',
     },
