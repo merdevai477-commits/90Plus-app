@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -10,10 +10,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@clerk/clerk-expo';
 import { X } from 'lucide-react-native';
 
 import { ReelsService } from '../../src/services/authService';
+import { useCommunityToken } from '../../hooks/community/useCommunityFeed';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { useResolvedAppScheme } from '../../hooks/useResolvedAppScheme';
@@ -35,44 +35,48 @@ type Props = {
 
 export function ReelLikersSheet({ reelId, visible, onClose, onProfile }: Props) {
   const insets = useSafeAreaInsets();
-  const { getToken } = useAuth();
+  const getToken = useCommunityToken();
   const { t, language } = useTranslation();
   const { isDark } = useResolvedAppScheme();
   const isAr = language === 'ar';
   const font = getAppFont(600, language);
   const fontReg = getAppFont(400, language);
+  const requestId = useRef(0);
 
   const sheetBg = isDark ? '#120a22' : '#ffffff';
   const ink = isDark ? 'rgba(255,255,255,0.92)' : '#24104e';
   const muted = isDark ? 'rgba(255,255,255,0.55)' : '#6b7387';
   const accent = isDark ? '#a78bfa' : '#6a2bd9';
   const border = isDark ? 'rgba(167,139,250,0.22)' : '#e8e0f5';
-  const overlay = 'rgba(0,0,0,0.55)';
 
   const [items, setItems] = useState<Liker[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = useCallback(
+  const loadPage = useCallback(
     async (next: string | null, append: boolean) => {
       if (!reelId) return;
+      const req = ++requestId.current;
       if (append) setLoadingMore(true);
       else setLoading(true);
       try {
         const token = await getToken();
         if (!token) {
-          if (!append) setItems([]);
+          if (req === requestId.current && !append) setItems([]);
           return;
         }
         const page = await ReelsService.getReelLikes(token, reelId, 30, next);
+        if (req !== requestId.current) return;
         setItems((prev) => (append ? [...prev, ...page.items] : page.items));
         setCursor(page.nextCursor);
       } catch {
-        if (!append) setItems([]);
+        if (req === requestId.current && !append) setItems([]);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (req === requestId.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [getToken, reelId],
@@ -82,98 +86,114 @@ export function ReelLikersSheet({ reelId, visible, onClose, onProfile }: Props) 
     if (!visible || !reelId) return;
     setItems([]);
     setCursor(null);
-    void load(null, false);
-  }, [visible, reelId, load]);
+    void loadPage(null, false);
+    return () => {
+      requestId.current += 1;
+    };
+    // Stable getToken via useCommunityToken — only reload when sheet opens / reel changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit loadPage identity
+  }, [visible, reelId]);
 
-  const title = t.reels.likedBy || t.community?.likedBy || (isAr ? 'الإعجابات' : 'Likes');
-  const empty = t.reels.noLikes || t.community?.noLikes || (isAr ? 'لسه مفيش إعجابات' : 'No likes yet');
-  const moreLabel = t.reels.loadMoreLikes || t.community?.loadMore || (isAr ? 'عرض المزيد' : 'Load more');
+  const title = t.reels.likedBy || (isAr ? 'الإعجابات' : 'Likes');
+  const empty = t.reels.noLikes || (isAr ? 'لسه مفيش إعجابات' : 'No likes yet');
+  const moreLabel = t.reels.loadMoreLikes || (isAr ? 'عرض المزيد' : 'Load more');
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={[styles.backdrop, { backgroundColor: overlay }]} onPress={onClose} />
-      <View
-        style={[
-          styles.sheet,
-          {
-            paddingBottom: Math.max(insets.bottom, 16),
-            backgroundColor: sheetBg,
-            borderColor: border,
-          },
-        ]}
-      >
-        <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-          <Text style={[styles.title, { fontFamily: font, color: ink }]}>{title}</Text>
-          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
-            <X size={20} color={muted} />
-          </Pressable>
-        </View>
-        {loading ? (
-          <ActivityIndicator style={{ marginVertical: 28 }} color={accent} />
-        ) : !items.length ? (
-          <Text style={[styles.empty, { fontFamily: fontReg, color: muted }]}>{empty}</Text>
-        ) : (
-          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
-            {items.map((user) => {
-              const name = user.displayName || user.username;
-              return (
-                <Pressable
-                  key={user.id}
-                  onPress={() => {
-                    onClose();
-                    onProfile(user.username);
-                  }}
-                  style={[styles.row, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
-                >
-                  {user.avatar ? (
-                    <Image source={{ uri: user.avatar }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: accent }]}>
-                      <Text style={styles.avatarLetter}>{name.slice(0, 1).toUpperCase()}</Text>
+      <View style={styles.root}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" />
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingBottom: Math.max(insets.bottom, 16),
+              backgroundColor: sheetBg,
+              borderColor: border,
+            },
+          ]}
+        >
+          <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <Text style={[styles.title, { fontFamily: font, color: ink }]}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
+              <X size={20} color={muted} />
+            </Pressable>
+          </View>
+          {loading ? (
+            <ActivityIndicator style={{ marginVertical: 28 }} color={accent} />
+          ) : !items.length ? (
+            <Text style={[styles.empty, { fontFamily: fontReg, color: muted }]}>{empty}</Text>
+          ) : (
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
+              {items.map((user) => {
+                const name = user.displayName || user.username;
+                return (
+                  <Pressable
+                    key={user.id}
+                    onPress={() => {
+                      onClose();
+                      onProfile(user.username);
+                    }}
+                    style={[styles.row, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                  >
+                    {user.avatar ? (
+                      <Image source={{ uri: user.avatar }} style={styles.avatar} />
+                    ) : (
+                      <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: accent }]}>
+                        <Text style={styles.avatarLetter}>{name.slice(0, 1).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.name,
+                          { fontFamily: font, textAlign: isAr ? 'right' : 'left', color: ink },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.handle,
+                          { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left', color: muted },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        @{user.username}
+                      </Text>
                     </View>
+                  </Pressable>
+                );
+              })}
+              {cursor ? (
+                <Pressable
+                  onPress={() => void loadPage(cursor, true)}
+                  style={styles.more}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <ActivityIndicator color={accent} />
+                  ) : (
+                    <Text style={[styles.moreText, { fontFamily: font, color: accent }]}>{moreLabel}</Text>
                   )}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[
-                        styles.name,
-                        { fontFamily: font, textAlign: isAr ? 'right' : 'left', color: ink },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.handle,
-                        { fontFamily: fontReg, textAlign: isAr ? 'right' : 'left', color: muted },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      @{user.username}
-                    </Text>
-                  </View>
                 </Pressable>
-              );
-            })}
-            {cursor ? (
-              <Pressable onPress={() => void load(cursor, true)} style={styles.more} disabled={loadingMore}>
-                {loadingMore ? (
-                  <ActivityIndicator color={accent} />
-                ) : (
-                  <Text style={[styles.moreText, { fontFamily: font, color: accent }]}>{moreLabel}</Text>
-                )}
-              </Pressable>
-            ) : null}
-          </ScrollView>
-        )}
+              ) : null}
+            </ScrollView>
+          )}
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  root: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
     borderTopLeftRadius: 22,
@@ -181,6 +201,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingHorizontal: 16,
     borderTopWidth: 1,
+    zIndex: 2,
   },
   header: {
     alignItems: 'center',

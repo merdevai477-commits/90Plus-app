@@ -778,15 +778,18 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 </KeyboardAvoidingView>
             </Modal>
 
-            <ReelLikersSheet
-                reelId={reel.id}
-                visible={likersOpen}
-                onClose={() => setLikersOpen(false)}
-                onProfile={(username) => {
-                    if (onMentionPress) onMentionPress(username);
-                    else onUserPress();
-                }}
-            />
+            {likersOpen ? (
+                <ReelLikersSheet
+                    reelId={reel.id}
+                    visible={likersOpen}
+                    onClose={() => setLikersOpen(false)}
+                    onProfile={(username) => {
+                        setLikersOpen(false);
+                        if (onMentionPress) onMentionPress(username);
+                        else onUserPress();
+                    }}
+                />
+            ) : null}
         </RNAnimated.View>
     );
 };
