@@ -319,7 +319,7 @@ export default function CoachKingScreen() {
 
   const bottomPad = ckNavBottom(insets.bottom) + 92;
   const chromeTop = insets.top + 6;
-  const contentTop = chromeTop + 88;
+  const contentTop = chromeTop + 48;
   const row = isAr ? 'row-reverse' : 'row';
 
   return (
@@ -327,32 +327,20 @@ export default function CoachKingScreen() {
       <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
 
       <View style={[styles.floatingChrome, { paddingTop: chromeTop }]} pointerEvents="box-none">
-        <View style={styles.floatingRow} pointerEvents="box-none">
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel={t.common.back}
-            hitSlop={8}
-            testID="ck-back"
-            style={({ pressed }) => [
-              styles.backIsland,
-              theme.isDark ? styles.backIslandDark : null,
-              pressed && styles.backPressed,
-            ]}
-          >
-            <Ionicons name="chevron-back" size={22} color={theme.isDark ? '#FFFFFF' : '#24104E'} />
-          </Pressable>
-          {shown ? (
-            <CoachKingDeadline
-              compact
-              startAt={shown.gameweek.startAt}
-              endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
-              locked={closed || !!shown.squad.lockedUntil}
-            />
-          ) : (
-            <View style={styles.chromeSpacer} />
-          )}
-        </View>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel={t.common.back}
+          hitSlop={8}
+          testID="ck-back"
+          style={({ pressed }) => [
+            styles.backIsland,
+            theme.isDark ? styles.backIslandDark : null,
+            pressed && styles.backPressed,
+          ]}
+        >
+          <Ionicons name="chevron-back" size={22} color={theme.isDark ? '#FFFFFF' : '#24104E'} />
+        </Pressable>
       </View>
 
       {loading && !home ? <ActivityIndicator color={theme.refresh} style={{ marginTop: contentTop + 24 }} /> : null}
@@ -403,6 +391,12 @@ export default function CoachKingScreen() {
               </View>
             </View>
           </LinearGradient>
+
+          <CoachKingDeadline
+            startAt={shown.gameweek.startAt}
+            endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
+            locked={closed || !!shown.squad.lockedUntil}
+          />
 
           {shown.squad.dirty && !closed ? (
             <Text
@@ -562,11 +556,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
     paddingHorizontal: 12,
   },
-  floatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   backIsland: {
     width: 40,
     height: 40,
@@ -591,7 +580,6 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.92 }],
     opacity: 0.9,
   },
-  chromeSpacer: { flex: 1 },
   error: { textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
   profile: {
     alignItems: 'center',
