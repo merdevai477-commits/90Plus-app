@@ -2308,7 +2308,7 @@ const MatchDetailsScreen = () => {
                   injurySubstitution: t.matchDetails.injurySubstitution || 'تبديل بسبب إصابة',
                   penalty: t.matchDetails.penalty || 'ركلة جزاء',
                   corner: t.matchDetails.cornerKick || 'ركلة ركنية',
-                  var: t.matchDetails.varReview || 'تقنية الفيديو',
+                  var: 'VAR',
                   missedPenalty: t.matchDetails.missedPenalty || 'ركلة جزاء مهدرة',
                   secondYellow: t.matchDetails.secondYellow || 'إنذار ثانٍ',
                   assist: t.matchDetails.assist || 'تمريرة حاسمة',

@@ -4,13 +4,13 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text } from './MatchText';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
 import type { Language } from '../../src/i18n/types';
+import { VarMonitorIcon } from './VarMonitorIcon';
 
 const ICON_GOAL = require('../../assets/images/match-events/legend-goal.svg');
 const ICON_OWN_GOAL = require('../../assets/images/match-events/legend-own-goal.svg');
 const ICON_PENALTY = require('../../assets/images/match-events/legend-penalty.svg');
 const ICON_MISSED_PENALTY = require('../../assets/images/match-events/legend-missed-penalty.svg');
 const ICON_CORNER = require('../../assets/images/match-events/legend-corner.svg');
-const ICON_VAR = require('../../assets/images/match-events/legend-var.svg');
 const ICON_ASSIST = require('../../assets/images/match-events/legend-assist.svg');
 const ICON_SUB = require('../../assets/images/match-events/legend-sub.svg');
 const ICON_INJURY_SUB = require('../../assets/images/match-events/legend-injury-sub.svg');
@@ -136,7 +136,11 @@ export function MatchEventsLegend({ language, labels }: Props) {
         rtl={rtl}
         color={ink}
         label={labels.var}
-        icon={<LegendIcon source={ICON_VAR} width={12.3333} height={11.6667} />}
+        icon={
+          <View style={styles.iconSlot}>
+            <VarMonitorIcon width={22} />
+          </View>
+        }
       />
     </View>
   );

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from './MatchText';
 import { Ionicons } from '@expo/vector-icons';
+import { VarMonitorIcon } from './VarMonitorIcon';
 
 interface MatchEventIconProps {
   type: string;
@@ -68,7 +69,7 @@ export const MatchEventIcon: React.FC<MatchEventIconProps> = ({ type, detail, si
   }
 
   if (type === 'Var') {
-    return <Ionicons name="tv-outline" size={size} color={color} />;
+    return <VarMonitorIcon width={Math.max(18, size + 4)} />;
   }
 
   if (/corner/i.test(type) || /corner/i.test(detail)) {

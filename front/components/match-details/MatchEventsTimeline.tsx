@@ -12,6 +12,7 @@ import { buildGoalClipPlaybackCandidates } from '../../utils/goalClipPlaybackCan
 import { isHomeSideEvent } from '../../utils/matchEventSide';
 import type { Language } from '../../src/i18n/types';
 import { useMatchDetailsTheme } from '../../hooks/useMatchDetailsTheme';
+import { VarMonitorIcon } from './VarMonitorIcon';
 
 const SWAP_ICON = require('../../assets/images/match-events/swap.svg');
 const SUB_IN_ICON = require('../../assets/images/match-events/sub-in.svg');
@@ -21,7 +22,6 @@ const OWN_GOAL_BALL = require('../../assets/images/match-events/legend-own-goal.
 const PENALTY_BALL = require('../../assets/images/match-events/legend-penalty.svg');
 const MISSED_PENALTY_BALL = require('../../assets/images/match-events/legend-missed-penalty.svg');
 const CORNER_ICON = require('../../assets/images/match-events/legend-corner.svg');
-const VAR_ICON = require('../../assets/images/match-events/legend-var.svg');
 const INJURY_SUB_ICON = require('../../assets/images/match-events/legend-injury-sub.svg');
 const GOAL_PLAY = require('../../assets/images/match-events/goal-play.svg');
 const HALFTIME_WHISTLE = require('../../assets/images/match-events/halftime-whistle.svg');
@@ -114,11 +114,7 @@ function EventGlyph({ event }: { event: FixtureEvent }) {
     );
   }
   if (event.type === 'Var') {
-    return (
-      <View style={styles.icon16}>
-        <ExpoImage source={VAR_ICON} style={{ width: 12.3333, height: 11.6667 }} contentFit="contain" />
-      </View>
-    );
+    return <VarMonitorIcon width={22} />;
   }
   if (/corner/i.test(event.type) || /corner/i.test(event.detail || '')) {
     return <ExpoImage source={CORNER_ICON} style={styles.icon16} contentFit="contain" />;
