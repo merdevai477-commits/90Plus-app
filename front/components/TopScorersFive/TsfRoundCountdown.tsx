@@ -71,23 +71,23 @@ export function TsfRoundCountdown({
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;
 
   if (compact) {
-    const digitSize = Math.round(18 * scale);
-    const labelSize = Math.round(9 * scale);
-    const colonSize = Math.round(16 * scale);
-    const crestW = Math.round(20 * scale);
-    const crestH = Math.round(24 * scale);
-    const leagueSize = Math.round(11 * scale);
-    const unitMin = Math.round(32 * scale);
+    const digitSize = Math.round(17 * scale);
+    const labelSize = Math.round(8 * scale);
+    const colonSize = Math.round(15 * scale);
+    const crestW = Math.round(18 * scale);
+    const crestH = Math.round(22 * scale);
+    const leagueSize = Math.round(12 * scale);
+    const unitMin = Math.round(28 * scale);
     return (
       <LinearGradient
         colors={[...GRADIENT]}
         locations={[0, 0.48, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
-        style={[styles.slim, { minHeight: Math.round(52 * scale), borderRadius: Math.round(16 * scale) }]}
+        style={[styles.slim, { minHeight: Math.round(56 * scale), borderRadius: Math.round(16 * scale) }]}
         testID="tsf-round-countdown-slim"
       >
-        <View style={[styles.slimMeta, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+        <View style={styles.slimMeta}>
           <Image
             source={crest}
             style={[
@@ -98,8 +98,18 @@ export function TsfRoundCountdown({
             resizeMode="contain"
           />
           <Text
-            style={[styles.slimLeague, { fontFamily: fontSemi, fontSize: leagueSize }]}
-            numberOfLines={1}
+            style={[
+              styles.slimLeague,
+              {
+                fontFamily: fontSemi,
+                fontSize: leagueSize,
+                textAlign: isAr ? 'right' : 'left',
+                writingDirection: isAr ? 'rtl' : 'ltr',
+              },
+            ]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
           >
             {leagueName}
           </Text>
@@ -143,7 +153,12 @@ export function TsfRoundCountdown({
           <View style={styles.badgeSpacer} />
         )}
         <View style={[styles.leagueWrap, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-          <Text style={[styles.league, { fontFamily: fontBold }]} numberOfLines={1}>
+          <Text
+            style={[styles.league, { fontFamily: fontBold, textAlign: isAr ? 'right' : 'left' }]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             {leagueName}
           </Text>
           <Image
@@ -236,28 +251,38 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   slimMeta: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    maxWidth: '30%',
+    gap: 6,
+    flexGrow: 1,
     flexShrink: 1,
+    flexBasis: '42%',
+    maxWidth: '46%',
     minWidth: 0,
   },
   slimCrest: {
-    width: 20,
-    height: 24,
+    width: 18,
+    height: 22,
+    flexShrink: 0,
   },
   slimLeague: {
-    color: '#F9F6FE',
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
     flexShrink: 1,
+    minWidth: 0,
+    lineHeight: 16,
   },
   slimUnits: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '54%',
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'space-evenly',
-    gap: 2,
+    gap: 1,
     minWidth: 0,
   },
   slimUnitSlot: {
@@ -266,23 +291,23 @@ const styles = StyleSheet.create({
   },
   slimUnit: {
     alignItems: 'center',
-    minWidth: 32,
+    minWidth: 28,
   },
   slimDigit: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 17,
     includeFontPadding: false,
     fontVariant: ['tabular-nums'],
   },
   slimLabel: {
     color: 'rgba(255,255,255,0.88)',
-    fontSize: 9,
+    fontSize: 8,
     marginTop: 1,
   },
   slimColon: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-    marginHorizontal: 1,
+    fontSize: 15,
+    marginHorizontal: 0,
     marginBottom: 10,
   },
   card: {
