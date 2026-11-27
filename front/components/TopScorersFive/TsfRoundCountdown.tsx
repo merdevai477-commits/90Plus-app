@@ -44,7 +44,7 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
   if (!targetAt || remainingMs <= 0) return null;
 
   const parts = splitCountdown(remainingMs);
-  // Figma LTR DOM order is ثوان → دقائق → ساعات → أيام; RTL row puts Days on the right.
+  // Forced LTR track: ثوان → دقائق → ساعات → أيام (Days on the right, like Figma).
   const units = [
     { value: parts.seconds, label: copy.seconds },
     { value: parts.minutes, label: copy.minutes },
@@ -63,7 +63,6 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
       style={styles.card}
       testID="tsf-round-countdown"
     >
-      {/* Figma: badge (left) · league name · crest (right) */}
       <View style={[styles.head, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
         {roundLabel ? (
           <View style={styles.badge}>
@@ -93,8 +92,7 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
         </View>
       </View>
 
-      {/* Figma DOM: ثوان → دقائق → ساعات → أيام so Days sits on the right */}
-      <View style={styles.units}>
+      <View style={styles.units} accessibilityRole="timer">
         {units.map((unit, index) => (
           <View key={unit.label} style={styles.unitSlot}>
             {index > 0 ? (
@@ -125,7 +123,6 @@ export function resolveTsfCountdownTarget(input: {
 }): string | null {
   const now = input.nowMs ?? Date.now();
 
-  // Per-player 7-day lock wins — show from the moment that player is picked.
   if (input.lockedUntil) {
     const lockMs = new Date(input.lockedUntil).getTime();
     if (Number.isFinite(lockMs) && lockMs > now) return input.lockedUntil;
@@ -137,7 +134,6 @@ export function resolveTsfCountdownTarget(input: {
   const reopenMs = reopenIso ? new Date(reopenIso).getTime() : NaN;
   const endMs = input.endAt ? new Date(input.endAt).getTime() : NaN;
 
-  // After the user starts a lineup, always count down to unlock / round reopen.
   if (input.hasPicks || input.leagueLocked) {
     if (Number.isFinite(endMs) && endMs > now) return input.endAt;
     if (Number.isFinite(reopenMs) && reopenMs > now) return reopenIso;
@@ -146,7 +142,6 @@ export function resolveTsfCountdownTarget(input: {
 
   if (!Number.isFinite(reopenMs) || reopenMs <= now) return null;
   if (!Number.isFinite(endMs)) return null;
-  // Empty pitch: only hint in the last hour before the round closes.
   if (now < endMs - 3_600_000) return null;
   return reopenIso;
 }
@@ -154,6 +149,8 @@ export function resolveTsfCountdownTarget(input: {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
@@ -230,7 +227,9 @@ const styles = StyleSheet.create({
     tintColor: '#FFFFFF',
   },
   units: {
+    // Keep LTR so RTL apps don't flip Days to the left.
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -272,7 +271,6 @@ const styles = StyleSheet.create({
   colon: {
     width: 8,
     height: 28,
-    marginHorizontal: 0,
     marginBottom: 18,
     tintColor: '#FFFFFF',
   },
