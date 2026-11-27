@@ -34,9 +34,9 @@ const MAX_STEPS = 3;
 /** Tool-selection turn only needs enough room for one call, not an essay. */
 const AGENT_STREAM_MAX_TOKENS = 360;
 /** Finish full player/club briefs + tables without cutting mid-reply. */
-const AGENT_FINAL_MAX_TOKENS = 1400;
+const AGENT_FINAL_MAX_TOKENS = 2200;
 /** Legend bios (career + titles table) need headroom past the default final cap. */
-const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 1800;
+const AGENT_ENCYCLOPEDIA_MAX_TOKENS = 2600;
 const AGENT_TOOL_TEMPERATURE = 0.15;
 const AGENT_ANSWER_TEMPERATURE = 0.35;
 
@@ -60,8 +60,8 @@ async function createAgentCompletion(
   } catch (err) {
     if (!isCreditBudgetError(err)) throw err;
     const current = Number(body.max_tokens ?? AGENT_STREAM_MAX_TOKENS);
-    // Credit-budget fallback: shrink, but keep enough room to finish a short table.
-    const reduced = Math.max(400, Math.min(current, 900));
+    // Credit-budget fallback: shrink, but keep enough room to finish a club/player reply.
+    const reduced = Math.max(700, Math.min(current, Math.floor(current * 0.75)));
     if (reduced >= current) throw err;
     logger.warn(
       `[chat-agent] OpenRouter credit budget hit — retrying with max_tokens=${reduced}`,
@@ -454,28 +454,63 @@ async function streamFinalAnswer(
   onToken: (token: string) => void,
   signal?: AbortSignal,
   maxTokens: number = AGENT_FINAL_MAX_TOKENS,
+  language: MessageLanguage = 'ar',
 ): Promise<string> {
   // Without tools + tool_choice 'none', Qwen keeps emitting tool calls here
   // (finish=tool_calls, empty content) and every step comes back blank.
-  const stream = (await createAgentCompletion(client, {
-    model,
-    messages,
-    tools: AGENT_TOOLS,
-    tool_choice: 'none',
-    temperature: AGENT_ANSWER_TEMPERATURE,
-    max_tokens: maxTokens,
-    stream: true,
-    reasoning: { effort: 'none' },
-  })) as AsyncIterable<{
-    choices: Array<{ delta?: { content?: string | null } }>;
-  }>;
-  let full = '';
-  for await (const chunk of stream) {
-    if (signal?.aborted) break;
-    const token = chunk.choices[0]?.delta?.content ?? '';
-    if (!token) continue;
-    full += token;
-    onToken(token);
+  const runOnce = async (
+    msgs: ChatCompletionMessageParam[],
+    budget: number,
+  ): Promise<{ text: string; finishReason: string | null }> => {
+    const stream = (await createAgentCompletion(client, {
+      model,
+      messages: msgs,
+      tools: AGENT_TOOLS,
+      tool_choice: 'none',
+      temperature: AGENT_ANSWER_TEMPERATURE,
+      max_tokens: budget,
+      stream: true,
+      reasoning: { effort: 'none' },
+    })) as AsyncIterable<{
+      choices: Array<{
+        finish_reason?: string | null;
+        delta?: { content?: string | null };
+      }>;
+    }>;
+    let text = '';
+    let finishReason: string | null = null;
+    for await (const chunk of stream) {
+      if (signal?.aborted) break;
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+      const token = choice.delta?.content ?? '';
+      if (!token) continue;
+      text += token;
+      onToken(token);
+    }
+    return { text, finishReason };
+  };
+
+  const first = await runOnce(messages, maxTokens);
+  let full = first.text;
+  if (first.finishReason === 'length' && full.trim() && !signal?.aborted) {
+    logger.warn(
+      `[chat-agent] final finish_reason=length chars=${full.length} — continuing once`,
+    );
+    const contMsgs: ChatCompletionMessageParam[] = [
+      ...messages,
+      { role: 'assistant', content: full },
+      {
+        role: 'user',
+        content:
+          language === 'en'
+            ? 'Continue the answer from where you stopped. Do not repeat what you already wrote.'
+            : 'كمّل الرد من حيث وقفت بالظبط، من غير ما تكرّر اللي اتكتب.',
+      },
+    ];
+    const cont = await runOnce(contMsgs, maxTokens);
+    if (cont.text) full += cont.text;
   }
   return full.trim();
 }
@@ -967,6 +1002,7 @@ export async function runFootballAgent(
           params.onToken,
           params.signal,
           finalTokenBudget(lastToolPayloads),
+          params.language,
         );
         logger.info(
           `[chat-agent] prefetch+stream total=${Date.now() - startedAt}ms chars=${fullText.length}`,
@@ -1004,16 +1040,20 @@ export async function runFootballAgent(
       }>;
     }>;
 
+    // Tool-picking turns stay small; free-form answers need the final budget so
+    // Arabic club/player replies don't die mid-word on finish_reason=length.
+    const forceTools = step === 0 && shouldRequireTools(userMessage);
+    const stepMaxTokens = forceTools ? AGENT_STREAM_MAX_TOKENS : finalTokenBudget(lastToolPayloads);
+
     try {
       stream = (await createAgentCompletion(client, {
         model,
         messages,
         tools: AGENT_TOOLS,
         parallel_tool_calls: false,
-        tool_choice:
-          step === 0 && shouldRequireTools(userMessage) ? 'required' : 'auto',
-        temperature: AGENT_TOOL_TEMPERATURE,
-        max_tokens: AGENT_STREAM_MAX_TOKENS,
+        tool_choice: forceTools ? 'required' : 'auto',
+        temperature: forceTools ? AGENT_TOOL_TEMPERATURE : AGENT_ANSWER_TEMPERATURE,
+        max_tokens: stepMaxTokens,
         stream: true,
         reasoning: { effort: 'none' },
       })) as unknown as typeof stream;
@@ -1078,8 +1118,8 @@ export async function runFootballAgent(
           };
         }),
       );
-          lastToolPayloads = results.map((r) => r.content);
-          allToolPayloads.push(...lastToolPayloads);
+      lastToolPayloads = results.map((r) => r.content);
+      allToolPayloads.push(...lastToolPayloads);
       messages.push(...results);
 
       // ─── Strict grounding ────────────────────────────────────────────────
@@ -1104,38 +1144,67 @@ export async function runFootballAgent(
         return finish(fullText);
       }
 
-      // After tools: stream the final answer so the user sees tokens immediately.
-      if (step < MAX_STEPS - 1) {
+      // Always stream the user-facing answer with the full budget — including
+      // the last step. Skipping this left finish_reason=length stubs mid-word.
+      try {
+        const answer = await streamFinalAnswer(
+          client,
+          model,
+          messages,
+          params.onToken,
+          params.signal,
+          finalTokenBudget(lastToolPayloads),
+          params.language,
+        );
+        if (answer) {
+          fullText = answer;
+          logger.info(`[chat-agent] streamed final ${Date.now() - startedAt}ms`);
+          return finish(fullText);
+        }
+        logger.warn('[chat-agent] streamed final answer empty — retrying loop');
+      } catch (err) {
+        logger.warn(
+          '[chat-agent] streamed final failed, continuing loop:',
+          (err as Error)?.message ?? err,
+        );
+      }
+      continue;
+    }
+
+    // Model answered without tools (already streamed via onToken).
+    if (stepContent) {
+      if (!fullText) fullText = stepContent;
+
+      // Hit the token wall mid-sentence — one continuation with the full budget.
+      if (finishReason === 'length') {
+        logger.warn(
+          `[chat-agent] finish_reason=length step=${step} chars=${fullText.length} — continuing`,
+        );
+        messages.push({ role: 'assistant', content: stepContent });
+        messages.push({
+          role: 'user',
+          content:
+            params.language === 'en'
+              ? 'Continue the answer from where you stopped. Do not repeat what you already wrote.'
+              : 'كمّل الرد من حيث وقفت بالظبط، من غير ما تكرّر اللي اتكتب.',
+        });
         try {
-          const answer = await streamFinalAnswer(
+          const cont = await streamFinalAnswer(
             client,
             model,
             messages,
             params.onToken,
             params.signal,
             finalTokenBudget(lastToolPayloads),
+            params.language,
           );
-          if (answer) {
-            fullText = answer;
-            logger.info(`[chat-agent] streamed final ${Date.now() - startedAt}ms`);
-            return finish(fullText);
-          }
-          logger.warn('[chat-agent] streamed final answer empty — retrying loop');
+          if (cont) fullText = `${fullText}${cont}`;
         } catch (err) {
           logger.warn(
-            '[chat-agent] streamed final failed, continuing loop:',
+            '[chat-agent] length-continuation failed:',
             (err as Error)?.message ?? err,
           );
         }
-      }
-      continue;
-    }
-
-    // Final answer turn already streamed via onToken
-    if (stepContent) {
-      if (!fullText) {
-        fullText = stepContent;
-        params.onToken(stepContent);
       }
       return finish(fullText);
     }

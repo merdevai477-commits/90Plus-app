@@ -692,8 +692,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   const finalizeStreamingMessage = useCallback((id: string) => {
     const typed = takeChatStream(id);
+    // Network buffer is the source of truth — never keep a mid-sentence stub
+    // just because the typing queue was cleared early (common on iOS disconnect).
+    const full =
+      partialTextRef.current.trim().length >= typed.trim().length
+        ? partialTextRef.current
+        : typed;
+    const text = full || typed || '';
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, text: typed || m.text, isStreaming: false } : m)),
+      prev.map((m) => (m.id === id ? { ...m, text: text || m.text, isStreaming: false } : m)),
     );
   }, []);
 
@@ -833,21 +840,27 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   /**
    * Hard-stop the typing renderer (used by stopGeneration / clearChat /
-   * conversation switch / retry). Keeps whatever's already on screen,
-   * drops the unrendered queue, and resets all pipeline refs.
+   * conversation switch / retry). Commits the full network buffer first so
+   * unrendered queue tokens are not lost as a truncated bubble.
    */
   const stopTypingPipeline = useCallback(() => {
     if (typingTimerRef.current) {
       clearInterval(typingTimerRef.current);
       typingTimerRef.current = null;
     }
-    rawStreamBufferRef.current = '';
+    // Flush any tokens still waiting in the typing queue into the stream buffer
+    // before we finalize — otherwise iOS abort/timeout looks like a cut reply.
+    const queued = visibleTypingQueueRef.current.join('');
+    const id = activeAssistantMessageIdRef.current;
+    if (id && queued) {
+      appendChatStream(id, queued);
+    }
     visibleTypingQueueRef.current = [];
+    rawStreamBufferRef.current = '';
     networkDoneRef.current = false;
     pendingDoneCallbackRef.current = null;
     paintedThinkingRef.current = false;
 
-    const id = activeAssistantMessageIdRef.current;
     if (id) finalizeStreamingMessage(id);
     activeAssistantMessageIdRef.current = null;
   }, [finalizeStreamingMessage]);
@@ -1133,8 +1146,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       xhr.onerror = handleDisconnect;
       xhr.ontimeout = handleDisconnect;
       // Agent tool loops (search + hydrate + final LLM) can exceed 60s on cold paths.
-      // Timing out mid-reply looked like a truncated answer; give the stream room.
-      xhr.timeout = 120_000;
+      // Timing out mid-reply looked like a truncated answer; give iOS more room.
+      xhr.timeout = 180_000;
       try {
         xhr.send(body);
       } catch {
