@@ -8,7 +8,7 @@
 
 
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, Linking, StatusBar, View } from 'react-native';
 
@@ -233,6 +233,7 @@ function ChatScreenInner() {
     hasMessages: screen.hasMessages,
     // FlashList renders `screen.displayMessages` (= messages.slice(1)).
     messageCount: screen.displayMessages.length,
+    isNearBottomRef: screen.isNearBottomRef,
 
   });
 
@@ -288,7 +289,20 @@ function ChatScreenInner() {
 
   const composerOverlap = composerHeight + keyboard.composerKeyboardLift;
 
-  const listBottomInset = chatSpacing.listBottom + composerOverlap;
+  // Extra breathing room above the floating composer while the keyboard is open
+  // so the last reply isn't clipped under the dock / keyboard edge.
+  const listBottomInset =
+    chatSpacing.listBottom +
+    composerOverlap +
+    (keyboard.keyboardVisible ? 12 : 0);
+
+  // After each keyboard show/hide layout pass, re-stick the thread so the last
+  // answered message stays above the keyboard.
+  useEffect(() => {
+    if (!keyboard.keyboardVisible || !screen.hasMessages) return;
+    screen.isNearBottomRef.current = true;
+    keyboard.scrollToEnd(false);
+  }, [keyboard.layoutEpoch, keyboard.keyboardVisible, keyboard.scrollToEnd, screen.hasMessages, screen.isNearBottomRef]);
 
 
 

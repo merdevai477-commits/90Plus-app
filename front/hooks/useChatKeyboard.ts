@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
 import type { FlashListRef } from '@shopify/flash-list';
 
@@ -12,10 +12,15 @@ const KEYBOARD_OPEN_GAP = Platform.OS === 'android' ? 0 : 5;
  */
 const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios';
 
+/** Retries after show/focus — window resize + FlashList layout settle at different times. */
+const SCROLL_RETRY_MS = Platform.OS === 'android' ? [0, 48, 120, 220, 360] : [0, 64, 160];
+
 type UseChatKeyboardParams<TItem> = {
   listRef: RefObject<FlashListRef<TItem> | null>;
   hasMessages: boolean;
   messageCount: number;
+  /** When the keyboard opens we pin the thread so the last reply stays above it. */
+  isNearBottomRef?: MutableRefObject<boolean>;
 };
 
 /** Only trust event coordinates — metrics() on Android focus is often stale/too large. */
@@ -33,6 +38,7 @@ export function useChatKeyboard<TItem>({
   listRef,
   hasMessages,
   messageCount,
+  isNearBottomRef,
 }: UseChatKeyboardParams<TItem>) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -43,6 +49,10 @@ export function useChatKeyboard<TItem>({
   const scrollRafRef = useRef<number[]>([]);
   const mountedRef = useRef(true);
   const keyboardVisibleRef = useRef(false);
+  const messageCountRef = useRef(messageCount);
+  messageCountRef.current = messageCount;
+  const hasMessagesRef = useRef(hasMessages);
+  hasMessagesRef.current = hasMessages;
   const useExpoKeyboardPath = !isKeyboardControllerActive;
   const useKeyboardAvoiding = false;
   const useNativeKeyboardScroll = isKeyboardControllerActive;
@@ -59,30 +69,51 @@ export function useChatKeyboard<TItem>({
     scrollRafRef.current = [];
   }, []);
 
+  const pinToBottom = useCallback(() => {
+    if (isNearBottomRef) isNearBottomRef.current = true;
+  }, [isNearBottomRef]);
+
   const scrollToEnd = useCallback(
     (animated = true) => {
-      if (!hasMessages || !mountedRef.current) return;
+      if (!hasMessagesRef.current || !mountedRef.current) return;
+      pinToBottom();
       const run = () => {
-        if (!mountedRef.current) return;
-        safeFlashListScrollToEnd(listRef.current, animated, { itemCount: messageCount });
+        if (!mountedRef.current || !hasMessagesRef.current) return;
+        safeFlashListScrollToEnd(listRef.current, animated, {
+          itemCount: messageCountRef.current,
+        });
       };
       const outer = requestAnimationFrame(() => {
         const inner = requestAnimationFrame(run);
         scrollRafRef.current.push(inner);
       });
       scrollRafRef.current.push(outer);
-      if (Platform.OS === 'android') {
-        if (!isKeyboardControllerActive) {
-          scrollTimersRef.current.push(setTimeout(run, 160));
-        }
-        return;
-      }
     },
-    [hasMessages, listRef, messageCount],
+    [listRef, pinToBottom],
   );
 
   const scrollToEndRef = useRef(scrollToEnd);
   scrollToEndRef.current = scrollToEnd;
+
+  /** Keep the last reply visible above the keyboard while layout is still settling. */
+  const scheduleScrollToEnd = useCallback(
+    (animated = false) => {
+      clearScrollTimers();
+      pinToBottom();
+      for (const ms of SCROLL_RETRY_MS) {
+        if (ms === 0) {
+          scrollToEndRef.current(animated);
+          continue;
+        }
+        scrollTimersRef.current.push(
+          setTimeout(() => {
+            scrollToEndRef.current(false);
+          }, ms),
+        );
+      }
+    },
+    [clearScrollTimers, pinToBottom],
+  );
 
   const setHeightIfValid = useCallback((h: number) => {
     if (h <= 0) return;
@@ -93,30 +124,27 @@ export function useChatKeyboard<TItem>({
     (e?: KeyboardEvent) => {
       keyboardVisibleRef.current = true;
       setKeyboardVisible(true);
-      if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
-        setLayoutEpoch((n) => n + 1);
-      }
+      setLayoutEpoch((n) => n + 1);
       const fromEvent = heightFromEvent(e);
       if (fromEvent > 0) {
         setHeightIfValid(fromEvent);
       }
-      if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
-        scrollToEndRef.current(false);
-      }
+      // Always re-pin the last message above the keyboard — including Android with
+      // KeyboardController. Native lift alone still leaves long replies clipped.
+      scheduleScrollToEnd(false);
     },
-    [setHeightIfValid],
+    [scheduleScrollToEnd, setHeightIfValid],
   );
 
   const applyKeyboardClose = useCallback(() => {
     if (!keyboardVisibleRef.current) return;
     clearSyncTimers();
+    clearScrollTimers();
     keyboardVisibleRef.current = false;
     setKeyboardVisible(false);
     setKeyboardHeight(0);
-    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
-      setLayoutEpoch((n) => n + 1);
-    }
-  }, [clearSyncTimers]);
+    setLayoutEpoch((n) => n + 1);
+  }, [clearScrollTimers, clearSyncTimers]);
 
   const applyKeyboardOpenRef = useRef(applyKeyboardOpen);
   const applyKeyboardCloseRef = useRef(applyKeyboardClose);
@@ -162,8 +190,9 @@ export function useChatKeyboard<TItem>({
     return () => {
       subs.forEach((s) => s.remove());
       clearSyncTimers();
+      clearScrollTimers();
     };
-  }, [clearSyncTimers]);
+  }, [clearScrollTimers, clearSyncTimers]);
 
   const onInputFocus = useCallback(() => {
     // Apply composer padding immediately on focus so Android pan + padding stay
@@ -171,16 +200,12 @@ export function useChatKeyboard<TItem>({
     // set keyboardHeight on Android — lift is iOS-only.
     keyboardVisibleRef.current = true;
     setKeyboardVisible(true);
-    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
-      setLayoutEpoch((n) => n + 1);
-    }
+    setLayoutEpoch((n) => n + 1);
     if (Platform.OS === 'ios') {
       scheduleHeightSync();
     }
-    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
-      scrollToEndRef.current(true);
-    }
-  }, [scheduleHeightSync]);
+    scheduleScrollToEnd(true);
+  }, [scheduleHeightSync, scheduleScrollToEnd]);
 
   const syncKeyboardHeight = useCallback(() => {
     if (!USE_MANUAL_COMPOSER_LIFT) return;

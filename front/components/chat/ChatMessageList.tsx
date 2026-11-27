@@ -189,10 +189,14 @@ export function ChatMessageList({
 
   const onListLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
     const next = e.nativeEvent.layout.height;
-    if (next <= 0 || next === viewportHeightRef.current) return;
+    if (next <= 0) return;
+    const shrunk = viewportHeightRef.current > 0 && next < viewportHeightRef.current - 8;
+    if (next === viewportHeightRef.current) return;
     viewportHeightRef.current = next;
+    // Keyboard resize shrinks the list — keep the last reply pinned above it.
+    if (shrunk) isNearBottomRef.current = true;
     scheduleStickToBottom();
-  }, [scheduleStickToBottom]);
+  }, [isNearBottomRef, scheduleStickToBottom]);
 
   const onListContentSizeChange = useCallback((_w: number, h: number) => {
     pendingContentHeightRef.current = h;
