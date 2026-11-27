@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTranslation } from '../../src/i18n';
@@ -13,6 +13,11 @@ import { splitCountdown } from '../ShareWin/data';
 import { SW_ASSET } from '../ShareWin/assets';
 
 const GRADIENT = ['#9533F4', '#6A2BD9', '#4B1FA3'] as const;
+const SLIM_BASE_WIDTH = 390;
+
+function slimScale(width: number): number {
+  return Math.min(1.18, Math.max(0.86, width / SLIM_BASE_WIDTH));
+}
 
 type Props = {
   leagueName: string;
@@ -37,6 +42,8 @@ export function TsfRoundCountdown({
   const isAr = language === 'ar';
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
+  const { width: windowWidth } = useWindowDimensions();
+  const scale = slimScale(windowWidth);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -64,37 +71,52 @@ export function TsfRoundCountdown({
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;
 
   if (compact) {
+    const digitSize = Math.round(18 * scale);
+    const labelSize = Math.round(9 * scale);
+    const colonSize = Math.round(16 * scale);
+    const crestW = Math.round(20 * scale);
+    const crestH = Math.round(24 * scale);
+    const leagueSize = Math.round(11 * scale);
+    const unitMin = Math.round(32 * scale);
     return (
       <LinearGradient
         colors={[...GRADIENT]}
         locations={[0, 0.48, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
-        style={styles.slim}
+        style={[styles.slim, { minHeight: Math.round(52 * scale), borderRadius: Math.round(16 * scale) }]}
         testID="tsf-round-countdown-slim"
       >
         <View style={[styles.slimMeta, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
           <Image
             source={crest}
-            style={[styles.slimCrest, tintCrest ? { tintColor: '#FFFFFF' } : null]}
+            style={[
+              styles.slimCrest,
+              { width: crestW, height: crestH },
+              tintCrest ? { tintColor: '#FFFFFF' } : null,
+            ]}
             resizeMode="contain"
           />
-          <Text style={[styles.slimLeague, { fontFamily: fontSemi }]} numberOfLines={1}>
+          <Text
+            style={[styles.slimLeague, { fontFamily: fontSemi, fontSize: leagueSize }]}
+            numberOfLines={1}
+          >
             {leagueName}
           </Text>
-          {roundLabel ? (
-            <Text style={[styles.slimRound, { fontFamily: fontSemi }]} numberOfLines={1}>
-              {roundLabel}
-            </Text>
-          ) : null}
         </View>
         <View style={styles.slimUnits} accessibilityRole="timer">
           {units.map((unit, index) => (
             <View key={unit.label} style={styles.slimUnitSlot}>
-              {index > 0 ? <Text style={[styles.slimColon, { fontFamily: fontBold }]}>:</Text> : null}
-              <View style={styles.slimUnit}>
-                <Text style={[styles.slimDigit, { fontFamily: fontBold }]}>{unit.value}</Text>
-                <Text style={[styles.slimLabel, { fontFamily: fontSemi }]}>{unit.label}</Text>
+              {index > 0 ? (
+                <Text style={[styles.slimColon, { fontFamily: fontBold, fontSize: colonSize }]}>:</Text>
+              ) : null}
+              <View style={[styles.slimUnit, { minWidth: unitMin }]}>
+                <Text style={[styles.slimDigit, { fontFamily: fontBold, fontSize: digitSize }]}>
+                  {unit.value}
+                </Text>
+                <Text style={[styles.slimLabel, { fontFamily: fontSemi, fontSize: labelSize }]}>
+                  {unit.label}
+                </Text>
               </View>
             </View>
           ))}
@@ -198,15 +220,15 @@ export function resolveTsfCountdownTarget(input: {
 const styles = StyleSheet.create({
   slim: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     shadowColor: '#2A1060',
     shadowOpacity: 0.18,
     shadowRadius: 8,
@@ -215,30 +237,28 @@ const styles = StyleSheet.create({
   },
   slimMeta: {
     alignItems: 'center',
-    gap: 4,
-    maxWidth: '34%',
+    gap: 5,
+    maxWidth: '30%',
     flexShrink: 1,
+    minWidth: 0,
   },
   slimCrest: {
-    width: 18,
-    height: 22,
+    width: 20,
+    height: 24,
   },
   slimLeague: {
     color: '#F9F6FE',
-    fontSize: 10,
+    fontSize: 11,
     flexShrink: 1,
-  },
-  slimRound: {
-    color: 'rgba(249,246,254,0.82)',
-    fontSize: 9,
   },
   slimUnits: {
     flex: 1,
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-evenly',
     gap: 2,
+    minWidth: 0,
   },
   slimUnitSlot: {
     flexDirection: 'row',
@@ -246,24 +266,24 @@ const styles = StyleSheet.create({
   },
   slimUnit: {
     alignItems: 'center',
-    minWidth: 28,
+    minWidth: 32,
   },
   slimDigit: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 18,
     includeFontPadding: false,
     fontVariant: ['tabular-nums'],
   },
   slimLabel: {
     color: 'rgba(255,255,255,0.88)',
-    fontSize: 8,
+    fontSize: 9,
     marginTop: 1,
   },
   slimColon: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
+    fontSize: 16,
     marginHorizontal: 1,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   card: {
     marginHorizontal: 16,
