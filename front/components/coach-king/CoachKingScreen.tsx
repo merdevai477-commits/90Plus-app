@@ -373,26 +373,11 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          {closed || shown.squad.lockedUntil || shown.gameweek.showTimer ? (
-            <CoachKingDeadline
-              startAt={shown.gameweek.startAt}
-              endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
-              locked={closed || !!shown.squad.lockedUntil}
-            />
-          ) : (
-            <Text
-              style={[
-                styles.tip,
-                {
-                  fontFamily: fontMed,
-                  color: theme.muted,
-                  textAlign: isAr ? 'right' : 'left',
-                },
-              ]}
-            >
-              {copy.deadline.tipOpen}
-            </Text>
-          )}
+          <CoachKingDeadline
+            startAt={shown.gameweek.startAt}
+            endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
+            locked={closed || !!shown.squad.lockedUntil}
+          />
           {shown.squad.dirty && !closed ? (
             <Text
               onPress={() => {
@@ -557,13 +542,6 @@ const styles = StyleSheet.create({
   metaRow: { alignItems: 'center', columnGap: 5, marginTop: 4 },
   meta: { fontSize: 12 },
   metaDot: { width: 3, height: 3, borderRadius: 2 },
-  tip: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 10,
-  },
   tipAction: {
     fontSize: 13,
     lineHeight: 18,
