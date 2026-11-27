@@ -1341,6 +1341,51 @@ export class ReelsService {
     }
 
     /**
+     * Users who liked a reel (paginated, newest first).
+     */
+    static async getReelLikes(
+        token: string,
+        reelId: string,
+        limit: number = 30,
+        cursor?: string | null,
+    ): Promise<{
+        items: Array<{
+            id: string;
+            username: string;
+            displayName: string | null;
+            avatar: string | null;
+            isVerified?: boolean;
+        }>;
+        nextCursor: string | null;
+        error?: string;
+    }> {
+        try {
+            const cursorQuery = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+            const response = await fetch(
+                `${API_URL}/reels/${reelId}/likes?limit=${limit}${cursorQuery}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                },
+            );
+            const data = await response.json();
+            if (data.status === 'SUCCESS') {
+                return {
+                    items: Array.isArray(data.data?.items) ? data.data.items : [],
+                    nextCursor: data.data?.nextCursor ?? null,
+                };
+            }
+            return { items: [], nextCursor: null, error: data.message || 'Failed to load likes' };
+        } catch (error) {
+            console.error('Error loading reel likes:', error);
+            return { items: [], nextCursor: null, error: 'Network error' };
+        }
+    }
+
+    /**
      * Like a reel
      */
     static async likeReel(token: string, reelId: string): Promise<{ success: boolean; likesCount?: number }> {

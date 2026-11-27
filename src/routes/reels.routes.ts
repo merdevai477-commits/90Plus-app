@@ -743,6 +743,78 @@ router.post('/:id/view', requireAuth, async (req: Request, res: Response): Promi
 });
 
 /**
+ * GET /api/reels/:id/likes
+ * Paginated list of users who liked a reel (newest first).
+ */
+router.get('/:id/likes', requireAuth, lenientLimiter, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const idStr = ensureString(req.params.id);
+        const { limit = '30', cursor } = req.query;
+        const take = Math.min(Math.max(parseInt(limit as string, 10) || 30, 1), 50);
+
+        const reelExists = await prisma.reel.findUnique({
+            where: { id: idStr },
+            select: { id: true },
+        });
+        if (!reelExists) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Reel not found');
+            return;
+        }
+
+        const clerkUserId = req.auth?.userId;
+        const currentUser = clerkUserId
+            ? await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
+            : null;
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
+
+        const likes = await prisma.like.findMany({
+            where: {
+                reelId: idStr,
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            },
+            take: take + 1,
+            ...(cursor ? { cursor: { id: ensureString(cursor as string) }, skip: 1 } : {}),
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                createdAt: true,
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatar: true,
+                        isVerified: true,
+                    },
+                },
+            },
+        });
+
+        const hasMore = likes.length > take;
+        const page = hasMore ? likes.slice(0, take) : likes;
+        const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                items: page.map((row) => ({
+                    id: row.user.id,
+                    username: row.user.username,
+                    displayName: row.user.displayName,
+                    avatar: row.user.avatar,
+                    isVerified: row.user.isVerified,
+                    likedAt: row.createdAt,
+                })),
+                nextCursor,
+            },
+        });
+    } catch (error: any) {
+        logger.error('List reel likes error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load likes');
+    }
+});
+
+/**
  * POST /api/reels/:id/like
  * Like a reel
  */

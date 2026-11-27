@@ -53,6 +53,7 @@ import {
 import { toastManager } from '../../services/toastManager';
 import { SURFACE_MODAL, OVERLAY_SCRIM } from '../../constants/tokens';
 import { RichText } from '../community/RichText';
+import { ReelLikersSheet } from './ReelLikersSheet';
 import { getAppFont } from '../../utils/fontSetup';
 
 function splitCaption(caption: string): { title: string; body: string } {
@@ -158,6 +159,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [showEditModal, setShowEditModal] = useState(false);
     const [editCaption, setEditCaption] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
+    const [likersOpen, setLikersOpen] = useState(false);
 
     const { t, language } = useTranslation();
     const insets = useSafeAreaInsets();
@@ -606,7 +608,15 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 <TouchableOpacity
                     style={styles.actionButton}
                     onPress={handleLikePress}
+                    onLongPress={() => {
+                        haptics.mediumImpact();
+                        setLikersOpen(true);
+                    }}
+                    delayLongPress={280}
                     activeOpacity={0.75}
+                    accessibilityHint={
+                        language === 'en' ? 'Long press to see who liked' : 'اضغط مطوّل لتشوف مين عمل لايك'
+                    }
                 >
                     <Heart
                         size={27}
@@ -767,6 +777,16 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
+
+            <ReelLikersSheet
+                reelId={reel.id}
+                visible={likersOpen}
+                onClose={() => setLikersOpen(false)}
+                onProfile={(username) => {
+                    if (onMentionPress) onMentionPress(username);
+                    else onUserPress();
+                }}
+            />
         </RNAnimated.View>
     );
 };

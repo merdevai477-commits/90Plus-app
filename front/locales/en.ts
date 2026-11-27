@@ -3232,6 +3232,9 @@ export const en = {
     // States
     views: 'Views',
     likes: 'Likes',
+    likedBy: 'Likes',
+    noLikes: 'No likes yet',
+    loadMoreLikes: 'Load more',
     comments: 'Comments',
     shares: 'Shares',
 
