@@ -3,7 +3,7 @@
  * and may play one or all of them. Each slot locks for 7 days on its own.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -150,6 +150,7 @@ export default function LeagueBoardScreen() {
   const [lockText, setLockText] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [pitchBox, setPitchBox] = useState({ width: 0, height: 0 });
+  const [paneBox, setPaneBox] = useState({ width: 0, height: 0 });
   const listRef = useRef<FlatList<TsfCompetitionKey>>(null);
 
   const competition = TSF_COMPETITIONS[index] ?? 'egypt';
@@ -295,30 +296,43 @@ export default function LeagueBoardScreen() {
       });
       const tintCrest = isDark && (item === 'pl' || item === 'ligue1' || item === 'egypt');
       return (
-        <LeaguePitchPage
-          width={width}
-          pageHeight={pitchBox.height}
-          countdown={
-            countdownAt ? (
-              <TsfRoundCountdown
-                leagueName={leagueName(item)}
-                crest={CREST[item]}
-                tintCrest={tintCrest}
-                round={lineup?.gameweek.round ?? null}
-                targetAt={countdownAt}
-              />
-            ) : null
-          }
-          slots={slots}
-          fontSemi={fontSemi}
-          fontMedium={fontMedium}
-          onHelp={() => setHelpOpen(true)}
-          onOpen={openSlot}
-          onRemove={removeSlot}
-        />
+        <View
+          style={{
+            width,
+            height: pitchBox.height || undefined,
+            flex: pitchBox.height ? undefined : 1,
+          }}
+        >
+          {countdownAt ? (
+            <TsfRoundCountdown
+              leagueName={leagueName(item)}
+              crest={CREST[item]}
+              tintCrest={tintCrest}
+              round={lineup?.gameweek.round ?? null}
+              targetAt={countdownAt}
+            />
+          ) : null}
+          <View
+            style={styles.pitchPane}
+            onLayout={(event) => {
+              const { width: w, height: h } = event.nativeEvent.layout;
+              setPaneBox((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+            }}
+          >
+            <PitchFormation
+              slots={slots}
+              box={paneBox.width > 0 ? paneBox : pitchBox}
+              fontSemi={fontSemi}
+              fontMedium={fontMedium}
+              onHelp={() => setHelpOpen(true)}
+              onOpen={openSlot}
+              onRemove={removeSlot}
+            />
+          </View>
+        </View>
       );
     },
-    [fontMedium, fontSemi, insets.bottom, isDark, leagueName, lineups, openSlot, pitchBox, removeSlot, width],
+    [fontMedium, fontSemi, isDark, leagueName, lineups, openSlot, paneBox, pitchBox, removeSlot, width],
   );
 
   const filtered = useMemo(() => {
@@ -513,52 +527,6 @@ export default function LeagueBoardScreen() {
           </View>
         </Pressable>
       </Modal>
-    </View>
-  );
-}
-
-function LeaguePitchPage({
-  width,
-  pageHeight,
-  countdown,
-  slots,
-  fontSemi,
-  fontMedium,
-  onHelp,
-  onOpen,
-  onRemove,
-}: {
-  width: number;
-  pageHeight: number;
-  countdown: ReactNode;
-  slots: TsfApiLineup['slots'];
-  fontSemi: string | undefined;
-  fontMedium: string | undefined;
-  onHelp: () => void;
-  onOpen: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
-  onRemove: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
-}) {
-  const [pane, setPane] = useState({ width: 0, height: 0 });
-  return (
-    <View style={{ width, height: pageHeight || undefined, flex: pageHeight ? undefined : 1 }}>
-      {countdown}
-      <View
-        style={styles.pitchPane}
-        onLayout={(event) => {
-          const { width: w, height: h } = event.nativeEvent.layout;
-          setPane((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
-        }}
-      >
-        <PitchFormation
-          slots={slots}
-          box={pane}
-          fontSemi={fontSemi}
-          fontMedium={fontMedium}
-          onHelp={onHelp}
-          onOpen={onOpen}
-          onRemove={onRemove}
-        />
-      </View>
     </View>
   );
 }
