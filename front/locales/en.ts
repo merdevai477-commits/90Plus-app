@@ -4420,8 +4420,8 @@ export const en = {
     },
     deadline: {
       currentRound: 'Current round',
-      closesIn: 'Squad closes in',
-      opensIn: 'Picks open in',
+      closesIn: 'Squad renews in',
+      opensIn: 'Renewal in',
       days: 'Days',
       hours: 'Hours',
       minutes: 'Mins',

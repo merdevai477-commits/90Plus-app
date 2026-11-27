@@ -1,6 +1,6 @@
 /**
- * Squad selection countdown — same purple timer language as Top Scorers Five.
- * Always ticks toward close (while open) or unlock (while locked).
+ * Squad renewal countdown — purple timer bar (same language as Top Scorers Five).
+ * Compact mode sits in the floating top chrome next to the back button.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -28,7 +28,7 @@ type DeadlineProps = {
   endAt?: string | null;
   /** Server says this gameweek no longer accepts picks. */
   locked?: boolean;
-  /** Thin bar under the page header. */
+  /** Thin bar for the floating top chrome. */
   compact?: boolean;
 };
 
@@ -61,9 +61,8 @@ export function CoachKingDeadline({
   const parts = splitCkCountdown(remaining);
   const phase = locked ? 'closed' : 'open';
   const headline = phase === 'open' ? copy.closesIn : copy.opensIn;
-  const tip = phase === 'open' ? copy.tipOpen : copy.tipClosed;
 
-  // Forced LTR track: ثوان → دقائق → ساعات → أيام (Days on the right, like TSF).
+  // Forced LTR track: ثوان → دقائق → ساعات → أيام (Days on the right).
   const units = [
     { value: parts.seconds, label: copy.seconds },
     { value: parts.minutes, label: copy.minutes },
@@ -72,39 +71,36 @@ export function CoachKingDeadline({
   ];
 
   if (compact) {
-    const digitSize = Math.round(17 * scale);
+    const digitSize = Math.round(16 * scale);
     const labelSize = Math.round(8 * scale);
-    const colonSize = Math.round(15 * scale);
-    const crestW = Math.round(18 * scale);
-    const crestH = Math.round(22 * scale);
-    const leagueSize = Math.round(12 * scale);
-    const unitMin = Math.round(28 * scale);
+    const colonSize = Math.round(14 * scale);
+    const crest = Math.round(20 * scale);
+    const titleSize = Math.round(12 * scale);
+    const unitMin = Math.round(26 * scale);
     return (
       <LinearGradient
         colors={[...GRADIENT]}
         locations={[0, 0.48, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
-        style={[styles.slim, { minHeight: Math.round(56 * scale), borderRadius: Math.round(16 * scale) }]}
+        style={[styles.slim, { borderRadius: Math.round(16 * scale) }]}
         testID="ck-deadline-slim"
       >
-        <View style={styles.slimMeta}>
-          <Image source={BADGE} style={{ width: crestW, height: crestH }} resizeMode="contain" />
+        <View style={[styles.slimHead, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          <Image source={BADGE} style={{ width: crest, height: crest }} resizeMode="contain" />
           <Text
             style={[
-              styles.slimLeague,
+              styles.slimTitle,
               {
                 fontFamily: fontSemi,
-                fontSize: leagueSize,
+                fontSize: titleSize,
                 textAlign: isAr ? 'right' : 'left',
                 writingDirection: isAr ? 'rtl' : 'ltr',
               },
             ]}
             numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
           >
-            {copy.currentRound}
+            {headline}
           </Text>
         </View>
         <View style={styles.slimUnits} accessibilityRole="timer">
@@ -137,19 +133,21 @@ export function CoachKingDeadline({
       style={styles.card}
       testID="ck-deadline"
     >
-      <View style={[styles.head, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <View style={styles.badge}>
-          <Text style={[styles.badgeText, { fontFamily: fontSemi }]}>{copy.currentRound}</Text>
-        </View>
-        <View style={[styles.leagueWrap, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-          <Text
-            style={[styles.league, { fontFamily: fontBold, textAlign: isAr ? 'right' : 'left' }]}
-            numberOfLines={2}
-          >
-            {headline}
-          </Text>
-          <Image source={BADGE} style={styles.crest} resizeMode="contain" />
-        </View>
+      <View style={[styles.head, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+        <Image source={BADGE} style={styles.crest} resizeMode="contain" />
+        <Text
+          style={[
+            styles.league,
+            {
+              fontFamily: fontBold,
+              textAlign: isAr ? 'right' : 'left',
+              writingDirection: isAr ? 'rtl' : 'ltr',
+            },
+          ]}
+          numberOfLines={2}
+        >
+          {headline}
+        </Text>
       </View>
 
       <View style={styles.units} accessibilityRole="timer">
@@ -167,8 +165,6 @@ export function CoachKingDeadline({
           </View>
         ))}
       </View>
-
-      <Text style={[styles.tip, { fontFamily: fontSemi }]}>{tip}</Text>
     </LinearGradient>
   );
 }
@@ -176,50 +172,39 @@ export function CoachKingDeadline({
 const styles = StyleSheet.create({
   slim: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 64,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    paddingVertical: 8,
+    gap: 6,
     shadowColor: '#2A1060',
     shadowOpacity: 0.18,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  slimMeta: {
-    flexDirection: 'row',
+  slimHead: {
     alignItems: 'center',
-    gap: 6,
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: '42%',
-    maxWidth: '46%',
+    gap: 8,
+    width: '100%',
     minWidth: 0,
   },
-  slimLeague: {
+  slimTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   slimUnits: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: '54%',
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'space-evenly',
+    width: '100%',
     gap: 1,
-    minWidth: 0,
   },
   slimUnitSlot: {
     flexDirection: 'row',
@@ -227,23 +212,20 @@ const styles = StyleSheet.create({
   },
   slimUnit: {
     alignItems: 'center',
-    minWidth: 28,
+    minWidth: 26,
   },
   slimDigit: {
     color: '#FFFFFF',
-    fontSize: 17,
     includeFontPadding: false,
     fontVariant: ['tabular-nums'],
   },
   slimLabel: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 8,
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 1,
   },
   slimColon: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 15,
-    marginHorizontal: 0,
+    marginHorizontal: 1,
     marginBottom: 10,
   },
   card: {
@@ -263,38 +245,21 @@ const styles = StyleSheet.create({
   },
   head: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    gap: 10,
     width: '100%',
   },
-  badge: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 40,
-    height: 24,
-    minWidth: 64,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    color: '#F9F6FE',
-    fontSize: 10,
-  },
-  leagueWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-    minWidth: 0,
-  },
   league: {
-    color: '#F9F6FE',
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 14,
+    flex: 1,
     flexShrink: 1,
+    minWidth: 0,
+    lineHeight: 20,
   },
   crest: {
-    width: 26,
-    height: 32,
+    width: 28,
+    height: 28,
+    flexShrink: 0,
   },
   units: {
     flexDirection: 'row',
@@ -337,11 +302,5 @@ const styles = StyleSheet.create({
     fontSize: 28,
     marginBottom: 16,
     marginHorizontal: 2,
-  },
-  tip: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
   },
 });

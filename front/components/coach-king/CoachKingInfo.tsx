@@ -67,7 +67,7 @@ function RowIcon({ kind, iconColor }: { kind: RowDef['icon']; iconColor: string 
   return <Ionicons name="football-outline" size={16} color={color} />;
 }
 
-export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
+export function CoachKingInfo({ bottomPad, topPad = 8 }: { bottomPad: number; topPad?: number }) {
   const { t, language } = useTranslation();
   const copy = t.coachKingGame.info;
   const isAr = language === 'ar';
@@ -80,7 +80,7 @@ export function CoachKingInfo({ bottomPad }: { bottomPad: number }) {
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: 8 }}
+      contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: topPad }}
       showsVerticalScrollIndicator={false}
       testID="ck-info"
     >

@@ -4329,8 +4329,8 @@ export const ar = {
     },
     deadline: {
       currentRound: 'الجولة الحالية',
-      closesIn: 'إغلاق التشكيلة خلال',
-      opensIn: 'فتح الاختيار خلال',
+      closesIn: 'تجديد التشكيلة خلال',
+      opensIn: 'التجديد خلال',
       days: 'يوم',
       hours: 'ساعة',
       minutes: 'دقيقه',

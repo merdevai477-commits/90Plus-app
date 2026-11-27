@@ -36,7 +36,6 @@ import { CoachKingMatches } from './CoachKingMatches';
 import { CoachKingMoney } from './CoachKingCoin';
 import { CoachKingLockedSheet, type CkLockedNotice } from './CoachKingLockedSheet';
 import { CoachKingNav, ckNavBottom, type CkTab } from './CoachKingNav';
-import { CoachKingPageHeader } from './CoachKingPageHeader';
 import { CoachKingPitch } from './CoachKingPitch';
 import { getCoachKingTheme } from './theme';
 
@@ -319,23 +318,55 @@ export default function CoachKingScreen() {
   };
 
   const bottomPad = ckNavBottom(insets.bottom) + 92;
+  const chromeTop = insets.top + 6;
+  const contentTop = chromeTop + 88;
   const row = isAr ? 'row-reverse' : 'row';
 
   return (
     <View style={[styles.root, { backgroundColor: theme.screen }]} testID="coach-king-screen">
       <StatusBar barStyle={theme.statusBar === 'dark' ? 'dark-content' : 'light-content'} />
-      <CoachKingPageHeader
-        title={copy.title}
-        onBack={() => router.back()}
-        backLabel={t.common.back}
-        testID="ck-back"
-      />
 
-      {loading && !home ? <ActivityIndicator color={theme.refresh} style={{ marginTop: 40 }} /> : null}
-      {error && !home ? <Text style={[styles.error, { fontFamily: fontMed, color: theme.danger }]}>{error}</Text> : null}
+      <View style={[styles.floatingChrome, { paddingTop: chromeTop }]} pointerEvents="box-none">
+        <View style={styles.floatingRow} pointerEvents="box-none">
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel={t.common.back}
+            hitSlop={8}
+            testID="ck-back"
+            style={({ pressed }) => [
+              styles.backIsland,
+              theme.isDark ? styles.backIslandDark : null,
+              pressed && styles.backPressed,
+            ]}
+          >
+            <Ionicons name="chevron-back" size={22} color={theme.isDark ? '#FFFFFF' : '#24104E'} />
+          </Pressable>
+          {shown ? (
+            <CoachKingDeadline
+              compact
+              startAt={shown.gameweek.startAt}
+              endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
+              locked={closed || !!shown.squad.lockedUntil}
+            />
+          ) : (
+            <View style={styles.chromeSpacer} />
+          )}
+        </View>
+      </View>
+
+      {loading && !home ? <ActivityIndicator color={theme.refresh} style={{ marginTop: contentTop + 24 }} /> : null}
+      {error && !home ? (
+        <Text style={[styles.error, { fontFamily: fontMed, color: theme.danger, marginTop: contentTop }]}>
+          {error}
+        </Text>
+      ) : null}
 
       {tab === 'pitch' && shown ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: bottomPad }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: bottomPad, paddingTop: contentTop }}
+          showsVerticalScrollIndicator={false}
+        >
           <LinearGradient
             colors={[...theme.profileGradient]}
             start={{ x: 0, y: 0 }}
@@ -373,11 +404,6 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          <CoachKingDeadline
-            startAt={shown.gameweek.startAt}
-            endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
-            locked={closed || !!shown.squad.lockedUntil}
-          />
           {shown.squad.dirty && !closed ? (
             <Text
               onPress={() => {
@@ -421,7 +447,10 @@ export default function CoachKingScreen() {
       ) : null}
 
       {tab === 'ranking' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: 4 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: 16, paddingTop: contentTop }}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.sectionTitle, { fontFamily: fontBold, color: theme.ink, textAlign: isAr ? 'right' : 'left' }]}>
             {copy.rankingTitle}
           </Text>
@@ -450,7 +479,7 @@ export default function CoachKingScreen() {
       ) : null}
 
       {tab === 'matches' ? (
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, paddingTop: contentTop }}>
           {squadLeagues.length > 0 ? (
             <View style={{ paddingTop: 4, paddingBottom: 6 }}>
               <CoachKingLeagueChips
@@ -495,7 +524,7 @@ export default function CoachKingScreen() {
         </View>
       ) : null}
 
-      {tab === 'info' ? <CoachKingInfo bottomPad={bottomPad} /> : null}
+      {tab === 'info' ? <CoachKingInfo bottomPad={bottomPad} topPad={contentTop} /> : null}
 
       <CoachKingCardGrid
         kind={picker}
@@ -525,6 +554,44 @@ export default function CoachKingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  floatingChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 12,
+  },
+  floatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backIsland: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(75,31,163,0.16)',
+    shadowColor: '#2A1060',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+    flexShrink: 0,
+  },
+  backIslandDark: {
+    backgroundColor: 'rgba(8,6,16,0.72)',
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  backPressed: {
+    transform: [{ scale: 0.92 }],
+    opacity: 0.9,
+  },
+  chromeSpacer: { flex: 1 },
   error: { textAlign: 'center', marginHorizontal: 20, marginTop: 8 },
   profile: {
     alignItems: 'center',
