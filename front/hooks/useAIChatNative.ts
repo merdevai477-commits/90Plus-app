@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import { useAuth } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
 import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
 import { logger } from '../services/logger';
@@ -25,6 +26,7 @@ import { readVoiceQuota, type VoiceQuotaUpdate } from './voiceTranscribeResponse
 import {
   decodeChatNavMarker,
   inferChatNavLinksFromQuestion,
+  isLastMatchNavIntent,
   navLinksForQuestion,
   sanitizeChatNavLinks,
   stripChatNavMarker,
@@ -258,6 +260,11 @@ export interface UseAIChatOptions {
 export function useAIChatNative(options: UseAIChatOptions = {}) {
   const { getSystemPromptSuffix, getChatLabels } = options;
   const { getToken } = useAuth();
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -947,32 +954,44 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             }
             // Tag the model on the message immediately — independent of how
             // long the typing renderer takes to drain.
-            if (usedModel && activeAssistantMessageIdRef.current) {
-              const targetId = activeAssistantMessageIdRef.current;
+            const attachNavLinks = (targetId: string, withModel?: string) => {
               let navLinks = navLinksForQuestion(sanitizeChatNavLinks(doneEvent.navLinks), trimmed);
               if (!navLinks.length) {
                 const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
                 navLinks = inferChatNavLinksFromQuestion(trimmed, lang);
               }
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === targetId
-                    ? { ...m, usedModel, ...(navLinks.length ? { navLinks } : {}) }
-                    : m,
-                ),
-              );
-            } else if (activeAssistantMessageIdRef.current) {
-              const targetId = activeAssistantMessageIdRef.current;
-              let navLinks = navLinksForQuestion(sanitizeChatNavLinks(doneEvent.navLinks), trimmed);
-              if (!navLinks.length) {
-                const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
-                navLinks = inferChatNavLinksFromQuestion(trimmed, lang);
-              }
-              if (navLinks.length) {
+              if (withModel || navLinks.length) {
                 setMessages(prev =>
-                  prev.map(m => (m.id === targetId ? { ...m, navLinks } : m)),
+                  prev.map(m =>
+                    m.id === targetId
+                      ? {
+                          ...m,
+                          ...(withModel ? { usedModel: withModel } : {}),
+                          ...(navLinks.length ? { navLinks } : {}),
+                        }
+                      : m,
+                  ),
                 );
               }
+              // Last-match questions jump straight into that fixture's details page.
+              if (isLastMatchNavIntent(trimmed)) {
+                const fixtureId = navLinks.find(l => l.type === 'match' && l.id)?.id;
+                if (fixtureId) {
+                  try {
+                    routerRef.current.push({
+                      pathname: '/(tabs)/match-details',
+                      params: { fixtureId: String(fixtureId) },
+                    } as never);
+                  } catch (err) {
+                    logger.warn('[chat] auto-open match details failed', err);
+                  }
+                }
+              }
+            };
+            if (usedModel && activeAssistantMessageIdRef.current) {
+              attachNavLinks(activeAssistantMessageIdRef.current, usedModel);
+            } else if (activeAssistantMessageIdRef.current) {
+              attachNavLinks(activeAssistantMessageIdRef.current);
             }
             // Tell the renderer to drain remaining tokens and call us back
             // once every visible word has been rendered.

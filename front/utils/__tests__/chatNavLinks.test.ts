@@ -109,6 +109,12 @@ describe('chatNavLinks', () => {
     expect(links.every((l) => l.choice && l.type === 'club')).toBe(true);
   });
 
+  it('infers match details (not club) for last-match questions', () => {
+    const links = inferChatNavLinksFromQuestion('اخر مباراه ليوف', 'ar');
+    expect(links[0]?.type).toBe('match');
+    expect(links.some((l) => l.type === 'club')).toBe(false);
+  });
+
   it('resolves a player club badge from logo or teamId', () => {
     expect(
       resolveChatNavClubBadge({

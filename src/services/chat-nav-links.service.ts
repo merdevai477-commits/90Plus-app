@@ -275,23 +275,47 @@ export function isFitnessTopic(message: string): boolean {
   return FITNESS_TOPIC_RE.test(message ?? '');
 }
 
+/** "اخر مباراه ليوفنتوس" / last match — open that fixture, not the club page. */
+export function isLastMatchNavIntent(message: string): boolean {
+  const m = (message ?? '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (m.length < 2) return false;
+  if (/(?:مباريات|ماتشات|matches)\s*(?:النهاردة|النهارده|اليوم|today)/i.test(m)) return false;
+  return (
+    /اخر\s*(?:مباراه|ماتش)|المباراه الاخيره|last\s+match/i.test(m) ||
+    /(?:الماتش|المباراه).{0,24}(?:خلص|انتهي|انته)/i.test(m) ||
+    /(?:اللي|اللى)\s+(?:خلص|انتهي|انته)/i.test(m) ||
+    /تفاصيل\s*(?:ال)?(?:مباراه|ماتش|match)/i.test(m) ||
+    /finished\s+match|match\s+details/i.test(m) ||
+    /(?:نتيجه|تفاصيل).{0,16}(?:الماتش|المباراه)/i.test(m) ||
+    (/لعب(?:ها|ه)/i.test(m) && /مبار|ماتش/.test(m))
+  );
+}
+
 export function inferChatNavIntent(message: string): ChatNavLinkType[] {
   const q = (message ?? '').replace(/\s+/g, ' ').trim();
   if (q.length < 2) return [];
   if (isFitnessTopic(q)) return [];
 
   const types: ChatNavLinkType[] = [];
+  const lastMatchFocus = isLastMatchNavIntent(q);
   const wantsMatches =
     /مباريات|ماتشات|\bmatches\b|جدول\s*اليوم|مواعيد\s*اليوم/i.test(q) ||
     (/(النهاردة|اليوم|\btoday\b)/i.test(q) && /مبار|ماتش|\bmatch/i.test(q)) ||
     /لايف|مباشر|\blive\b/.test(q);
   const wantsMatch =
-    /مباراة|مباراه|\bvs\b|ضد\s|\bfixture\b|\bmatch\b|ماتش/.test(q) && !wantsMatches;
+    lastMatchFocus ||
+    (/مباراة|مباراه|\bvs\b|ضد\s|\bfixture\b|\bmatch\b|ماتش/.test(q) && !wantsMatches);
   const wantsClub =
-    /نادي|فريق|\bclub\b|\bteam\b|تشكيلة|تشكيله|هدافين|مدرب/.test(q) ||
-    /الأهلي|اهلي|الزمالك|زمالك|بيراميدز|ريال|برشلون|ليفربول|مانشستر|بايرن|تشيلسي|آرسنال|يوفنتوس|ميلان|باريس|الهلال|النصر|الاتحاد|Al Ahly|Zamalek|Liverpool|Barcelona|Madrid/i.test(
-      q,
-    );
+    !lastMatchFocus &&
+    (/نادي|فريق|\bclub\b|\bteam\b|تشكيلة|تشكيله|هدافين|مدرب/.test(q) ||
+      /الأهلي|اهلي|الزمالك|زمالك|بيراميدز|ريال|برشلون|ليفربول|مانشستر|بايرن|تشيلسي|آرسنال|يوفنتوس|ميلان|باريس|الهلال|النصر|الاتحاد|Al Ahly|Zamalek|Liverpool|Barcelona|Madrid/i.test(
+        q,
+      ));
   const wantsPlayer =
     /لاعب|\bplayer\b|بيلعب|إحصائ|احصائ|سيزون|موسم|ألقاب|القاب|هداف(?!ين)|صناعة|صانع/.test(q);
   const wantsCompetition =
@@ -317,6 +341,7 @@ export function extractChatNavLinks(
   if (isFitnessTopic(userMessage ?? '')) return [];
   const used = new Set(toolsUsed);
   const inferred = inferChatNavIntent(userMessage ?? '');
+  const lastMatchFocus = isLastMatchNavIntent(userMessage ?? '') || used.has('get_team_match');
   const wantMatches =
     used.has('get_today_matches') || used.has('get_live_matches') || inferred.includes('matches');
   const wantMatch =
@@ -332,12 +357,13 @@ export function extractChatNavLinks(
     used.has('get_player_career') ||
     used.has('get_player_match_report') ||
     inferred.includes('player');
+  // Last-match answers should deep-link the fixture — don't lead with the club page.
   const wantClub =
-    used.has('get_team_info') ||
-    used.has('get_team_squad') ||
-    used.has('get_team_scorers') ||
-    used.has('get_team_match') ||
-    inferred.includes('club');
+    !lastMatchFocus &&
+    (used.has('get_team_info') ||
+      used.has('get_team_squad') ||
+      used.has('get_team_scorers') ||
+      inferred.includes('club'));
 
   const map = new Map<string, ChatNavLink>();
   const playerFallback = language === 'en' ? 'Player profile' : 'بروفايل اللاعب';
@@ -479,7 +505,7 @@ export function extractChatNavLinks(
     const leagueName = Array.isArray(parsed.competitions)
       ? asLabel(isRecord(parsed.competitions[0]) ? parsed.competitions[0].name : '')
       : '';
-    if (competitorId) {
+    if (wantClub && competitorId) {
       addLink(map, {
         type: 'club',
         id: competitorId,
@@ -490,7 +516,7 @@ export function extractChatNavLinks(
         country: clubCountry || null,
         teamName: leagueName || null,
       });
-    } else if (parsed.source === '365scores_team') {
+    } else if (wantClub && parsed.source === '365scores_team') {
       addLink(map, {
         type: 'club',
         label: clubName || clubFallback,
@@ -614,13 +640,15 @@ export function extractChatNavLinks(
 
   const ranked = [...map.values()].sort((a, b) => {
     if (!!b.choice !== !!a.choice) return a.choice ? -1 : 1;
-    const order: Record<ChatNavLinkType, number> = {
-      player: 0,
-      club: 1,
-      competition: 2,
-      matches: 3,
-      match: 4,
-    };
+    const order: Record<ChatNavLinkType, number> = lastMatchFocus
+      ? { match: 0, matches: 1, player: 2, club: 3, competition: 4 }
+      : {
+          player: 0,
+          club: 1,
+          competition: 2,
+          matches: 3,
+          match: 4,
+        };
     const typeDelta = order[a.type] - order[b.type];
     if (typeDelta !== 0) return typeDelta;
     return (b.id ? 1 : 0) - (a.id ? 1 : 0);
@@ -630,9 +658,11 @@ export function extractChatNavLinks(
   let matchCount = 0;
   const choiceOnly = ranked.some((l) => l.choice);
   const clubQuestion = wantClub && !wantPlayer;
+  const hasResolvedMatch = ranked.some((l) => l.type === 'match' && !!l.id);
   for (const link of ranked) {
     if (choiceOnly && !link.choice) continue;
     if (clubQuestion && link.type === 'player') continue;
+    if (lastMatchFocus && hasResolvedMatch && link.type === 'club') continue;
     if (link.type === 'match') {
       if (matchCount >= 3) continue;
       matchCount += 1;

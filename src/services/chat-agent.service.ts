@@ -376,21 +376,27 @@ function formatTeamMatchReply(parsed: any, language: MessageLanguage): string | 
     if (/missed/i.test(d)) return false;
     return /goal/i.test(t) || /goal/i.test(d);
   });
-  const goalBits = goals.map((e: any) => {
-    const min = e.minute != null ? `${e.minute}'` : '';
-    const own = /own/i.test(String(e.detail ?? ''))
-      ? language === 'en'
-        ? ' OG'
-        : ' (عكس)'
-      : '';
-    const pen =
-      /penalty/i.test(String(e.detail ?? '')) && !/own/i.test(String(e.detail ?? ''))
+  const goalBits = goals
+    .map((e: any) => {
+      const scorer = String(e.player ?? e.assist ?? e.team ?? '').trim();
+      if (!scorer) return null;
+      const minuteNum = Number(e.minute);
+      const min =
+        Number.isFinite(minuteNum) && minuteNum > 0 ? `${minuteNum}'` : '';
+      const own = /own/i.test(String(e.detail ?? ''))
         ? language === 'en'
-          ? ' pen'
-          : ' (جزاء)'
+          ? ' OG'
+          : ' (عكس)'
         : '';
-    return `${e.player ?? '?'}${own}${pen} ${min}`.trim();
-  });
+      const pen =
+        /penalty/i.test(String(e.detail ?? '')) && !/own/i.test(String(e.detail ?? ''))
+          ? language === 'en'
+            ? ' pen'
+            : ' (جزاء)'
+          : '';
+      return `${scorer}${own}${pen}${min ? ` ${min}` : ''}`.trim();
+    })
+    .filter(Boolean);
   const goalLine = goalBits.length
     ? language === 'en'
       ? `Goals: ${goalBits.join(', ')}`

@@ -232,6 +232,27 @@ export function navLinksForQuestion(links: ChatNavLink[], question: string): Cha
   return isFitnessTopic(question) ? [] : links;
 }
 
+/** Mirrors backend: last-match questions should open the fixture, not the club profile. */
+export function isLastMatchNavIntent(message: string): boolean {
+  const m = (message ?? '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (m.length < 2) return false;
+  if (/(?:مباريات|ماتشات|matches)\s*(?:النهاردة|النهارده|اليوم|today)/i.test(m)) return false;
+  return (
+    /اخر\s*(?:مباراه|ماتش)|المباراه الاخيره|last\s+match/i.test(m) ||
+    /(?:الماتش|المباراه).{0,24}(?:خلص|انتهي|انته)/i.test(m) ||
+    /(?:اللي|اللى)\s+(?:خلص|انتهي|انته)/i.test(m) ||
+    /تفاصيل\s*(?:ال)?(?:مباراه|ماتش|match)/i.test(m) ||
+    /finished\s+match|match\s+details/i.test(m) ||
+    /(?:نتيجه|تفاصيل).{0,16}(?:الماتش|المباراه)/i.test(m) ||
+    (/لعب(?:ها|ه)/i.test(m) && /مبار|ماتش/.test(m))
+  );
+}
+
 export function inferChatNavLinksFromQuestion(
   question: string,
   language: 'ar' | 'en',
@@ -240,16 +261,20 @@ export function inferChatNavLinksFromQuestion(
   if (q.length < 2) return [];
   if (isFitnessTopic(q)) return [];
 
+  const lastMatchFocus = isLastMatchNavIntent(q);
   const matches =
     /مباريات|ماتشات|\bmatches\b|جدول\s*اليوم|مواعيد\s*اليوم/i.test(q) ||
     (/(النهاردة|اليوم|\btoday\b)/i.test(q) && /مبار|ماتش|\bmatch/i.test(q)) ||
     /لايف|مباشر|\blive\b/.test(q);
-  const matchOnly = /مباراة|مباراه|\bvs\b|ضد\s|\bfixture\b|\bmatch\b|ماتش/.test(q) && !matches;
+  const matchOnly =
+    lastMatchFocus ||
+    (/مباراة|مباراه|\bvs\b|ضد\s|\bfixture\b|\bmatch\b|ماتش/.test(q) && !matches);
   const club =
-    /نادي|فريق|\bclub\b|\bteam\b|تشكيلة|تشكيله|هدافين|مدرب/.test(q) ||
-    /الأهلي|اهلي|الزمالك|زمالك|بيراميدز|ريال|برشلون|ليفربول|مانشستر|بايرن|تشيلسي|آرسنال|يوفنتوس|ميلان|باريس|الهلال|النصر|الاتحاد|Al Ahly|Zamalek|Liverpool|Barcelona|Madrid/i.test(
-      q,
-    );
+    !lastMatchFocus &&
+    (/نادي|فريق|\bclub\b|\bteam\b|تشكيلة|تشكيله|هدافين|مدرب/.test(q) ||
+      /الأهلي|اهلي|الزمالك|زمالك|بيراميدز|ريال|برشلون|ليفربول|مانشستر|بايرن|تشيلسي|آرسنال|يوفنتوس|ميلان|باريس|الهلال|النصر|الاتحاد|Al Ahly|Zamalek|Liverpool|Barcelona|Madrid/i.test(
+        q,
+      ));
   const player = /لاعب|\bplayer\b|بيلعب|إحصائ|احصائ|سيزون|موسم|ألقاب|القاب|هداف(?!ين)|صناعة|صانع/.test(q);
   const competition =
     /دوري|بطول[ةه]|ليج|\bleague\b|\bcompetition\b|ترتيب\s*ال|premier|laliga|serie\s*a|bundesliga|champions/i.test(
@@ -257,7 +282,19 @@ export function inferChatNavLinksFromQuestion(
     );
 
   const out: ChatNavLink[] = [];
-  if (player) {
+  if (matches) {
+    out.push({
+      type: 'matches',
+      label: language === 'en' ? "Today's matches" : 'مباريات اليوم',
+    });
+  } else if (matchOnly) {
+    out.push({
+      type: 'match',
+      label: language === 'en' ? 'Match details' : 'تفاصيل المباراة',
+      query: q,
+    });
+  }
+  if (player && !lastMatchFocus) {
     out.push({
       type: 'player',
       label: language === 'en' ? 'Player profile' : 'بروفايل اللاعب',
@@ -273,22 +310,10 @@ export function inferChatNavLinksFromQuestion(
       query: q,
     });
   }
-  if (competition) {
+  if (competition && !lastMatchFocus) {
     out.push({
       type: 'competition',
       label: language === 'en' ? 'Competition profile' : 'بروفايل البطولة',
-      query: q,
-    });
-  }
-  if (matches) {
-    out.push({
-      type: 'matches',
-      label: language === 'en' ? "Today's matches" : 'مباريات اليوم',
-    });
-  } else if (matchOnly) {
-    out.push({
-      type: 'match',
-      label: language === 'en' ? 'Match details' : 'تفاصيل المباراة',
       query: q,
     });
   }

@@ -85,6 +85,27 @@ describe('chat-nav-links', () => {
     ]);
   });
 
+  it('prefers the fixture CTA over the club for last-match questions', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          source: '365scores_team_match',
+          competitorId: 116,
+          teamName: 'Juventus',
+          when: 'last_finished',
+          match: { fixtureId: 9911, home: 'Juventus', away: 'Omonia', score: { home: 4, away: 1 } },
+        }),
+      ],
+      ['get_team_match'],
+      'ar',
+      'اخر مباراه ليوف',
+    );
+    expect(links[0]).toEqual(
+      expect.objectContaining({ type: 'match', id: 9911, label: 'Juventus vs Omonia' }),
+    );
+    expect(links.some((l) => l.type === 'club')).toBe(false);
+  });
+
   it('always emits a player CTA even without an athleteId', () => {
     const links = extractChatNavLinks([], ['search_player'], 'ar', 'صلاح بيلعب فين');
     expect(links.some((l) => l.type === 'player')).toBe(true);
