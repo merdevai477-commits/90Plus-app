@@ -2859,13 +2859,13 @@ const MatchDetailsScreen = () => {
                       <TeamBadge
                         name={row.teams.away.name}
                         logo={row.teams.away.logo}
-                        size={40}
+                        size={32}
                         color="transparent"
                         highQuality
                       />
                       <Text
                         style={[styles.h2hTeamName, { color: mdColors.textPrimary }]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {getTeamDisplayName(row.teams.away.name, language)}
                       </Text>
@@ -2881,6 +2881,7 @@ const MatchDetailsScreen = () => {
                           styles.h2hScoreText,
                           { color: mdIsDark ? '#E9D5FF' : '#4B1FA3' },
                         ]}
+                        numberOfLines={1}
                       >
                         {row.goals.away ?? '-'} - {row.goals.home ?? '-'}
                       </Text>
@@ -2888,14 +2889,14 @@ const MatchDetailsScreen = () => {
                     <View style={[styles.h2hTeamSide, styles.h2hTeamSideEnd]}>
                       <Text
                         style={[styles.h2hTeamName, styles.h2hTeamNameEnd, { color: mdColors.textPrimary }]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {getTeamDisplayName(row.teams.home.name, language)}
                       </Text>
                       <TeamBadge
                         name={row.teams.home.name}
                         logo={row.teams.home.logo}
-                        size={40}
+                        size={32}
                         color="transparent"
                         highQuality
                       />
@@ -4272,8 +4273,8 @@ const styles = StyleSheet.create({
   },
   h2hCard: {
     borderRadius: 18,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
     minHeight: 81,
     justifyContent: 'center',
     borderWidth: 1,
@@ -4281,45 +4282,51 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 4,
     elevation: 2,
-    gap: 2,
+    gap: 4,
   },
   h2hCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     minHeight: 48,
-    gap: 8,
+    gap: 6,
   },
   h2hTeamSide: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     minWidth: 0,
   },
   h2hTeamSideEnd: {
     justifyContent: 'flex-end',
   },
   h2hTeamName: {
+    flex: 1,
     flexShrink: 1,
-    fontSize: 14,
+    minWidth: 0,
+    fontSize: 12.5,
+    lineHeight: 16,
     fontWeight: '700',
+    includeFontPadding: false,
   },
   h2hTeamNameEnd: {
     textAlign: 'right',
   },
   h2hScoreCapsule: {
-    minWidth: 78,
-    height: 29,
+    flexShrink: 0,
+    minWidth: 62,
+    height: 28,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   h2hScoreText: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
+    includeFontPadding: false,
   },
   h2hMetaRow: {
     flexDirection: 'row',
