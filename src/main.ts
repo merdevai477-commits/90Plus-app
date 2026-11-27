@@ -1313,6 +1313,20 @@ async function startServer() {
                 } else {
                     logger.info('⚠️ FOOTBALL_API_KEY not set - Match watcher disabled');
                 }
+
+                // Seed Share & Win demo: +1 friend every 7m (ranking +3, profile XP +1).
+                // Independent of FOOTBALL_API_KEY — only touches the locked seed account.
+                try {
+                    const { startSeedFriendsAutoBoost } = await import(
+                        './services/seed-friends-auto.service'
+                    );
+                    startSeedFriendsAutoBoost();
+                } catch (seedFriendsErr) {
+                    logger.warn(
+                        'Seed friends auto-boost failed to start (non-fatal):',
+                        (seedFriendsErr as Error)?.message ?? seedFriendsErr,
+                    );
+                }
         });
 
 
@@ -1338,6 +1352,12 @@ const SETTLE_DRAIN_MS = 20_000;
 process.on('SIGINT', async () => {
     logger.info('\n👋 Shutting down gracefully...');
     stopNativeHeapRelease();
+    try {
+        const { stopSeedFriendsAutoBoost } = await import('./services/seed-friends-auto.service');
+        stopSeedFriendsAutoBoost();
+    } catch {
+        /* non-fatal */
+    }
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);
@@ -1372,6 +1392,12 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
     logger.info('\n👋 Shutting down gracefully...');
     stopNativeHeapRelease();
+    try {
+        const { stopSeedFriendsAutoBoost } = await import('./services/seed-friends-auto.service');
+        stopSeedFriendsAutoBoost();
+    } catch {
+        /* non-fatal */
+    }
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     await PredictionWatcherService.stopAndDrain(SETTLE_DRAIN_MS);

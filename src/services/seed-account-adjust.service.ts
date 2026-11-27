@@ -226,7 +226,7 @@ export async function adjustSeedFriends(delta: number): Promise<{
         amount: XP_VALUES.REFERRAL_CONVERSION,
         timezone: 'Africa/Cairo',
         idempotencyKey: `share-win-referral:${referredUserId}`,
-        metadata: { source: 'ass_seed', cycleId: cycle.id },
+        metadata: { source: 'seed_friends', cycleId: cycle.id },
       });
       xpDelta += result.awarded;
     }
