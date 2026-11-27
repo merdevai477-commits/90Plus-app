@@ -270,8 +270,13 @@ async function runAiModeration(job: AiModerationJob): Promise<void> {
         type: 'MODERATION_ALERT',
         titleKey: 'communityHiddenTitle',
         bodyKey: 'communityHiddenBody',
-        data: { screen: '/(tabs)/community', kind: 'community', contentKind: job.kind, contentId: job.id },
-        skipPush: true,
+        data: {
+            screen: '/(tabs)/community',
+            kind: 'community',
+            contentKind: job.kind,
+            contentId: job.id,
+            action: 'hidden',
+        },
         bypassPreferences: true,
     }).catch(() => undefined);
 

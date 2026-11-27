@@ -22,6 +22,7 @@ import {
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
 import { useLiveFixtureStore } from '../store/liveFixtureStore';
 import { useKingPicksStore } from '../../components/KingOfPredictions/kingPicksStore';
+import { purgeCommunityPost } from '../../hooks/community/communityCache';
 
 const PERMISSION_REQUESTED_KEY = NOTIFICATION_PERMISSION_REQUESTED_KEY;
 
@@ -274,6 +275,14 @@ export function usePushNotifications(): PushNotificationState {
             return;
         }
 
+        if (
+            data.type === 'MODERATION_ALERT' &&
+            data.contentKind === 'post' &&
+            (data.contentId || data.postId)
+        ) {
+            purgeCommunityPost(queryClientRef.current, String(data.contentId || data.postId));
+        }
+
         handleDeepLinking(data);
     }).current;
 
@@ -380,6 +389,15 @@ export function usePushNotifications(): PushNotificationState {
             }
 
             if (data?.type === 'PREDICTION_RESULT') useKingPicksStore.getState().noteResult();
+
+            // Moderation / AI removal — drop the post from every feed immediately.
+            if (
+                data?.type === 'MODERATION_ALERT' &&
+                data?.contentKind === 'post' &&
+                (data?.contentId || data?.postId)
+            ) {
+                purgeCommunityPost(queryClientRef.current, String(data.contentId || data.postId));
+            }
 
             if (data?.silent === true || data?.silent === 'true') {
                 logger.debug('🔕 Silent notification received, invalidating cache:', data.type);

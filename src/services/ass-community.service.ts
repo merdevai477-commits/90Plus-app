@@ -3,13 +3,28 @@
  * Shared-password session (same as competition ads) — not Clerk admin.
  */
 
+import { Prisma } from '@prisma/client';
+
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { r2MediaStorage } from './r2-media-storage.service';
 import { notifyUser } from './notify.service';
-import { redisCacheService } from './redis-cache.service';
+import { invalidateFeedCache } from './community.service';
 
-const FEED_CACHE_KEY = 'community:feed:first:v2';
+function storagePathsFromPost(images: unknown, primaryPath: string | null | undefined): string[] {
+    const keys = new Set<string>();
+    if (primaryPath) keys.add(primaryPath);
+    if (Array.isArray(images)) {
+        for (const row of images) {
+            const path =
+                row && typeof row === 'object' && typeof (row as { storagePath?: unknown }).storagePath === 'string'
+                    ? (row as { storagePath: string }).storagePath
+                    : null;
+            if (path) keys.add(path);
+        }
+    }
+    return [...keys];
+}
 
 export type AssPostFilter = 'all' | 'reported' | 'ai';
 export type AssPostOrder = 'newest' | 'oldest';
@@ -265,6 +280,7 @@ export async function assDeleteCommunityPost(
             userId: true,
             status: true,
             imageStoragePath: true,
+            images: true,
             content: true,
         },
     });
@@ -274,11 +290,20 @@ export async function assDeleteCommunityPost(
 
     const warningReason =
         reason || 'Community post removed by moderators for violating community guidelines';
+    const mediaKeys = storagePathsFromPost(post.images, post.imageStoragePath);
 
     await prisma.$transaction(async (tx) => {
         await tx.communityPost.update({
             where: { id: post.id },
-            data: { status: 'DELETED' },
+            data: {
+                status: 'DELETED',
+                imageUrl: null,
+                imageStoragePath: null,
+                imageWidth: null,
+                imageHeight: null,
+                imagePlaceholder: null,
+                images: Prisma.DbNull,
+            },
         });
         await tx.moderationLog.create({
             data: {
@@ -325,10 +350,9 @@ export async function assDeleteCommunityPost(
         });
     });
 
-    await redisCacheService.del(FEED_CACHE_KEY).catch(() => undefined);
+    void invalidateFeedCache();
 
-    if (post.imageStoragePath) {
-        const key = post.imageStoragePath;
+    for (const key of mediaKeys) {
         void r2MediaStorage.deleteObject(key).catch((err: any) => {
             logger.warn('[AsS] R2 cleanup failed:', err?.message);
         });
@@ -435,7 +459,7 @@ export async function assDeleteCommunityComment(
         });
     });
 
-    await redisCacheService.del(FEED_CACHE_KEY).catch(() => undefined);
+    void invalidateFeedCache();
 
     const hasReason = !!reason;
     void notifyUser({

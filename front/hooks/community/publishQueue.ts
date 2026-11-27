@@ -236,15 +236,19 @@ export function publishPost(input: PublishInput): void {
     try {
       const mediaIds: string[] = [];
       if (!isPoll) {
-        for (const { key, draft } of listImageDrafts(clientId)) {
-          let handle = uploads.get(key);
-          if (!handle || draft.status === 'failed') {
-            startImageUpload(input.getToken, key, draft.local);
-            handle = uploads.get(key);
-          }
-          const media = draft.media ?? (await handle!.promise);
-          mediaIds.push(media.id);
-        }
+        // Uploads already start in parallel on pick — wait for all slots together.
+        const settled = await Promise.all(
+          listImageDrafts(clientId).map(async ({ key, draft }) => {
+            let handle = uploads.get(key);
+            if (!handle || draft.status === 'failed') {
+              startImageUpload(input.getToken, key, draft.local);
+              handle = uploads.get(key);
+            }
+            const media = draft.media ?? (await handle!.promise);
+            return media.id;
+          }),
+        );
+        mediaIds.push(...settled);
       }
       const post = await communityApi.createPost(input.getToken, {
         content: input.content,

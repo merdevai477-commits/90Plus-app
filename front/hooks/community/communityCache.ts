@@ -109,13 +109,24 @@ export function findPost(qc: QueryClient, postId: string): CommunityPost | undef
 export function removePostEverywhere(qc: QueryClient, postId: string): void {
   for (const query of qc.getQueryCache().findAll({ predicate: (q) => postQueryFilter(q.queryKey) })) {
     const data = query.state.data;
-    if (!isPostPages(data)) continue;
-    if (!data.pages.some((p) => p.items.some((i) => i.id === postId))) continue;
-    qc.setQueryData(query.queryKey, {
-      ...data,
-      pages: data.pages.map((page) => ({ ...page, items: page.items.filter((i) => i.id !== postId) })),
-    });
+    if (isPostPages(data)) {
+      if (!data.pages.some((p) => p.items.some((i) => i.id === postId))) continue;
+      qc.setQueryData(query.queryKey, {
+        ...data,
+        pages: data.pages.map((page) => ({ ...page, items: page.items.filter((i) => i.id !== postId) })),
+      });
+    } else if (isPost(data) && data.id === postId) {
+      qc.removeQueries({ queryKey: communityKeys.post(postId), exact: true });
+    }
   }
+  qc.removeQueries({ queryKey: communityKeys.post(postId), exact: true });
+  qc.removeQueries({ queryKey: communityKeys.comments(postId), exact: true });
+}
+
+/** Drop a post from every community list when the owner or moderation removes it. */
+export function purgeCommunityPost(qc: QueryClient, postId: string): void {
+  if (!postId) return;
+  removePostEverywhere(qc, postId);
 }
 
 export function removeAuthorEverywhere(qc: QueryClient, authorId: string): void {

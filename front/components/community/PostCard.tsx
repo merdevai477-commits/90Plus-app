@@ -35,6 +35,7 @@ import { RichText } from './RichText';
 import { formatCount } from './format';
 import { LikersSheet } from './LikersSheet';
 import { useCommunityTheme } from '../../hooks/useCommunityTheme';
+import { prefetchImages } from '../../utils/prefetchImages';
 import { AVATAR_SIZE, CARD_RADIUS, CI, COMMUNITY_LIGHT_ELEVATION, POST_IMAGE_RADIUS } from './theme';
 import UserIdentity from '../identity/UserIdentity';
 
@@ -140,6 +141,8 @@ function PostImage({
   const layout = postImageLayout(width, primary);
   const [page, setPage] = useState(0);
   const pageRef = useRef(0);
+  /** Load the first slide immediately, then neighbors as the user swipes. */
+  const [loadedThrough, setLoadedThrough] = useState(0);
 
   const burst = useCallback(() => {
     onDoubleTap();
@@ -179,14 +182,28 @@ function PostImage({
     transform: [{ scale: 0.4 + heart.value * 0.8 }],
   }));
 
+  const warmNeighbor = useCallback(
+    (index: number) => {
+      const nextUrl = images[index + 1]?.url;
+      if (nextUrl) void prefetchImages([nextUrl]);
+      setLoadedThrough((prev) => Math.max(prev, Math.min(images.length - 1, index + 1)));
+    },
+    [images],
+  );
+
+  useEffect(() => {
+    if (images.length > 1 && images[1]?.url) void prefetchImages([images[1].url]);
+  }, [images]);
+
   const onScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const next = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width));
       const clamped = Math.max(0, Math.min(images.length - 1, next));
       pageRef.current = clamped;
       setPage(clamped);
+      warmNeighbor(clamped);
     },
-    [images.length, width],
+    [images.length, warmNeighbor, width],
   );
 
   if (!images.length || !primary) return null;
@@ -203,24 +220,33 @@ function PostImage({
     },
   ];
 
-  const slide = (img: CommunityImage, index: number) => (
-    <GestureDetector key={`${post.id}-${img.url}-${index}`} gesture={tapGesture()}>
-      <View style={{ width, height: layout.height }} accessibilityRole="imagebutton">
-        <Image
-          source={{ uri: img.url }}
-          placeholder={img.placeholder ? { uri: img.placeholder } : undefined}
-          placeholderContentFit={layout.fit}
-          style={StyleSheet.absoluteFill}
-          contentFit={layout.fit}
-          transition={120}
-          cachePolicy="memory-disk"
-          recyclingKey={`${post.id}-${index}`}
-          priority={index === 0 ? priority : 'low'}
-          allowDownscaling
-        />
-      </View>
-    </GestureDetector>
-  );
+  const slide = (img: CommunityImage, index: number) => {
+    const shouldLoad = index === 0 || index <= loadedThrough;
+    const slideLayout = postImageLayout(width, img);
+    return (
+      <GestureDetector key={`${post.id}-${img.url}-${index}`} gesture={tapGesture()}>
+        <View
+          style={{ width, height: layout.height, backgroundColor: isDark ? '#15111F' : colors.contentBox }}
+          accessibilityRole="imagebutton"
+        >
+          {shouldLoad ? (
+            <Image
+              source={{ uri: img.url }}
+              placeholder={img.placeholder ? { uri: img.placeholder } : undefined}
+              placeholderContentFit={slideLayout.fit}
+              style={StyleSheet.absoluteFill}
+              contentFit={slideLayout.fit}
+              transition={index === 0 ? 120 : 80}
+              cachePolicy="memory-disk"
+              recyclingKey={`${post.id}-${index}`}
+              priority={index === 0 ? priority : index === page || index === page + 1 ? 'normal' : 'low'}
+              allowDownscaling
+            />
+          ) : null}
+        </View>
+      </GestureDetector>
+    );
+  };
 
   return (
     <View style={{ width, gap: multi ? 8 : 0 }}>

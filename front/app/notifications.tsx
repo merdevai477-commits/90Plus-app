@@ -50,6 +50,8 @@ import {
 } from '../components/notifications/notificationsTheme';
 import { useResolvedAppScheme } from '@/hooks/useResolvedAppScheme';
 import { useAuth } from '@clerk/clerk-expo';
+import { useQueryClient } from '@tanstack/react-query';
+import { purgeCommunityPost } from '../hooks/community/communityCache';
 import { NotificationService, type SocialNotification } from '../src/services/authService';
 import { syncExpoPushTokenIfGranted } from '../src/hooks/usePushNotifications';
 import { logger } from '../utils/logger';
@@ -565,6 +567,7 @@ export default function NotificationsScreen() {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation();
     const { getToken } = useAuth();
+    const queryClient = useQueryClient();
     const { isDark } = useResolvedAppScheme();
     const theme = useMemo(() => getNotificationsTheme(isDark), [isDark]);
     const {
@@ -655,6 +658,13 @@ export default function NotificationsScreen() {
                 }
 
                 const data = (notif.data ?? {}) as Record<string, any>;
+                if (
+                    notif.type === 'MODERATION_ALERT' &&
+                    data.contentKind === 'post' &&
+                    (data.contentId || data.postId)
+                ) {
+                    purgeCommunityPost(queryClient, String(data.contentId || data.postId));
+                }
                 if (data.kind === 'community' && data.postId && notif.type !== 'MODERATION_ALERT') {
                     router.push({
                         pathname: '/community/post/[id]',
@@ -734,7 +744,7 @@ export default function NotificationsScreen() {
                 logger.error('Failed to handle notification tap:', err);
             }
         },
-        [getToken, router, setBackendNotifications, setUnreadCount],
+        [getToken, queryClient, router, setBackendNotifications, setUnreadCount],
     );
 
     const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;

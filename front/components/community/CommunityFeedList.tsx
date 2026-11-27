@@ -7,7 +7,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { ArrowUp, MessagesSquare, RefreshCw } from 'lucide-react-native';
 
 import ImageViewerModal from '../common/ImageViewerModal';
-import { communityApi, type CommunityPost } from '../../services/community.api';
+import { communityApi, postImages, type CommunityPost } from '../../services/community.api';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { prefetchImages } from '../../utils/prefetchImages';
@@ -74,11 +74,11 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
     onPostsCount?.(feed.postsCount);
   }, [feed.postsCount, onPostsCount]);
 
-  // Warm the first few image URLs so the opening scroll feels instant.
+  // Warm images for the first posts (all slides) so multi-photo posts open cleanly.
   useEffect(() => {
     const urls = feed.posts
-      .slice(0, 5)
-      .map((p) => p.image?.url)
+      .slice(0, 6)
+      .flatMap((p) => postImages(p).map((img) => img.url))
       .filter((u): u is string => !!u);
     if (urls.length) void prefetchImages(urls);
   }, [feed.posts]);
@@ -280,7 +280,13 @@ export function CommunityFeedList({ source, header, showPending = false, topPadd
         renderItem={renderItem}
         keyExtractor={(r) => r.key}
         getItemType={(r) =>
-          r.type === 'ghost' ? 'ghost' : r.post.kind === 'TEAM_POLL' ? 'post-poll' : r.post.image ? 'post-image' : 'post-text'
+          r.type === 'ghost'
+            ? 'ghost'
+            : r.post.kind === 'TEAM_POLL'
+              ? 'post-poll'
+              : postImages(r.post).length
+                ? 'post-image'
+                : 'post-text'
         }
         ListHeaderComponent={listHeader}
         ListEmptyComponent={empty}

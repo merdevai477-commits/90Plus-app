@@ -173,7 +173,12 @@ export function usePostActions() {
         await communityApi.deletePost(getToken, post.id);
       } catch (err) {
         toastManager.showError(s.delete, communityErrorMessage(err, s));
-        void qc.invalidateQueries({ queryKey: ['community', 'feed'] });
+        void qc.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return key[0] === 'community' && (key[1] === 'feed' || key[1] === 'tag' || key[1] === 'user');
+          },
+        });
       }
     },
     [getToken, qc, s],
