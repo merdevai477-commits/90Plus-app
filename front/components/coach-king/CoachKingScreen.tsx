@@ -373,11 +373,11 @@ export default function CoachKingScreen() {
             </View>
           </LinearGradient>
 
-          {closed ? (
+          {closed || shown.squad.lockedUntil || shown.gameweek.showTimer ? (
             <CoachKingDeadline
               startAt={shown.gameweek.startAt}
               endAt={shown.squad.lockedUntil ?? shown.gameweek.endAt}
-              locked
+              locked={closed || !!shown.squad.lockedUntil}
             />
           ) : (
             <Text

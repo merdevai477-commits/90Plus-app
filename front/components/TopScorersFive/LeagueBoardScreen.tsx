@@ -276,40 +276,49 @@ export default function LeagueBoardScreen() {
     ({ item }) => {
       const lineup = lineups[item];
       const slots = lineup?.slots ?? emptyLineup(item);
+      const hasPicks = slots.some((slot) => slot.player != null);
+      const nowMs = Date.now();
       const earliestLock =
-        slots.map((slot) => slot.lockedUntil).filter((value): value is string => !!value).sort()[0] ?? null;
+        slots
+          .map((slot) => slot.lockedUntil)
+          .filter((value): value is string => !!value)
+          .map((value) => ({ value, at: new Date(value).getTime() }))
+          .filter((row) => Number.isFinite(row.at) && row.at > nowMs)
+          .sort((a, b) => a.at - b.at)[0]?.value ?? null;
       const countdownAt = resolveTsfCountdownTarget({
+        nowMs,
         lockedUntil: earliestLock,
         endAt: lineup?.gameweek.endAt ?? null,
         reopenAt: lineup?.gameweek.reopenAt ?? null,
         leagueLocked: !!lineup?.gameweek.locked,
+        hasPicks,
       });
       const tintCrest = isDark && (item === 'pl' || item === 'ligue1' || item === 'egypt');
       return (
-        <ScrollView
-          style={{ width }}
-          contentContainerStyle={{ paddingBottom: tsfNavBottom(insets.bottom) + 16, flexGrow: 1 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <TsfRoundCountdown
-            leagueName={leagueName(item)}
-            crest={CREST[item]}
-            tintCrest={tintCrest}
-            round={lineup?.gameweek.round ?? null}
-            targetAt={countdownAt}
+        <View style={{ width, height: pitchBox.height || undefined, flex: pitchBox.height ? undefined : 1 }}>
+          <PitchFormation
+            slots={slots}
+            box={pitchBox}
+            fontSemi={fontSemi}
+            fontMedium={fontMedium}
+            onHelp={() => setHelpOpen(true)}
+            onOpen={openSlot}
+            onRemove={removeSlot}
           />
-          <View style={{ width, height: pitchBox.height || undefined, flex: pitchBox.height ? undefined : 1 }}>
-            <PitchFormation
-              slots={slots}
-              box={pitchBox}
-              fontSemi={fontSemi}
-              fontMedium={fontMedium}
-              onHelp={() => setHelpOpen(true)}
-              onOpen={openSlot}
-              onRemove={removeSlot}
-            />
-          </View>
-        </ScrollView>
+          {/* Stadium-sky overlay — visible as soon as the user picks anyone */}
+          {countdownAt ? (
+            <View style={styles.countdownOverlay} pointerEvents="box-none">
+              <TsfRoundCountdown
+                leagueName={leagueName(item)}
+                crest={CREST[item]}
+                tintCrest={tintCrest}
+                round={lineup?.gameweek.round ?? null}
+                targetAt={countdownAt}
+                compact
+              />
+            </View>
+          ) : null}
+        </View>
       );
     },
     [fontMedium, fontSemi, insets.bottom, isDark, leagueName, lineups, openSlot, pitchBox, removeSlot, width],
@@ -1277,6 +1286,14 @@ const styles = StyleSheet.create({
   back: { position: 'absolute', left: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   help: { position: 'absolute', right: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   pitchStage: { flex: 1, minHeight: 520 },
+  countdownOverlay: {
+    position: 'absolute',
+    // Sit in the stadium sky under the ? help orb
+    top: 44,
+    left: 0,
+    right: 0,
+    zIndex: 6,
+  },
   lockRow: {
     marginTop: 10,
     marginLeft: 16,

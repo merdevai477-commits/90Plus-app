@@ -20,9 +20,11 @@ type Props = {
   tintCrest?: boolean;
   round: number | null;
   targetAt: string | null;
+  /** Smaller digits for the stadium-sky overlay above the pitch. */
+  compact?: boolean;
 };
 
-export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetAt }: Props) {
+export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetAt, compact }: Props) {
   const { t, language } = useTranslation();
   const copy = t.topScorersFive.pick.countdown;
   const isAr = language === 'ar';
@@ -54,13 +56,18 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
   const roundLabel =
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;
 
+  const digitBox = compact ? styles.digitCompact : styles.digit;
+  const digitTxt = compact ? styles.digitTextCompact : styles.digitText;
+  const unitBox = compact ? styles.unitCompact : styles.unit;
+  const unitsRow = compact ? styles.unitsCompact : styles.units;
+
   return (
     <LinearGradient
       colors={[...GRADIENT]}
       locations={[0, 0.48, 1]}
       start={{ x: 0, y: 0.5 }}
       end={{ x: 1, y: 0.5 }}
-      style={styles.card}
+      style={[styles.card, compact && styles.cardCompact]}
       testID="tsf-round-countdown"
     >
       <View style={[styles.head, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
@@ -84,21 +91,27 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
       </View>
 
       <View style={[styles.headline, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <Text style={[styles.headlineText, { fontFamily: fontBold }]}>{copy.reopensIn}</Text>
+        <Text style={[styles.headlineText, compact && styles.headlineTextCompact, { fontFamily: fontBold }]}>
+          {copy.reopensIn}
+        </Text>
         <View style={styles.clockWrap}>
           <Image source={SW_ASSET.clockV2} style={styles.clock} resizeMode="contain" />
         </View>
       </View>
 
-      <View style={[styles.units, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+      <View style={[unitsRow, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
         {units.map((unit, index) => (
           <View key={unit.label} style={styles.unitSlot}>
             {index > 0 ? (
-              <Image source={SW_ASSET.colonDots} style={styles.colon} resizeMode="contain" />
+              <Image
+                source={SW_ASSET.colonDots}
+                style={[styles.colon, compact && styles.colonCompact]}
+                resizeMode="contain"
+              />
             ) : null}
-            <View style={styles.unit}>
-              <View style={styles.digit}>
-                <Text style={[styles.digitText, { fontFamily: fontBold }]}>{unit.value}</Text>
+            <View style={unitBox}>
+              <View style={digitBox}>
+                <Text style={[digitTxt, { fontFamily: fontBold }]}>{unit.value}</Text>
               </View>
               <Text style={[styles.unitLabel, { fontFamily: fontSemi }]}>{unit.label}</Text>
             </View>
@@ -116,27 +129,34 @@ export function resolveTsfCountdownTarget(input: {
   endAt: string | null;
   reopenAt: string | null;
   leagueLocked: boolean;
+  /** At least one player is already on the pitch — show the timer immediately. */
+  hasPicks?: boolean;
 }): string | null {
   const now = input.nowMs ?? Date.now();
+
+  // Per-player 7-day lock wins — show from the moment that player is picked.
   if (input.lockedUntil) {
     const lockMs = new Date(input.lockedUntil).getTime();
     if (Number.isFinite(lockMs) && lockMs > now) return input.lockedUntil;
   }
 
-  const reopenIso = input.reopenAt
-    ?? (input.endAt
-      ? new Date(new Date(input.endAt).getTime() + 3_600_000).toISOString()
-      : null);
-  if (!reopenIso) return null;
-  const reopenMs = new Date(reopenIso).getTime();
-  if (!Number.isFinite(reopenMs) || reopenMs <= now) return null;
-
-  if (input.leagueLocked) return reopenIso;
-
+  const reopenIso =
+    input.reopenAt ??
+    (input.endAt ? new Date(new Date(input.endAt).getTime() + 3_600_000).toISOString() : null);
+  const reopenMs = reopenIso ? new Date(reopenIso).getTime() : NaN;
   const endMs = input.endAt ? new Date(input.endAt).getTime() : NaN;
+
+  // After the user starts a lineup, always count down to unlock / round reopen.
+  if (input.hasPicks || input.leagueLocked) {
+    if (Number.isFinite(endMs) && endMs > now) return input.endAt;
+    if (Number.isFinite(reopenMs) && reopenMs > now) return reopenIso;
+    return null;
+  }
+
+  if (!Number.isFinite(reopenMs) || reopenMs <= now) return null;
   if (!Number.isFinite(endMs)) return null;
-  const showFrom = endMs - 3_600_000;
-  if (now < showFrom) return null;
+  // Empty pitch: only hint in the last hour before the round closes.
+  if (now < endMs - 3_600_000) return null;
   return reopenIso;
 }
 
@@ -156,6 +176,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
     zIndex: 4,
+  },
+  cardCompact: {
+    marginTop: 0,
+    marginBottom: 0,
+    padding: 12,
+    gap: 6,
   },
   head: {
     alignItems: 'center',
@@ -203,6 +229,9 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
+  headlineTextCompact: {
+    fontSize: 13,
+  },
   clockWrap: {
     width: 24,
     height: 24,
@@ -220,6 +249,12 @@ const styles = StyleSheet.create({
     width: '100%',
     minHeight: 90,
   },
+  unitsCompact: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    minHeight: 56,
+  },
   unitSlot: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -229,6 +264,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  unitCompact: {
+    width: 58,
+    alignItems: 'center',
+    gap: 2,
+  },
   digit: {
     width: 72,
     height: 72,
@@ -237,9 +277,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  digitCompact: {
+    width: 52,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   digitText: {
     color: '#FFFFFF',
     fontSize: 36,
+    textAlign: 'center',
+  },
+  digitTextCompact: {
+    color: '#FFFFFF',
+    fontSize: 22,
     textAlign: 'center',
   },
   unitLabel: {
@@ -253,5 +306,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
     marginBottom: 18,
     tintColor: '#FFFFFF',
+  },
+  colonCompact: {
+    height: 18,
+    marginBottom: 14,
   },
 });

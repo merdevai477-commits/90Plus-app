@@ -391,23 +391,27 @@ export function tsfRoundNumber(weekKey: string): number {
 
 /**
  * What the per-league countdown ticks toward.
- * Slot locks win; otherwise the card appears from one hour before the window
- * ends through one hour after (`endAt + grace`).
+ * Slot locks win. Once the user has picks (or the league is locked), show the
+ * timer immediately toward end/reopen — not only in the last hour.
  */
 export function tsfCountdownTarget(input: {
   now: Date;
   endAt: Date;
   lockedUntil?: Date | null;
   leagueLocked?: boolean;
+  hasPicks?: boolean;
 }): Date | null {
   const lock = input.lockedUntil ?? null;
   if (lock != null && lock.getTime() > input.now.getTime()) return lock;
 
   const reopen = tsfRoundReopenAt(input.endAt);
+  if (input.hasPicks || input.leagueLocked) {
+    if (input.endAt.getTime() > input.now.getTime()) return input.endAt;
+    if (reopen.getTime() > input.now.getTime()) return reopen;
+    return null;
+  }
+
   if (reopen.getTime() <= input.now.getTime()) return null;
-
-  if (input.leagueLocked) return reopen;
-
   const showFrom = new Date(input.endAt.getTime() - TSF_ROUND_GRACE_MS);
   if (input.now.getTime() < showFrom.getTime()) return null;
   return reopen;
