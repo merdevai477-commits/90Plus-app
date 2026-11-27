@@ -1,5 +1,5 @@
 /**
- * Per-league round countdown — Figma node 2308:5630.
+ * Per-league round countdown — Figma node 2308:5630 (Card / Monthly Countdown).
  * Ticks toward slot unlock or the gameweek reopen (+1h after endAt).
  */
 
@@ -20,11 +20,9 @@ type Props = {
   tintCrest?: boolean;
   round: number | null;
   targetAt: string | null;
-  /** Smaller digits for the stadium-sky overlay above the pitch. */
-  compact?: boolean;
 };
 
-export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetAt, compact }: Props) {
+export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetAt }: Props) {
   const { t, language } = useTranslation();
   const copy = t.topScorersFive.pick.countdown;
   const isAr = language === 'ar';
@@ -46,20 +44,15 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
   if (!targetAt || remainingMs <= 0) return null;
 
   const parts = splitCountdown(remainingMs);
-  // Logical order; row-reverse (LTR) / row (RTL) puts Days on the right like Figma.
+  // Figma LTR DOM order is ثوان → دقائق → ساعات → أيام; RTL row puts Days on the right.
   const units = [
-    { value: parts.days, label: copy.days },
-    { value: parts.hours, label: copy.hours },
-    { value: parts.minutes, label: copy.minutes },
     { value: parts.seconds, label: copy.seconds },
+    { value: parts.minutes, label: copy.minutes },
+    { value: parts.hours, label: copy.hours },
+    { value: parts.days, label: copy.days },
   ];
   const roundLabel =
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;
-
-  const digitBox = compact ? styles.digitCompact : styles.digit;
-  const digitTxt = compact ? styles.digitTextCompact : styles.digitText;
-  const unitBox = compact ? styles.unitCompact : styles.unit;
-  const unitsRow = compact ? styles.unitsCompact : styles.units;
 
   return (
     <LinearGradient
@@ -67,31 +60,32 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
       locations={[0, 0.48, 1]}
       start={{ x: 0, y: 0.5 }}
       end={{ x: 1, y: 0.5 }}
-      style={[styles.card, compact && styles.cardCompact]}
+      style={styles.card}
       testID="tsf-round-countdown"
     >
+      {/* Figma: badge (left) · league name · crest (right) */}
       <View style={[styles.head, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <View style={[styles.headMain, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-          {roundLabel ? (
-            <View style={styles.badge}>
-              <Text style={[styles.badgeText, { fontFamily: fontSemi }]}>{roundLabel}</Text>
-            </View>
-          ) : (
-            <View />
-          )}
+        {roundLabel ? (
+          <View style={styles.badge}>
+            <Text style={[styles.badgeText, { fontFamily: fontSemi }]}>{roundLabel}</Text>
+          </View>
+        ) : (
+          <View style={styles.badgeSpacer} />
+        )}
+        <View style={[styles.leagueWrap, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
           <Text style={[styles.league, { fontFamily: fontBold }]} numberOfLines={1}>
             {leagueName}
           </Text>
+          <Image
+            source={crest}
+            style={[styles.crest, tintCrest ? { tintColor: '#FFFFFF' } : null]}
+            resizeMode="contain"
+          />
         </View>
-        <Image
-          source={crest}
-          style={[styles.crest, tintCrest ? { tintColor: '#FFFFFF' } : null]}
-          resizeMode="contain"
-        />
       </View>
 
       <View style={[styles.headline, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
-        <Text style={[styles.headlineText, compact && styles.headlineTextCompact, { fontFamily: fontBold }]}>
+        <Text style={[styles.headlineText, { fontFamily: fontBold }]} numberOfLines={1}>
           {copy.reopensIn}
         </Text>
         <View style={styles.clockWrap}>
@@ -99,19 +93,16 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
         </View>
       </View>
 
-      <View style={[unitsRow, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+      {/* Figma DOM: ثوان → دقائق → ساعات → أيام so Days sits on the right */}
+      <View style={styles.units}>
         {units.map((unit, index) => (
           <View key={unit.label} style={styles.unitSlot}>
             {index > 0 ? (
-              <Image
-                source={SW_ASSET.colonDots}
-                style={[styles.colon, compact && styles.colonCompact]}
-                resizeMode="contain"
-              />
+              <Image source={SW_ASSET.colonDots} style={styles.colon} resizeMode="contain" />
             ) : null}
-            <View style={unitBox}>
-              <View style={digitBox}>
-                <Text style={[digitTxt, { fontFamily: fontBold }]}>{unit.value}</Text>
+            <View style={styles.unit}>
+              <View style={styles.digit}>
+                <Text style={[styles.digitText, { fontFamily: fontBold }]}>{unit.value}</Text>
               </View>
               <Text style={[styles.unitLabel, { fontFamily: fontSemi }]}>{unit.label}</Text>
             </View>
@@ -163,8 +154,6 @@ export function resolveTsfCountdownTarget(input: {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
@@ -175,24 +164,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
-    zIndex: 4,
-  },
-  cardCompact: {
-    marginTop: 0,
-    marginBottom: 0,
-    padding: 12,
-    gap: 6,
   },
   head: {
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  headMain: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    width: '100%',
   },
   badge: {
     backgroundColor: 'rgba(255,255,255,0.16)',
@@ -203,9 +180,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  badgeSpacer: {
+    width: 64,
+    height: 24,
+  },
   badgeText: {
     color: '#F9F6FE',
     fontSize: 10,
+  },
+  leagueWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    minWidth: 0,
   },
   league: {
     color: '#F9F6FE',
@@ -222,15 +210,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 8,
     minHeight: 22,
+    width: '100%',
   },
   headlineText: {
     color: '#FFFFFF',
     fontSize: 15,
     flex: 1,
     textAlign: 'right',
-  },
-  headlineTextCompact: {
-    fontSize: 13,
   },
   clockWrap: {
     width: 24,
@@ -244,16 +230,11 @@ const styles = StyleSheet.create({
     tintColor: '#FFFFFF',
   },
   units: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
     minHeight: 90,
-  },
-  unitsCompact: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    minHeight: 56,
   },
   unitSlot: {
     flexDirection: 'row',
@@ -264,11 +245,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  unitCompact: {
-    width: 58,
-    alignItems: 'center',
-    gap: 2,
-  },
   digit: {
     width: 72,
     height: 72,
@@ -276,39 +252,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  digitCompact: {
-    width: 52,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    shadowColor: '#29267A',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
   },
   digitText: {
     color: '#FFFFFF',
-    fontSize: 36,
+    fontSize: 40,
     textAlign: 'center',
-  },
-  digitTextCompact: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    textAlign: 'center',
+    includeFontPadding: false,
   },
   unitLabel: {
     color: 'rgba(255,255,255,0.96)',
     fontSize: 10,
     textAlign: 'center',
+    height: 14,
   },
   colon: {
     width: 8,
     height: 28,
-    marginHorizontal: 2,
+    marginHorizontal: 0,
     marginBottom: 18,
     tintColor: '#FFFFFF',
-  },
-  colonCompact: {
-    height: 18,
-    marginBottom: 14,
   },
 });

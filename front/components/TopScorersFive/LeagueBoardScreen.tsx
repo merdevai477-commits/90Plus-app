@@ -314,7 +314,6 @@ export default function LeagueBoardScreen() {
                 tintCrest={tintCrest}
                 round={lineup?.gameweek.round ?? null}
                 targetAt={countdownAt}
-                compact
               />
             </View>
           ) : null}
@@ -1288,8 +1287,8 @@ const styles = StyleSheet.create({
   pitchStage: { flex: 1, minHeight: 520 },
   countdownOverlay: {
     position: 'absolute',
-    // Sit in the stadium sky under the ? help orb
-    top: 44,
+    // Stadium sky under the header / help orb — full Figma card
+    top: 40,
     left: 0,
     right: 0,
     zIndex: 6,
