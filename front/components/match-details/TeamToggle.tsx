@@ -96,8 +96,9 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
           },
         ]}
       >
-        {renderSegment('home', home)}
+        {/* Locked LTR: away left · home right — same as the match scorecard. */}
         {renderSegment('away', away)}
+        {renderSegment('home', home)}
       </View>
     );
   }
@@ -137,8 +138,9 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
 
   return (
     <View style={styles.container}>
-      {renderButton('home', home)}
+      {/* Locked LTR: away left · home right — same as the match scorecard. */}
       {renderButton('away', away)}
+      {renderButton('home', home)}
     </View>
   );
 };
@@ -146,6 +148,7 @@ export const TeamToggle: React.FC<TeamToggleProps> = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    direction: 'ltr',
     gap: 12,
     marginBottom: 16,
   },
@@ -179,6 +182,7 @@ const pill = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'row',
+    direction: 'ltr',
     borderWidth: 1,
     borderRadius: 48,
     overflow: 'hidden',
