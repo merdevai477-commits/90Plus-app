@@ -20,9 +20,18 @@ type Props = {
   tintCrest?: boolean;
   round: number | null;
   targetAt: string | null;
+  /** Thin floating bar for the pitch chrome (back + timer row). */
+  compact?: boolean;
 };
 
-export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetAt }: Props) {
+export function TsfRoundCountdown({
+  leagueName,
+  crest,
+  tintCrest,
+  round,
+  targetAt,
+  compact,
+}: Props) {
   const { t, language } = useTranslation();
   const copy = t.topScorersFive.pick.countdown;
   const isAr = language === 'ar';
@@ -53,6 +62,46 @@ export function TsfRoundCountdown({ leagueName, crest, tintCrest, round, targetA
   ];
   const roundLabel =
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;
+
+  if (compact) {
+    return (
+      <LinearGradient
+        colors={[...GRADIENT]}
+        locations={[0, 0.48, 1]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.slim}
+        testID="tsf-round-countdown-slim"
+      >
+        <View style={[styles.slimMeta, { flexDirection: isAr ? 'row' : 'row-reverse' }]}>
+          <Image
+            source={crest}
+            style={[styles.slimCrest, tintCrest ? { tintColor: '#FFFFFF' } : null]}
+            resizeMode="contain"
+          />
+          <Text style={[styles.slimLeague, { fontFamily: fontSemi }]} numberOfLines={1}>
+            {leagueName}
+          </Text>
+          {roundLabel ? (
+            <Text style={[styles.slimRound, { fontFamily: fontSemi }]} numberOfLines={1}>
+              {roundLabel}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.slimUnits} accessibilityRole="timer">
+          {units.map((unit, index) => (
+            <View key={unit.label} style={styles.slimUnitSlot}>
+              {index > 0 ? <Text style={[styles.slimColon, { fontFamily: fontBold }]}>:</Text> : null}
+              <View style={styles.slimUnit}>
+                <Text style={[styles.slimDigit, { fontFamily: fontBold }]}>{unit.value}</Text>
+                <Text style={[styles.slimLabel, { fontFamily: fontSemi }]}>{unit.label}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -147,6 +196,75 @@ export function resolveTsfCountdownTarget(input: {
 }
 
 const styles = StyleSheet.create({
+  slim: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#2A1060',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  slimMeta: {
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '34%',
+    flexShrink: 1,
+  },
+  slimCrest: {
+    width: 18,
+    height: 22,
+  },
+  slimLeague: {
+    color: '#F9F6FE',
+    fontSize: 10,
+    flexShrink: 1,
+  },
+  slimRound: {
+    color: 'rgba(249,246,254,0.82)',
+    fontSize: 9,
+  },
+  slimUnits: {
+    flex: 1,
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+  },
+  slimUnitSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  slimUnit: {
+    alignItems: 'center',
+    minWidth: 28,
+  },
+  slimDigit: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    includeFontPadding: false,
+    fontVariant: ['tabular-nums'],
+  },
+  slimLabel: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 8,
+    marginTop: 1,
+  },
+  slimColon: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    marginHorizontal: 1,
+    marginBottom: 8,
+  },
   card: {
     marginHorizontal: 16,
     marginTop: 8,

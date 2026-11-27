@@ -127,12 +127,15 @@ export function TsfIslandBack({
   label,
   rtl: _rtl,
   light,
+  inline,
 }: {
   onPress: () => void;
   label: string;
   /** Kept for callers; the control stays on the left in both languages. */
   rtl?: boolean;
   light?: boolean;
+  /** Sit in a flex row instead of absolute header placement. */
+  inline?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -140,7 +143,11 @@ export function TsfIslandBack({
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
-      style={[styles.island, styles.islandStart, light && styles.islandOnDark]}
+      style={[
+        styles.island,
+        inline ? styles.islandInline : styles.islandStart,
+        light && styles.islandOnDark,
+      ]}
     >
       <Ionicons name="chevron-back" size={22} color={light ? '#FFFFFF' : '#24104E'} />
     </TouchableOpacity>
@@ -230,4 +237,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
   },
   islandStart: { left: 12 },
+  islandInline: {
+    position: 'relative',
+    top: 0,
+    flexShrink: 0,
+  },
 });

@@ -100,16 +100,16 @@ function fixturePhase(status: string | null | undefined): 'LIVE' | 'FT' | 'NS' |
   return 'NS';
 }
 
-/** 2-2-1 on the far goal: striker, two mids, two at the back. Percents of the pitch. */
+/** 1-2-2 toward the far goal — leaves room under the floating chrome. */
 const PITCH_SPOTS = [
-  { top: 0.16, left: 0.5 },
-  { top: 0.4, left: 0.24 },
-  { top: 0.4, left: 0.76 },
-  { top: 0.66, left: 0.3 },
-  { top: 0.66, left: 0.7 },
+  { top: 0.2, left: 0.5 },
+  { top: 0.41, left: 0.22 },
+  { top: 0.41, left: 0.78 },
+  { top: 0.63, left: 0.28 },
+  { top: 0.63, left: 0.72 },
 ] as const;
 
-const PITCH_CARD = { width: 118, height: 156 };
+const PITCH_CARD = { width: 108, height: 142 };
 
 export default function LeagueBoardScreen() {
   useScreenFont();
@@ -273,28 +273,38 @@ export default function LeagueBoardScreen() {
     [width],
   );
 
+  const activeCountdown = useMemo(() => {
+    const lineup = lineups[competition];
+    const slots = lineup?.slots ?? emptyLineup(competition);
+    const hasPicks = slots.some((slot) => slot.player != null);
+    const nowMs = Date.now();
+    const earliestLock =
+      slots
+        .map((slot) => slot.lockedUntil)
+        .filter((value): value is string => !!value)
+        .map((value) => ({ value, at: new Date(value).getTime() }))
+        .filter((row) => Number.isFinite(row.at) && row.at > nowMs)
+        .sort((a, b) => a.at - b.at)[0]?.value ?? null;
+    const targetAt = resolveTsfCountdownTarget({
+      nowMs,
+      lockedUntil: earliestLock,
+      endAt: lineup?.gameweek.endAt ?? null,
+      reopenAt: lineup?.gameweek.reopenAt ?? null,
+      leagueLocked: !!lineup?.gameweek.locked,
+      hasPicks,
+    });
+    if (!targetAt) return null;
+    return {
+      targetAt,
+      round: lineup?.gameweek.round ?? null,
+      tintCrest: isDark && (competition === 'pl' || competition === 'ligue1' || competition === 'egypt'),
+    };
+  }, [competition, isDark, lineups]);
+
   const renderCard: ListRenderItem<TsfCompetitionKey> = useCallback(
     ({ item }) => {
       const lineup = lineups[item];
       const slots = lineup?.slots ?? emptyLineup(item);
-      const hasPicks = slots.some((slot) => slot.player != null);
-      const nowMs = Date.now();
-      const earliestLock =
-        slots
-          .map((slot) => slot.lockedUntil)
-          .filter((value): value is string => !!value)
-          .map((value) => ({ value, at: new Date(value).getTime() }))
-          .filter((row) => Number.isFinite(row.at) && row.at > nowMs)
-          .sort((a, b) => a.at - b.at)[0]?.value ?? null;
-      const countdownAt = resolveTsfCountdownTarget({
-        nowMs,
-        lockedUntil: earliestLock,
-        endAt: lineup?.gameweek.endAt ?? null,
-        reopenAt: lineup?.gameweek.reopenAt ?? null,
-        leagueLocked: !!lineup?.gameweek.locked,
-        hasPicks,
-      });
-      const tintCrest = isDark && (item === 'pl' || item === 'ligue1' || item === 'egypt');
       return (
         <View
           style={{
@@ -303,15 +313,6 @@ export default function LeagueBoardScreen() {
             flex: pitchBox.height ? undefined : 1,
           }}
         >
-          {countdownAt ? (
-            <TsfRoundCountdown
-              leagueName={leagueName(item)}
-              crest={CREST[item]}
-              tintCrest={tintCrest}
-              round={lineup?.gameweek.round ?? null}
-              targetAt={countdownAt}
-            />
-          ) : null}
           <View
             style={styles.pitchPane}
             onLayout={(event) => {
@@ -324,7 +325,6 @@ export default function LeagueBoardScreen() {
               box={paneBox.width > 0 ? paneBox : pitchBox}
               fontSemi={fontSemi}
               fontMedium={fontMedium}
-              onHelp={() => setHelpOpen(true)}
               onOpen={openSlot}
               onRemove={removeSlot}
             />
@@ -332,7 +332,7 @@ export default function LeagueBoardScreen() {
         </View>
       );
     },
-    [fontMedium, fontSemi, isDark, leagueName, lineups, openSlot, paneBox, pitchBox, removeSlot, width],
+    [fontMedium, fontSemi, lineups, openSlot, paneBox, pitchBox, removeSlot, width],
   );
 
   const filtered = useMemo(() => {
@@ -346,19 +346,28 @@ export default function LeagueBoardScreen() {
   }, [players, query]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
-      <StatusBar barStyle={colors.statusBar === 'light' ? 'light-content' : 'dark-content'} />
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>
-          {tab === 'pitch' ? pickCopy.formationTitle : copy.title}
-        </Text>
-        <TsfIslandBack
-          onPress={() => router.back()}
-          label={copy.back}
-          rtl={language === 'ar'}
-          light={isDark}
-        />
-      </View>
+    <View
+      style={[
+        styles.screen,
+        { backgroundColor: colors.bg, paddingTop: tab === 'pitch' ? 0 : insets.top },
+      ]}
+    >
+      <StatusBar
+        barStyle={
+          tab === 'pitch' ? 'light-content' : colors.statusBar === 'light' ? 'light-content' : 'dark-content'
+        }
+      />
+      {tab !== 'pitch' ? (
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text, fontFamily: fontSemi }]}>{copy.title}</Text>
+          <TsfIslandBack
+            onPress={() => router.back()}
+            label={copy.back}
+            rtl={language === 'ar'}
+            light={isDark}
+          />
+        </View>
+      ) : null}
 
       {tab === 'pitch' ? (
         <View
@@ -388,6 +397,40 @@ export default function LeagueBoardScreen() {
             extraData={lineups}
             style={styles.flex}
           />
+          <View
+            style={[styles.pitchChrome, { paddingTop: insets.top + 6 }]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.pitchChromeRow} pointerEvents="box-none">
+              <TsfIslandBack
+                inline
+                light
+                onPress={() => router.back()}
+                label={copy.back}
+                rtl={language === 'ar'}
+              />
+              {activeCountdown ? (
+                <TsfRoundCountdown
+                  compact
+                  leagueName={leagueName(competition)}
+                  crest={CREST[competition]}
+                  tintCrest={activeCountdown.tintCrest}
+                  round={activeCountdown.round}
+                  targetAt={activeCountdown.targetAt}
+                />
+              ) : (
+                <View style={styles.pitchChromeSpacer} />
+              )}
+              <TouchableOpacity
+                onPress={() => setHelpOpen(true)}
+                accessibilityRole="button"
+                style={styles.infoOrb}
+                hitSlop={8}
+              >
+                <Ionicons name="help" size={18} color="#6A2BD9" />
+              </TouchableOpacity>
+            </View>
+          </View>
           {focusedLeague ? null : (
             <View style={[styles.dots, { bottom: tsfNavBottom(insets.bottom) + 72 }]}>
               {TSF_COMPETITIONS.map((key, dot) => (
@@ -536,7 +579,6 @@ function PitchFormation({
   box,
   fontSemi,
   fontMedium,
-  onHelp,
   onOpen,
   onRemove,
 }: {
@@ -544,22 +586,11 @@ function PitchFormation({
   box: { width: number; height: number };
   fontSemi: string | undefined;
   fontMedium: string | undefined;
-  onHelp: () => void;
   onOpen: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
   onRemove: (slotKey: string, locked: boolean, lockedUntil: string | null) => void;
 }) {
   return (
     <View style={styles.pitchStage}>
-      <View style={styles.lockRow}>
-        <TouchableOpacity
-          onPress={onHelp}
-          accessibilityRole="button"
-          style={styles.infoOrb}
-          hitSlop={8}
-        >
-          <Ionicons name="help" size={18} color="#6A2BD9" />
-        </TouchableOpacity>
-      </View>
       {box.width > 0 && box.height > 0
         ? slots.slice(0, 5).map((slot, index) => {
             const spot = PITCH_SPOTS[index] ?? PITCH_SPOTS[0];
@@ -1296,6 +1327,22 @@ const styles = StyleSheet.create({
   title: { fontSize: 18 },
   back: { position: 'absolute', left: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   help: { position: 'absolute', right: 16, top: 8, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  pitchChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 6,
+    paddingHorizontal: 12,
+  },
+  pitchChromeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pitchChromeSpacer: {
+    flex: 1,
+  },
   pitchStage: { flex: 1, minHeight: 420 },
   pitchPane: { flex: 1, minHeight: 0 },
   lockRow: {
@@ -1347,8 +1394,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pitchPhoto: { width: 92, height: 92 },
-  pitchName: { color: '#24104E', fontSize: 13, marginTop: 2, textAlign: 'center', paddingHorizontal: 6 },
+  pitchPhoto: { width: 78, height: 78 },
+  pitchName: { color: '#24104E', fontSize: 12, marginTop: 2, textAlign: 'center', paddingHorizontal: 6 },
   crown: { position: 'absolute', top: 6, left: 8 },
   helpCard: {
     width: '100%',
