@@ -164,8 +164,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const bottomClearance = REELS_TAB_CLEARANCE + Math.max(insets.bottom, 12);
     const topClearance = Math.max(insets.top, 12) + 56; // below For You header
     const cellHeight = itemHeight && itemHeight > 0 ? itemHeight : FALLBACK_HEIGHT;
-    const isRtl = language !== 'en';
-    const captionAlign = isRtl ? 'right' : 'left';
+    // Meta sits on the left rail; keep captions flush under the avatar.
+    const captionAlign = 'left' as const;
     const fontBold = getAppFont(700, language);
     const fontRegular = getAppFont(400, language);
     const { title: captionTitle, body: captionBody } = splitCaption(reel.description || '');
@@ -494,7 +494,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 style={[
                     styles.metaBlock,
                     {
-                        bottom: bottomClearance + 10,
+                        // Sit above the tab bar + swipe hint so the bio stays readable
+                        bottom: bottomClearance + 28,
                         left: 12,
                         right: 78,
                     },

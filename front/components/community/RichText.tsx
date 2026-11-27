@@ -37,7 +37,10 @@ export const RichText = memo(function RichText({
   const { colors } = useCommunityTheme();
   const segments = useMemo(() => parseRichText(text), [text]);
   const detectedRtl = useMemo(() => isArabicText(text), [text]);
-  const rtl = align ? align === 'right' : detectedRtl;
+  // `align` only pins the block edge (e.g. under a left-side reel avatar);
+  // writing direction still follows the actual caption language.
+  const textAlign = align ?? (detectedRtl ? 'right' : 'left');
+  const writingRtl = detectedRtl;
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const collapsible = !!collapseAfterLines;
@@ -45,7 +48,10 @@ export const RichText = memo(function RichText({
   return (
     <>
       <Text
-        style={[style, { textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' }]}
+        style={[
+          style,
+          { textAlign, writingDirection: writingRtl ? 'rtl' : 'ltr' },
+        ]}
         numberOfLines={collapsible && !expanded ? collapseAfterLines : undefined}
         onTextLayout={
           collapsible && !expanded && !overflowing
@@ -118,7 +124,7 @@ export const RichText = memo(function RichText({
       {collapsible && overflowing && (
         <Text
           onPress={() => setExpanded((v) => !v)}
-          style={{ color: colors.muted, fontSize: 14, marginTop: 4, textAlign: rtl ? 'right' : 'left' }}
+          style={{ color: colors.muted, fontSize: 14, marginTop: 4, textAlign }}
           suppressHighlighting
         >
           {expanded ? seeLessLabel : seeMoreLabel}

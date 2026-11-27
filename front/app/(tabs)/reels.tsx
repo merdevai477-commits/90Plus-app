@@ -2386,7 +2386,8 @@ const styles = StyleSheet.create({
   },
   swipeHint: {
     position: 'absolute',
-    bottom: 110,
+    // Below the caption/actions, above the floating tab bar
+    bottom: 88,
     left: 0,
     right: 0,
     alignItems: 'center',
