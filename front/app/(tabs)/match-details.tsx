@@ -2258,8 +2258,14 @@ const MatchDetailsScreen = () => {
             }}
           />
         )}
-        <View style={styles.eventsContainer}>
-          <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
+        <View
+          style={[
+            styles.eventsContainer,
+            // Pull the score-only notice flush under the tabs when momentum/summary is absent.
+            // Momentum keeps its own bottom margin, so this does not change its spacing.
+            eventsFeedAvailable === false && !matchSummary ? { marginTop: 0 } : null,
+          ]}
+        >
           {eventsFeedAvailable === false ? (
             <View
               style={[
@@ -2276,7 +2282,11 @@ const MatchDetailsScreen = () => {
                   'Goals are shown from the score only, without player names'}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            <Text style={[styles.sectionTitle, { color: mdColors.textPrimary }]}>
+              {t.matchDetails.matchEvents}
+            </Text>
+          )}
           {sortedEvents.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="football-outline" size={48} color="#333" />
@@ -4412,6 +4422,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    marginTop: 0,
     marginBottom: 12,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
