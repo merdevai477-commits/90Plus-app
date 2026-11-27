@@ -60,12 +60,12 @@ export function TsfRoundCountdown({
   if (!targetAt || remainingMs <= 0) return null;
 
   const parts = splitCountdown(remainingMs);
-  // Forced LTR track: ثوان → دقائق → ساعات → أيام (Days on the right, like Figma).
+  // Forced LTR track: أيام → ساعات → دقائق → ثوان (Days on the left).
   const units = [
-    { value: parts.seconds, label: copy.seconds },
-    { value: parts.minutes, label: copy.minutes },
-    { value: parts.hours, label: copy.hours },
     { value: parts.days, label: copy.days },
+    { value: parts.hours, label: copy.hours },
+    { value: parts.minutes, label: copy.minutes },
+    { value: parts.seconds, label: copy.seconds },
   ];
   const roundLabel =
     round != null && round > 0 ? copy.round.replace('{n}', String(round)) : null;

@@ -62,12 +62,12 @@ export function CoachKingDeadline({
   const phase = locked ? 'closed' : 'open';
   const headline = phase === 'open' ? copy.closesIn : copy.opensIn;
 
-  // Forced LTR track: ثوان → دقائق → ساعات → أيام (Days on the right).
+  // Forced LTR track: أيام → ساعات → دقائق → ثوان (Days on the left).
   const units = [
-    { value: parts.seconds, label: copy.seconds },
-    { value: parts.minutes, label: copy.minutes },
-    { value: parts.hours, label: copy.hours },
     { value: parts.days, label: copy.days },
+    { value: parts.hours, label: copy.hours },
+    { value: parts.minutes, label: copy.minutes },
+    { value: parts.seconds, label: copy.seconds },
   ];
 
   if (compact) {

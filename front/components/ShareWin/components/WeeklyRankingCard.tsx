@@ -114,8 +114,9 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
         },
         units: {
           width: '100%',
-          // Figma visual: Days on the right → Seconds on the left
-          flexDirection: 'row-reverse',
+          // Days on the left → Seconds on the right (LTR even in Arabic UI).
+          flexDirection: 'row',
+          direction: 'ltr',
           alignItems: 'center',
           justifyContent: 'space-between',
         },
@@ -299,7 +300,7 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
     [f, mirrorRtl, s, theme],
   );
 
-  // Logical order; `units` row-reverse places Days on the right (Figma).
+  // Days → Hours → Minutes → Seconds (left to right).
   const units = [
     { value: countdown.days, label: copy.unitDays },
     { value: countdown.hours, label: copy.unitHours },
