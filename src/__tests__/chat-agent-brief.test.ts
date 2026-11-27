@@ -10,7 +10,8 @@ describe('buildAgentVoicePrompt', () => {
     const prompt = buildAgentVoicePrompt('medium');
     expect(prompt).toContain('90Plus agent');
     expect(prompt).toContain('لهجة مصرية');
-    expect(prompt.length).toBeLessThan(900);
+    expect(prompt).toContain('بروفايل');
+    expect(prompt.length).toBeLessThan(1200);
   });
 });
 
@@ -51,9 +52,21 @@ describe('formatEntityBrief', () => {
         source: '365scores_team',
         teamName: 'الأهلي المصري',
         coach: 'حسين عموتة',
+        coachNationality: 'المغرب',
         country: 'مصر',
         stadium: 'ستاد القاهرة',
-        competitions: [{ id: 1, name: 'الدوري المصري' }],
+        founded: 1907,
+        cafChampionsLeagueWins: 12,
+        competitions: [
+          { id: 1, name: 'الدوري المصري' },
+          { id: 2, name: 'دوري أبطال أفريقيا' },
+        ],
+        leaguePosition: { rank: 1, played: 20, points: 48, gd: 30 },
+        notablePlayers: ['إمام عاشور (وسط)', 'وسام أبو علي (هجوم)'],
+        form: [
+          { result: 'W', opponent: 'بيراميدز', score: '2-1' },
+          { result: 'D', opponent: 'الزمالك', score: '1-1' },
+        ],
         recentMatches: {
           upcoming: [{ home: 'الأهلي', away: 'الزمالك', kickoff: '2026-09-20T18:00:00Z' }],
           finished: [{ home: 'الأهلي', away: 'بيراميدز', score: { home: 2, away: 1 } }],
@@ -64,9 +77,13 @@ describe('formatEntityBrief', () => {
     expect(text).toContain('**الأهلي المصري**');
     expect(text).toContain('حسين عموتة');
     expect(text).toContain('ستاد القاهرة');
+    expect(text).toContain('ألقاب دوري أبطال أفريقيا: **12**');
+    expect(text).toContain('ترتيب الدوري: **1**');
+    expect(text).toContain('إمام عاشور');
+    expect(text).toContain('| الحالة | الخصم | النتيجة |');
+    expect(text).toContain('بيراميدز');
     expect(text).toContain('المباراة الجاية');
-    expect(text).toContain('آخر مباراة');
-    expect(text).toContain('2-1');
+    expect(text).toContain('بروفايل النادي');
   });
 });
 

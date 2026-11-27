@@ -23,12 +23,30 @@ import { resolveFootballSeason } from '../utils/football-season.util';
 
 export type TeamDossierSource = 'api' | 'cache' | 'unavailable';
 
+export interface TeamDossierFormRow {
+  result: string;
+  opponent: string;
+  score: string;
+}
+
+export interface TeamDossierLeaguePosition {
+  rank: number | string;
+  played: number | string;
+  points: number | string;
+  gd: number | string;
+  leagueName?: string;
+}
+
 export interface TeamDossierResult {
   block: string;
   source: TeamDossierSource;
   apiTeamId: number;
   /** Current head coach (from API-Football), when available. */
   coach?: { name: string; nationality?: string | null } | null;
+  /** Last fixtures as structured form (newest first). */
+  form?: TeamDossierFormRow[];
+  leaguePosition?: TeamDossierLeaguePosition | null;
+  notablePlayers?: string[];
 }
 
 const TEAM_DOSSIER_TTL_MS = 3 * 60 * 60_000; // ~3h
@@ -78,6 +96,7 @@ export async function fetchTeamDossierContext(
 
   // ── 1. DB-first squad/team info (source: cache) ──────────────────────────
   let leagueIdFromDb: number | null = null;
+  const notablePlayers: string[] = [];
   try {
     const teamInfo = await prisma.teamInfo.findUnique({
       where: { apiTeamId: teamId },
@@ -87,11 +106,12 @@ export async function fetchTeamDossierContext(
       usedCache = true;
       lines.push(`source: cache | Squad snapshot season ${teamInfo.season}`);
       if (teamInfo.players.length) {
-        const notable = teamInfo.players
-          .slice(0, 8)
-          .map((p) => `${p.playerName}${p.position ? ` (${p.position})` : ''}`)
-          .join(', ');
-        lines.push(`Notable players (cache): ${notable}`);
+        for (const p of teamInfo.players.slice(0, 8)) {
+          notablePlayers.push(
+            `${p.playerName}${p.position ? ` (${p.position})` : ''}`,
+          );
+        }
+        lines.push(`Notable players (cache): ${notablePlayers.join(', ')}`);
       }
     }
   } catch (err) {
@@ -102,6 +122,7 @@ export async function fetchTeamDossierContext(
   }
 
   // ── 2. Last-5 fixtures (source: api) — also reveals the domestic league id ──
+  const form: TeamDossierFormRow[] = [];
   try {
     const fixtures = await footballService.getFixtures({ team: teamId, last: 5 });
     if (Array.isArray(fixtures) && fixtures.length) {
@@ -117,7 +138,13 @@ export async function fetchTeamDossierContext(
         const lid = f.league?.id;
         if (typeof lid === 'number') leagueCount.set(lid, (leagueCount.get(lid) ?? 0) + 1);
         const res = resultLetter(isHome, gh, ga);
-        return `${res} vs ${opp ?? '—'} (${gh ?? '?'}-${ga ?? '?'})`;
+        const score = `${gh ?? '?'}-${ga ?? '?'}`;
+        form.push({
+          result: res,
+          opponent: opp ?? '—',
+          score,
+        });
+        return `${res} vs ${opp ?? '—'} (${score})`;
       });
       lines.push(`source: api | Last ${recent.length} results: ${recent.join(' | ')}`);
 
@@ -143,6 +170,7 @@ export async function fetchTeamDossierContext(
   }
 
   // ── 3. Current league position (source: api) ─────────────────────────────
+  let leaguePosition: TeamDossierLeaguePosition | null = null;
   if (leagueIdFromDb != null) {
     try {
       const { flat } = await footballService.getStandingsParsed(leagueIdFromDb, season);
@@ -150,6 +178,13 @@ export async function fetchTeamDossierContext(
       if (myRow) {
         usedApi = true;
         const leagueName = myRow.group ?? '';
+        leaguePosition = {
+          rank: myRow.rank ?? '—',
+          played: myRow.all?.played ?? '—',
+          points: myRow.points ?? '—',
+          gd: myRow.goalsDiff ?? '—',
+          ...(leagueName ? { leagueName } : {}),
+        };
         lines.push(
           `source: api | League position: ${myRow.rank ?? '—'}${
             leagueName ? ` (${leagueName})` : ''
@@ -201,7 +236,15 @@ export async function fetchTeamDossierContext(
     'NOTE: Use ONLY the figures above. Items marked "unavailable" have no verified data — do not invent them.',
   ].join('\n');
 
-  const result: TeamDossierResult = { block, source, apiTeamId: teamId, coach: coachInfo };
+  const result: TeamDossierResult = {
+    block,
+    source,
+    apiTeamId: teamId,
+    coach: coachInfo,
+    ...(form.length ? { form } : {}),
+    ...(leaguePosition ? { leaguePosition } : {}),
+    ...(notablePlayers.length ? { notablePlayers } : {}),
+  };
   // Only persist dossiers that actually carry data (don't cache empty shells).
   if (source !== 'unavailable') {
     await redisCacheService.set(redisKey, result, TEAM_DOSSIER_TTL_MS);

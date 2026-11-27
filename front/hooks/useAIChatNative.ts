@@ -89,18 +89,18 @@ const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
  * We split chunks into words, queue them, and reveal a few per tick.
  *
  * Kept snappy so tool/LLM latency isn't compounded by a long artificial drain:
- *   - Small backlog  → 2 words per tick
- *   - Medium backlog → 3-5 words per tick
- *   - Large backlog  → 8-14 words per tick (catch up)
- *   - Network done   → finish remaining words within TYPING_DRAIN_* (~0.1–0.7s)
+ *   - Small backlog  → 3 words per tick
+ *   - Medium backlog → 5-8 words per tick
+ *   - Large backlog  → 12-20 words per tick (catch up)
+ *   - Network done   → finish remaining words within TYPING_DRAIN_* (~0.08–0.4s)
  */
 const TYPING_TICK_MS = 16;
 const TYPING_BACKLOG_LARGE = 40;
 const TYPING_BACKLOG_HUGE = 120;
 const TYPING_DRAIN_TICK_MS = 16;
-const TYPING_DRAIN_MS_PER_WORD = 6;
-const TYPING_DRAIN_MIN_MS = 100;
-const TYPING_DRAIN_MAX_MS = 700;
+const TYPING_DRAIN_MS_PER_WORD = 4;
+const TYPING_DRAIN_MIN_MS = 80;
+const TYPING_DRAIN_MAX_MS = 400;
 const CODE_BLOCK_REGEX = /```|\|/;
 
 export interface ChatLabels {
@@ -699,11 +699,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
    */
   const computeWordsPerTick = useCallback((queueLen: number): number => {
     if (networkDoneRef.current) return drainStepRef.current;
-    if (queueLen > TYPING_BACKLOG_HUGE) return 14;
-    if (queueLen > TYPING_BACKLOG_LARGE) return 8;
-    if (queueLen > 20) return 5;
-    if (queueLen > 8) return 3;
-    return 2;
+    if (queueLen > TYPING_BACKLOG_HUGE) return 20;
+    if (queueLen > TYPING_BACKLOG_LARGE) return 12;
+    if (queueLen > 20) return 8;
+    if (queueLen > 8) return 5;
+    return 3;
   }, []);
 
   /** One typing tick — pull a few tokens off the queue and apply to state. */

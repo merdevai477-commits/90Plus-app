@@ -117,13 +117,13 @@ const TOOL_USAGE_PREAMBLE = `
 - لو عدد كاس العالم = 1 يبقى اللاعب فاز بكاس عالم فعلًا. ممنوع تقول "ماكسبش" أو "لسه صغير" أو تعكس الرقم اللي في الأداة بناءً على ذاكرتك أو سن اللاعب.
 - ممنوع منعًا باتًا تضيف من ذاكرتك: سنة بطولة، اسم منتخب، اسم نادي، أو نسخة/إصدار بطولة — إلا لو مكتوبة صراحة في نتيجة الأداة (مثال: apiFootballWorldCup.wins). متقولش "كأس العالم 2022" لو السنة مش موجودة في الأداة.
 - نادي اللاعب الحالي: استخدم قيمة club / quickFacts.currentClub من الأداة بالظبط (مثال: حكيمي = باريس سان جيرمان). ممنوع تذكر نادي قديم أو نادي من ذاكرتك.
-- ممنوع أي سرد تاريخي أو تعليق زيادة حوالين البطولة — جاوب على السؤال بالرقم/النادي وبس.
+- لو السؤال عن رقم واحد: جاوب بالرقم بوضوح ومع جملة سياق قصيرة من نفس الأداة. لو السؤال عن بروفايل/نادي/لاعب: غطِّ الحقول المتاحة كاملة من غير اختراع.
 
 الأسلوب (صاحب كروي محترف):
 - أول سطر هو الإجابة نفسها، بصيغة جملة، و**بولد** للرقم أو النادي أو الاسم المهم.
 - كمّل الجملة والجدول لآخر صف. متقفش في نص فكرة.
-- بعد الخلاصة: ٢–٤ نقط، أو جدول Markdown واحد لو فيه ٣ صفوف أو أكتر.
-- لهجة مصرية طبيعية لو السؤال عربي. من غير حشو، ومن غير سرد زيادة، ومن غير إيموجي كتير.
+- بعد الخلاصة: ٢–٥ نقط، أو جدول Markdown واحد لو فيه ٣ صفوف أو أكتر. لبروفايل نادي/لاعب غطِّ الحقول المتاحة من الأداة (مدرب، ملعب، ترتيب، فورم، ألقاب) — متكتفيش بسطرين.
+- لهجة مصرية طبيعية لو السؤال عربي. من غير حشو فاضي، ومن غير إيموجي كتير.
 - الأسلوب مايغيّرش أي رقم أو نادي — دول من الأداة بس.
 - ماتذكرش أسماء الأدوات أو API للمستخدم.
 `.trim();
@@ -571,25 +571,99 @@ export function formatEntityBrief(parsed: any, language: MessageLanguage): strin
     const name = parsed.teamName || parsed.name || parsed.best?.name;
     if (!name) return null;
     const coach = parsed.coach || facts.coach;
+    const coachNat = parsed.coachNationality;
     const country = parsed.country;
     const stadium = parsed.stadium || facts.stadium;
     const founded = parsed.founded || facts.founded;
-    const league = Array.isArray(parsed.competitions) ? parsed.competitions[0]?.name : null;
-    const nextMatch = formatCompactMatch(facts.nextMatch ?? parsed.recentMatches?.live?.[0] ?? parsed.recentMatches?.upcoming?.[0]);
-    const lastMatch = formatCompactMatch(facts.lastMatch ?? parsed.recentMatches?.finished?.[0]);
+    const competitions: Array<{ name?: string }> = Array.isArray(parsed.competitions)
+      ? parsed.competitions
+      : [];
+    const league = competitions[0]?.name ?? null;
+    const otherComps = competitions
+      .slice(1, 4)
+      .map((c) => c?.name)
+      .filter(Boolean);
+    const caf =
+      parsed.cafChampionsLeagueWins ?? facts.cafChampionsLeagueWins ?? null;
+    const pos = parsed.leaguePosition ?? facts.leaguePosition ?? null;
+    const notables: string[] = Array.isArray(parsed.notablePlayers)
+      ? parsed.notablePlayers.filter(Boolean).slice(0, 6)
+      : [];
+    const formRows: Array<{ result?: string; opponent?: string; score?: string }> =
+      Array.isArray(parsed.form) && parsed.form.length
+        ? parsed.form.slice(0, 5)
+        : (parsed.recentMatches?.finished ?? []).slice(0, 5).map((m: any) => ({
+            result: '',
+            opponent: [m.home, m.away].filter(Boolean).join(' vs '),
+            score:
+              m.score?.home != null && m.score?.away != null
+                ? `${m.score.home}-${m.score.away}`
+                : '',
+          }));
+    const nextMatch = formatCompactMatch(
+      facts.nextMatch ??
+        parsed.recentMatches?.live?.[0] ??
+        parsed.recentMatches?.upcoming?.[0],
+    );
+    const lastMatch = formatCompactMatch(
+      facts.lastMatch ?? parsed.recentMatches?.finished?.[0],
+    );
+
+    const formTable =
+      formRows.length >= 2
+        ? [
+            en ? '| Result | Opponent | Score |' : '| الحالة | الخصم | النتيجة |',
+            '| --- | --- | --- |',
+            ...formRows.map((r) => {
+              const result = r.result && r.result !== '?' ? r.result : '—';
+              return `| ${result} | ${r.opponent || '—'} | ${r.score || '—'} |`;
+            }),
+          ].join('\n')
+        : null;
+
     const lines = [
       coach
-        ? (en ? `**${name}** — coach **${coach}**.` : `**${name}**، المدرب الحالي **${coach}**.`)
+        ? en
+          ? `**${name}** — head coach **${coach}**${coachNat ? ` (${coachNat})` : ''}.`
+          : `**${name}** — المدرب الحالي **${coach}**${coachNat ? ` (${coachNat})` : ''}.`
         : `**${name}**`,
-      league ? (en ? `Competition: ${league}.` : `بيلعب في ${league}.`) : null,
+      league
+        ? en
+          ? `Competition: **${league}**${otherComps.length ? ` · also ${otherComps.join(', ')}` : ''}.`
+          : `بيلعب في **${league}**${otherComps.length ? ` · وكمان ${otherComps.join('، ')}` : ''}.`
+        : null,
       country ? (en ? `Country: ${country}.` : `البلد: ${country}.`) : null,
       stadium ? (en ? `Stadium: ${stadium}.` : `الملعب: ${stadium}.`) : null,
       founded ? (en ? `Founded: ${founded}.` : `تأسس: ${founded}.`) : null,
+      caf != null
+        ? en
+          ? `CAF Champions League titles: **${caf}**.`
+          : `ألقاب دوري أبطال أفريقيا: **${caf}**.`
+        : null,
+      pos
+        ? en
+          ? `League position: **${pos.rank}** — P${pos.played} · Pts ${pos.points} · GD ${pos.gd}${pos.leagueName ? ` (${pos.leagueName})` : ''}.`
+          : `ترتيب الدوري: **${pos.rank}** — لعب ${pos.played} · نقاط ${pos.points} · فارق ${pos.gd}${pos.leagueName ? ` (${pos.leagueName})` : ''}.`
+        : null,
+      notables.length
+        ? en
+          ? `Notable players: ${notables.join(', ')}.`
+          : `أبرز اللاعبين: ${notables.join('، ')}.`
+        : null,
+      formTable
+        ? en
+          ? `Recent form:\n${formTable}`
+          : `آخر النتائج:\n${formTable}`
+        : null,
       nextMatch ? (en ? `Next match: ${nextMatch}.` : `المباراة الجاية: ${nextMatch}.`) : null,
-      lastMatch ? (en ? `Last match: ${lastMatch}.` : `آخر مباراة: ${lastMatch}.`) : null,
+      !formTable && lastMatch
+        ? en
+          ? `Last match: ${lastMatch}.`
+          : `آخر مباراة: ${lastMatch}.`
+        : null,
       en
         ? 'Open the club profile below for the full page.'
-        : 'تقدر تفتح بروفايل النادي من الزر تحت.',
+        : 'تقدر تفتح بروفايل النادي الكامل من الزر تحت.',
     ].filter(Boolean);
     return lines.join('\n');
   }
@@ -600,10 +674,10 @@ export function formatEntityBrief(parsed: any, language: MessageLanguage): strin
 export function buildAgentVoicePrompt(mode: 'short' | 'medium' | 'detailed'): string {
   const length =
     mode === 'short'
-      ? 'السؤال قصير: سطر أو سطرين، والجملة كاملة.'
+      ? 'لو السؤال واقعي برقم واحد (مين سجل / كام هدف / فين بيلعب): جملة كاملة + سطر دعم لو مفيد. متختصرش بروفايل لاعب/نادي في سطرين.'
       : mode === 'detailed'
         ? 'ابدأ بالخلاصة في سطر، وبعدين جدول أو ٤–٦ نقط، وخلّص الفكرة.'
-        : 'الخلاصة في أول سطر، وبعدين ٢–٤ نقط أو جدول واحد لو الأرقام كتير.';
+        : 'الخلاصة في أول سطر، وبعدين ٢–٥ نقط أو جدول واحد. لبروفايل نادي/لاعب: غطِّ المدرب/الملعب/الترتيب/الفورم/الألقاب المتاحة من الأدوات.';
   return [
     'أنت 90Plus agent، صاحب كروي جوه تطبيق 90Plus.',
     'ابدأ بالإجابة في أول سطر، و**بولد** الاسم أو الرقم أو النادي المهم.',
@@ -611,6 +685,7 @@ export function buildAgentVoicePrompt(mode: 'short' | 'medium' | 'detailed'): st
     'لو السؤال عربي: لهجة مصرية طبيعية. لو إنجليزي: إنجليزي واضح. من غير حشو ومن غير إيموجي كتير.',
     'كمّل الجملة والجدول لآخر صف. متقفش في نص فكرة.',
     'أي رقم أو نادي حالي أو نتيجة أو دقيقة مباراة لازم ييجي من أداة البيانات. ممنوع تخمين حاجة بتتغير.',
+    'لو الأداة رجّعت بيانات ناقصة: جاوب باللي موجود بوضوح، وقول إيه اللي مش متاح — ممنوع تعوّض من الذاكرة بأرقام أو نوادي حالية.',
     'التاريخ الثابت القديم تقدر تقوله لو الأداة مرجّعتش حاجة، ومن غير أرقام مش متأكد منها.',
     'نطاقك: كرة القدم، التمرين، التغذية الرياضية، والاستشفاء. برا النطاق اعتذر في سطر.',
     'لو فيه سباب، ارفض بهدوء.',

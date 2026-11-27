@@ -112,7 +112,8 @@ export function ChatTypingOrb() {
       fromX.value = origin.x - (x + w / 2);
       fromY.value = origin.y - (y + h / 2);
       fromScale.value = origin.size / ORB_RENDER;
-      holdTypingUntil(Date.now() + LANDED_MS);
+      // Let tokens start during settle wobble — full LANDED_MS added ~1s of dead air.
+      holdTypingUntil(Date.now() + PULL_MS + 180);
 
       pull.value = withTiming(1, { duration: PULL_MS, easing: Easing.in(Easing.cubic) });
       settle.value = withDelay(

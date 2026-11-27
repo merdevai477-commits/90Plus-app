@@ -381,19 +381,36 @@ function detectLengthMode(message: string): LengthMode {
     const normalized = message.toLowerCase();
     const words = message.trim().split(/\s+/).length;
 
-    // Player / career questions are often short but need thorough answers.
+    // Player / career / club profile questions are often short but need thorough answers.
     if (
-        /مسيرة|سيرة|تاريخ\s*اللاعب|career|biography|bio|history|titles|trophies|ألقاب|القاب|انتقالات|transfers|who\s+is|tell\s+me\s+about|من\s+هو|مين\s+هو|عن\s+اللاعب|about\s+the\s+player|player\s+profile/i.test(
+        /مسيرة|سيرة|تاريخ\s*اللاعب|career|biography|bio|history|titles|trophies|ألقاب|القاب|انتقالات|transfers|who\s+is|tell\s+me\s+about|من\s+هو|مين\s+هو|عن\s+اللاعب|عن\s+النادي|about\s+the\s+player|player\s+profile|club\s+profile|بروفايل/i.test(
             normalized,
         )
     ) {
         return 'detailed';
     }
 
+    // Bare club/player name lookups need a medium profile, not a 1-line stub.
+    if (
+        /أهلي|اهلي|زمالك|ريال|برشلون|ليفربول|سيتي|ارسنال|أرسنال|بيراميدز|المصري|نصر|هلال|اتحاد|يوفنتوس|بايرن|تشيلسي|منتخب|صلاح|مبابي|ميسي|رونالدو|al\s*ahly|liverpool|madrid|barcelona/i.test(
+            normalized,
+        )
+    ) {
+        return 'medium';
+    }
+
     if (/تحليل|تفصيلي|قارن|مقارنة|استراتيجية|خطة كاملة/.test(normalized)) return 'detailed';
     if (/اشرح|شرح|خطوات|ازاي|كيف|ليه|لماذا/.test(normalized)) return 'medium';
     if (/ألم|إصابة|تعب|استشفاء|نظام غذائي|وجبة|تمرين|تدريب|نصائح/.test(normalized)) return 'medium';
-    if (words <= 4 || /^(كم|مين|فين|متى|ايه|ما هو)[؟?\s]/.test(normalized)) return 'short';
+    // Single-fact questions stay short; anything longer stays at least medium.
+    if (
+        words <= 3 &&
+        /^(كم|مين|فين|متى|ايه|ما هو)[؟?\s]/.test(normalized) &&
+        !/بروفايل|نادي|فريق|لاعب|مدرب|ترتيب|تشكيلة|ألقاب|القاب/i.test(normalized)
+    ) {
+        return 'short';
+    }
+    if (words <= 2 && /^(كم|مين|فين|متى|ايه)\b/.test(normalized)) return 'short';
     return 'medium';
 }
 
@@ -859,7 +876,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
             const historyForAgent = buildHistoryWindow(
                 Array.isArray(history) ? history : [],
-                1100,
+                1800,
             );
 
             try {

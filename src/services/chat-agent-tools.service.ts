@@ -1405,7 +1405,9 @@ async function hydrateFootballSearchHit(
     };
   }
   if (hit.type === 'club' || hit.type === 'national_team') {
-    const needDossier = wantsTrophyEnrichment(hint);
+    // Always pull dossier in parallel (Redis ~3h). Club name lookups need a
+    // full profile (form / standing / notables), not just coach+stadium.
+    const wantTrophies = wantsTrophyEnrichment(hint);
     const [infoRes, coachRes, matchesRes, dossier] = await Promise.all([
       Promise.resolve(footballDataCacheService.getCached365CompetitorInfo(hit.id, language)).catch(
         () => ({ data: null }),
@@ -1416,9 +1418,7 @@ async function hydrateFootballSearchHit(
       Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
         () => ({ data: null }),
       ),
-      needDossier
-        ? Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null)
-        : Promise.resolve(null),
+      Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null),
     ]);
     const info = infoRes?.data;
     const coach = coachRes?.data;
@@ -1426,9 +1426,20 @@ async function hydrateFootballSearchHit(
     const coachName = coach?.name ?? dossier?.coach?.name ?? null;
     const live = (matches?.live ?? []).slice(0, 2).map(compactFixture);
     const upcoming = (matches?.upcoming ?? []).slice(0, 3).map(compactFixture);
-    const finished = (matches?.finished ?? []).slice(0, 3).map(compactFixture);
+    const finished = (matches?.finished ?? []).slice(0, 5).map(compactFixture);
     const nextMatch = live[0] ?? upcoming[0] ?? null;
     const lastMatch = finished[0] ?? null;
+    const form =
+      Array.isArray(dossier?.form) && dossier.form.length
+        ? dossier.form
+        : finished.slice(0, 5).map((m: any) => ({
+            result: '?',
+            opponent: [m.home, m.away].filter(Boolean).join(' vs ') || '—',
+            score:
+              m.score?.home != null && m.score?.away != null
+                ? `${m.score.home}-${m.score.away}`
+                : '—',
+          }));
 
     let cafCount: number | null = null;
     if (dossier?.apiTeamId) {
@@ -1450,6 +1461,15 @@ async function hydrateFootballSearchHit(
       }
     }
 
+    const competitions = (info?.competitions ?? []).slice(0, 6).map((c: { id: number; name: string }) => ({
+      id: c.id,
+      name: c.name,
+    }));
+    const leaguePosition = dossier?.leaguePosition ?? null;
+    const notablePlayers = Array.isArray(dossier?.notablePlayers)
+      ? dossier.notablePlayers.slice(0, 8)
+      : [];
+
     return {
       source: '365scores_team',
       competitorId: hit.id,
@@ -1459,18 +1479,19 @@ async function hydrateFootballSearchHit(
       isNationalTeam: hit.type === 'national_team' || !!info?.isNationalTeam,
       founded: info?.founded ?? null,
       stadium: info?.stadium ?? null,
-      competitions: (info?.competitions ?? []).slice(0, 6).map((c: { id: number; name: string }) => ({
-        id: c.id,
-        name: c.name,
-      })),
+      competitions,
       coach: coachName,
       coachNationality: coach?.nationality ?? dossier?.coach?.nationality ?? null,
       cafChampionsLeagueWins: cafCount,
+      form,
+      leaguePosition,
+      notablePlayers,
       recentMatches: {
         live,
         upcoming,
         finished,
       },
+      dossierSummary: dossier?.block ?? null,
       quickFacts: {
         ...(coachName ? { coach: coachName } : {}),
         ...(cafCount != null ? { cafChampionsLeagueWins: cafCount } : {}),
@@ -1478,14 +1499,19 @@ async function hydrateFootballSearchHit(
         ...(info?.founded ? { founded: info.founded } : {}),
         ...(nextMatch ? { nextMatch } : {}),
         ...(lastMatch ? { lastMatch } : {}),
+        ...(leaguePosition ? { leaguePosition } : {}),
       },
       answerHint: [
+        'Write a clear club profile from these fields: coach, country, stadium, founded, competitions, leaguePosition, form, notablePlayers, cafChampionsLeagueWins, next/last match.',
         coachName
           ? `The current head coach is exactly "${coachName}" — do not name a former coach.`
           : 'Head coach unavailable — do not invent a name.',
         cafCount != null
           ? `African Champions League titles = exactly ${cafCount}.`
-          : 'CAF title count unavailable from this payload — do not invent a number.',
+          : wantTrophies
+            ? 'CAF title count unavailable from this payload — do not invent a number.'
+            : 'CAF titles optional unless asked.',
+        'Do not invent standings, scores, or players missing from this payload.',
       ].join(' '),
     };
   }
@@ -1562,8 +1588,8 @@ async function toolSearchFootball(
       ...(details ?? {}),
       answerHint:
         language === 'en'
-          ? 'Give a short club brief from these fields only. Tell the user they can open the club profile. Do not mention a player photo.'
-          : 'اكتب بريف قصير عن النادي من الحقول دي بس، وقول للمستخدم إنه يقدر يفتح بروفايل النادي. ممنوع تذكر صورة لاعب.',
+          ? 'Write a clear club profile from these fields only (coach, stadium, competitions, form, standing, notables, CAF if present). Tell the user they can open the full club page below. Do not mention a player photo.'
+          : 'اكتب بروفايل نادي واضح من الحقول دي بس (مدرب، ملعب، بطولات، فورم، ترتيب، نجوم، ألقاب أفريقيا لو موجودة)، وقول إنه يقدر يفتح صفحة النادي كاملة من الزر تحت. ممنوع تذكر صورة لاعب.',
     };
   }
 
@@ -2040,6 +2066,11 @@ async function toolTeamInfo(
   const cafCount = cafChampionsWins.length > 0 ? cafChampionsWins.length : curated?.wins ?? null;
 
   const coachName = dossier.coach?.name ?? null;
+  const form = Array.isArray(dossier.form) ? dossier.form : [];
+  const leaguePosition = dossier.leaguePosition ?? null;
+  const notablePlayers = Array.isArray(dossier.notablePlayers)
+    ? dossier.notablePlayers.slice(0, 8)
+    : [];
 
   return {
     teamId: dossier.apiTeamId,
@@ -2048,14 +2079,19 @@ async function toolTeamInfo(
     summary: dossier.block,
     coach: coachName,
     coachNationality: dossier.coach?.nationality ?? null,
+    form,
+    leaguePosition,
+    notablePlayers,
     cafChampionsLeagueWins: cafCount,
     cafChampionsLeagueSeasons: cafChampionsWins.map((t) => t.season).filter(Boolean).slice(0, 20),
     cafSource: cafChampionsWins.length > 0 ? 'api-football' : curated ? 'curated' : null,
     quickFacts: {
       ...(cafCount != null ? { cafChampionsLeagueWins: cafCount } : {}),
       ...(coachName ? { coach: coachName } : {}),
+      ...(leaguePosition ? { leaguePosition } : {}),
     },
     answerHint: [
+      'Write a clear club profile covering coach, league position, recent form, notable players, and CAF titles when present.',
       coachName
         ? `The current head coach is exactly "${coachName}" — use this name; do not name a former or remembered coach.`
         : 'Head coach unavailable — say it is unavailable; do not invent a name.',
