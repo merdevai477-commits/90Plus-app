@@ -262,7 +262,16 @@ function EventBody({
         </Text>
       ) : null}
       {isSynthetic ? (
-        <Text style={[styles.syntheticHint, { color: mutedColor, textAlign: towardCenter === 'right' ? 'left' : 'right' }]}>
+        <Text
+          style={[
+            styles.syntheticHint,
+            {
+              color: textColor,
+              opacity: 0.72,
+              textAlign: towardCenter === 'right' ? 'left' : 'right',
+            },
+          ]}
+        >
           {detailsUnavailableLabel}
         </Text>
       ) : null}

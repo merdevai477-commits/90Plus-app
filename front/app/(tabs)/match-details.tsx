@@ -2261,9 +2261,17 @@ const MatchDetailsScreen = () => {
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
           {eventsFeedAvailable === false ? (
-            <View style={styles.eventsFeedNotice}>
-              <Ionicons name="information-circle-outline" size={16} color={PURPLE_SOFT} />
-              <Text style={styles.eventsFeedNoticeText}>
+            <View
+              style={[
+                styles.eventsFeedNotice,
+                {
+                  backgroundColor: mdColors.primaryMuted,
+                  borderColor: mdColors.primaryBorder,
+                },
+              ]}
+            >
+              <Ionicons name="information-circle" size={18} color={mdColors.primary} />
+              <Text style={[styles.eventsFeedNoticeText, { color: mdColors.textPrimary }]}>
                 {t.matchDetails.eventsFeedUnavailableHint ||
                   'Goals are shown from the score only, without player names'}
               </Text>
@@ -4406,15 +4414,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(168,85,247,0.10)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(168,85,247,0.28)',
   },
   eventsFeedNoticeText: {
     flex: 1,
-    color: TEXT_MUTED,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   substituteCardOut: {
     opacity: 0.55,
