@@ -7,7 +7,8 @@ import { logger } from '../utils/logger';
 import { adjustSeedFriends, SEED_FRIENDS_MAX } from './seed-account-adjust.service';
 
 const INTERVAL_MS = 7 * 60 * 1000;
-const ENABLED = process.env.SEED_FRIENDS_AUTO_ENABLED !== 'false';
+/** Opt-in only — leave off unless SEED_FRIENDS_AUTO_ENABLED=true. */
+const ENABLED = process.env.SEED_FRIENDS_AUTO_ENABLED === 'true';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
@@ -41,7 +42,7 @@ async function tick(): Promise<void> {
 /** Schedule +1 seed friend every 7 minutes. No immediate fire on boot. */
 export function startSeedFriendsAutoBoost(): void {
   if (!ENABLED) {
-    logger.info('[SeedFriendsAuto] disabled (SEED_FRIENDS_AUTO_ENABLED=false)');
+    logger.info('[SeedFriendsAuto] disabled (set SEED_FRIENDS_AUTO_ENABLED=true to enable)');
     return;
   }
   if (timer) return;
